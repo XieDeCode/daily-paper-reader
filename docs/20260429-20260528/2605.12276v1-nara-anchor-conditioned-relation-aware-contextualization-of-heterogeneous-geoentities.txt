@@ -1,0 +1,801 @@
+Title: NARA: Anchor-Conditioned Relation-Aware Contextualization of Heterogeneous Geoentities
+
+URL Source: https://arxiv.org/pdf/2605.12276v1
+
+Published Time: Wed, 13 May 2026 01:32:35 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# NARA: Anchor-Conditioned Relation-Aware Contextualization of Heterogeneous Geoentities 
+
+Jina Kim 1 Gengchen Mai 2 Lingyi Zhao 3 Khurram Shafique 3 Yao-Yi Chiang 1
+
+> 1
+
+Department of Computer Science and Engineering, University of Minnesota, Minnesota, USA 
+
+> 2
+
+Department of Geography and the Environment, University of Texas at Austin, Texas, USA 
+
+> 3
+
+Novateur Research Solutions, Virginia, USA 
+
+{kim01479, yaoyi}@umn.edu , gengchen.mai@austin.utexas.edu ,
+
+{lzhao, kshafique}@novateur.ai 
+
+## Abstract 
+
+Geospatial foundation models have primarily focused on raster data such as satellite imagery, where self-supervised learning has been widely studied. Vector geospatial data instead represent the world as discrete geoentities with explicit geometry, semantics, and structured spatial relations, including metric proximity and topolog-ical relationships. These relations jointly determine how entities interact within space, yet existing representation learning methods remain fragmented, often re-stricted to specific geometry types or partial spatial relations, limiting their ability to capture unified spatial context across heterogeneous geoentities. We propose 
+
+NARA (Neural Anchor-conditioned Relation-Aware representation learning), a self-supervised framework for vector geoentities. NARA learns context-dependent representations by jointly modeling semantics, geometry, and spatial relations within a unified framework and captures relational spatial structure beyond prox-imity alone, enabling rich contextualized representations across heterogeneous geoentities of points, polylines, and polygons. Evaluation on building function classification, traffic speed prediction, and next point-of-interest recommendation shows consistent improvements over prior methods, highlighting the benefit of unified relational modeling for vector geospatial data. 
+
+## 1 Introduction 
+
+Vector geographic datasets such as OpenStreetMap (OSM) [ 1] and Overture Maps [ 2] provide large-scale, human-curated abstractions of the environment as collections of discrete geoentities , including roads, buildings, and amenities. Unlike sensed raster data (e.g., satellite imagery), vector geographic datasets reflect intentional selection: important landmarks are preserved, and entities are encoded at different geometric granularities (e.g., polygons vs. points) based on their functional roles [ 3]. Consequently, geoentities are irregular and heterogeneous (with diverse semantic descriptions and ge-ometry types) and organized through structured spatial relations rather than fixed-grid neighborhoods, making raster-based self-supervised learning (SSL) approaches [ 4 , 5 , 6, 7, 8] not directly applicable. Instead, vector data can be viewed with a language analogy: a map is a collection of discrete entities, analogous to tokens in a document, where meaning arises from context. In natural language processing, models such as BERT [ 9] learn contextualized representations by combining token semantics with positional information (e.g., “bank” in “river bank” vs. “Bank of America”). In the same spirit, the meaning of geoentities with identical names, types, and geometries can vary depending on their surrounding neighborhood. For example, a Starbucks inside a mall exhibits different visiting patterns from one in an airport or along Fifth Avenue in New York City; additionally, a Starbucks represented as a polygon rather than a point may indicate expanded functionality. 
+
+> Preprint.
+> arXiv:2605.12276v1 [cs.AI] 12 May 2026
+
+This notion of context extends beyond one-dimensional sentences and two-dimensional images. A geoentity is characterized by attributes and geometry, and by spatial relationships to others, including metric (distance, orientation) and topological (containment, adjacency) relations. These jointly shape meaning, and positional structures alone, such as token order in NLP [ 9] or patch/grid positions in vision transformers [ 10 ], are therefore insufficient. A unified mechanism that captures both metric and topological relations is needed to properly contextualize geoentities during representation learning. Existing SSL methods for vector geospatial data are tailored to individual geoentities or geometry types. Previous work typically develops isolated frameworks, e.g., for learning representations of point-of-interest (POI) [ 11 , 12 , 13 ], road networks [ 14 , 15 ], or regional polygons [ 16 ], each with task-specific architectures. Consequently, these methods lack the flexibility to jointly represent heterogeneous entities within a single representation space. Recent efforts to incorporate multiple types are often constrained to fixed data or application assumptions, failing to generalize across datasets with diverse attributes or unseen combinations of entities [17, 18, 19]. To address these limitations, we propose NARA (Neural Anchor-conditioned Relation-Aware repre-sentation learning), a self-supervised framework that learns how spatial relations should influence semantic representations , enabling spatial-aware, adaptive contextualization of heterogeneous geoen-tities. NARA integrates a geometry encoder into a unified training framework and captures both distance- and topology-based interactions across geometry types. We further introduce relation-aware spatial regularization to encourage entities sharing similar spatial relations to a common reference entity, termed an anchor, to learn consistent representations beyond simple spatial proximity. By combining objectives over semantic features, metric neighborhoods, and relation-aware interactions, NARA learns a unified representation space that generalizes across points, polylines, and polygons, as well as across diverse data sources. We evaluate NARA across a diverse set of tasks that tradi-tionally rely on ad hoc assumptions and task-specific architectures: building function classification, traffic speed prediction, and next POI recommendation. The results demonstrate robust, meaningful representations that advance the development of geospatial foundation models for vector data. 
+
+## 2 Related Work 
+
+Existing representation learning methods for geospatial vector data are typically designed for a single geometry type (e.g., points) [ 7, 6], rely on specific data sources or attributes (e.g., place categories) [ 18 ], and define context using fixed similarity notions such as spatial proximity or predefined functional relations [ 20 ]. This limits their ability to capture rich spatial interactions and generalize across heterogeneous geoentities. Point-based methods encode semantic attributes with coordinate embeddings [ 11 , 12 ], but lack spatial extent and topology. Line-based methods, largely focused on road networks, learn from graph connectivity [ 21 , 22 , 23 , 14 , 15 ] but ignore geometric shape and spatial relations with surrounding entities, and are difficult to generalize beyond road networks. Polygon-based methods either rasterize shapes for visual encoders [ 24 , 18 , 16 ], losing geometric precision and scale, or encode coordinates only (e.g., [ 24 ]), and model entities in isolation without inter-entity context. Geometry-type-agnostic encoders [ 25 , 26 ] unify representations across geometry types but focus solely on geometry and require downstream adaptation to capture semantic, metric, or topological relationships. More general frameworks in urban computing [ 17 , 18 , 19 ]contextualize heterogeneous entities, yet rely on proximity or predefined functional dependencies from available data schemas (e.g., OSM relations), rather than learning how topological relations shape functional similarity. As a result, semantics and spatial structure are treated separately instead of jointly as complementary information sources. NARA addresses these limitations by jointly encoding semantic attributes and geometry across heterogeneous entity types. In addition, prior work has incorporated spatial autocorrelation, one of the critical spatial principles, into general-purpose AI models through strategies such as training data sampling [ 27 ], negative sampling [ 28 , 29 ], and specialized loss functions [ 30 , 31 ]. However, these approaches focus solely on metric relations and are limited to satellite imagery [ 30 , 32 ] or point-based entities [ 28 , 29 , 31 ]. In contrast, NARA models spatial autocorrelation across geoentities with diverse geometry types and explicitly captures how metric and topological relations jointly shape contextual representations of vector geoentities. 
+
+## 3 Spatial Contextualization Principles 
+
+Preliminaries Given a set of n geoentities G = {v1, . . . , v n}, each entity vi is associated with semantic attributes si (e.g., category, name, or text description) and geometry gi (i.e., points, lines, or polygons). Our goal is to learn a representation function f : G → Rd that embeds each geoentity into a shared d-dimensional space while preserving semantic attributes, geometry, and spatial structure, including both metric proximity and topological relations. 2Spatial Dependencies Geographic systems exhibit structured spatial dependencies. Tobler’s First Law states that nearby entities tend to be more related than distant ones [ 33 , 34 ], motivating spatial autocorrelation , where similarity decays with distance, often characterized by the semivariogram [ 35 ]: 
+
+γ(b) = 12 E
+
+h
+
+(Z(vi) − Z(vj )) 2 dij = b
+
+i
+
+, (1) where Z(vi) denotes a latent attribute associated with geoentity vi, and dij is the geographic distance between vi and vj . Smaller γ(b) indicates stronger similarity at separation b, and γ(b) typically increases with distance in a nonlinear, saturating manner. For vector geoentities, this suggests that nearby entities provide stronger contextual information and that contextual influence should decay with distance in a data-dependent way. Beyond metric proximity, spatial reasoning also depends on topological structure (e.g., containment and adjacency) [ 36 , 37 , 38 ]. Such relations can override proximity: entities sharing meaningful topology (e.g., stores within the same mall or businesses along the same avenue) may exhibit similar functions despite being geographically separated. Let a denote a reference (anchor) entity and rel (vi, a ) ∈ R the topological relation between vi and a. We expect entities sharing the same relation to a common anchor to exhibit correlated latent properties: 
+
+Cov( Z(vi), Z (vj ) | rel (vi, a ) = rel (vj , a )) > 0. (2) Here, Eq. (2) should be viewed as a modeling assumption motivated by geographic spatial organization rather than a theoretical guarantee. Therefore, motivated by Eq. (1) and Eq. (2), we model functional similarity as jointly governed by metric distance and relational agreement: 
+
+sim( vi, v j ) ∝ k(dij ) · Ea∼p(a|vi,v j )
+
+ϕ rel (vi, a ), rel (vj , a ) , (3) where k(·) models distance decay and ϕ(·) captures topological modulation. The expectation is taken over anchors relevant to the pair (vi, v j ), allowing entities to participate in multiple relational contexts. Eq. (3) is not intended as a probabilistic generative model, but rather as a conceptual formulation motivating the representation objectives introduced in §4. This perspective suggests two desirable properties for contextual representation learning over heterogeneous geoentities. Distance-decay: contextual similarity decreases with geographic distance in a nonlinear manner. Topological modulation: entities sharing similar topological relations to a common anchor should exhibit enhanced similarity beyond metric proximity alone. These principles motivate the design of NARA’s training objectives, which operationalize distance-decay and topological modulation through distance-aware contrastive learning and relation-conditioned semivariogram regularization. 
+
+## 4 Method: NARA Framework 
+
+We propose NARA, a self-supervised framework for learning how spatial relations derived from geometry guide the learning of semantic representations (Fig. 1). 
+
+Figure 1: Overview of the proposed self-supervised framework, NARA. 
+
+4.1 Semantic and Geometric Embeddings of Geoentity 
+
+Each geoentity vi ∈ G is defined by semantic attributes si, represented as a sentence (e.g., composed from name, category, or other textual descriptors), and geometry gi. NARA encodes si using a language encoder (e.g., BERT [9]) and gi using a geometry encoder (e.g., Poly2Vec [25]): 
+
+esem  
+
+> i
+
+= Enc sem (si), egeom  
+
+> i
+
+= Enc geom (gi), (4) where esem  
+
+> i
+
+∈ Rds and egeom  
+
+> i
+
+∈ Rdg . NARA projects both embeddings into a shared d-dimensional space, yielding ˜esem  
+
+> i
+
+and ˜egeom  
+
+> i
+
+and fuses them via an adaptive gate: 
+
+αi = σ  fgate ([˜ esem  
+
+> i
+
+; ˜ egeom  
+
+> i
+
+])  , ei = (1 − αi)˜ esem  
+
+> i
+
++ αi ˜egeom  
+
+> i
+
+(5) where αi ∈ [0 , 1] modulates the contribution of geometric information. We initialize the gating bias negatively so that training prioritizes semantic information and gradually incorporates geometry. 34.2 Masked Geoentity Semantic Modeling 
+
+NARA’s core self-supervised objective is Masked Geoentity Semantic Modeling (MGSM). Given a target geoentity with masked semantic embedding, the goal is to predict the masked semantic attributes from its geometry and neighboring entities. Following §3, this task requires modeling how semantic similarity varies with spatial proximity and topological relations. To achieve this, we propose a Transformer encoder with spatial-context-aware attention over local geoentities. We define local neighborhoods by partitioning a target area (e.g., NYC) into overlapping spatial windows {W ℓ}Lℓ=1 (e.g., 500 m × 500 m ) with a stride, analogous to how Vision Transformers partition an image into fixed patches [ 10 ]. Each window contains geoentities that intersect its spatial extent: 
+
+N (ℓ) = {vi ∈ G | gi ∩ W ℓ̸ = ∅}. (6) This ensures that each entity appears in multiple neighborhoods, preserving spatial continuity. Within each window, we randomly sample a subset of geoentities M to mask, replacing their projected semantic embeddings with a learned [MASK] token while retaining their geometric embeddings: 
+
+ˇesem  
+
+> i
+
+=
+
+[MASK] if vi ∈ M 
+
+˜esem  
+
+> i
+
+otherwise. (7) To reconstruct masked semantic attributes, the proposed spatial-context-aware multi-head attention learns how spatial relations among neighboring entities modulate the strength of contextualization, analogous to how word order shapes meaning in language models. Queries and keys are computed from the fused geoentity embeddings Efused = [ e1; . . . ; en], where masked entities use the [MASK] 
+
+token in place of their semantic component (Eq. (5)). Here, NARA follows the same principle as prior models [ 12 , 39 , 18 ], which incorporate spatial information into attention by injecting coordinate embeddings into the representations used to compute attention, enabling the model to capture point-level metric relations. NARA generalizes this idea to heterogeneous vector geometries by replacing coordinate embeddings with geometry embeddings encoding points, polylines, and polygons. These geometry embeddings provide the information needed to learn location- and shape-dependent interactions across geometry types. The spatial-context-aware attention supervision introduced next (§4.3) guides the contextual embeddings produced by the same attention map to preserve pairwise metric and topological structure, encouraging attention to reflect spatial context. Values are computed from the masked semantic embeddings ˇEsem = [ˇ esem  
+
+> 1
+
+; . . . ; ˇ esem  
+
+> n
+
+] ∈ Rn×d:
+
+Q = Efused W Q, K = Efused W K , A = Softmax( QK ⊤/pdh), (8) 
+
+Vsem = ˇEsem W Vsem , Hsem = AV sem , (9) where dh is the dimension of the attention heads. By using ˇEsem rather than the original ˜Esem as values, masked entities contribute only the [MASK] token to contextualization, preventing self-leakage of the target semantic embedding. The contextual representation hsem  
+
+> i
+
+(row i of Hsem ) of each masked geoentity is passed to a reconstruction head to predict the original semantic embedding: 
+
+ˆesem  
+
+> i
+
+= frec (hsem  
+
+> i
+
+). (10) The reconstruction is supervised by a contrastive objective where, for each masked entity vi ∈ M ,the predicted embedding ˆesem  
+
+> i
+
+is pulled toward the original semantic embedding esem  
+
+> i
+
+and pushed against the semantic embeddings of other entities within the same spatial window: 
+
+LMGSM = − X
+
+> i∈M
+
+log exp(sim(ˆ esem  
+
+> i
+
+, e sem  
+
+> i
+
+)/τ MGSM )
+
+P 
+
+> j∈P (i)
+
+exp  sim(ˆ esem  
+
+> i
+
+, e sem  
+
+> j
+
+)/τ MGSM 
+
+ , (11) where P(i) denotes entities within the same spatial window, excluding those with identical semantic embeddings to vi. sim( ·) is the cosine similarity and τMGSM > 0 is a temperature parameter. 
+
+4.3 Spatial-Aware Attention Supervision 
+
+Accurate MGSM requires contextual representations to preserve meaningful spatial structure. For example, consider a point entity with a masked semantic attribute: being contained within a “commer-cial building” polygon suggests a “shop,” whereas being adjacent to the same polygon might suggest a “parking lot.” To this end, we introduce spatial-aware supervision on the fused contextual embeddings 
+
+Hfused , training them to predict pairwise distance and topological relations. This encourages the 4fused embeddings to capture the information needed for spatial-aware attention and to generalize across relational contexts. The idea is that incorporating semantic context allows the model to better distinguish relations (e.g., a shop vs. a parking lot), such as containment versus adjacency (as opposed to geometry alone, e.g., Poly2Vec [ 25 ]), enabling attention to exploit both spatial and functional context rather than relying solely on geometry. NARA computes Hfused using the same attention map 
+
+A as in Eq. (8), with values projected from the geoentity embeddings Efused :
+
+Vfused = Efused W Vfused , Hfused = AV fused . (12) During training, we sample random pairs to cover diverse spatial configurations, as well as hard pairs that capture informative topological relations, such as intersection and adjacency. Hard pairs are excluded from the random pool to avoid overlap. For each sampled pair (vi, v j ), we predict the pairwise distance ˆdij and topological relation ˆrij :
+
+ˆdij = fdist ([ hfused  
+
+> i
+
+; hfused  
+
+> j
+
+]) , ˆrij = ftopo ([ hfused  
+
+> i
+
+; hfused  
+
+> j
+
+]) . (13) We treat topological relations as symmetric predicates to focus NARA on contextual similarity rather than explicit geometric reasoning. For example, “a restaurant within a mall” and “a mall contains a restaurant” both indicate participation in a shared functional context (see Appdx. B.1). Collapsing inverse relations into a shared predicate also yields a simpler and denser supervision signal across heterogeneous geometry types. The overall geometric loss combines mean squared error for distance prediction ( Ldist = ∥ ˆdij − dij ∥2) and cross-entropy for topology classification ( Ltopo = CE (ˆ rij , r ij )), weighted by αtopo and αdist :
+
+LGEO = αtopo Ltopo + αdist Ldist . (14) This supervision encourages Hfused , which is computed using the same attention map A as MGSM, to preserve spatial proximity and topological structure across geometry types. As a result, the shared attention mechanism is trained to support contextualization that reflects metric and relational context. 
+
+4.4 Relation-Conditioned Modeling 
+
+MGSM provides contextualization, and geometry-aware attention supervision ensures that embed-dings encode information required for spatial-aware attention. However, they do not explicitly enforce that topological relationships are used during contextualization. To address this, we introduce two complementary objectives that promote relation-conditioned contextualization (Eq. (3)). The first encourages NARA to consider topological structure by pulling sibling entities sharing the same relation to an anchor closer in the contextual semantic embedding space, while pushing non-siblings apart, with attraction modulated by geographic distance. The second objective, inspired by Kriging for spatial prediction [ 40 ], enforces consistency of spatial autocorrelation within a neighborhood: sibling pairs must follow the same distance-dependent similarity trend as non-sibling pairs, while remaining more similar at the same distance. Within each spatial window Wℓ, polygons and polylines serve as anchors, where A ⊆ G denotes the set of anchor entities. Geoentities contained within a polygon or located within a 30-meter buffer of a polyline belong to that anchor’s space. Let rel (vi, a ) ∈ R denote the topological relation between entity vi and anchor a, with rel (vi, a ) = ∅ if no relation is defined. Each unique (anchor, relation) pair (a, r ) defines a sibling group :
+
+Sa,r = {vi ∈ N (ℓ) | rel (vi, a ) = r̸ = ∅} , (15) comprising point or polygon entities sharing topological relation r ∈ R to anchor a within the same window. We denote the collection of all non-empty sibling groups within window Wℓ as 
+
+S∗(ℓ) = {S a,r | a ∈ A , r ∈ R , Sa,r ̸ = ∅}, and the geometry type of entities in Sa,r as ta,r ∈{point , polygon }. The per-entity sibling set of vi with respect to anchor a is the sibling group containing vi, excluding itself: 
+
+Sa(vi; ℓ) = Sa, rel (vi,a ) \ { vi}. (16) Since an entity may belong to multiple sibling groups across different anchors, the full sibling set aggregates across all anchors of vi:
+
+S(vi; ℓ) = [
+
+> a∈A vi
+
+Sa(vi; ℓ), Avi = {a ∈ A | rel (vi, a )̸ = ∅} . (17) Entities in S(vi; ℓ) share at least one sibling group and, by Eq. (2), are expected to exhibit positively correlated latent properties, motivating the two objectives below. 5Anchor-Conditioned Contrastive Learning. We enforce relation-conditioned similarity by pulling sibling pairs together and pushing non-siblings apart, with attraction modulated by geographic distance. For each unmasked entity vi, comparisons are restricted to same-type entities (let η(vi)
+
+denote the geometry type of vi): 
+
+E(vi; ℓ) = {vj ∈ N (ℓ) \ M | η(vj ) = η(vi), v j̸ = vi} . (18) Each sibling pair (vi, v j ) is weighted by distance decay: 
+
+wij = exp 
+
+
+
+− dij 
+
+λ
+
+
+
+, (19) where λ > 0 is a distance decay scale. The loss is aggregated over all windows in a training batch B:
+
+LACC = 1
+
+|B| 
+
+X
+
+> ℓ∈B
+
+1
+
+|Q (ℓ)|
+
+X
+
+> vi∈Q (ℓ)
+
+−1
+
+Wi
+
+X 
+
+> vj∈S (vi;ℓ)
+
+wij log exp(sim( hsem  
+
+> i
+
+, h sem  
+
+> j
+
+)/τ ACC )
+
+P  
+
+> vk∈C (vi;ℓ)
+
+exp(sim( hsem  
+
+> i
+
+, h sem  
+
+> k
+
+)/τ ACC ) ,
+
+(20) where Q(ℓ) = {vi ∈ N (ℓ) \ M | S (vi; ℓ)̸ = ∅} denotes unmasked entities with at least one sibling, 
+
+Wi = P  
+
+> vj∈S (vi;ℓ)
+
+wij is the normalization factor, C(vi; ℓ) = S(vi; ℓ) ∪ (E(vi; ℓ) \ S (vi; ℓ)) is the contrast set comprising siblings (positives) and same-type non-siblings (negatives), and τACC > 0 is a temperature parameter. This formulation allows entities to belong to multiple relational contexts, with distance-aware weighting ensuring proximate siblings exhibit stronger similarity than distant siblings or non-siblings at the same distance. 
+
+Relational Semivariogram Regularization. To enforce spatial autocorrelation consistency, we introduce semivariogram-based regularization over ℓ2-normalized contextual semantic embeddings 
+
+hsem  
+
+> i
+
+. Using cosine distance as a proxy for squared Euclidean distance (see Appdx. B.2), the empirical semivariance over a pair set Π is: 
+
+ˆγ(Π) = 1
+
+|Π|
+
+X 
+
+> (vi,v j)∈Π
+
+ 1 − sim( hsem  
+
+> i
+
+, h sem  
+
+> j
+
+) . (21) We compute two semivariance estimates conditioned on distance bin b: the global semivariance 
+
+γ(t)
+
+> glob
+
+(b) over non-sibling pairs of geometry type t (relation-agnostic baseline), and the relational semivariance γ(a,r ) 
+
+> rel
+
+(b) over sibling pairs within sibling group Sa,r . Both are evaluated separately per geometry type to account for distributional differences between points and polygons. The objective enforces that relational semivariance stays below the type-matched global baseline by margin δ at every distance bin: 
+
+LRSR = 1
+
+|B| 
+
+X
+
+> ℓ∈B
+
+ESa,r ∈S ∗(ℓ)
+
+"X
+
+> b
+
+ω(a,r ) 
+
+> b
+
+· max 
+
+
+
+0, γ (a,r ) 
+
+> rel
+
+(b) − γ(ta,r ) 
+
+> glob
+
+(b) + δ
+
+#
+
+, (22) where S∗(ℓ) is the collection of non-empty sibling groups within window Wℓ, ta,r ∈{point , polygon } is the geometry type of entities in Sa,r , and ω(a,r ) 
+
+> b
+
+are bin weights normalized within each sibling group to ensure equal contribution across groups regardless of size. Because the empirical semivariances γrel and γglob are evaluated per-window and aggregated over the current training batch B, this objective serves as a computationally efficient, stochastic approximation of the global relational semivariogram. Only violations of the margin are penalized. Overall, NARA pretraining loss combines all four objectives: 
+
+L = αMGSM LMGSM + αGEO LGEO + αACC LACC + αRSR LRSR , (23) where αMGSM , αGEO , αACC , αRSR ≥ 0 are loss weighting coefficients. 
+
+4.5 Downstream Task Adaptation 
+
+NARA is pretrained once using the self-supervised objectives described in this section and remains frozen during downstream adaptation. For a target geoentity vi, spatial context is constructed by defining a fixed-radius neighborhood around vi and collecting all geoentities whose geometries intersect this region. Semantic attributes may be observed or masked depending on task availability. The resulting contextualized representations encode both the target entity and its surrounding spatial 6context. For downstream tasks, predictions are made using the pretrained fused embeddings hfused  
+
+> i
+
+,optionally combined with semantic embeddings hsem  
+
+> i
+
+depending on the task. Only lightweight task-specific components are trained downstream, such as a regression/classification head (e.g., for building function prediction) or an external sequential model using NARA embeddings as contextual inputs (e.g., for next POI prediction). The pretrained NARA encoder itself is not retrained or fine-tuned. 
+
+## 5 Experiments 
+
+We evaluate NARA on three standard tasks spanning all geometry types: traffic speed estimation on polylines (§5.1), building function classification on polygons (§5.2), and next POI prediction on points (§5.3). Each task is typically addressed with task-specific feature engineering and architectural choices in prior work; NARA uses a single architecture pretrained on OSM from New York City (NYC) and Singapore (SG), separately for each task region, without task-specific modifications. Polylines are noded at intersections into segments, each treated as a separate geoentity. Spatial context is built with sliding windows of size 500 m × 500 m (stride 250 m), and pretraining uses a mask ratio of 40%. Additional details on anchor construction, implementation, pretraining dataset statistics, task evaluation protocol, and baselines are provided in Appdx. B.3–Appdx. C.4. 
+
+5.1 Task A: Traffic Speed Estimation 
+
+This task predicts the average observed traffic speed on road segments, where each road segment is represented as a polyline geoentity, using Uber Movement data mapped to OSM road segments following the CityFM protocol [ 18 ]. Traffic speed emerges from its relational spatial context, in-cluding nearby schools, commercial areas, and residential neighborhoods that shape congestion, as well as network connectivity and topological relations with surrounding geoentities. The pre-trained NARA encodes each road segment using all geoentities within its 100-meter buffer and then average-pools segment embeddings to obtain a road-level representation. This strategy allows NARA to handle arbitrary road lengths and segment granularities without architectural changes. CityFM [ 18 ] fine-tunes pretrained BERT [ 9] to encode OSM tags, while representing polylines with task-specific engineered features such as segment length, vertex count, length-to-neighbor ratio, and one-hot-encoded OSM road types. We also compare against road-network graph-based methods (Node2Vec [ 21 ], GCWC [ 41 ], RFN [ 23 ]), geometry-based encoders (Poly2Vec [ 25 ], Geo2Vec [ 26 ]), and spatial representation learning methods (IRN2Vec [ 22 ], GeoVectors [ 17 ]). Following CityFM, all methods incorporate the average neighbor speed ¯vnbr  
+
+> i
+
+from the training set as an additional feature. 
+
+Results. Tab. 1 reports means over 10 runs with standard deviations, following CityFM [ 18 ]. NARA achieves the best overall performance (MAE 3.05, MAPE 18.36%). Performance improves progressively across model categories: topology-only models (MAE 4.83–5.31) capture connectivity but lack semantic and geometric information; geometry-based encodings (MAE 4.20–4.24) benefit from polyline shape; and semantic methods (MAE 3.78–3.92) further improve by incorporating road attributes. CityFM (MAE 3.20, MAPE 19.27%) achieves strong performance with hand-crafted features and a geometry-type-specific contextualization pipeline for polylines, while NARA outperforms CityFM across all metrics (+4.69% MAE, +4.72% MAPE) with a unified architecture and substantially lower variance (std 0.01 vs 0.01–0.80 across metrics). We analyze performance across road types (Appdx. D.1). NARA shows the largest improvements over CityFM on high-speed roads: motorway, trunk, and primary (42.3%, 16.7%, 9.1% MAE reduction, respectively), suggesting improved robustness on high-speed corridors where traffic dynamics are influenced by diverse spatial context. NARA’s performance on service roads and construction zones (16 segments total) remains limited due to small numbers of training samples for rare road types (encoded in the semantic attributes), while CityFM explicitly aggregates semantically similar road types into groups, and hence improves availability of training samples for each group. 
+
+5.2 Task B: Building Function Classification 
+
+This task predicts land-use categories for untagged OSM building polygons using the standard 8-class Singapore government land-use taxonomy, following the CityFM protocol [ 18 ]. A building’s function emerges not only from its own footprint, but also from its heterogeneous spatial relationships with surrounding entities, including nearby POIs, road infrastructure, and neighboring buildings, which jointly shape its functional interpretation. The pretrained NARA encodes the target building using all geoentities within its 100-meter buffer and then passes the concatenated embeddings [hfused  
+
+> i
+
+; hsem  
+
+> i
+
+]
+
+to a classification head. CityFM [ 18 ] incorporates a building-type-aligned pretraining objective (contrastive learning between rasterized building footprints and OSM building type labels) and relies 7Table 1: Traffic speed prediction: results averaged over 10 independent runs (SD in parentheses). Gains are computed relative to the second-best method. Bold = best, underline = second-best. Category Model RMSE ↓ MAE ↓ R2 ↑ MAPE ↓                                                                             
+
+> Topology (Road Network) Node2Vec 6.82 ( ±0.12) 5.31 ( ±0.05) 0.38 ( ±0.04) 32.22% ( ±0.6%) GCWC 6.74 ( ±0.04) 5.20 ( ±0.04) 0.41 ( ±0.04) 32.75% ( ±1.2%) RFN 6.45 ( ±0.09) 4.83 ( ±0.02) 0.46 ( ±0.02) 30.10% ( ±0.0%)
+> Geometry Poly2Vec 5.66 ( ±0.01) 4.24 ( ±0.01) 0.56 ( ±0.00) 25.75% ( ±0.1%) Geo2Vec 5.64 ( ±0.01) 4.20 ( ±0.01) 0.56 ( ±0.00) 25.42% ( ±0.2%)
+> Semantics + Metric IRN2Vec 5.02 ( ±0.04) 3.78 ( ±0.02) 0.66 ( ±0.01) 24.30% ( ±0.0%) GeoVectors 5.21 ( ±0.07) 3.92 ( ±0.06) 0.64 ( ±0.06) 24.03% ( ±0.3%)
+> Semantics + Geometry CityFM 4.08 ( ±0.01) 3.20 ( ±0.01) 0.77 ( ±0.02) 19.27% ( ±0.8%)
+> NARA 3.99 (±0.01) +2.21%
+> 3.05 (±0.01) +4.69%
+> 0.78 (±0.00) +1.30%
+> 18.36% (±0.1%) +4.72%
+
+on engineered features such as precomputed building area. We also compare against non-spatial semantic models (BERT [9]), geometry-based encoders (Poly2Vec [25], Geo2Vec [26]), and spatial methods incorporating neighborhood context (SpaBERT [12], GeoVectors [17]). 
+
+Results. Tab. 2 shows that NARA achieves the best Macro-F1 (72.82, +3.88% over CityFM) and Accuracy (92.22), while Weighted-F1 remains competitive (91.59 vs 92.75). Notably, NARA exhibits substantially lower variance (e.g., std 0.018 vs 1.7 for Macro-F1), with the worst NARA run outperforming CityFM’s mean for Macro-F1. Performance improves progressively: BERT (Macro-F1 37.56) confirms that semantic attributes alone are insufficient; geometry-based methods (Macro-F1 45.12–58.35) demonstrate that building footprint shape carries strong information; point-based spatial methods (GeoVectors, SpaBERT) underperform geometry-based models because point-level metric proximity fails to capture spatial extent and shape variation of building footprints. CityFM achieves strong performance through building-type-aligned pretraining and a polygon-specific contextualization pipeline. NARA excels in both Macro-F1 and Accuracy without relying on a task-specific architecture, demonstrating the effectiveness of its contextualized polygon embeddings. CityFM’s higher Weighted-F1 is driven by dominant classes (Residential, 67% of test samples), while NARA’s higher Macro-F1 reflects substantially better generalization to underrepresented classes, particularly Civic & Community Institutions (+26.6%) and Transport (+11.9%) (Appdx. D.2). Table 2: Building function classification: results averaged over 10 independent runs (SD in parenthe-ses). Gains are computed relative to the second-best method. Bold = best, underline = second-best. Category Model Macro-F1 ↑ Weighted-F1 ↑ Accuracy ↑                                               
+
+> Non-Spatial Semantics BERT (fine-tuned) 37.56 ( ±0.3) 44.19 ( ±0.7) 51.77 ( ±0.7)
+> Geometry Poly2Vec 45.12 ( ±0.031) 84.25 ( ±0.010) 86.65 ( ±0.008) Geo2Vec 58.35 ( ±0.007) 86.90 ( ±0.003) 88.05 ( ±0.003)
+> Semantics + Metric GeoVectors 47.24 ( ±1.4) 64.18 ( ±2.1) 69.49 ( ±1.5) SpaBERT 45.06 ( ±1.1) 78.47 ( ±2.4) 75.95 ( ±2.7)
+> Semantics + Geometry CityFM 70.10 ( ±1.7) 92.75 (±1.2) 91.93 ( ±1.3)
+> NARA 72.82 (±0.018) +3.88% 91.59 ( ±0.005) -1.25%
+> 92.22 (±0.003) +0.32%
+
+5.3 Task C: Next Point-of-Interest Prediction 
+
+This task predicts the next POI a user will visit, given a historical sequence of check-ins, where each POI is drawn from Foursquare check-in data from NYC and SG [ 42 ], following the POI-Enhancer protocol [ 13 ]. POI semantics emerge from surrounding spatial relations: a cafe within a commercial district exhibits different visit dynamics than one in a residential area, despite sharing the same entity type. POI-Enhancer [ 13 ] generates enriched embeddings by querying Llama-2-7B [ 43 ] with task-specific inputs including statistical analysis of check-ins, POI addresses from OSM (e.g., street name, postal code), and categories of nearby POIs. In contrast, pretrained NARA encodes the target POI from Foursquare check-in data and all OSM geoentities within its 100-meter spatial buffer jointly through spatial attention, yielding contextual embeddings for the target POI. This cross-dataset integration (i.e., Foursquare POIs contextualized by pretrained OSM entities) demonstrates NARA’s ability to integrate heterogeneous geospatial data sources. Following POI-Enhancer [ 13 ], these contextual embeddings are integrated into trajectory-based sequential models (TALE [ 44 ], CTLE [ 45 ]) via cross-attention fusion, and we evaluate two settings: (i) trajectory models alone as baselines, and (ii) trajectory models augmented with either POI-Enhancer or NARA embeddings. 8Results. Tab. 3 shows that incorporating pretrained POI representations consistently improves all trajectory models, highlighting the importance of spatial context beyond sequential transition patterns. CTLE + NARA achieves the best performance across models with strong gains on commute and work-related venues (neighborhoods +3.31% Hit@1, Mexican restaurants +2.89%, deli/bodegas +3.18%) (Appdx. D.3). Table 3: Next POI prediction on Foursquare NY and SG. Parentheses indicate relative improvement over the base model; ∆ denotes additional gain over POI-Enhancer. Bold = best. Model NY SG Hit@1 ↑ Hit@5 ↑ Hit@1 ↑ Hit@5 ↑                                                                                                  
+
+> TALE 5.828 ±0.025 12.427 ±0.177 9.777 ±0.136 22.021 ±0.380 + POI-Enhancer 7.876 ±0.051 (+35.14%) 16.107 ±0.144 (+29.60%) 10.736 ±0.018 (+9.81%) 23.159 ±0.076 (+5.17%)
+> +NARA 8.165 ±0.096 (+40.13%, ∆3.67%) 16.903 ±0.078 (+36.09%, ∆4.93%) 10.890 ±0.051 (+11.39%, ∆1.43%) 23.889 ±0.107 (+8.48%, ∆3.15%)
+> CTLE 7.018 ±0.148 14.194 ±0.307 10.323 ±0.137 22.572 ±0.121 + POI-Enhancer 7.699 ±0.028 (+9.70%) 15.872 ±0.051 (+11.82%) 10.667 ±0.003 (+3.33%) 23.199 ±0.043 (+2.78%)
+> +NARA 8.005 ±0.002 (+14.04%, ∆3.98%) 16.145 ±0.011 (+13.75%, ∆1.72%) 10.749 ±0.180 (+4.13%, ∆0.77%) 23.148 ±0.176 (+2.55%, ∇0.22%)
+
+5.4 Ablation Studies 
+
+We ablate each self-supervised objective for traffic speed prediction (NY) and building function classification (SG). Next POI prediction is excluded due to additional confounds introduced by sequential cross-attention modeling. Tab. 4 reports controlled relative comparisons using a fixed downstream configuration, whereas Tabs. 1 and 2 report averages over 10 runs following prior work. For traffic speed prediction, the results show limited differences across variants because road segments serve only as anchors, never as anchor members. Consequently, LACC and LRSR do not directly regularize polyline embeddings. The stable performance across ablation variants indicates that these objectives do not adversely affect polyline representations. For building function classification, each objective provides consistent gains. LMGSM alone yields relatively low Macro-F1 (69.44). Incorporating LACC leads to the largest improvement (+5.85% relative Macro-F1), highlighting the importance of anchor-conditioned relational learning for distinguishing underrepresented building types, with LRSR providing an additional +1.13% relative gain in the full model. Table 4: Ablation study of pretraining losses across downstream tasks. Bold = best. Traffic Speed (NY) Building Classification (SG) Variant RMSE ↓ MAE ↓ R2 ↑ MAPE ↓ Macro-F1 ↑ Acc. ↑ Weighted-F1 ↑LMGSM only 3.96 3.04 0.78 18.33% 69.44 91.38 90.50 + LGEO 3.96 3.04 0.78 18.30% 70.62 91.71 90.96 + LACC 3.98 3.04 0.78 18.18% 74.68 92.52 92.05 + LRSR (full) 3.99 3.04 0.78 18.16% 75.52 92.71 92.30 
+
+In addition, Tab. 5 isolates the role of spatial context. Replacing each target’s true neighborhood with randomly sampled geoentities, while keeping the target entity fixed, substantially degrades performance, indicating that the spatial organization of neighboring entities matters. These results suggest that NARA’s gains arise from spatial contextualization rather than only from strong semantic and geometric encodings. Table 5: Ablation of neighbor selection strategy. Traffic Speed (NY) Building Classification (SG) Neighbor Selection RMSE ↓ MAE ↓ R2 ↑ MAPE ↓ Macro-F1 ↑ Acc. ↑ Weighted-F1 ↑
+
+Random Neighbors (no spatial) 4.18 3.23 0.76 19.58% 26.87 76.88 73.17 Spatial Neighbors (NARA) 3.99 3.04 0.78 18.16% 75.52 92.71 92.30 
+
+## 6 Conclusion 
+
+We present NARA, a self-supervised framework grounded in relation-conditioned spatial auto-correlation, where semantic similarity among geoentities is governed jointly by metric proximity and topological relations. By integrating masked geoentity semantic modeling, spatial-aware at-tention supervision, and relation-conditioned modeling, NARA learns representations capturing adaptive, meaningful spatial context without task-specific feature engineering. Across a diverse set of downstream tasks, the same pretrained NARA achieves robust performance gains compared to task-specialized baselines. Without tailored architectures, NARA provides a unified pretraining framework for heterogeneous vector geospatial representation learning. Limitations and broader impacts are provided in Appdx. A. 9References 
+
+[1] OpenStreetMap contributors. Planet dump from openstreetmap. https://planet.osm.org ,2017. Accessed: 2026-03-26. [2] OpenStreetMap contributors, Overture Maps Foundation. Overture maps open data platform. 
+
+https://overturemaps.org , 2026. Accessed: 2026-03-26. [3] Paul A Longley, Michael F Goodchild, David J Maguire, and David W Rhind. Geographic information science and systems . John Wiley & Sons, 2015. [4] Mubashir Noman, Muzammal Naseer, Hisham Cholakkal, Rao Muhammad Anwer, Salman Khan, and Fahad Shahbaz Khan. Rethinking transformers pre-training for multi-spectral satellite imagery. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 27811–27819, 2024. [5] Gengchen Mai, Ni Lao, Yutong He, Jiaming Song, and Stefano Ermon. Csp: Self-supervised contrastive spatial pre-training for geospatial-visual representations. In International Conference on Machine Learning , pages 23498–23515. PMLR, 2023. [6] Zeping Liu, Lao Ni, Zhangyu Wang, Junfeng Jiao, and Gengchen Mai. Gair: Location-aware self-supervised contrastive pre-training with geo-aligned implicit representations. ISPRS Journal of Photogrammetry and Remote Sensing , 2026. [7] Konstantin Klemmer, Esther Rolf, Caleb Robinson, Lester Mackey, and Marc Rußwurm. Satclip: Global, general-purpose location embeddings with satellite imagery. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pages 4347–4355, 2025. [8] Daniela Szwarcman, Sujit Roy, Paolo Fraccaro, Orsteinn Elí Gíslason, Benedikt Blumenstiel, Rinki Ghosal, Pedro Henrique De Oliveira, Joao Lucas de Sousa Almeida, Rocco Sedona, Yanghui Kang, et al. Prithvi-eo-2.0: A versatile multi-temporal foundation model for earth observation applications. IEEE Transactions on Geoscience and Remote Sensing , 2025. [9] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. BERT: Pre-training of deep bidirectional transformers for language understanding. In Jill Burstein, Christy Doran, and Thamar Solorio, editors, Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers) , pages 4171–4186, Minneapolis, Minnesota, June 2019. Association for Computational Linguistics. [10] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representations , 2021. [11] Gengchen Mai, Krzysztof Janowicz, Bo Yan, Rui Zhu, Ling Cai, and Ni Lao. Multi-scale repre-sentation learning for spatial feature distributions using grid cells. In International Conference on Learning Representations , 2020. [12] Zekun Li, Jina Kim, Yao-Yi Chiang, and Muhao Chen. SpaBERT: A pretrained language model from geographic data for geo-entity representation. In Yoav Goldberg, Zornitsa Kozareva, and Yue Zhang, editors, Findings of the Association for Computational Linguistics: EMNLP 2022 , pages 2757–2769, Abu Dhabi, United Arab Emirates, December 2022. Association for Computational Linguistics. [13] Jiawei Cheng, Jingyuan Wang, Yichuan Zhang, Jiahao Ji, Yuanshao Zhu, Zhibo Zhang, and Xiangyu Zhao. Poi-enhancer: An llm-based semantic enhancement framework for poi represen-tation learning. Proceedings of the AAAI Conference on Artificial Intelligence , 39(11):11509– 11517, Apr. 2025. [14] Liang Zhang and Cheng Long. Road network representation learning: A dual graph-based approach. ACM Transactions on Knowledge Discovery from Data , 17(9):1–25, 2023. 10 [15] Haicang Zhou, Weiming Huang, Yile Chen, Tiantian He, Gao Cong, and Yew-Soon Ong. Road network representation learning with the third law of geography. In A. Globerson, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang, editors, Advances in Neural Information Processing Systems , volume 37, pages 11789–11813. Curran Associates, Inc., 2024. [16] Yi Li, Weiming Huang, Gao Cong, Hao Wang, and Zheng Wang. Urban region representation learning with openstreetmap building footprints. In Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , KDD ’23, page 1363–1373, New York, NY, USA, 2023. Association for Computing Machinery. [17] Nicolas Tempelmeier, Simon Gottschalk, and Elena Demidova. Geovectors: A linked open corpus of openstreetmap embeddings on world scale. In Proceedings of the 30th ACM Inter-national Conference on Information & Knowledge Management , CIKM ’21, page 4604–4612, New York, NY, USA, 2021. Association for Computing Machinery. [18] Pasquale Balsebre, Weiming Huang, Gao Cong, and Yi Li. City foundation models for learning general purpose representations from openstreetmap. In Proceedings of the 33rd ACM Interna-tional Conference on Information and Knowledge Management , CIKM ’24, page 87–97, New York, NY, USA, 2024. Association for Computing Machinery. [19] Yifan Yang, Jingyuan Wang, Xie Yu, and Yibang Tang. Hygmap: representing all types of map entities via heterogeneous hypergraph. In Proceedings of the Thirty-Fourth International Joint Conference on Artificial Intelligence , IJCAI ’25, 2025. [20] Yile Chen, Weiming Huang, Kaiqi Zhao, Yue Jiang, and Gao Cong. Self-supervised representa-tion learning for geospatial objects: A survey. Information Fusion , 123:103265, 2025. [21] Aditya Grover and Jure Leskovec. node2vec: Scalable feature learning for networks. In 
+
+Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , KDD ’16, page 855–864, New York, NY, USA, 2016. Association for Computing Machinery. [22] Meng-xiang Wang, Wang-Chien Lee, Tao-yang Fu, and Ge Yu. Learning embeddings of intersections on road networks. In Proceedings of the 27th ACM SIGSPATIAL International Conference on Advances in Geographic Information Systems , SIGSPATIAL ’19, page 309–318, New York, NY, USA, 2019. Association for Computing Machinery. [23] Tobias Skovgaard Jepsen, Christian S. Jensen, and Thomas Dyhre Nielsen. Relational fusion networks: Graph convolutional networks for road networks. IEEE Transactions on Intelligent Transportation Systems , 23(1):418–429, 2022. [24] Gengchen Mai, Chiyu Jiang, Weiwei Sun, Rui Zhu, Yao Xuan, Ling Cai, Krzysztof Janowicz, Stefano Ermon, and Ni Lao. Towards general-purpose representation learning of polygonal geometries. GeoInformatica , 27(2):289–340, 2023. [25] Maria Despoina Siampou, Jialiang Li, John Krumm, Cyrus Shahabi, and Hua Lu. Poly2vec: Polymorphic fourier-based encoding of geospatial objects for geoAI applications. In Forty-second International Conference on Machine Learning , 2025. [26] Chen Chu and Cyrus Shahabi. Geo2vec: Shape-and distance-aware neural representation of geospatial entities. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, pages 18985–18993, 2026. [27] Bo Yan, Krzysztof Janowicz, Gengchen Mai, and Song Gao. From itdl to place2vec: Reasoning about place type similarity and relatedness by learning embeddings from augmented spatial contexts. In Proceedings of the 25th ACM SIGSPATIAL international conference on advances in geographic information systems , pages 1–10, 2017. [28] Gengchen Mai, Bo Yan, Krzysztof Janowicz, and Rui Zhu. Relaxing unanswerable geographic questions using a spatially explicit knowledge graph embedding model. In International conference on geographic information science , pages 21–39. Springer, 2019. 11 [29] Weiming Huang, Lizhen Cui, Meng Chen, Daokun Zhang, and Yao Yao. Estimating urban functional distributions with semantics preserved poi embedding. International Journal of Geographical Information Science , 36(10):1905–1930, 2022. [30] Neal Jean, Sherrie Wang, Anshul Samar, George Azzari, David Lobell, and Stefano Ermon. Tile2vec: Unsupervised representation learning for spatially distributed data. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 33, pages 3967–3974, 2019. [31] Zhangyu Wang, Gengchen Mai, Krzysztof Janowicz, and Ni Lao. Mc-gta: Metric-constrained model-based clustering using goodness-of-fit tests with autocorrelations. In 41st International Conference on Machine Learning, ICML 2024 , 2024. [32] Hao Li, Jiapan Wang, Johann Maximilian Zollner, Gengchen Mai, Ni Lao, and Martin Werner. Rethink geographical generalizability with unsupervised self-attention model ensemble: A case study of openstreetmap missing building detection in africa. In Proceedings of the 31st ACM International Conference on Advances in Geographic Information Systems , pages 1–9, 2023. [33] Waldo R Tobler. A computer movie simulating urban growth in the detroit region. Economic geography , 46(sup1):234–240, 1970. [34] Waldo Tobler. On the first law of geography: A reply. Annals of the association of American geographers , 94(2):304–310, 2004. [35] Martin Bachmaier and Matthias Backes. Variogram or semivariogram? variance or semivari-ance? allan variance or introducing a new term? Mathematical Geosciences , 43(6):735–740, 2011. [36] Max Egenhofer. A mathematical framework for the definition of topological relations. In Proc. the fourth international symposium on spatial data handing , pages 803–813, 1990. [37] David A Randell, Zhan Cui, Anthony G Cohn, et al. A spatial logic based on regions and connection. KR , 92(165-176):40–40, 1992. [38] Blake Regalia, Krzysztof Janowicz, and Grant McKenzie. Computing and querying strict, approximate, and metrically refined topological relations in linked geographic data. Transactions in GIS , 23(3):601–619, 2019. [39] Zekun Li, Wenxuan Zhou, Yao-Yi Chiang, and Muhao Chen. GeoLM: Empowering language models for geospatially grounded language understanding. In Houda Bouamor, Juan Pino, and Kalika Bali, editors, Proceedings of the 2023 Conference on Empirical Methods in Nat-ural Language Processing , pages 5227–5240, Singapore, December 2023. Association for Computational Linguistics. [40] Yijun Lin, Yao-Yi Chiang, Meredith Franklin, Sandrah P. Eckel, and José Luis Ambite. Building autocorrelation-aware representations for fine-scale spatiotemporal prediction. In 2020 IEEE International Conference on Data Mining (ICDM) , pages 352–361, 2020. [41] Jilin Hu, Chenjuan Guo, Bin Yang, and Christian S. Jensen. Stochastic weight completion for road networks using graph convolutional networks. In 2019 IEEE 35th International Conference on Data Engineering (ICDE) , pages 1274–1285, 2019. [42] Dingqi Yang, Daqing Zhang, Vincent W Zheng, and Zhiyong Yu. Modeling user activity preference by leveraging user spatial temporal characteristics in lbsns. IEEE Transactions on Systems, Man, and Cybernetics: Systems , 45(1):129–142, 2014. [43] Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat models. arXiv preprint arXiv:2307.09288 , 2023. [44] Huaiyu Wan, Yan Lin, Shengnan Guo, and Youfang Lin. Pre-training time-aware location embeddings from spatial-temporal trajectories. IEEE Transactions on Knowledge and Data Engineering , 34(11):5510–5523, 2022. 12 [45] Yan Lin, Huaiyu Wan, Shengnan Guo, and Youfang Lin. Pre-training context and time aware location embeddings from spatial-temporal trajectories for user next location prediction. Pro-ceedings of the AAAI Conference on Artificial Intelligence , 35(5):4241–4248, May 2021. [46] Mordechai Haklay. How good is volunteered geographical information? a comparative study of openstreetmap and ordnance survey datasets. Environment and planning B: Planning and design , 37(4):682–703, 2010. [47] Ilya Loshchilov and Frank Hutter. Decoupled weight decay regularization. In International Conference on Learning Representations , 2019. 13 A Limitations & Broader Impact 
+
+Limitations NARA is pretrained on a specific geographic region; as with most geospatial mod-els [ 20 ], spatial variability across cities with different urban structures may limit transferability. We treat all polygons and polylines as potential anchors with equal importance, though anchor salience varies in practice. Learning anchor importance automatically, for example, by weighting anchors by spatial extent or entity density, is a promising direction for future work. Finally, geoentity attributes reflect human annotation biases inherent in crowdsourced OSM data [ 46 ], where tagging patterns reflect perceived importance rather than comprehensive coverage, which may introduce systematic biases into learned representations. 
+
+Broader Impact. NARA demonstrates that a single pretraining framework can serve diverse geospatial tasks across geometry types without requiring task-specific architectural design or domain expertise for feature engineering. Our experiments show transferability across data sources within the same regions: representations pretrained on OSM entities successfully contextualize Foursquare POIs for next-visit prediction. The framework enables diverse applications, including traffic speed attribution for polylines, functional typing for untagged building polygons, and integration with mobility applications for point-based POI prediction, paving the way toward unified pretraining frameworks for vector geospatial data. 
+
+## B Method Details 
+
+B.1 Topological Relation Definitions 
+
+We adopt a symmetric topological relation schema based on DE-9IM predicates [ 36 ]. We define four relations r ∈ 0, 1, 2, 3 and enforce mutual exclusivity via the following precedence: Contains/Within > Adjacent > Intersects > Disjoint. Relations are treated symmetrically: if vi is in relation r with vj ,then vj is in relation r with vi.• Disjoint ( r = 0 ): gi ∩ gj = ∅.• Intersects ( r = 1 ): Geometries share interior points but do not satisfy higher-precedence relations. • Adjacent ( r = 2 ): Geometries share boundary points while interiors do not intersect. • Contains/Within ( r = 3 ): One geometry is fully contained within the other. For representation learning, we treat containment and within as a shared symmetric contextual relation, focusing on co-participation in the same spatial context rather than directional topology. We adopt symmetric predicates because our objective is to capture shared relational context rather than directional roles. For example, a shop within a mall and the mall enclosing the shop describe the same spatial configuration from complementary perspectives. This design aligns with our anchor-conditioned formulation (§4.4), where entities sharing a relation to a common anchor are treated as siblings regardless of directional roles. Collapsing directional predicates also reduces the relation space, simplifying the classification task. 
+
+B.2 Semivariogram of Spatial Relations 
+
+The relational semivariogram regularization LRSR enforces that sibling pairs exhibit lower dispersion than non-sibling pairs at the same distance. We formalize the connection between cosine dissimilarity and squared Euclidean distance under ℓ2 normalization, and show that enforcing lower semivariance translates to a margin-based similarity gap. 
+
+Proposition 1 (Equivalence under normalization) . If embeddings are ℓ2-normalized ( ∥hsem  
+
+> i
+
+∥ = 1 for all i), then for any pair (vi, v j ):
+
+∥hsem  
+
+> i
+
+− hsem  
+
+> j
+
+∥2 = 2  1 − sim( hsem  
+
+> i
+
+, h sem  
+
+> j
+
+) , (24) 
+
+where sim( u, v ) = u⊤v/ (∥u∥∥ v∥) is cosine similarity. Proof. Expand the squared ℓ2 distance: 
+
+∥hsem  
+
+> i
+
+− hsem  
+
+> j
+
+∥2 = ∥hsem  
+
+> i
+
+∥2 + ∥hsem  
+
+> j
+
+∥2 − 2( hsem  
+
+> i
+
+)⊤hsem  
+
+> j
+
+.
+
+14 Under ℓ2 normalization, ∥hsem  
+
+> i
+
+∥ = ∥hsem  
+
+> j
+
+∥ = 1 , so: 
+
+∥hsem  
+
+> i
+
+− hsem  
+
+> j
+
+∥2 = 2 − 2( hsem  
+
+> i
+
+)⊤hsem  
+
+> j
+
+= 2  1 − sim( hsem  
+
+> i
+
+, h sem  
+
+> j
+
+) .
+
+This justifies using 1 − sim( hsem  
+
+> i
+
+, h sem  
+
+> j
+
+) as a proxy for squared distance in the semivariogram, up to a constant factor of 2. 
+
+Proposition 2 (Dispersion ordering implies similarity gap) . Fix a distance bin b and an anchor-relation group g = ( a, r ) with geometry type tg . Assume both Pb (non-sibling pairs of type tg in bin 
+
+b) and P (g) 
+
+> b
+
+(sibling pairs in group g in bin b) are non-empty. If the hinge term in LRSR corresponding to (b, g ) equals zero, then: 
+
+γ(g) 
+
+> rel
+
+(b) ≤ γ(tg ) 
+
+> glob
+
+(b) − δ. (25) 
+
+Under ℓ2 normalization, defining the average similarity over a pair set P as: 
+
+S(P ) = 1
+
+|P |
+
+X 
+
+> (vi,v j)∈P
+
+sim( hsem  
+
+> i
+
+, h sem  
+
+> j
+
+), (26) 
+
+it follows that: 
+
+S(P (g) 
+
+> b
+
+) ≥ S(Pb) + δ. (27) 
+
+Proof. If the hinge term equals zero, then by definition: 
+
+γ(g) 
+
+> rel
+
+(b) − γ(tg ) 
+
+> glob
+
+(b) + δ ≤ 0,
+
+which directly implies γ(g) 
+
+> rel
+
+(b) ≤ γ(tg ) 
+
+> glob
+
+(b) − δ.Under ℓ2 normalization, averaging Proposition 1 over any pair set P gives: 
+
+ˆγ(P ) = 1
+
+|P |
+
+X 
+
+> (vi,v j)∈P
+
+ 1 − sim( hsem  
+
+> i
+
+, h sem  
+
+> j
+
+) = 1 − S(P ).
+
+Substituting γ(g) 
+
+> rel
+
+(b) = 1 − S(P (g) 
+
+> b
+
+) and γ(tg ) 
+
+> glob
+
+(b) = 1 − S(Pb) into the dispersion inequality: 
+
+1 − S(P (g) 
+
+> b
+
+) ≤ 1 − S(Pb) − δ, 
+
+which rearranges to S(P (g) 
+
+> b
+
+) ≥ S(Pb) + δ.
+
+Interpretation: Proposition 2 shows that minimizing LRSR enforces a margin-based similarity gap between sibling and non-sibling pairs at each distance bin. Sibling pairs must be at least δ more similar (in cosine similarity) than non-sibling pairs at the same distance, ensuring that relational structure enhances semantic coherence beyond metric proximity alone. 
+
+B.3 Anchor Construction Details 
+
+We define three types of anchor-member relationships: (1) polyline anchors and polygon members within a 30-meter buffer (e.g., buildings near roads), (2) polyline anchors and point members within a 30-meter buffer (e.g., POIs near roads), and (3) polygon anchors and point members within a 5-meter buffer to capture containment (e.g., POIs inside buildings). All polygons and polylines serve as anchors without filtering by size; the spatial windowing in MGSM naturally constrains the anchor space. For polylines spanning multiple windows due to noding at intersections, we use the parent way ID for semantic grouping, treating noded segments of the same way as a single anchor. For the global (non-sibling) pairs used as the type-matched baseline in LRSR , we sample same-type pairs within a 100-meter buffer in each window and remove any pair that already appears as an anchor sibling, ensuring the baseline is purified of relational structure. 15 Table 6: Counts of geoentity relations used for spatial context construction.                   
+
+> Neighborhood & Relation NYC SG
+> Spatial Windows 61,008 44,982
+> Sibling Relations
+> Line →Point 348,055 277,308 Line →Polygon 729,654 1,048,146 Polygon →Point 41,958 66,002
+> Global (Non-Sibling)
+> All Pairs 1,299,060 1,622,367
+
+## C Experimental Setup 
+
+C.1 NARA Implementation Details 
+
+We employ BERT-base [ 9] (frozen, 768-dim output) for semantic encoding and Poly2Vec [ 25 ] (128-dim output) for geometry encoding. Both are projected to a shared 128-dimensional space and fused via adaptive gating (MLP with gate bias initialized to −2.0). The Transformer has 3 layers, 4 heads, feedforward dimension 256, and dropout 0.1. Each layer uses dual-stream attention: shared Q/K from fused embeddings Efused produce attention map A, which is applied to separate value branches for Hsem from masked semantic embeddings ˘Esem and Hfused from Efused .We pretrain NARA with AdamW [ 47 ] with learning rate 2 × 10 −4, weight decay 0.01, and cosine annealing over 100 epochs. Batch size is 256, gradients are clipped at norm 1.0. Loss weights: 
+
+αMGSM = 1 .0, αACC = 1 .0, αRSR = 50 .0, αtopo = 0 .5, αdist = 100 .0. Temperatures: τMGSM = 0 .15 ,
+
+τACC = 0 .3 (NY) / 0.4 (SG). Semivariogram margin δ = 0 .4, distance decay λ = 20 .0. Each pretraining was conducted on a single NVIDIA A100-SXM4-40GB GPU, with a total wall-clock runtime of approximately 7 hours (SG) and 10 hours (NY). 
+
+C.2 Pretraining Dataset Statistics 
+
+Table 7 summarizes the number of geoentities by geometry type, and Table 6 summarizes the spatial relations used for context construction. Polylines are noded at intersections prior to pretraining, resulting in the segment counts reported. Spatial windows of size 500 m with stride 250 m yield 61,008 and 44,982 windows for NYC and SG respectively. Sibling relations are defined over anchor-entity pairs sharing the same topological relation to a common anchor (polygon or polyline), covering line-to-point, line-to-polygon, and polygon-to-point configurations. Global (non-sibling) pairs are sampled across all geometry types within each spatial window to compute the type-matched global semivariance γ(t)
+
+> glob
+
+(b) in LRSR .Table 7: Geoentity statistics for NYC and Singapore after data preprocessing.         
+
+> Geoentity Type NYC SG Point 43,549 23,621 Polygon 49,486 40,594 Polyline 186,667 181,592
+
+C.3 Downstream Task Protocols Task A: Traffic Speed Estimation. We follow the CityFM protocol [ 18 ]. The data source is Uber Movement, which provides taxi speed measurements mapped to OSM road segments in New York City. Road segments with fewer than 10 observations are removed, resulting in 29,755 segments. Speeds are measured in miles per hour (mph) (mean 19.50, standard deviation 8.69, range 1.46–57.37). The dataset is split into 60% training, 20% validation, and 20% test sets. Evaluation metrics include root mean square error (RMSE), mean absolute error (MAE), coefficient of determination (R 2), and mean absolute percentage error (MAPE), reported as mean and standard deviation over 10 runs. 16 Task B: Building Function Classification. We follow the CityFM protocol [ 18 ]. The dataset consists of 64,384 OSM building polygons in Singapore labeled with an 8-class land-use taxonomy. The dataset is split into 50% training, 25% validation, and 25% test sets. Evaluation metrics include Macro-F1, Weighted-F1, and Accuracy, reported as mean and standard deviation over 10 runs. 
+
+Task C: Next POI Prediction. We follow the POI-Enhancer protocol [ 13 ]. The datasets are Foursquare check-in data from [ 42 ], including Foursquare-NY (15,171 users, 24,118 POIs, 641,005 check-ins) and Foursquare-SG (10,909 users, 20,154 POIs, 696,306 check-ins). Each dataset is randomly split into 60% training and 40% test sets. Performance is evaluated using Hit@ k (k = 1 , 5), which equals 1 if the ground-truth POI appears in the top-k predictions and 0 otherwise. We report the mean and standard deviation over three independent runs. 
+
+C.4 Baseline Details Task A: Traffic Speed Estimation Baselines. 
+
+• Topology (Road Network): 
+
+– Node2Vec [21 ]: learns node representations from biased random walks over the road-network graph by encouraging neighboring nodes in the walk context to have similar embeddings. 
+
+– GCWC [41 ]: a graph convolutional method that captures edge correlations and local spatial dependencies in road networks. 
+
+– RFN [ 23 ]: a graph neural network that models relational dependencies between connected road segments. • Geometry: 
+
+– Poly2Vec [25 ]: a geometry encoder that represents coordinate sequences in the spectral domain using Fourier transforms. 
+
+– Geo2Vec [26 ]: a geometry encoder based on Signed Distance Fields (SDFs) that captures fine-grained spatial boundary information. • Semantics + Metric: 
+
+– IRN2Vec [ 22 ]: learns road-intersection embeddings from random-walk sequences generated over adjacent intersections. 
+
+– GeoVectors [17 ]: learns embeddings of OSM entities by jointly modeling geographic coordi-nates and semantic tags. • Semantics + Geometry: 
+
+– CityFM [ 18 ]: combines hand-crafted polyline features, positional encodings, and learned semantic representations of surrounding point and polygon geoentities. 
+
+Task B: Building Function Classification Baselines. 
+
+• Non-Spatial Semantics: 
+
+– BERT (fine-tuned) [9]: a pretrained language model used as the textual encoder backbone. • Geometry: 
+
+– Poly2Vec [25 ], Geo2Vec [26 ]: geometry encoders that map spatial coordinates into continuous latent representations. • Semantics + Metric: 
+
+– GeoVectors [ 17 ]: encodes buildings using geographic coordinates and semantic information from neighboring entities. 
+
+– SpaBERT [12 ]: encodes surrounding entity names together with relative distance information from the target building. • Semantics + Geometry: 
+
+– CityFM [ 18 ]: combines polygon geometry features, positional encodings, polygon area, and learned semantic representations of nearby geographic entities. 
+
+Task C: Next POI Prediction Baselines. 
+
+• TALE [44 ]: learns POI embeddings from visit co-occurrence patterns while modeling temporal periodicity through hierarchical time discretization. • CTLE [45 ]: a self-supervised Transformer that learns contextual POI representations by recon-structing masked location and temporal attributes from visit sequences. 17 • POI-Enhancer [ 13 ]: enhances POI representations using auxiliary textual knowledge generated by large language models (e.g., Llama-2-7B [ 43 ]). It incorporates information such as addresses, nearby POIs, and check-in statistics, and aligns text-enhanced representations with pretrained POI embeddings (e.g., TALE or CTLE). 
+
+## D Additional Analyses 
+
+D.1 Polyline Analysis: Performance by Road Type 
+
+Tab. 8 evaluates traffic speed estimation across OpenStreetMap road categories. NARA achieves substantial error reductions on high-capacity corridors, including motorways (+42.3%) and trunk roads (+16.7%). Performance remains unstable for highly underrepresented categories such as “Con-struction” and “Service”, which together contain only 16 test segments. While CityFM incorporates manually designed semantic features that may help in rare categories (e.g., grouping with certain OSM road types), NARA consistently outperforms across primary road types. Table 8: Per-type performance for traffic speed prediction. Counts denote the number of test instances per class. Road Type Count MAE (NARA) MAE (CityFM [18]) Improvement Pedestrian 1 1.17 3.91 +70.0% Motorway 279 3.34 5.78 +42.3% Tertiary link 12 2.86 4.20 +31.9% Trunk link 30 3.44 4.46 +23.0% Trunk 71 3.63 4.36 +16.7% Living street 4 2.88 3.37 +14.6% Primary link 59 3.68 4.20 +12.2% Unclassified 89 3.30 3.71 +10.9% Primary 1,114 2.90 3.19 +9.1% Secondary 1,100 2.98 3.23 +7.6% Motorway link 377 5.15 5.49 +6.2% Tertiary 602 2.99 3.17 +5.4% Residential 2,160 2.68 2.79 +3.9% Secondary link 37 4.00 4.05 +1.3% Construction 4 4.40 2.60 –68.9% Service 12 9.15 4.07 –124.5% 
+
+D.2 Polygon Analysis: Performance by Land Use Label 
+
+Tab. 9 evaluates building classification performance across land-use categories. NARA outperforms CityFM in 7 out of 8 classes, demonstrating robust performance on dominant classes such as “Residential” while substantially improving accuracy on less frequent functional categories. In particular, we observe large gains in Civic & Community Institutions (+26.55 F1) and Transport (+11.94 F1). Table 9: Per-class F1 score for building function classification (SG). Counts denote the number of test instances per class. Category Count CityFM NARA Residential 8,645 96.03 96.09 Industrial 2,087 94.65 94.70 Commercial 1,038 87.07 87.96 Comm. & Res. 329 46.29 53.69 Educational 286 73.00 69.23 Civic & Commun. Inst. 241 24.92 51.47 Sports & Recr. 151 69.76 77.58 Transport 103 61.53 73.47 
+
+D.3 Point Analysis: Performance by Check-in POI Type 
+
+We evaluate next POI prediction accuracy across the top 15 venue types in the Foursquare-New York dataset (Tab. 10). NARA achieves the best Hit@1 scores in 11 out of 15 categories, outperforming 18 POI-Enhancer ranging from “Mexican Restaurants” to “Train Stations”. While POI-Enhancer remains competitive on categories such as “Subways” and “Offices” by leveraging rich textual descriptions, NARA benefits from direct interaction with underlying OSM geo-entities. Table 10: Per-category Hit@1 and Hit@5 for next POI prediction (NY-CTLE). Counts denote the number of test instances per type. Foursquare POI Type Count NARA POI-Enhancer Hit@1 Hit@5 Hit@1 Hit@5 Subway 1,863 20.77 39.77 21.15 41.60 Bar 1,677 1.49 5.37 2.62 5.55 Home (private) 1,630 22.94 43.37 22.39 43.37 Office 1,340 23.66 37.16 25.45 37.99 Coffee Shop 1,323 4.84 12.55 7.33 13.83 Park 1,158 9.50 16.75 8.89 16.41 Neighborhood 876 11.07 21.35 7.76 22.60 American Restaurant 819 2.56 7.45 2.20 6.72 Hotel 801 11.24 18.23 10.24 20.35 Mexican Restaurant 795 8.55 15.97 5.66 11.82 Grocery Store 750 5.87 14.67 5.73 14.53 Deli / Bodega 724 19.48 38.81 16.30 39.23 Train Station 683 16.69 33.38 15.37 32.21 Building 627 14.04 28.71 12.92 29.67 Italian Restaurant 587 2.04 4.60 1.70 3.92 19

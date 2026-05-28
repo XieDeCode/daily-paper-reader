@@ -1,0 +1,933 @@
+Title: MetaEarth-MM: Unified Multimodal Remote Sensing Image Generation with Scene-centered Joint Modeling
+
+URL Source: https://arxiv.org/pdf/2605.20090v1
+
+Published Time: Wed, 20 May 2026 01:44:24 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+1
+
+# MetaEarth-MM: Unified Multimodal Remote Sensing Image Generation with Scene-centered Joint Modeling 
+
+Zhiping Yu, Chenyang Liu, Jinqi Cao, Qinzhe Yang, Siwei Yu, Zhengxia Zou, Senior Member, IEEE , and Zhenwei Shi*, Senior Member, IEEE 
+
+Abstract —Multi-modal remote sensing images are vital for Earth observation, yet complete paired observations are often scarce in practice. Existing generative methods commonly ad-dress this problem through isolated pairwise modality translation, but their versatility and scalability remain limited as the number of modalities and generation tasks increases. Here, we develop a generative foundation model MetaEarth-MM for multi-modal re-mote sensing imagery, enabling paired joint generation and any-to-any translation across five modalities within a unified model. Recognizing the intrinsic scene consistency underlying multi-modal observations, we introduce a scene-centered joint modeling paradigm in MetaEarth-MM. Unlike previous methods that rely on direct appearance-level cross-modal mapping, our model organizes the generation around the underlying scene content. Specifically, MetaEarth-MM adopts a decoupled architecture that first infers a latent scene representation from available observations, and then generates target modalities conditioned on this intermediate state. To support training, we further construct EarthMM, a large-scale dataset comprising 2.8 million multi-resolution global images with 2.2 million aligned pairs. Extensive experiments demonstrate that MetaEarth-MM not only exhibits strong generative capability and robust generalization across diverse generation tasks, but also supports downstream tasks at both data and representation levels, highlighting its potential as a general foundation model for cross-modal Earth observation. The code and dataset will be available at https: //github.com/YZPioneer/MetaEarth-MM. 
+
+Index Terms —Generative foundation model, unified multi-modal image generation, remote sensing, scene-centered joint modeling. 
+
+I. I NTRODUCTION 
+
+# MULTI-MODAL imagery is fundamental to modern Earth observation, as different remote sensing modal-ities provide complementary information about the Earth’s surface [1]–[3]. Modalities such as optical imagery, Synthetic Aperture Radar (SAR), and Near Infrared (NIR) capture 
+
+This work was supported in part by the National Natural Science Foundation of China under Grants U24B20177, 62125102, U25A20401, 62471014 and 624B2017, in part by the Inner Mongolia Autonomous Region Science and Technology Planning Project under Grant 2025YFHH0124, in part by the Beijing Natural Science Foundation under QY25221 and in part by the Fundamental Research Funds for the Central Universities. (*Corresponding author: Zhenwei Shi.) 
+
+Zhiping Yu, Chenyang Liu, Jinqi Cao, Siwei Yu, Zhengxia Zou and Zhen-wei Shi are with the Department of Aerospace Intelligent Science and Tech-nology, School of Astronautics, Beihang University, Beijing 100191, China and the State Key Laboratory of Virtual Reality Technology and Systems, Bei-hang University, Beijing 100191, China (e-mail: shizhenwei@buaa.edu.cn). Qinzhe Yang is with Shenyuan Honors College, Beihang University, Beijing 100191, China. Latent scene      
+
+> representation 𝒔
+> O
+> b
+> s
+> e
+> r
+> v
+> e
+> d
+> m
+> o
+> d
+> a
+> l
+> i
+> t
+> i
+> e
+> s
+> generate
+> target modality
+> PAN OSM
+> SAR NIR
+> RGB
+> Previous methods
+> RGB SAR
+> RGB OSM
+
+…… 
+
+MetaEarth -MM (Ours)  
+
+> PAN NIR
+> Pair -specific
+> conditional mappings
+
+𝑝 𝑥 𝑖 𝑥 𝑗 
+
+Unified scene -centered 
+
+joint modeling 
+
+𝑝 𝑥 𝑖 , 𝑥 𝑗 |𝑠 = 𝑝 𝑥 𝑖 𝑠 𝑝 (𝑥 𝑗 |𝑠 )
+
+Fig. 1. Comparison between existing pairwise modality translation methods and the proposed MetaEarth-MM. Left : Previous isolated direct cross-modal mappings. Right : Proposed MetaEarth-MM with scene-centered joint model-ing. Unlike previous pair-specific appearance mappings, our model organizes multi-modal generation around an inferred latent scene representation. 
+
+distinct physical properties and play important roles in appli-cations including environmental monitoring, urban planning, and disaster response [4]–[7]. However, complete and well-aligned paired observations across multiple modalities are often difficult to obtain in practice. This data scarcity has motivated growing interest in generative models for multi-modal remote sensing image synthesis [8]–[10]. Most existing studies address this problem through modality translation [11]–[15], where a model learns a conditional distribution from an observed source modality to a target modality. While this paradigm has achieved promising results for specific modality pairs, it remains limited as a general solution for multi-modal remote sensing generation. On the one hand, it inherently relies on the presence of an observed source modality, limiting its applicability to source-free paired generation. On the other hand, its scalability remains lim-ited, as extending to more modalities and generation tasks often requires training separate translation models for different modality pairs. These limitations highlight the need to develop a unified generative model for diverse modalities and multi-modal generation tasks. Joint distribution modeling provides an effective way to construct such a unified model. Under this paradigm, pairwise conditional distributions are subsumed by joint modeling [16], 
+
+> arXiv:2605.20090v1 [cs.CV] 19 May 2026 2
+
+[17]. The same model can therefore generate a target modality when an observed modality is available, and jointly sample paired modalities without relying on a specific source modal-ity. Moreover, by capturing cross-modal dependencies and co-occurrence patterns, joint modeling further enables shared scene-level information and cross-modal complementarities to be integrated across different modality pairs. This provides a more general basis for building a unified multi-modal generative model. Despite its promise, developing a unified multi-modal gen-erative model remains highly challenging due to the hetero-geneity across diverse modalities. Different modalities exhibit distinct visual characteristics, physical properties, and data distributions. For example, optical imagery mainly reflects spectral appearance such as color and texture, whereas SAR captures microwave backscatter and primarily characterizes structural and dielectric properties. These modality-specific patterns may interfere with one another in a unified model, leading to degraded generation fidelity. In addition, sharing a limited model capacity across different modalities will further complicate joint optimization within a unified network. To address these challenges, we start from the intrinsic scene consistency of multi-modal remote sensing data, recognizing that different modalities can be regarded as modality-specific observations or representations of the same underlying scene. This insight leads us to reformulate multi-modal generation in a scene-centered paradigm, anchoring the generative process around the intrinsic scene content. As shown in Fig. 1, under this scene-centered joint modeling paradigm, a latent scene representation is first inferred from available observations, and target modalities are then generated conditioned on that rep-resentation. This paradigm also provides a unified foundation for both paired joint generation and cross-modal translation. Building upon this paradigm, we propose MetaEarth-MM, a unified generative foundation model for multi-modal remote sensing imagery across five modalities: RGB, SAR, NIR, Panchromatic image (PAN), and OSM. To instantiate the proposed scene-centered joint modeling paradigm, MetaEarth-MM introduces a decoupled architecture for modeling the joint distribution of aligned multi-modal remote sensing images under the flow matching framework. Specifically, the model consists of two components: a scene inference module and a modality-aware routed generator. The scene inference module estimates a latent scene representation from available noisy modality latents. Conditioned on this inferred representation, the modality-aware routed generator predicts the velocity field of each target modality through modality-specific generation routes. Crucially, we further introduce a scene consistency regularization during training, encouraging different modal observations of the same scene to yield a latent representation centered on the underlying scene. In this way, MetaEarth-MM separates shared scene modeling from modality-specific generation, enabling diverse generation tasks within a unified model while reducing cross-modal interference and capacity competition caused by heterogeneous modality distributions. To support unified multi-modal generation, we construct a large-scale multi-modal remote sensing dataset EarthMM. Ex-isting datasets are often limited in modality diversity, dataset scale, or modality combinations, which restricts the devel-opment of unified multi-modal generative models. EarthMM contains 2.8 million images across five modalities, covering diverse geographic regions and a wide range of spatial res-olutions from 0.5 to 10 m per pixel, thereby providing the data foundation for joint generative modeling across diverse modalities. Comprehensive experiments demonstrate that MetaEarth-MM achieves superior generative performance in both paired joint generation and any-to-any translation across diverse modalities. It also exhibits strong zero-shot generalization, successfully synthesizing unseen modality combinations be-yond those observed during training. Beyond image gen-eration, MetaEarth-MM supports downstream tasks through generative data augmentation, image-level domain adaptation, and zero-shot representation transfer. These results suggest that MetaEarth-MM shows promise as both a powerful multi-modal generator and a versatile foundation model for multi-modal Earth observation. The contributions of this paper are summarized as follows:  
+
+> •
+
+We propose MetaEarth-MM, a unified foundation model for multi-modal remote sensing image generation under a scene-centered joint modeling paradigm. Its decoupled ar-chitecture separates latent scene inference from modality-specific generation, enabling paired joint generation and any-to-any cross-modal translation across five modalities within a unified model.  
+
+> •
+
+We construct EarthMM, a globally distributed multi-modal remote sensing dataset comprising 2.8 million images and 2.2 million aligned pairs. With larger-scale paired observations, broader modality diversity, and a wider range of spatial resolution than existing datasets, EarthMM serves as a comprehensive data foundation for developing multi-modal generative models.  
+
+> •
+
+We demonstrate the downstream utility of MetaEarth-MM at both data and representation levels, showing its role as a multi-modal generative data engine and its ability to support zero-shot transfer through learned scene representations. II. R ELATED WORK 
+
+A. Unified Multi-modal Image Generation in General Vision 
+
+Synthesizing images across diverse visual modalities re-mains a fundamental challenge in computer vision. Early efforts in cross-modal generation primarily focused on acollection of isolated Image-to-Image (I2I) translation tasks. Early GAN-based methods, such as Pix2Pix [11], [18] and CycleGAN [19], independently addressed different translation tasks, requiring a dedicated model for each pair of specific modality. Subsequent variants [20]–[23] focused on enhancing synthesis fidelity and mapping robustness across more com-plex scenarios. With the advent of diffusion models, this fragmented I2I paradigm evolved toward unified multi-modal architectures. Seminal works like Palette [24] demonstrated that a single diffusion model can master diverse conditional generation problems. Following this trend, recent generative foundation 3
+
+models have further broadened the scope to support gener-ation and translation tasks across an expanded set of visual modalities. These models [25]–[28] can simultaneously handle bidirectional mappings between RGB images and various spatial conditions, encompassing tasks such as RGB-to-canny, RGB-to-pose and their inverse generation processes. In parallel, significant progress has been made in adapting pre-trained foundation models for conditional cross-modal im-age generation. ControlNet [29] and its concurrent works [30], [31] introduce parameter-efficient mechanisms to inject diverse visual modality guidance, such as edge maps and semantic layouts, into pre-trained generative foundation models. More recently, OminiControl [32] also extended these parameter-efficient condition injection mechanisms to modern DiT mod-els [33]–[35]. Building upon these frameworks, UniControl [36] and Uni-ControlNet [37] have demonstrated remarkable capabilities in handling multiple visual representations simul-taneously, enabling more flexible and composable cross-modal image generation. While successful in general vision, these methods typically treat image generation as an RGB-centric task where other modalities serve merely as auxiliary conditions. This primary-auxiliary assumption is ill-suited for Earth observation. Re-mote sensing data consists of parallel, equally significant observations of the identical geographical area. Thus, instead of using one modality simply to condition another, there is a critical need to explicitly model the joint distribution across these diverse modalities. 
+
+B. Multi-modal Image Generation in Remote Sensing 
+
+Historically, early research on multi-modal remote sensing image generation was largely developed in a modality-specific manner, with most methods designed for individual modalities or narrowly defined generation settings. One important line of work focuses on modality-specific generation conditioned on auxiliary signals other than source images, such as seman-tic descriptors, category information, or modality-dependent physical cues. In this setting, models are often designed to reflect the imaging principles of a particular sensor, enabling physics-informed and interpretable generation [8], [9], [38]– [41]. While these methods are effective at modeling the data distribution within a single modality, their specialized architectures and sensor-dependent assumptions make them difficult to extend toward unified cross-modal generation. Another major line of research studies cross-modal im-age translation between heterogeneous sensor observations. Representative tasks include SAR-to-optical translation and NIR/PAN colorization. Most early methods were devel-oped under an image-to-image translation framework (e.g., Pix2Pix [11]), and improved synthesis fidelity and spatial consistency through enhanced feature representations [42], frequency-domain or multi-scale constraints [43], and tempo-ral modeling [44]. Subsequent work further addressed unpaired or data-limited settings by introducing priors from pre-trained optical foundation models. More recently, diffusion-based methods have also been adapted to remote sensing translation, particularly by incorporating inductive biases tailored to SAR characteristics [45]–[47]. A related yet distinct direction is map-satellite transla-tion, which connects abstract semantic layouts with realistic remote sensing imagery. Benefiting from the controllability of ControlNet and the strong priors of pre-trained diffusion models, methods such as Map-Sat [48] and GeoSynth [49] generate high-resolution remote sensing imagery from map layouts. Extending this direction, EarthMapper [13] further explores bidirectional map-satellite translation and investigates the interaction between structured map representations and satellite observations. While these methods are effective within their targeted tasks, most existing approaches remain centered on isolated conditional generation or pairwise image-to-image translation. Such formulations are typically designed for a single source-target mapping and therefore do not explicitly model the broader relationships among multiple remote sensing modal-ities. Although recent studies have begun to explore unified multi-modal generative modeling [50], they typically rely on direct joint modeling paradigms that implicitly entangle diverse modalities. In contrast, MetaEarth-MM reformulates this process through a novel scene-centered paradigm. By introducing a latent scene representation as an intermediate variable, our method organizes the generative process around the intrinsic scene content. 
+
+C. Remote Sensing Generative Foundation Model 
+
+The rapid evolution of generative AI has facilitated the in-troduction of generative foundation models to remote sensing [51]–[56]. Early efforts in this area mainly focused on adapting latent diffusion models [57] for remote sensing text-to-image generation. Representative works such as DiffusionSat [54] and RSDiff [55] demonstrated the feasibility of adapting es-tablished natural image generative architectures [58] to remote sensing imagery. Building on these advances, subsequent studies further expanded both the scale and scope of remote sensing genera-tion. MetaEarth [59], [60] introduced a resolution-guided self-cascading framework that enables unbounded multi-resolution remote sensing image generation at a global scale. In parallel, Text2Earth [12] established Git-10M, a global-scale image-text pair dataset, to train billion-parameter foundation models, which demonstrates remarkable flexibility across diverse gen-erative tasks, including zero-shot generation, image editing, and cross-modal image translation. To provide these foundation models with finer spatial and structural control, later research increasingly turned to more precise conditional generation. A prominent line of work focuses on adapting ControlNet [29] or T2I-Adapters [30] to remote sensing, employing dense structural inputs, such as se-mantic maps, layouts, or edge images, to guide the generation process. For instance, Crs-Diff [61] supports multiple control signals for guided image generation, while HSIGene [15] further extends this multi-conditional framework to hyperspec-tral imagery. Beyond external control branches, other studies refine internal model representations to improve controllability. A representative example is MGDiff [62], which enables precise object-count control by imposing constraints at three granularities. 4Generator block × N
+
+> Scene inference module block  × L
+> VAE
+> Enc
+> noise
+
+𝒛 𝒊 
+
+> 𝒕 𝒊
+
+𝒛 𝒋 
+
+> 𝒕 𝒋
+> Inferred scene
+> representation
+
+ො𝒔 𝒋 
+
+ො𝒔 𝒊   
+
+> 𝑒 𝑚 𝑖
+> 𝑒 𝑡 𝑖
+> 𝑒 𝑚 𝑗
+> 𝑒 𝑡 𝑗
+> Patch
+> Embedder 𝑖
+> Patch
+> Embedder 𝑗
+> Partition AdaLN
+> Multi -head Self -attention
+> Partition AdaLN
+
++
+
++
+
+Q
+
+K
+
+V
+
+> Feedforward  Network
+
+Modality -aware routed generator 𝓖 𝝓 Scene inference module 𝓔 𝜽   
+
+> 𝛾 𝑖 ,𝛽 𝑖
+> 𝛾 𝑗 ,𝛽 𝑗
+
+𝓛 𝒔𝒄 
+
+> Eq.(17)
+
+𝒛 𝒊 
+
+> 𝒕 𝒊
+
+𝒛 𝒋 
+
+> 𝒕 𝒋
+> Multi -head Self -attention
+> Token -wise AdaLN
+> Modality -aware FFN router
+> Linear & Unpatchify
+
+ෝ𝒗 𝒋 
+
+ෝ𝒗 𝒊 
+
+> Token -wise AdaLN
+> 𝑡 𝑗 ~U(0,1)
+> 𝛾 𝑖 ,𝑛
+> 𝛽 𝑖 ,𝑛
+> 𝛾 𝑖 ,𝑛
+> 𝛽 𝑖 ,𝑛
+
++
+
+> +
+
+Real -world scene 
+
+𝒙 𝒊 
+
+𝒙 𝒋     
+
+> PAN
+> RGB
+> Multi -modal
+> dataset
+> （ℳ)
+> SAR OSM
+> NIR
+> VAE
+> Enc
+> noise
+> Sample
+> 𝒙 𝒊 ,𝒙 𝒋 ~𝓜
+> 𝑡 𝑖 ~U(0,1)
+
+𝓛 𝒋𝒐𝒊𝒏𝒕 Eq.(8) 
+
+Fig. 2. Overall architecture of MetaEarth-MM. The model adopts a decoupled architecture consisting of two components: a scene inference module that infers the latent scene representation from paired noisy observations, and a modality-aware routed generator that predicts modality-specific velocity fields conditioned on the inferred scene representation. During training, a scene consistency regularization is further introduced, encouraging different modal observations of the same scene to yield a latent representation centered on the underlying scene. 
+
+Despite the substantial progress of existing image-conditioned remote sensing generative foundation models, their primary focus has largely remained on visible-image generation and spatially controlled synthesis. On the one hand, many current methods build upon backbones pretrained on RGB imagery, and their generation space is correspondingly centered on visible optical outputs. On the other hand, their conditioning inputs are typically general spatial layouts, which are less directly suited to modeling the translation relationships among diverse Earth observation modalities. In this paper, we propose MetaEarth-MM, a unified remote sensing generative foundation model that extends generative modeling beyond visible imagery and supports multi-modal generation across five modalities. Within a single framework, it enables joint generation and zero-shot any-to-any translation, broadening the scope of remote sensing generative foundation models. III. T HE PROPOSED META EARTH -MM 
+
+A. From conditional to joint flow matching 
+
+Most existing methods achieve paired multi-modal im-age generation through isolated cross-modal translation. Given a set of remote sensing modalities M, e.g., M =
+
+{RGB , NIR , SAR , PAN , OSM }, let xi and xj denote paired observations from two different modalities mi, m j ∈ M , they typically learn a conditional distribution p(xi|xj ). However, this paradigm confines paired generation to scenarios where a source modality is observed, and scales poorly with modality diversity. To overcome these limitations, we shift our focus to joint distribution modeling. By learning the joint distribution 
+
+p(xi, xj ), the model subsumes pairwise conditional generation while naturally enabling source-free joint sampling. To accomplish this modeling process, we adopt the con-tinuous flow matching framework [63]. In the following, we detail the mathematical transition from conditional to joint flow matching. For a modality mi, let z0 
+
+> i
+
+denote the latent embedding of xi encoded by a pre-trained variational autoen-coder (VAE) [57], and let z1 
+
+> i
+
+∼ N (0, I) be a standard Gaussian sample. Rectified flow [64] defines a linear interpolation path between data and noise: 
+
+zti = (1 − t)z0 
+
+> i
+
++ tz1 
+
+> i
+
+(1) where t ∈ [0 , 1] is the continuous time variable. The corre-sponding target velocity field is given by 
+
+vi = dzti
+
+dt = z1 
+
+> i
+
+− z0 
+
+> i
+
+(2) Under the conditional distribution modeling paradigm, the model only predicts the velocity of the target modality while treating the other modality as a clean condition. Specifically, for generating modality mi conditioned on mj , the model learns 
+
+ˆvi = fθ (zti, t, z0 
+
+> j
+
+), (3) and is trained with the standard flow matching objective: 
+
+Lcond = Ez0   
+
+> i,z0
+> j,z1
+> i,t
+
+h
+
+fθ (zti, t, z0 
+
+> j
+
+) − vi
+
+> 22
+
+i
+
+. (4) To support a more comprehensive joint generative frame-work, recent studies [16], [17] have shown that multiple modalities can be jointly modeled by independently perturb-ing each modality with its own noise level. Following this paradigm, we independently corrupt the latent representations of both modalities and obtain the joint noisy state: 
+
+zti 
+
+> i
+
+= (1 − ti)z0 
+
+> i
+
++ tiz1 
+
+> i
+
+, ztj 
+
+> j
+
+= (1 − tj )z0 
+
+> j
+
++ tj z1 
+
+> j
+
+(5) where ti, t j ∈ [0 , 1] are independently sampled timesteps. Their corresponding target velocities are 
+
+vi = z1 
+
+> i
+
+− z0 
+
+> i
+
+, vj = z1 
+
+> j
+
+− z0 
+
+> j
+
+(6) 5
+
+The model then jointly predicts the dual velocity fields from the noisy modality pair: 
+
+(ˆ vi, ˆvj ) = Fθ (zti 
+
+> i
+
+, ztj 
+
+> j
+
+, t i, t j ) (7) with the training objective 
+
+Ljoint = E
+
+h
+
+∥ˆvi − vi∥22 + ∥ˆvj − vj ∥22
+
+i
+
+. (8) By sampling ti and tj independently during training, a single model can jointly learn marginal, conditional, and joint generation within a unified framework. This joint modeling paradigm provides the mathematical basis for unified multi-modal generation. we next present our scene-centered joint modeling paradigm for unified multi-modal remote sensing image generation. 
+
+B. Overview of the MetaEarth-MM scene-centered joint mod-eling paradigm 
+
+Building upon the joint flow matching framework, we propose a scene-centered joint modeling paradigm for unified multi-modal remote sensing generation. Driven by the intrinsic scene consistency of multi-modal data, we organize the gen-erative process around the underlying scene content. Based on this paradigm, we develop a unified generative foundation model MetaEarth-MM with a decoupled architecture. Fig. 2 illustrates the overall architecture of the proposed model. Specifically, the model first infers a latent scene representation from current noisy observations, and then uses this represen-tation to guide the generation of each modality with its own observation and representation characteristics. Given a paired sample (xi, xj ) from modalities mi and 
+
+mj , we assume that both observations correspond to the same underlying scene state, denoted by s. Here, s is a conceptual variable representing the scene underlying the paired observa-tions. Under this scene-centered paradigm, the joint modeling of the modality pair is explicitly decoupled by conditioning on this shared scene state: 
+
+p(xi, xj |s) = p(xi|s) p(xj |s) (9) This conditional independence directly motivates our decou-pled architectural design: given the inferred scene state, the generation of each modality can be carried out independently. Correspondingly, within the flow matching framework, the joint velocity field (ˆ vi, ˆvj ) naturally decouples into indepen-dent modality-specific velocity predictions conditioned on this shared scene state. However, since the state s is unobserved in practice, it is not directly accessible to the model. To address this, we design a scene inference module Eθ to implicitly estimate latent scene representations from noisy observations. Given a pair of noisy modality latents (zti 
+
+> i
+
+, ztj 
+
+> j
+
+), the scene inference module processes them jointly and outputs paired scene embeddings, denoted as ˆsi and ˆsj :
+
+[ˆ si, ˆsj ] = Eθ (zti 
+
+> i
+
+, ztj 
+
+> j
+
+, t i, t j , m i, m j ) (10) where mi and mj denote modality identifiers. Since both embeddings are inferred from observations of the same scene, we further introduce a scene-consistency regularization during training to encourage ˆsi and ˆsj to remain close, so that they can better approximate the same underlying scene state s.Details are provided in Sec. IV-C. Conditioned on the inferred latent scene representation, we further design a unified modality-aware routed generator 
+
+Gϕ to predict the target velocity field for each modality independently: 
+
+ˆvi = Gϕ(zti 
+
+> i
+
+, ˆsi, t i, m i), ˆvj = Gϕ(ztj 
+
+> j
+
+, ˆsj , t j , m j ) (11) where ˆvi and ˆvj denote the predicted velocity fields for modalities mi and mj , respectively. Structurally, this decou-pled model design organizes cross-modal interaction at the scene inference stage, while leaving modality-specific velocity prediction to separate generation processes, thereby helping alleviate representation entanglement across heterogeneous modalities. 
+
+C. Scene inference module 
+
+The scene inference module Eθ is designed to estimate a latent scene representation from the paired noisy observations. To this end, we build Eθ upon a diffusion transformer (DiT) architecture and adapt it to the setting where paired modalities are jointly processed with independently sampled noise levels. For each modality k ∈ {i, j }, the noisy latent ztk 
+
+> k
+
+∈
+
+RH×W ×C is first converted into a sequence of N tokens with dimension D through a modality-specific patch embedding layer. Since the paired modalities are spatially aligned, we in-ject a shared spatial positional embedding Epos ∈ RN ×D into different modality token sequences to preserve location-wise correspondence. Meanwhile, a learnable modality embedding 
+
+emk ∈ RD is added to retain modality identity. The resulting input tokens are written as: 
+
+H(0)  
+
+> k
+
+= Patch k(ztk 
+
+> k
+
+) + Epos + emk (12) and these tokens from both modalities are concatenated along sequence dimension to form the joint input sequence H(0) =[H(0)  
+
+> i
+
+; H(0)  
+
+> j
+
+] ∈ R2N ×D .The H(0) is subsequently processed by L standard DiT blocks. Within the l-th block, different modality partitions share the same set of attention projection layers (i.e., 
+
+Wlq , Wlk, Wlv ∈ RD×D). The self-attention is then performed over the full sequence, allowing each token to aggregate both intra-modal context and cross-modal correspondences. Meanwhile, since the tokens of each modality are perturbed under independently sampled noise levels and exhibit distinct modality characteristics, we introduce a partition adaptive layer normalization to enable the model to adapt to differences in both noise scale and modality-specific features. Specifically, for each modality k ∈ {i, j }, the modulation parameters 
+
+γ(l) 
+
+> k
+
+and β(l) 
+
+> k
+
+are generated from a condition embedding 
+
+ck = etk + emk , where etk ∈ RD denotes the embedding of timestep tk:
+
+[γ(l) 
+
+> k
+
+, β(l) 
+
+> k
+
+] = MLP( ck) (13) 6
+
+where MLP denotes a multi-layer perceptron. These param-eters are applied only to the tokens of the corresponding modality partition: 
+
+¯H(l−1)  
+
+> k
+
+= γ(l) 
+
+> k
+
+⊙ LayerNorm( H(l−1)  
+
+> k
+
+) + β(l) 
+
+> k
+
+(14) where ⊙ represents element-wise multiplication. In this way, pairwise dependencies are jointly modeled in a shared atten-tion space, while the network remains flexible to accommodate heterogeneous feature patterns across modalities. After L blocks, the final sequence is denoted as H(L) =[ˆ si, ˆsj ], where ˆsi, ˆsj ∈ RN ×D represent the latent scene embeddings for each modality. Since both embeddings serve as estimates of the same underlying scene, we further impose a scene-consistency regularization. Specifically, the similarity between ˆsi and ˆsj is defined by averaging the cosine similarity over spatially corresponding tokens: 
+
+sim(ˆ si, ˆsj ) = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+ˆs⊤
+
+> i,n
+
+ˆsj,n 
+
+∥ˆsi,n ∥2 ∥ˆsj,n ∥2
+
+(15) where ˆsi,n , ˆsj,n ∈ RD denote the n-th tokens in the embed-dings ˆsi and ˆsj . Based on this similarity, we define the scene-consistency loss using a symmetric InfoNCE objective over a mini-batch of size B. The directional loss from modality i to 
+
+j is defined as follows: 
+
+Li→j 
+
+> sc
+
+= − 1
+
+B
+
+> B
+
+X
+
+> b=1
+
+log exp(sim(ˆ s(b) 
+
+> i
+
+, ˆs(b) 
+
+> j
+
+)/τ )
+
+PBm=1 exp(sim(ˆ s(b) 
+
+> i
+
+, ˆs(m) 
+
+> j
+
+)/τ ) (16) where τ is a learnable temperature parameter, ˆs(b) 
+
+> i
+
+and ˆs(b)
+
+> j
+
+denote the paired scene embeddings of the b-th sample in the mini-batch. The full scene-consistency loss is then given by the average of the two directional InfoNCE terms: 
+
+Lsc = 12
+
+ Li→j 
+
+> sc
+
++ Lj→i
+
+> sc
+
+ (17) 
+
+D. Modality-aware routed generator 
+
+The modality-aware routed generator Gϕ is designed to predict the latent velocity field of each modality conditioned on the inferred scene representation. The generator Gϕ is also built on a DiT-style architecture. For a modality mk,where k ∈ { i, j }, the noisy latent ztk 
+
+> k
+
+is first patchified into a sequence of latent tokens U(0)  
+
+> k
+
+∈ RN ×D with its own modality-specific patch embedder. Positional and modality embeddings are added in the same way as Eq. 12. In the 
+
+l-th block, the latent scene representation is injected via token-wise AdaLN, providing spatially aligned guidance for the denoising process. Specifically, let ˆsk = [ˆ sk, 1, . . . , ˆsk,N ]
+
+denote the inferred scene token sequence. For the n-th token 
+
+u(l−1)  
+
+> k,n
+
+∈ U(l−1)  
+
+> k
+
+of modality mk, the modulation parameters are derived from ck,n = ˆ sk,n +etk +emk and applied following the AdaLN formulation in Eq. 14. To reduce cross-modal interference and network capacity competition in unified multimodal generation, we further intro-duce deterministic modality routing in the FFN layers, while keeping self-attention shared across modalities. This design follows the different functional roles of the two components:                                                              
+
+> TABLE I COMPARISON OF EARTH MM WITH REPRESENTATIVE MULTIMODAL REMOTE SENSING DATASETS . I MAGE AND IMAGE -PAIR COUNTS ARE REPORTED AFTER NORMALIZING THE ORIGINAL IMAGE SIZES TO
+> 256 ×256 PATCHES .Dataset #Images #Pairs Modalities Spatial resolution (m/pix) RGB SAR NIR OSM PAN SEN1-2 [65] 564K 282K ✓✓10 SAR2Opt [66] 22K 11K ✓✓1MMM-RS [67] 594K 297K ✓✓✓5-10 MSBC [68] 11.4K 3.8K ✓✓✓2S2MS-HR [69] 9.1K 4.5K ✓✓0.3 GID [70] 237K 118K ✓✓4CNSatMap [13] 604K 302K ✓✓0.6 NewYork Map [11] 36K 18K ✓✓-EarthMM (Ours) 2.8M 2.2M ✓✓✓✓✓0.5-10
+
+self-attention mainly captures spatial and contextual dependen-cies that can be shared across modalities, whereas the FFN is more directly responsible for modeling modality-specific features. Specifically, the FFN in the l-th block is implemented with a set of routed branches {F (l) 
+
+> r
+
+}Rr=1 . For the modality mk,a fixed routing indicator π(mk) ∈ { 0, 1}R is determined by its modality identity, with PRr=1 πr (mk) = 1 . The FFN operation can be written as 
+
+FFN (l)(U(l−1)  
+
+> k
+
+, m k) = 
+
+> R
+
+X
+
+> r=1
+
+πr (mk) F(l) 
+
+> r
+
+(U(l−1)  
+
+> k
+
+) (18) Since π(mk) is one-hot, all tokens from the same modality are routed to the same branch. After passing through all trans-former blocks, the output tokens are projected and unpatchified to produce the predicted velocity field. With the scene inference module and the modality-aware routed generator designed above, MetaEarth-MM is trained end-to-end with a joint objective that combines the flow matching loss and the scene-consistency regularization: 
+
+L = Ljoint + λLsc (19) where λ is a balancing coefficient. IV. E XPERIMENTS 
+
+A. The EarthMM dataset 
+
+To support unified multimodal remote sensing generation, we construct EarthMM, a large-scale dataset spanning five modalities: RGB, SAR, NIR, PAN, and OSM. This dataset contains 2.8 million globally distributed images and spans a wide range of resolutions, from 0.5 to 10 m per pixel. Table I compares EarthMM with representative remote sensing datasets, showing that EarthMM provides broader modality coverage, larger scale, and a wider resolution range. 
+
+1) Data collection and preprocessing: EarthMM is built by combining 15 public high-quality pair-wise aligned remote sensing datasets with a newly collected set of RGB-OSM pairs. Specifically, the integrated multi-modal datasets in-clude OpenEarthMap-SAR [71], DFC23 [72], DDHRNet [73], fMoW [74], MultiResSAR [75], OSDataset [76], QXS-SAROPT [77], SEN12MS [78], SpaceNet-3 [79], SpaceNet-5 [79], SpaceNet6 [80], SSL4EO-S12 [81], WHU-OPT-SAR [82], and 3MOS [83]. We further apply strict and 7(b) Multi -modal data volume matrix  (c) Spatial resolution distribution                 
+
+> RGB
+> 34%
+> SAR
+> 34%
+> NIR
+> 33%
+> RGB
+> 43%
+> OSM
+> 28%
+> RGB
+> 45%
+> OSM
+> 35%
+> RGB
+> SAR
+> NIR
+> PAN
+> OSM
+> （a) Global -distributed multi -modal data
+> 1.126M 517.6K 505.8K 108.5K 534.6K
+> 535.6K 432.1K 45.8K —
+> 505.8K 90.5K —
+> 137.9K —
+> 534.6K OSM
+> PAN
+> NIR
+> SAR
+> RGB
+> RGB SAR NIR PAN OSM
+> #Pairs
+> 0
+> 200K
+> 400K
+> 600K
+> 800K
+> 1.0M
+> Fig. 3. Overview of the EarthMM dataset. (a) Global geographic distribu-tion of collected multi-modal samples. (b) Multi-modal data volume matrix, where diagonal entries denote the number of samples for each modality and off-diagonal entries denote the number of aligned modality pairs. (c) Spatial resolution distribution and modality composition across different resolution ranges.
+
+consistent data cleaning process across all sources, removing samples affected by severe noise, corrupted observations, or large-area cloud occlusion. Beyond the integrated public datasets, we further collect a large-scale set of geographically aligned RGB-OSM pairs covering 42 representative cities worldwide, including London, Beijing, New York, Tokyo. The RGB images are sourced from Google Earth, while the OSM data are obtained from OpenStreetMap and rendered into RGB-style map images. Each image-map pair is aligned by geographic coordinates to ensure spatial correspondence. To improve diversity and reduce redundancy, we remove highly repetitive regions, such as homogeneous bare-land areas. All data are finally cropped or resampled into uniform 256 ×256 patches for training and analysis. 
+
+2) Dataset analysis: Fig. 3 summarizes the data distribution of EarthMM from three aspects, including geographic cover-age, cross-modal pair statistics, and spatial resolution compo-sition. As shown in Fig. 3(a), the dataset covers a wide range of land areas across major continents, suggesting its diversity in geographic environments, land-cover patterns, and scene layouts. This broad distribution is beneficial for developing multimodal generative models with stronger scene diversity and better geographic generalization. Fig. 3(b) presents the sample counts of each modality and the numbers of aligned cross-modal pairs in EarthMM. The diagonal entries denote the sample counts of individual modalities, while the off-diagonal entries denote the numbers of aligned cross-modal pairs. In total, the dataset contains about 2.2M modality pairs, which provide rich cross-modal supervision for learning correspondences across diverse modality combinations and for capturing the underlying scene content. Fig. 3(c) further reveals how different modalities are distributed across spatial resolutions in EarthMM. The inner ring shows that the dataset covers three major resolution ranges, including ≤0.5 m/pix, 1-5 m/pix, and 8-10 m/pix, while the outer ring further presents the modality composition within each range. The RGB data span all three major resolution ranges and thus connect multiple spatial granularities, while OSM and PAN are mainly distributed in higher-resolution ranges with richer fine-scale structural details, and SAR and NIR are more prominent in the medium resolution range. This resolution composition enables EarthMM to cover both fine spatial structures and broader cross-sensor observations, which helps improve the generalization of the model across different observation scales. 
+
+B. Experimental setup 1) Model design: MetaEarth-MM is instantiated with a 20-block scene inference module and a 4-block modality-aware routed generator. Both modules use a hidden dimension of 1024. The latent inputs are patchified with a patch size of 2. In the routed generator, the number of FFN branches is set to 5, matching the number of modalities, and each modality is deterministically assigned to its corresponding branch. All modalities share the same pre-trained VAE for latent encoding, which is kept frozen during training. In total, the MetaEarth-MM contains approximately 600M parameters. 
+
+2) Training details: Our model is implemented in PyTorch and trained from scratch without any pre-trained initialization. We use the AdamW optimizer with an initial learning rate of 1 × 10 −5. Training is conducted on NVIDIA A800 GPUs with a total batch size of 256 for 900K iterations. To alleviate the imbalance among different modality pairs in the training set, we uniformly sample modality pairs during training. To enable classifier-free guidance during inference, we randomly drop one modality input with a probability of 0.1 during training, where the dropped modality is replaced with pure noise. In addition, we randomly convert RGB images into grayscale images to construct pseudo-PAN samples as an auxiliary augmentation for the PAN modality. The model is optimized using the overall objective in Eq. 19, with loss weight set to λ = 1 .
+
+3) Evaluation settings: For evaluation, we construct test sets by sampling paired samples from EarthMM. The bench-mark covers four modality pairs used in the main comparison, including SAR-RGB, NIR-RGB, PAN-RGB, OSM-RGB with 6826, 6670, 6670, and 10000 paired samples, respectively. The same test sets are used for all compared methods to ensure a fair evaluation. During inference, MetaEarth-MM uses the Euler-Maruyama sampler with 250 sampling steps for all modality pairs. Classifier-free guidance is applied with a guidance scale of 1.2. For cross-modal translation, the source modality is fixed as the condition, and the target modality is generated from noise. For unconditional paired joint generation, both modalities are initialized from noise and generated jointly in a single sampling process. 
+
+4) Evaluation metrics: We evaluate the generated results comprehensively from four aspects: distributional realism, perceptual fidelity, structural similarity, and cross-modal con-sistency. Specifically, we adopt FID [84] for distributional 8(b) Cross -modal translation 
+
+(a) Unconditional paired joint generation            
+
+> SAR →RGB RGB →SAR NIR →RGB RGB →NIR OSM →RGB RGB →OSM NIR →SAR SAR →NIR PAN →RGB
+> NIR →OSM OSM →NIR
+> RGB -SAR RGB -OSM RGB -NIR NIR -SAR
+
+（c) Zero -shot generalization on unseen modality pairs    
+
+> OSM →SAR NIR -OSM
+> PAN -SAR
+> SAR →OSM
+> Fig. 4. Qualitative results of MetaEarth-MM under different generation settings. (a) Examples of unconditional paired joint generation. (b) Examples of cross-modal translation. (c) Zero-shot generation on unseen generation tasks.
+
+realism, LPIPS [85] for perceptual fidelity, and SSIM [86] for structural similarity. However, for SAR-related generative tasks, the inherent speckle noise makes local intensity statistics less stable, often compromising SSIM. To address this, we additionally report PSNR and FSIM [87] for SAR images. FSIM is based on phase congruency and gradient magnitude, and thus better captures structurally salient features such as edges and scattering patterns. To measure cross-modal consistency, we introduce the Cross-modal Alignment Score (CAS). For each modality pair, we train a CLIP-style dual-image encoder on the correspond-ing paired data using a contrastive learning objective [88]. Given N generated samples, let ˆx(n) 
+
+> i
+
+denote the generated image from modality mi, and x(n) 
+
+> j
+
+denote its corresponding image from the other modality mj . CAS is computed as the average cosine similarity in the learned embedding space: 
+
+CAS i,j = 100 × 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+fi(ˆ x(n) 
+
+> i
+
+)⊤fj (x(n) 
+
+> j
+
+)
+
+fi(ˆ x(n) 
+
+> i
+
+) 2
+
+fj (x(n) 
+
+> j
+
+) 2
+
+, (20) where fi and fj are the modality-specific image encoders. A higher CAS indicates better cross-modal alignment between the generated image. 
+
+C. Qualitative analysis 1) Unified multimodal generation within a single frame-work: Fig. 4(a) and Fig. 4(b) present qualitative results of MetaEarth-MM on two paired-modality generation tasks: unconditional paired joint generation and cross-modal transla-tion, respectively. These results demonstrate that MetaEarth-MM serves as a unified generative foundation model ca-pable of supporting both tasks without requiring task-specific model designs. In unconditional paired joint gen-eration, the model generates two aligned modalities di-rectly from noise. The generated RGB-SAR, RGB-OSM, RGB-NIR, NIR-SAR, and PAN-SAR pairs exhibit consistent scene structures across modalities. For cross-modal trans-lation, the model supports multiple directions, as exempli-fied by SAR →RGB, RGB →SAR, NIR →RGB, RGB →NIR, NIR →SAR, SAR →NIR, PAN →RGB, OSM →RGB, and RGB →OSM. The translated results preserve major spatial layouts, such as roads, buildings, vegetation, and field bound-aries. Across both tasks, the generated modalities also show visually reasonable modality-dependent appearances: water areas are often represented as dark homogeneous regions in SAR, vegetation shows stronger responses in NIR and OSM maps assign correct colors to different land-cover categories. 
+
+2) Zero-shot generation on unseen modality pairs: Fig. 4(c) further shows the zero-shot capability of MetaEarth-MM on unseen modality pairs. According to the modality-pair statis-tics of EarthMM in Fig. 3, OSM-NIR and OSM-SAR pairs are not included in the paired training data. Despite the absence of direct paired supervision, the model still generates visually plausible results with reasonable spatial and semantic corre-spondence. For example, the generated OSM maps exhibit pre-cise scene layouts and color mappings, while the NIR and SAR images generated from OSM translate the category semantics of the map input into modality-specific appearances. For NIR-OSM joint generation, the paired outputs also exhibit coherent spatial layouts across modalities. These results suggest that the 9                                                                                                                                                                                                              
+
+> TABLE II QUANTITATIVE COMPARISON OF META EARTH -MM AND PREVIOUS METHODS ON SAR/RGB AND OSM/RGB CROSS -MODAL TRANSLATION .Method SAR →RGB RGB →SAR OSM →RGB RGB →OSM FID ↓LPIPS ↓SSIM ↑CAS ↑FID ↓FSIM ↑PSNR ↑CAS ↑FID ↓LPIPS ↓SSIM ↑CAS ↑FID ↓LPIPS ↓SSIM ↑CAS ↑
+> Pix2Pix 109.23 0.5864 0.2487 52.85 138.21 0.6239 13.1573 45.11 103.52 0.6253 0.2080 63.88 37.80 0.2914 0.8361 62.18 Palette 144.81 0.6542 0.1231 49.17 133.57 0.6582 9.6141 50.45 168.74 0.7229 0.2062 54.25 265.62 0.6443 0.5621 41.23 BBDM 91.18 0.5717 0.2349 57.40 131.40 0.6769 13.1963 56.09 86.80 0.5317 0.2265 67.90 28.37 0.2748 0.8191 60.94 Text2Earth 49.43 0.4943 0.2010 56.51 87.41 0.6601 11.8304 44.73 50.28 0.5261 0.1908 64.83 44.67 0.3543 0.7230 55.84 BiBBDM 182.26 0.6154 0.2293 42.62 140.62 0.6302 10.6268 47.67 214.66 0.5630 0.1744 52.96 39.23 0.2958 0.8128 55.47 MetaEarth-MM 38.11 0.4392 0.2441 59.82 47.10 0.6784 13.3415 60.04 43.04 0.5106 0.2415 70.04 23.08 0.2101 0.8411 68.17
+> (ours) TABLE III QUANTITATIVE COMPARISON OF META EARTH -MM AND PREVIOUS METHODS ON NIR/RGB AND PAN/RGB CROSS -MODAL TRANSLATION .Method NIR →RGB RGB →NIR PAN →RGB FID ↓LPIPS ↓SSIM ↑CAS ↑FID ↓LPIPS ↓SSIM ↑CAS ↑FID ↓LPIPS ↓SSIM ↑
+> Pix2Pix 30.47 0.4332 0.5449 67.54 35.93 0.1846 0.6477 66.73 42.80 0.3205 0.8572
+> Palette 87.66 0.4447 0.3821 60.01 133.70 0.3414 0.4448 62.77 143.61 0.3958 0.5925 BBDM 68.91 0.4634 0.3754 66.76 76.32 0.3718 0.3946 66.92 51.60 0.3690 0.5661 Text2Earth 41.55 0.4746 0.3095 61.60 50.29 0.3839 0.3782 63.82 51.28 0.3947 0.3331 BiBBDM 134.52 0.5564 0.2906 60.52 118.41 0.5079 0.3045 54.57 128.74 0.4061 0.3148 MetaEarth-MM (ours) 28.45 0.4188 0.3933 67.59 32.61 0.2940 0.5199 68.38 30.58 0.3225 0.7622
+
+scene-centered joint modeling paradigm allows the model to reuse modality-scene relationships learned from available pairs and compose them for unseen modality combinations. 
+
+D. Comparision with previous methods 
+
+We compare MetaEarth-MM with representative previous methods under two tasks: cross-modal translation and un-conditional paired joint generation. For cross-modal trans-lation, we include Pix2Pix [11] as a GAN-based image-to-image translation method, Palette [24] as a pixel-space diffusion baseline, and BBDM [89]/BiBBDM [90] as latent-space Brownian bridge diffusion models. We also compare with Text2Earth [12], a remote sensing text-to-image diffusion model that supports modality translation through a ControlNet-based architecture [29]. During implementation, we initialize these methods with their officially released pre-trained weights whenever available. Each method is trained independently for each specific task, while MetaEarth-MM is evaluated across all tasks without any task-specific fine-tuning. 
+
+1) Comparison on cross-modal translation: Tables II and III report the quantitative results for cross-modal transla-tion, and Fig. 5 presents the corresponding qualitative com-parisons. MetaEarth-MM achieves consistently strong per-formance across different modality groups and maintains a better balance between target-domain realism and source-condition consistency. These results show that MetaEarth-MM can handle different types of cross-modal gaps, including different imaging mechanisms, spectral responses, and levels of semantic abstraction. For SAR/RGB translation, MetaEarth-MM shows clear ad-vantages in both directions. In SAR →RGB, it achieves an FID of 38.11 and the highest CAS, outperforming Text2Earth (FID: 49.43). This performance margin widens in RGB →SAR. These results highlight the limitations of modality-specific priors. Previous methods heavily based on RGB pre-training often experience performance drops when the target domain shifts to SAR due to the large distribution gap. In contrast, MetaEarth-MM employs scene-centered modeling without any modality bias, which allows it to adapt to SAR-specific or RGB-specific appearance effectively. The qualitative results also show that MetaEarth-MM produces more coherent RGB textures and more faithful SAR structures, with fewer color shifts and over-smoothed regions. For OSM/RGB translation, MetaEarth-MM shows stable performance despite the semantic abstraction gap between the two modalities. Specifically, OSM →RGB demands syn-thesizing dense optical textures from sparse layouts, while RGB →OSM requires extracting abstract structural repre-sentations from complex imagery. Across both directions, MetaEarth-MM consistently achieves the best FID, SSIM, and CAS. These results demonstrate that our method improves both appearance generation and structural abstraction. Qual-itatively, MetaEarth-MM better preserves road topology and building layouts in OSM, and produces higher-fidelity roads and building blocks in the RGB imagery. For NIR/RGB and PAN/RGB translation, the source and target modalities share stronger structural and appearance similarity. Although Pix2Pix obtains the highest SSIM in these tasks, as shown in Fig. 5, its outputs often suffer from severe blurring and noticeable artifacts. SSIM typically reward deterministic pixel-level mappings rather but fail to reflect perceptual realism. For example, in PAN →RGB, Pix2Pix yields an FID of 42.80 despite its high SSIM, whereas MetaEarth-MM achieves a significantly lower FID of 30.58. Furthermore, our model obtains the best FID and CAS across 10 Source  Target Ours BiBBDM Text2Earth BBDM Palette Pix2Pix   
+
+> SAR →RGB RGB →SAR OSM →RGB RGB →OSM NIR →RGB RG B→NIR PAN →RGB
+> Fig. 5. Qualitative comparison on cross-modal translation. MetaEarth-MM generates more realistic and cross-modally consistent images compared with representative image-to-image translation and diffusion-based methods across SAR/RGB, OSM/RGB, NIR/RGB, and PAN/RGB translation tasks.
+
+all NIR/RGB directions. These results indicate that MetaEarth-MM effectively maintains strict cross-modal consistency and avoids the over-smoothed appearance common in previous methods. Overall, MetaEarth-MM achieves superior and robust per-formance across diverse asymmetric translation tasks. Notably, BiBBDM consistently exhibits poor performance, ranking at the bottom across almost all tasks. This reveals that simply using one bidirectional model is insufficient for heterogeneous remote sensing translation, since opposite directions may in-volve conflicting generation and abstraction processes. By de-coupling these processes through a latent scene representation, MetaEarth-MM avoids this optimization conflict, ensuring stable performance regardless of the translation direction. 
+
+2) Comparison on unconditional paired joint generation: 
+
+We conduct comprehensive experiments on paired generation, focusing on OSM-RGB, SAR-RGB, and NIR-RGB tasks. Since most previous methods cannot generate aligned modality pairs directly, we construct a cascade pipeline to enable a fair comparison. In this setup, the first modality (e.g., OSM) is initially generated unconditionally from noise via MetaEarth-MM. The generated image is then mapped to the second modality (e.g., RGB) using various translation models. Since all cascade pipelines share identical first-stage output, their FID scores for the first modality are exactly the same. Any differences in the second-modality FID and cross-modal CAS strictly reflect the capability of the second-stage translation model. 11                                                                       
+
+> TABLE IV QUANTITATIVE COMPARISON ON UNCONDITIONAL PAIRED GENERATION . F OR OSM-RGB, CASCADE METHODS FIRST GENERATE OSM USING
+> META EARTH -MM AND THEN TRANSLATE IT INTO RGB USING DIFFERENT TRANSLATION MODELS . S TARRED VALUES (*) DENOTE THE SHARED FIRST -STAGE OSM RESULTS GENERATED BY META EARTH -MM. F OR SAR-RGB AND NIR-RGB, M ETA EARTH -MM C ASCADE REFERS TO THE
+> META EARTH -MM CASCADE PIPELINE .OSM-RGB SAR-RGB NIR-RGB Metric Joint Cascade method Metric Joint MetaEarth-MM Cascade Metric Joint MetaEarth-MM Cascade Pix2Pix Palette BBDM Text2Earth BiBBDM MetaEarth-MM FID OSM ↓16.92 17.36* 17.36* 17.36* 17.36* 17.36* 17.36 FID SAR ↓61.36 62.08 FID NIR ↓44.24 46.24 FID RGB ↓45.68 115.98 167.11 70.04 59.40 207.89 46.86 FID RGB ↓30.47 34.85 FID RGB ↓38.11 39.92 CAS ↑64.45 57.86 58.38 62.06 57.92 45.59 62.42 CAS ↑52.76 50.90 CAS ↑63.60 61.57
+
+Table IV reports the quantitative results of these tasks. In the OSM-RGB generation task, the cascade pipeline gen-erates OSM first and subsequently generates RGB. When evaluated and compared under the cascade pipeline, previous methods such as Pix2Pix, Palette, BBDM, Text2Earth, and BiBBDM exhibit clear limitations, producing lower-quality paired images and weaker cross-modal consistency. In con-trast, utilizing MetaEarth-MM as the second-stage translator yields significantly better visual quality and alignment. This confirms its robustness: even when conditioned on imperfect generated samples rather than real observations, MetaEarth-MM consistently maintains high generation quality. More importantly, our joint generation paradigm achieves the best overall performance, outperforming even the strong MetaEarth-MM cascade pipeline. In the OSM-RGB task, the joint generation obtains a noticeably lower RGB FID and a higher CAS than its cascaded pipeline. This result high-lights that the paired generation is not simply equivalent to generating one modality and then translating it into another. In a cascade pipeline, generation errors from the first stage inevitably accumulate and mislead the second stage. Joint generation allows both modalities to mutually guide each other during the generation process. By jointly modeling their dis-tribution, our model ensures that shared structural features are developed simultaneously, leading to more realistic individual distributions and tighter pairwise alignment. Considering that the cascade pipeline heavily relies on the second-stage translation, where previous methods have already shown worse performance, we only compare the joint and cas-cade generation of MetaEarth-MM on the SAR-RGB and NIR-RGB tasks. As demonstrated in the SAR-RGB and NIR-RGB sections of Table IV, joint generation consistently outperforms the cascade strategy, confirming that joint sampling is superior for paired multi-modal generation. 
+
+E. Ablation study 
+
+We conduct ablation studies to evaluate the core designs of MetaEarth-MM: the scene-centered decoupled architecture, the modality-routed FFN, and the scene consistency con-straint. Table V compares the full MetaEarth-MM against progressively degraded variants. The baseline is a direct joint transformer, which uses a standard ViT with an equivalent total depth but lacks explicit decoupling between scene inference and modality generation. All models are trained for 700k steps under identical setups. Overall, the full MetaEarth-MM achieves the best FID, LPIPS, and CAS across all conditional translation and paired generation tasks. More importantly, the progressive settings reveal the specific contributions of each component: 
+
+Decoupled architecture. Comparing the decoupled baseline with the direct joint transformer reveals that architectural de-coupling alone significantly improves performance. In a stan-dard joint transformer, cross-modal information aggregation and modality-specific flow prediction are heavily entangled. Our design introduces an intermediate representation as an explicit interface, providing a separate space to reorganize information before generation. This advantage is particularly pronounced in pairs with massive domain gaps (e.g. SAR/RGB and OSM/RGB), where modeling direct appearance-level cor-respondence is highly challenging. 
+
+Modality-routed FFN. Introducing the modality-routed FFN further reduces FID. Forcing a fully shared generator to fit heterogeneous texture and structural distributions of different modalities inevitably causes cross-modality competition. The routed FFN mitigates this by assigning dedicated parameter capacity to each modality, thereby enhancing individual gen-eration quality. 
+
+Scene Consistency Constraint. This constraint imposes a scene-level prior on the intermediate representation, encourag-ing the scene inference module to organize it around the under-lying scene content. With this prior, the decoupled architecture achieves a clearer role assignment: scene inference module provides a scene-level basis, while the generator focuses exclusively on representing the scene in the modality-specific manner and dedicates its computational capacity entirely to modeling the characteristics of the target modality, resulting in improved cross-modal correspondence and generation fidelity. 
+
+Optimization Stability. Finally, the training curves (Fig. 6) show that MetaEarth-MM converges faster and reaches a lower final FID. Under the same training budget, the direct joint transformer and other ablated settings plateau at higher FID scores. These results indicate that the proposed method not only improves the final generation quality but also makes the multi-modal generation objective easier to optimize. V. D OWNSTREAM APPLICATIONS 
+
+Beyond image generation, we further examine how MetaEarth-MM can support downstream tasks at data-level and representation-level. This provides a functional evalua-tion of whether our model captures transferable cross-modal 12 
+
+TABLE V ABLATION STUDY OF META EARTH -MM. T HE CONTRIBUTIONS OF THE DECOUPLED ARCHITECTURE , MODALITY -ROUTED FFN, AND SCENE CONSISTENCY CONSTRAINT ARE EVALUATED ACROSS CROSS -MODAL TRANSLATION AND PAIRED JOINT GENERATION TASKS .                                                                                                                           
+
+> Decoupled architecture Modality-routed FFN Scene consistency constraint SAR →RGB OSM →RGB RGB →NIR SAR-RGB SAR-NIR FID ↓LPIPS ↓CAS ↑FID ↓LPIPS ↓CAS ↑FID ↓LPIPS ↓CAS ↑FID RGB ↓FID SAR ↓CAS ↑FID NIR ↓FID SAR ↓CAS ↑×––54.18 0.4784 55.08 58.39 0.5294 65.94 41.59 0.3728 64.37 39.77 65.94 49.12 50.56 70.67 48.68
+> ✓××48.78 0.4682 55.75 52.11 0.5199 66.49 35.61 0.3454 66.44 37.49 64.43 50.80 47.41 71.98 48.93
+> ✓✓×44.54 0.4609 56.47 49.45 0.5170 66.90 34.99 0.3448 66.61 36.14 64.26 49.92 45.62 71.33 49.17
+> ✓✓✓39.93 0.4437 59.38 45.82 0.5146 69.46 33.74 0.3417 66.71 33.81 63.13 51.05 44.76 68.84 50.26 MetaEarth -MM (ours) w/o Scene Consistency Constrain tw/o Decoupled Architecture
+> SAR →RGB
+> 30 0400 500 600 700 900
+> Training steps (K)
+> 40
+> 54
+> 52
+> 50
+> 48
+> 46
+> 44
+> 42
+> FID  ↓
+> OSM →RGB
+> 30 0400 500 600 700 900
+> Training steps (K)
+> 46
+> 48
+> 50
+> 52
+> 54
+> 56
+> 58
+> 60
+> 62
+> RGB →NIR
+> 30 0400 500 600 700 900
+> Training steps (K)
+> 34
+> 36
+> 38
+> 40
+> 42
+> RGB -SAR
+> 30 0400 500 600 700 900
+> Training steps (K)
+> 49
+> 51
+> 53
+> 55
+> 57
+> 59
+> 61
+> 63
+> NIR -SAR
+> 30 0400 500 600 700 900
+> Training steps (K)
+> 57
+> 59
+> 61
+> 63
+> 65
+> 67
+> 69
+
+Fig. 6. FID evaluation curves during training for MetaEarth-MM and its ablated variants on cross-modal translation and paired joint generation tasks. The x-axis denotes training steps, and the y-axis denotes test-set FID. For paired joint generation tasks, the reported FID is computed as the average FID of the two generated modalities. MetaEarth-MM achieves faster convergence and better generation quality. 
+
+knowledge during training, highlighting its potential as aversatile foundation model for multi-modal Earth observation. 
+
+A. Generative data augmentation 
+
+Paired multi-modal data are essential for many remote sens-ing tasks, such as cross-modal matching, image registration, and data fusion, where consistent observations of the same scene across different modalities are required. However, such data are often expensive to collect at scale and difficult to align accurately. To address this data scarcity, we serve MetaEarth-MM as a generative data engine for data augmentation, gen-erating high-quality, aligned modality pairs to expand training sets. In this section, we evaluate this capability on cross-modal image matching, a representative task that directly tests whether the generated pairs preserve useful spatial and semantic correspondence. We consider two cross-modal matching tasks, RGB-OSM and RGB-SAR. For each task, we start from 10K real paired training samples and use MetaEarth-MM to generate an additional 10K paired samples, resulting in an augmented training set of 20K samples. The generated pairs are used only for training augmentation, while evaluation is conducted on real paired test samples. Ground-truth correspondences are obtained from known random geometric transformations. To cover different matching paradigms, we evaluate three representative methods: LightGlue [91] for sparse matching, LoFTR [92] for semi-dense matching, and DKM [93] for dense matching. Performance is measured using EPE and PCK under different pixel thresholds. As shown in Table VI, adding jointly generated pairs con-sistently improves matching performance across both modality pairs and all three matchers. The gains are particularly pro-nounced for LoFTR and DKM, suggesting that the generated pairs provide not only greater scene diversity but also strong pixel-level alignment. The improvement is even larger on RGB-SAR, where the modality gap is much larger than that of RGB-OSM. This further indicates that MetaEarth-MM can generate paired samples with stable and accurate cross-modal correspondence even when the visual differences between modalities are substantial. 
+
+B. Image-level domain adaptation 
+
+Modern visual perception models are often pretrained on large-scale RGB imagery, which makes the RGB domain a major source of reusable visual knowledge. However, remote sensing modalities such as SAR and NIR have visual appear-ances that differ greatly from RGB images, making it difficult to directly apply this knowledge to non-RGB data. A common solution is to adapt the model itself by initializing from RGB-pretrained weights and fine-tuning on the target modality. In this section, we conduct an exploratory experiment from a data-centric perspective: before downstream fine-tuning, we use MetaEarth-MM to translate non-RGB observations into the RGB domain, bringing the input data closer to the domain where pretrained visual knowledge is available. We evaluate this data-centric adaptation setting on semantic segmentation using the WHU-OPT-SAR [82] dataset. Given SAR or NIR inputs, MetaEarth-MM first translates them into RGB images. The segmentation models are initialized with RGB-pretrained weights and then fine-tuned on the translated training images, followed by evaluation on the translated test images. The pretrained MetaEarth-MM is used directly, 13 
+
+TABLE VI RESULTS OF GENERATIVE DATA AUGMENTATION FOR CROSS -MODAL IMAGE MATCHING . F OR EACH MATCHER , WE COMPARE MODELS TRAINED WITH REAL PAIRED DATA ONLY AND WITH ADDITIONAL GENERATED PAIRS . T HE BEST RESULT BETWEEN THE TWO TRAINING SETTINGS IS SHOWN IN BOLD .Matcher Training Data RGB-OSM RGB-SAR EPE ↓ PCK@1px ↑ PCK@3px ↑ PCK@5px ↑ PCK@10px ↑ EPE ↓ PCK@1px ↑ PCK@3px ↑ PCK@5px ↑ PCK@10px ↑                                                               
+
+> LightGlue Real 3.757 0.07798 0.4824 0.7804 0.9647 3.560 0.09955 0.5697 0.8480 0.9730
+> Real+Gen 3.494 0.0959 0.5416 0.8116 0.9695 3.489 0.1047 0.5948 0.8595 0.9720 LoFTR Real 5.574 0.1711 0.3841 0.5830 0.8823 20.16 0.2102 0.3464 0.4935 0.7831 Real+Gen 4.900 0.2480 0.4432 0.6357 0.9005 4.932 0.3344 0.4845 0.6451 0.8828
+> DKM Real 28.44 0.006399 0.05235 0.1182 0.2770 39.83 0.004074 0.03343 0.07826 0.1974 Real+Gen 11.29 0.02295 0.1705 0.3397 0.6213 10.27 0.02352 0.1730 0.3521 0.6647
+
+TABLE VII SEMANTIC SEGMENTATION RESULTS ON WHU-OPT-SAR. SAR →RGB  
+
+> AND
+
+NIR →RGB DENOTE TRANSLATED RGB IMAGES . F OR EACH SOURCE MODALITY , THE BETTER RESULT BETWEEN THE ORIGINAL INPUT AND TRANSLATED INPUT IS SHOWN IN BOLD .Method Metric SAR SAR →RGB NIR NIR →RGB MaskFormer mIoU ↑ 14.53 38.53 36.83 43.28 
+
+mAcc ↑ 27.96 51.22 47.40 55.00 
+
+DeepLabv3 mIoU ↑ 28.49 33.58 35.17 39.04 
+
+mAcc ↑ 37.46 43.45 46.99 50.92 
+
+without any task-specific fine-tuning. As a comparison, we fine-tune the same RGB-pretrained segmentation models di-rectly on the original SAR, and NIR inputs. To examine whether the effect is consistent across architectures, we adopt two representative segmentation models: the transformer-based MaskFormer [94] and the CNN-based DeepLabv3 [95]. As shown in Table VII, translating heterogeneous modalities into the RGB domain leads to substantial improvements in segmentation performance. The effect is especially pronounced for SAR, where direct SAR inputs perform poorly for both MaskFormer and DeepLabv3, yielding only 14.53 and 28.49 mIoU, respectively. After SAR →RGB translation, the perfor-mance rises sharply to 38.53 and 33.58 mIoU. NIR →RGB translation also consistently outperforms direct NIR input on both models. These results validate the effectiveness of this data-level adaptation strategy for heterogeneous remote sens-ing modalities. By translating SAR and NIR inputs into the RGB domain, MetaEarth-MM places the inputs in a domain where RGB-pretrained visual priors can be more effectively activated. The consistent improvements further suggest that the translated images are not only visually plausible, but also preserve semantic information useful for downstream tasks. 
+
+C. Zero-shot representation transfer 
+
+Cross-modal understanding is a key challenge in remote sensing, since recognition models trained on one modality of-ten suffer severe degradation when applied to another directly. Beyond using MetaEarth-MM for generative data augmenta-tion and image-level domain adaptation, we further examine whether its internal scene representation itself supports zero-shot representation transfer. Specifically, we probe the latent scene tokens inferred by the scene inference module and 
+
+TABLE VIII ZERO -SHOT MODALITY TRANSFER RESULTS ON SCENE CLASSIFICATION TASK . A CCURACY (%) IS REPORTED . I N-DOMAIN RESULTS ARE SHOWN IN GRAY , AND THE BEST RESULT IN EACH TRAIN -TEST SETTING IS SHOWN IN BOLD .Modality Setting Method Train Test ResNet50 DINOv3 MetaEarth-MM RGB RGB 83.57 89.07 85.29 SAR 18.57 18.21 65.00 
+
+NIR 44.50 66.57 76.14 
+
+SAR SAR 68.64 75.93 75.14 RGB 19.86 25.50 68.29 
+
+NIR NIR 76.79 88.14 82.36 SAR 14.71 20.57 65.00 
+
+evaluate them on scene classification without retraining the model. We construct a seven-class scene classification dataset from SEN12-MS [78], including urban, cropland, forest, grassland, shrubland, savanna, and bare land. Each class contains 600 training samples and 200 test samples, with aligned RGB, SAR, and NIR images. This setting allows us to train a clas-sifier based on one modality and test it on another modality. We freeze the scene inference module Eθ and train only a lightweight attention-pooling classifier Cϕ. Given a training modality mi and another modality mj , the classifier is trained on the scene tokens inferred from the clean latent of mi:
+
+[ˆ si, ˆsj ] = Eθ
+
+ z0 
+
+> i
+
+, z1 
+
+> j
+
+, 0, 1, m i, m j
+
+ , ˆy = Cϕ(ˆ si). (21) During zero-shot inference, mi is unavailable and its branch is replaced with random noise, while the clean latent of mj is provided to the other branch: 
+
+[ˆ si|j , ˆsj ] = Eθ
+
+ z1 
+
+> i
+
+, z0 
+
+> j
+
+, 1, 0, m i, m j
+
+ , ˆy = Cϕ(ˆ si|j ). (22) Here, ˆsi|j denotes the mi-branch scene tokens inferred from modality mj . The classifier is kept frozen, so the evaluation directly measures whether the inferred scene representation is transferable across modalities. As shown in Table VIII, MetaEarth-MM is compared with ResNet50 [96] and DINOv3 [97] under the same frozen-backbone setting, where only a lightweight classifier is trained. ResNet50 is pretrained on our constructed dataset, and DI-NOv3 uses its official remote-sensing version. MetaEarth-MM achieves consistently higher accuracy across all zero-shot 14 
+
+train-test modality pairs, while ResNet50 and DINOv3 degrade substantially once the test modality differs from the training modality. On average, MetaEarth-MM preserves 83.82% of the accuracy obtained on the training modality, compared with only 30.89% for ResNet50 and 38.03% for DINOv3. These results indicate that the latent scene representation learned by MetaEarth-MM captures modality-transferable scene seman-tics, making it a promising modality-agnostic feature extractor for zero-shot downstream tasks. VI. C ONCLUSION 
+
+In this paper, we propose MetaEarth-MM, a unified gen-erative foundation model for multi-modal remote sensing imagery. Instead of learning isolated conditional cross-modal mappings, MetaEarth-MM introduces a scene-centered joint modeling paradigm that organizes multi-modal generation around intrinsic scene content. Built upon a decoupled archi-tecture comprising a scene inference module and a modality-aware routed generator, the model supports paired joint gen-eration and any-to-any translation across five modalities. We also construct EarthMM, a large-scale multi-modal remote sensing dataset with 2.8 million globally distributed images, providing a data foundation for training and evaluation. Ex-periments show that MetaEarth-MM achieves consistently superior generation quality and cross-modal alignment across diverse translation and joint generation tasks, while further enabling zero-shot generation on unseen modality combina-tions. Beyond serving as a powerful multi-modal generative data engine, MetaEarth-MM learns transferable scene-level se-mantics, supporting downstream tasks through generative data augmentation, image-level domain adaptation, and zero-shot representation transfer. These results demonstrate its potential as a foundation model for cross-modal Earth observation. REFERENCES [1] H. Bi, Y. Feng, B. Tong, M. Wang, H. Yu, Y. Mao, H. Chang, W. Diao, P. Wang, Y. Yu et al. , “Ringmoe: Mixture-of-modality-experts multi-modal foundation models for universal remote sensing image interpretation,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [2] Z. Gong, Z. Wei, D. Wang, X. Hu, X. Ma, H. Chen, Y. Jia, Y. Deng, Z. Ji, X. Zhu et al. , “Crossearth: Geospatial vision foundation model for domain generalizable remote sensing semantic segmentation,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [3] C. Liu, J. Zhang, K. Chen, M. Wang, Z. Zou, and Z. Shi, “Remote sens-ing spatiotemporal vision–language models: A comprehensive survey,” 
+
+IEEE Geoscience and Remote Sensing Magazine , 2025. [4] K. Wu, Y. Zhang, L. Ru, B. Dang, J. Lao, L. Yu, J. Luo, Z. Zhu, Y. Sun, J. Zhang et al. , “A semantic-enhanced multi-modal remote sensing foundation model for earth observation,” Nature Machine Intelligence ,vol. 7, no. 8, pp. 1235–1249, 2025. [5] D. Wang, M. Hu, Y. Jin, Y. Miao, J. Yang, Y. Xu, X. Qin, J. Ma, L. Sun, C. Li et al. , “Hypersigma: Hyperspectral intelligence comprehension foundation model,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [6] C. Liu, K. Chen, H. Zhang, Z. Qi, Z. Zou, and Z. Shi, “Change-agent: Toward interactive comprehensive remote sensing change interpretation and analysis,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 62, pp. 1–16, 2024. [7] C. Liu, K. Chen, B. Chen, H. Zhang, Z. Zou, and Z. Shi, “Rscama: Remote sensing image change captioning with state space model,” IEEE Geoscience and Remote Sensing Letters , vol. 21, pp. 1–5, 2024. [8] Z. Huang, X. Zhang, Z. Tang, F. Xu, M. Datcu, and J. Han, “Generative artificial intelligence meets synthetic aperture radar: A survey,” IEEE Geoscience and Remote Sensing Magazine , vol. 14, no. 1, pp. 6–48, 2026. [9] X. Zhang, Y. Zhuang, Q. Guo, H. Yang, X. Qian, G. Cheng, J. Han, and Z. Huang, “Ph-gan: Physics-inspired gan for generating sar images under limited data,” in Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , October 2025, pp. 29 075–29 085. [10] Y. Liu, J. Yue, S. Xia, P. Ghamisi, W. Xie, and L. Fang, “Diffusion models meet remote sensing: Principles, methods, and perspectives,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1– 22, 2024. [11] P. Isola, J.-Y. Zhu, T. Zhou, and A. A. Efros, “Image-to-image translation with conditional adversarial networks,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2017, pp. 1125– 1134. [12] C. Liu, K. Chen, R. Zhao, Z. Zou, and Z. Shi, “Text2earth: Unlocking text-driven remote sensing image generation with a global-scale dataset and a foundation model,” IEEE Geoscience and Remote Sensing Mag-azine , 2025. [13] Z. Dong, Y. Sun, T. Liu, W. Zuo, and Y. Gu, “Earthmapper: Visual autoregressive models for controllable bidirectional satellite-map trans-lation,” arXiv preprint arXiv:2504.19432 , 2025. [14] J. He, L. Chen, H. Shi, Y. Chen, J. Yang, and W. Li, “Dogan: Dino-based optical-prior-driven gan for sar-to-optical image translation,” IEEE Transactions on Geoscience and Remote Sensing , 2025. [15] L. Pang, X. Cao, D. Tang, S. Xu, X. Bai, F. Zhou, and D. Meng, “Hsigene: a foundation model for hyperspectral image generation,” IEEE Transactions on Pattern Analysis and Machine Intelligence , pp. 1–18, 2025. [16] F. Bao, S. Nie, K. Xue, C. Li, S. Pu, Y. Wang, G. Yue, Y. Cao, H. Su, and J. Zhu, “One transformer fits all distributions in multi-modal diffusion at scale,” in International Conference on Machine Learning . PMLR, 2023, pp. 1692–1717. [17] S. Li, K. Kallidromitis, A. Gokul, Z. Liao, Y. Kato, K. Kozuka, and A. Grover, “Omniflow: Any-to-any generation with multi-modal rectified flows,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 13 178–13 188. [18] T.-C. Wang, M.-Y. Liu, J.-Y. Zhu, A. Tao, J. Kautz, and B. Catanzaro, “High-resolution image synthesis and semantic manipulation with condi-tional gans,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2018, pp. 8798–8807. [19] J.-Y. Zhu, T. Park, P. Isola, and A. A. Efros, “Unpaired image-to-image translation using cycle-consistent adversarial networks,” in Proceedings of the IEEE international conference on computer vision , 2017, pp. 2223–2232. [20] Y. Choi, Y. Uh, J. Yoo, and J.-W. Ha, “Stargan v2: Diverse image synthesis for multiple domains,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 8188– 8197. [21] T. Park, A. A. Efros, R. Zhang, and J.-Y. Zhu, “Contrastive learning for unpaired image-to-image translation,” in European conference on computer vision . Springer, 2020, pp. 319–345. [22] S. Wu, Y. Chen, S. Mermet, L. Hurni, K. Schindler, N. Gonthier, and L. Landrieu, “Stegogan: Leveraging steganography for non-bijective image-to-image translation,” in Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , 2024, pp. 7922–7931. [23] Z. Qi, G. Huang, C. Liu, and F. Ye, “Layered rendering diffusion model for controllable zero-shot image synthesis,” in European Conference on Computer Vision . Springer, 2024, pp. 426–443. [24] C. Saharia, W. Chan, H. Chang, C. Lee, J. Ho, T. Salimans, D. Fleet, and M. Norouzi, “Palette: Image-to-image diffusion models,” in ACM SIGGRAPH 2022 conference proceedings , 2022, pp. 1–10. [25] T. Brooks, A. Holynski, and A. A. Efros, “Instructpix2pix: Learning to follow image editing instructions,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2023, pp. 18 392–18 402. [26] K. Zhang, L. Mo, W. Chen, H. Sun, and Y. Su, “Magicbrush: A manually annotated dataset for instruction-guided image editing,” Advances in Neural Information Processing Systems , vol. 36, pp. 31 428–31 449, 2023. [27] C. Wu, P. Zheng, R. Yan, S. Xiao, X. Luo, Y. Wang, W. Li, X. Jiang, Y. Liu, J. Zhou et al. , “Omnigen2: Exploration to advanced multimodal generation,” arXiv preprint arXiv:2506.18871 , 2025. [28] W. Lin, X. Wei, R. Zhang, L. Zhuo, S. Zhao, S. Huang, H. Teng, J. Xie, Y. Qiao, P. Gao et al. , “Pixwizard: Versatile image-to-image visual assis-15 
+
+tant with open-language instructions,” arXiv preprint arXiv:2409.15278 ,2024. [29] L. Zhang, A. Rao, and M. Agrawala, “Adding conditional control to text-to-image diffusion models,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 3836–3847. [30] C. Mou, X. Wang, L. Xie, Y. Wu, J. Zhang, Z. Qi, and Y. Shan, “T2i-adapter: Learning adapters to dig out more controllable ability for text-to-image diffusion models,” in Proceedings of the AAAI conference on artificial intelligence , vol. 38, no. 5, 2024, pp. 4296–4304. [31] L. Huang, D. Chen, Y. Liu, Y. Shen, D. Zhao, and J. Zhou, “Composer: Creative and controllable image synthesis with composable conditions,” 
+
+arXiv preprint arXiv:2302.09778 , 2023. [32] Z. Tan, S. Liu, X. Yang, Q. Xue, and X. Wang, “Ominicontrol: Minimal and universal control for diffusion transformer,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2025, pp. 14 940–14 950. [33] B. F. Labs, S. Batifol, A. Blattmann, F. Boesel, S. Consul, C. Diagne, T. Dockhorn, J. English, Z. English, P. Esser et al. , “Flux. 1 kontext: Flow matching for in-context image generation and editing in latent space,” arXiv preprint arXiv:2506.15742 , 2025. [34] W. Peebles and S. Xie, “Scalable diffusion models with transformers,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 4195–4205. [35] P. Esser, S. Kulal, A. Blattmann, R. Entezari, J. M¨ uller, H. Saini, Y. Levi, D. Lorenz, A. Sauer, F. Boesel et al. , “Scaling rectified flow transformers for high-resolution image synthesis,” in Forty-first international conference on machine learning , 2024. [36] C. Qin, S. Zhang, N. Yu, Y. Feng, X. Yang, Y. Zhou, H. Wang, J. C. Niebles, C. Xiong, S. Savarese et al. , “Unicontrol: A unified diffusion model for controllable visual generation in the wild,” arXiv preprint arXiv:2305.11147 , 2023. [37] S. Zhao, D. Chen, Y.-C. Chen, J. Bao, S. Hao, L. Yuan, and K.-Y. K. Wong, “Uni-controlnet: All-in-one control to text-to-image diffusion models,” Advances in Neural Information Processing Systems , vol. 36, pp. 11 127–11 150, 2023. [38] Q. Song, F. Xu, X. X. Zhu, and Y.-Q. Jin, “Learning to generate sar images with adversarial autoencoder,” IEEE Transactions on Geoscience and Remote Sensing , vol. 60, pp. 1–15, 2022. [39] L. Liu, W. Li, Z. Shi, and Z. Zou, “Physics-informed hyperspectral remote sensing image synthesis with deep conditional generative adver-sarial networks,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 60, pp. 1–15, 2022. [40] L. Liu, B. Chen, H. Chen, Z. Zou, and Z. Shi, “Diverse hyperspectral remote sensing image synthesis with diffusion models,” IEEE Transac-tions on Geoscience and Remote Sensing , vol. 61, pp. 1–16, 2023. [41] B. Chen, L. Liu, C. Liu, Z. Zou, and Z. Shi, “Spectral-cascaded diffusion model for remote sensing image spectral super-resolution,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–14, 2024. [42] Z. Wang, Y. Ma, and Y. Zhang, “Hybrid cgan: Coupling global and local features for sar-to-optical image translation,” IEEE Transactions on Geoscience and Remote Sensing , vol. 60, pp. 1–16, 2022. [43] H. Li, C. Gu, D. Wu, G. Cheng, L. Guo, and H. Liu, “Multiscale generative adversarial network based on wavelet feature learning for sar-to-optical image translation,” IEEE Transactions on Geoscience and Remote Sensing , vol. 60, pp. 1–15, 2022. [44] C. Dong, G. Yang, Y. Wang, W. Sun, X. Meng, and B. Chen, “Integrating multitemporal sar and optical information for missing optical imagery generation,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 62, pp. 1–14, 2024. [45] J. Qin, K. Wang, B. Zou, L. Zhang, and J. van de Weijer, “Conditional diffusion model with spatial-frequency refinement for sar-to-optical im-age translation,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 62, pp. 1–14, 2024. [46] J. Qin, B. Zou, H. Li, and L. Zhang, “Efficient end-to-end diffusion model for one-step sar-to-optical translation,” IEEE Geoscience and Remote Sensing Letters , vol. 22, pp. 1–5, 2024. [47] Z. Guo, J. Liu, Q. Cai, Z. Zhang, and S. Mei, “Learning sar-to-optical image translation via diffusion models with color memory,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , vol. 17, pp. 14 454–14 470, 2024. [48] M. Espinosa and E. J. Crowley, “Generate your own scotland: Satellite image generation conditioned on maps,” arXiv preprint arXiv:2308.16648 , 2023. [49] S. Sastry, S. Khanal, A. Dhakal, and N. Jacobs, “Geosynth: Contextually-aware high-resolution satellite image synthesis,” in Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 460–470. [50] M. Espinosa, V. Marsocci, Y. Jia, E. Crowley, and M. Czerkawski, “Cop-gen-beta: Unified generative modelling of copernicus imagery thumb-nails,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 3085–3095. [51] A. Xiao, W. Xuan, J. Wang, J. Huang, D. Tao, S. Lu, and N. Yokoya, “Foundation models for remote sensing and earth observation: A survey,” 
+
+IEEE Geoscience and Remote Sensing Magazine , 2025. [52] Z. Zheng, S. Ermon, D. Kim, L. Zhang, and Y. Zhong, “Changen2: Multi-temporal remote sensing generative change foundation model,” 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , 2024. [53] Q. Liu, Y. Kuang, J. Yue, P. Ghamisi, W. Xie, and L. Fang, “Generating any changes in the noise domain,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [54] S. Khanna, P. Liu, L. Zhou, C. Meng, R. Rombach, M. Burke, D. Lobell, and S. Ermon, “Diffusionsat: A generative foundation model for satellite imagery,” arXiv preprint arXiv:2312.03606 , 2023. [55] A. Sebaq and M. ElHelw, “Rsdiff: Remote sensing image generation from text using diffusion model,” Neural Computing and Applications ,vol. 36, no. 36, pp. 23 103–23 111, 2024. [56] C. Liu, R. Zhao, J. Chen, Z. Qi, Z. Zou, and Z. Shi, “A decoupling paradigm with prompt learning for remote sensing image change cap-tioning,” IEEE Transactions on Geoscience and Remote Sensing , vol. 61, pp. 1–18, 2023. [57] R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer, “High-resolution image synthesis with latent diffusion models,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,2022, pp. 10 684–10 695. [58] C. Saharia, W. Chan, S. Saxena, L. Li, J. Whang, E. L. Denton, K. Ghasemipour, R. Gontijo Lopes, B. Karagol Ayan, T. Salimans 
+
+et al. , “Photorealistic text-to-image diffusion models with deep language understanding,” Advances in neural information processing systems ,vol. 35, pp. 36 479–36 494, 2022. [59] Z. Yu, C. Liu, L. Liu, Z. Shi, and Z. Zou, “Metaearth: A generative foundation model for global-scale remote sensing image generation,” 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , 2024. [60] J. Cao, Z. Yu, B. Lin, C. Liu, Z. Shi, and Z. Zou, “Metaearth3d: Unlocking world-scale 3d generation with spatially scalable generative modeling,” arXiv preprint arXiv:2604.22828 , 2026. [61] D. Tang, X. Cao, X. Hou, Z. Jiang, J. Liu, and D. Meng, “Crs-diff: Controllable remote sensing image generation with diffusion model,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , 2024. [62] Z. Yu, C. Liu, C. Zhong, Z. Zou, and Z. Shi, “Multi-grained guided diffusion for quantity-controlled remote sensing object generation,” 
+
+IEEE Geoscience and Remote Sensing Letters , 2025. [63] Y. Lipman, R. T. Chen, H. Ben-Hamu, M. Nickel, and M. Le, “Flow matching for generative modeling,” arXiv preprint arXiv:2210.02747 ,2022. [64] X. Liu, C. Gong, and Q. Liu, “Flow straight and fast: Learning to generate and transfer data with rectified flow,” arXiv preprint arXiv:2209.03003 , 2022. [65] M. Schmitt, L. H. Hughes, and X. X. Zhu, “The sen1-2 dataset for deep learning in sar-optical data fusion,” arXiv preprint arXiv:1807.01569 ,2018. [66] Y. Zhao, T. Celik, N. Liu, and H.-C. Li, “A comparative analysis of gan-based methods for sar-to-optical image translation,” IEEE Geoscience and Remote Sensing Letters , 2022. [67] J. Luo, Y. Wang, Z. Gu, Y. Qiu, S. Yao, F. Wang, C. Xu, W. Zhang, D. Wang, and Z. Cui, “Mmm-rs: A multi-modal, multi-gsd, multi-scene remote sensing dataset and benchmark for text-to-image generation,” 
+
+arXiv preprint arXiv:2410.22362 , 2024. [68] H. Li, F. Zhu, X. Zheng, M. Liu, and G. Chen, “Mscdunet: A deep learning framework for built-up area change detection integrating multi-spectral, sar, and vhr data,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , vol. 15, pp. 5163–5176, 2022. [69] Y. Liu, Q. Han, H. Yang, and H. Hu, “High-resolution sar-to-multispectral image translation based on s2ms-gan,” Remote Sensing ,vol. 16, no. 21, p. 4045, 2024. [70] X.-Y. Tong, G.-S. Xia, Q. Lu, H. Shen, S. Li, S. You, and L. Zhang, “Land-cover classification with high-resolution remote sensing images using transferable deep models,” Remote Sensing of Environment , vol. 237, p. 111322, 2020. [71] J. Xia, H. Chen, C. Broni-Bediako, Y. Wei, J. Song, and N. Yokoya, “Openearthmap-sar: A benchmark synthetic aperture radar dataset for global high-resolution land cover mapping [software and data sets],” 16 
+
+IEEE Geoscience and Remote Sensing Magazine , vol. 13, no. 4, pp. 476–487, 2025. [72] C. Persello, R. H¨ ansch, G. Vivone, K. Chen, Z. Yan, D. Tang, H. Huang, M. Schmitt, and X. Sun, “2023 ieee grss data fusion contest: Large-scale fine-grained building classification for semantic urban reconstruction,” 2022. [Online]. Available: https://dx.doi.org/10.21227/mrnt-8w27 [73] B. Ren, S. Ma, B. Hou, D. Hong, J. Chanussot, J. Wang, and L. Jiao, “A dual-stream high resolution network: Deep fusion of gf-2 and gf-3 data for land cover classification,” International Journal of Applied Earth Observation and Geoinformation , vol. 112, p. 102896, 2022. [74] G. Christie, N. Fendley, J. Wilson, and R. Mukherjee, “Functional map of the world,” in CVPR , 2018. [75] W. Zhang, R. Zhao, Y. Yao, Y. Wan, P. Wu, J. Li, Y. Li, and Y. Zhang, “Multi-resolution sar and optical remote sensing image registration methods: A review, datasets, and future perspectives,” arXiv preprint arXiv:2502.01002 , 2025. [76] Y. Xiang, R. Tao, F. Wang, H. You, and B. Han, “Automatic registration of optical and sar images via improved phase congruency model,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , vol. 13, pp. 5847–5861, 2020. [77] M. Huang, Y. Xu, L. Qian, W. Shi, Y. Zhang, W. Bao, N. Wang, X. Liu, and X. Xiang, “The qxs-saropt dataset for deep learning in sar-optical data fusion. arxiv 2021,” arXiv preprint arXiv:2103.08259 , 2021. [78] M. Schmitt, L. H. Hughes, C. Qiu, and X. X. Zhu, “Sen12ms–a curated dataset of georeferenced multi-spectral sentinel-1/2 imagery for deep learning and data fusion,” arXiv preprint arXiv:1906.07789 , 2019. [79] A. Van Etten, D. Lindenbaum, and T. M. Bacastow, “Spacenet: A remote sensing dataset and challenge series,” arXiv preprint arXiv:1807.01232 ,2018. [80] J. Shermeyer, D. Hogan, J. Brown, A. Van Etten, N. Weir, F. Pacifici, R. Hansch, A. Bastidas, S. Soenen, T. Bacastow et al. , “Spacenet 6: Multi-sensor all weather mapping dataset,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition workshops , 2020, pp. 196–197. [81] Y. Wang, N. A. A. Braham, Z. Xiong, C. Liu, C. M. Albrecht, and X. X. Zhu, “Ssl4eo-s12: A large-scale multimodal, multitemporal dataset for self-supervised learning in earth observation [software and data sets],” 
+
+IEEE Geoscience and Remote Sensing Magazine , vol. 11, no. 3, pp. 98–106, 2023. [82] X. Li, G. Zhang, H. Cui, S. Hou, S. Wang, X. Li, Y. Chen, Z. Li, and L. Zhang, “Mcanet: A joint semantic segmentation framework of optical and sar images for land use classification,” International Journal of Applied Earth Observation and Geoinformation , vol. 106, p. 102638, 2022. [83] Y. Ye, X. Teng, H. Yang, S. Chen, Y. Sun, Y. Bian, T. Tan, Z. Li, and Q. Yu, “3mos: a multi-source, multi-resolution, and multi-scene optical-sar dataset with insights for multi-modal image matching,” Visual Intelligence , vol. 3, no. 1, p. 19, 2025. [84] M. Heusel, H. Ramsauer, T. Unterthiner, B. Nessler, and S. Hochreiter, “Gans trained by a two time-scale update rule converge to a local nash equilibrium,” Advances in neural information processing systems ,vol. 30, 2017. [85] R. Zhang, P. Isola, A. A. Efros, E. Shechtman, and O. Wang, “The unreasonable effectiveness of deep features as a perceptual metric,” in 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , 2018, pp. 586–595. [86] Z. Wang, A. C. Bovik, H. R. Sheikh, and E. P. Simoncelli, “Image quality assessment: from error visibility to structural similarity,” IEEE transactions on image processing , vol. 13, no. 4, pp. 600–612, 2004. [87] L. Zhang, L. Zhang, X. Mou, and D. Zhang, “Fsim: A feature similarity index for image quality assessment,” IEEE transactions on Image Processing , vol. 20, no. 8, pp. 2378–2386, 2011. [88] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al. , “Learning transferable visual models from natural language supervision,” in International conference on machine learning . PmLR, 2021, pp. 8748–8763. [89] B. Li, K. Xue, B. Liu, and Y.-K. Lai, “Bbdm: Image-to-image trans-lation with brownian bridge diffusion models,” in Proceedings of the IEEE/CVF conference on computer vision and pattern Recognition ,2023, pp. 1952–1961. [90] K. Xue, B. Li, Z. Liu, Z. He, B. Liu, C. Zhang, and Y.-K. Lai, “Bibbdm: Bidirectional image translation with brownian bridge diffusion models,” 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [91] P. Lindenberger, P.-E. Sarlin, and M. Pollefeys, “Lightglue: Local feature matching at light speed,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 17 627–17 638. [92] J. Sun, Z. Shen, Y. Wang, H. Bao, and X. Zhou, “Loftr: Detector-free local feature matching with transformers,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2021, pp. 8922–8931. [93] J. Edstedt, I. Athanasiadis, M. Wadenb¨ ack, and M. Felsberg, “Dkm: Dense kernelized feature matching for geometry estimation,” in Pro-ceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2023, pp. 17 765–17 775. [94] B. Cheng, A. Schwing, and A. Kirillov, “Per-pixel classification is not all you need for semantic segmentation,” Advances in neural information processing systems , vol. 34, pp. 17 864–17 875, 2021. [95] L.-C. Chen, Y. Zhu, G. Papandreou, F. Schroff, and H. Adam, “Encoder-decoder with atrous separable convolution for semantic image segmen-tation,” in Proceedings of the European conference on computer vision (ECCV) , 2018, pp. 801–818. [96] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2016, pp. 770–778. [97] O. Sim´ eoni, H. V. Vo, M. Seitzer, F. Baldassarre, M. Oquab, C. Jose, V. Khalidov, M. Szafraniec, S. Yi, M. Ramamonjisoa et al. , “Dinov3,” 
+
+arXiv preprint arXiv:2508.10104 , 2025. 
+
+Zhiping Yu received his B.S. degree from the De-partment of Aerospace Intelligent Science and Tech-nology, School of Astronautics, Beihang University in 2025. He is currently working towards the Ph.D. degree in the Department of Aerospace Intelligent Science and Technology, School of Astronautics, Beihang University. His research interests include deep learning and remote sensing image generation. 
+
+Chenyang Liu received his B.S. degree from the Image Processing Center, School of Astronautics, Beihang University in 2021. He is currently work-ing towards the Ph.D. degree in the Department of Aerospace Intelligent Science and Technology, School of Astronautics, Beihang University. His re-search interests include machine learning, computer vision, and multimodal learning. 
+
+Jinqi Cao is currently an undergraduate student at the Department of Aerospace Intelligent Science and Technology, School of Astronautics, Beihang Uni-versity. Her research interests include deep learning and remote sensing image processing. 17 
+
+Qinzhe Yang is currently a student at the Shen Yuan Honors College, Beihang University, pursuing a Ph.D. degree through an eight-year integrated program in Future Aerospace Technology. His re-search interests include image processing and deep learning, particularly object detection and instance segmentation in remote sensing. 
+
+Siwei Yu received his B.S. degree from the Depart-ment of Aerospace Intelligent Science and Technol-ogy, School of Astronautics, Beihang University in 2025. He is currently working towards the Ph.D. degree in the Department of Aerospace Intelligent Science and Technology, School of Astronautics, Beihang University. His research interests include deep learning and remote sensing image registration. 
+
+Zhengxia Zou (Senior Member, IEEE) received his BS degree and his Ph.D. degree from Beihang Uni-versity in 2013 and 2018. He is currently a Professor at the Department of Aerospace Intelligent Science and Technology, School of Astronautics, Beihang University. During 2018-2021, he was a postdoc research fellow at the University of Michigan, Ann Arbor. His research interests include computer vision and related problems in remote sensing. He has published over 100 peer-reviewed papers in top-tier journals and conferences, including Proceedings of the IEEE, Nature Communications, IEEE Transactions on Pattern Analysis and Machine Intelligence, IEEE Transactions on Geoscience and Remote Sensing, and IEEE / CVF Computer Vision and Pattern Recognition. Dr. Zou serves as the Associate Editor for IEEE Transactions on Image Processing and IEEE Transactions on Geoscience and Remote Sensing. His personal website is https://zhengxiazou.github.io/. 
+
+Zhenwei Shi (Senior Member, IEEE) is currently a Professor and Dean of the Department of Aerospace Intelligent Science and Technology, School of As-tronautics, Beihang University. He has authored or co-authored over 300 scientific articles in refereed journals and proceedings, including the IEEE Trans-actions on Pattern Analysis and Machine Intelli-gence, the IEEE Transactions on Image Processing, the IEEE Transactions on Geoscience and Remote Sensing, the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) and the IEEE In-ternational Conference on Computer Vision (ICCV). His current research interests include remote sensing image processing and analysis, computer vision, pattern recognition, and machine learning. Dr. Shi serves as an Editor for the IEEE Transactions on Geoscience and Re-mote Sensing, the Pattern Recognition, the Remote Sensing, and the Infrared Physics and Technology, etc. His personal website is http://levir.buaa.edu.cn/..
