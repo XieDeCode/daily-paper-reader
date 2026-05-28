@@ -1,0 +1,966 @@
+Title: Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning
+
+URL Source: https://arxiv.org/pdf/2605.20551v1
+
+Published Time: Thu, 21 May 2026 00:22:07 GMT
+
+Number of Pages: 21
+
+Markdown Content:
+# Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+Zichao Zeng 1,2,⋆ June Moh Goo 1 Junwei Zheng 2,† Weijia Fan 2,4
+
+Jiaming Zhang 3,† Rainer Stiefelhagen 2 Jan Boehm 11University College London, London, UK 
+
+> 2
+
+Karlsruhe Institute of Technology, Karlsruhe, Germany 
+
+> 3
+
+Hunan University, Changsha, China 
+
+> 4
+
+Shenzhen University, Shenzhen, China 
+
+Abstract 
+
+Visual Place Recognition (VPR) aims to match a query image to reference images of the same place in a large-scale database. Recent state-of-the-art methods employ Vision Transformers (ViTs) as backbone foundation models to extract patch-level features that are robust to viewpoint, illumination, and seasonal variations, which are then aggregated into a compact global descrip-tor for retrieval. Most existing aggregation methods uniformly pool patch tokens into learned clusters, despite the fact that different clusters often encode distinct spatial or semantic patterns and contribute unequally to VPR performance. To address this limitation, we propose Weighted Aggregated Descriptor ( WeiAD ), which assigns weights to clusters during aggregation, producing more discriminative global representations. Beyond accuracy, retrieval latency is a critical concern for large-scale deployments and resource-constrained edge devices. Prior work mainly reduces latency by compressing global descriptors, while overlooking the cost of feature extraction, an issue exacerbated by ViT-based backbones. We therefore introduce WeiToP , a VPR-oriented token pruning framework that reduces feature extraction cost via self-distillation, where aggregation-induced token importance supervises a lightweight pruning module attached to an early transformer layer, enabling inference-time token pruning. After a single joint training phase, WeiToP enables plug-and-play token pruning at inference time, allowing flexible and on-demand control over the accuracy–efficiency trade-off without additional training. Moreover, WeiToP outperforms existing token pruning methods adapted from general vision tasks. 
+
+/ The code is publicly available at https://zichaozeng.github.io/WeiToP. 
+
+1. Introduction 
+
+Visual Place Recognition (VPR) aims to retrieve previously visited locations from visual observations and serves as a core component in robotics, AR/VR, and autonomous driv-ing systems (Ali-bey et al., 2022). VPR pipelines typically follow a two-stage paradigm: extracting a compact global descriptor using a powerful image encoder ( e.g. , ResNet or Vision Transformer) (Ali-Bey et al., 2023; Berton et al., 2022; 2023; Arandjelovic et al., 2016), followed by efficient nearest-neighbor retrieval in large-scale databases (John-
+
+> ⋆This work was done while Zichao Zeng (zichao.zeng.21@ucl.ac.uk) was a visiting student at Karlsruhe Institute of Technology.
+> †Correspondence: junwei.zheng@kit.edu, jiamingzhang@hnu.edu.cn.
+
+son et al., 2019). Recent transformer-based visual foun-dation models, such as CLIP (Radford et al., 2021) and DINOv2 (Oquab et al., 2023), have further improved ro-bustness to severe illumination, viewpoint, and seasonal variations, leading to state-of-the-art performance on chal-lenging VPR benchmarks (Keetha et al., 2023; Garg et al., 2024; Izquierdo & Civera, 2024; Zeng et al., 2026; Lu et al., 2024a; Khaliq et al., 2024). Over the past decade, NetVLAD (Arandjelovic et al., 2016) has served as a domi-nant aggregation baseline for VPR by introducing differen-tiable soft assignment and aggregating residuals with respect to learned cluster centers. Building upon this paradigm, SALAD (Izquierdo & Civera, 2024) further improves aggre-1           
+
+> arXiv:2605.20551v1 [cs.CV] 19 May 2026 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning MixVPR
+> NetVLAD
+> CosPlace
+> EigenPlaces
+> SALAD
+> WeiAD
+> +WeiToP
+> +ToFu
+> +FastV
+> +DynamicViT
+> +ToMe
+> ConvAP
+> Figure 1. Star-shaped markers correspond to WeiAD -based mod-els. The solid red star denotes base WeiAD . The yellow line shows our VPR-specific token pruning approach WeiToP inte-grated with WeiAD across different retention ratios. Other lines indicate WeiAD equipped with different generic token pruning strategies. Single markers show competing VPR methods.
+
+gation by incorporating optimal transport (OT) formulations and explicit dustbin mechanisms to discard uninformative tokens. SuperVLAD (Lu et al., 2024c) simplifies the aggre-gation by using a small number of clusters without explicit cluster centers and introduces ghost clusters similar to dust-bins. Although effective, these approaches adopt a flat ag-gregation formulation: each token is either assigned to one of a fixed set of clusters or discarded altogether. Such de-signs overlook the fact that clusters which encode different spatial or semantic patterns contribute to VPR performance with varying degrees of importance (Fig. 2a). Meanwhile, efficiency is a central requirement for practical VPR systems. Most existing efficiency-oriented approaches focus on descriptor-side compression, such as dimensional-ity reduction, product quantization, or aggregation-level sparsification (Keetha et al., 2023; Izquierdo & Civera, 2024). While these techniques reduce memory usage and retrieval cost, they leave the local feature extraction stage unchanged. In practice, feature extraction dominates the overall computational budget, affecting not only segment-level coarse retrieval (Garg et al., 2024; Zeng et al., 2026) and re-ranking stages (Lu et al., 2024b; Zhu et al., 2023), but also large-scale deployments (Mur-Artal et al., 2015; Milford & Wyeth, 2010; Ali-bey et al., 2022; Matsumoto et al., 1996) that require low latency and high throughput. Some methods offer alternatives with lighter-weight struc-tures at the expense of performance ceilings (Izquierdo & Civera, 2024). This naturally raises the question: Why not achieve a flexible balance between efficiency and accuracy by reducing redundancy in local features without sacrificing performance ceilings? Token pruning in Vision Transformers (ViTs) has recently Cluster 1 Cluster 2 Cluster 3   
+
+> (a) Keep Ratio: 70% (b) Figure 2. (a) Cluster-to-patch transport heatmaps showing distinct assignment patterns. (b) Token pruning illustration, where squares denote patch tokens and blank ones are pruned redundant tokens.
+
+emerged as an effective strategy for accelerating inference by removing spatial tokens that contribute little to down-stream tasks (Rao et al., 2021; Meng et al., 2022; Ye et al., 2025; Chen et al., 2024). Prior work has demonstrated its effectiveness in general vision benchmarks. Surprisingly, despite its clear potential, token pruning remains largely unexplored in ViT-based VPR, where representations are in-herently global, local redundancy is substantial, and efficient feature extraction is critical (Fig. 2b). To address these limitations, we propose Wei ghted 
+
+Aggregated Descriptor ( WeiAD ) with a To ken Pruning mod-ule ( WeiToP ), forming a unified framework that jointly improves VPR robustness and efficiency. WeiAD extends OT-based aggregation with a VPR-oriented tiered weight-ing scheme and bidirectional dustbins, organizing clusters from highly informative to marginally relevant according to their contribution to place recognition. This design en-ables importance-weighted aggregation and yields more discriminative global descriptors. Furthermore, we intro-duce a self-distillation mechanism that transfers aggregation-induced token importance to a lightweight pruning module 
+
+WeiToP attached to an early transformer layer. During inference, WeiToP prunes less informative tokens based on predicted importance, substantially accelerating feature extraction while preserving VPR-relevant semantics. Our main contributions are summarized as follows: • Weighted OT-based aggregation for VPR. We pro-pose WeiAD , a weighted optimal transport aggrega-tion framework that assigns importance-aware weights to clusters, achieving state-of-the-art performance on challenging VPR benchmarks. • VPR-oriented token pruning via self-distillation. 
+
+We introduce WeiToP , the first token pruning frame-work tailored for VPR, which distills aggregation-induced token importance into a lightweight mod-ule for inference-time pruning, reducing computation while preserving VPR-relevant semantics. • Flexible accuracy–efficiency trade-off with a sin-gle training. WeiAD and WeiToP are jointly trained once and can be used in a plug-and-play manner at inference time, enabling flexible control over the ac-curacy–efficiency trade-off and outperforming token pruning methods adapted from general vision tasks. 2Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning     
+
+> Figure 3. The unified framework of WeiAD and WeiToP . At training stage, we fine-tune the late layers of DINOv2 ViT-B on GSV-Cities, alongside the score projection, dimension reduction module, WeiToP module, and weight parameters (fire icon).
+
+2. Literature Review 
+
+Visual Place Recognition. NetVLAD (Arandjelovic et al., 2016) marked a milestone by integrating convolutional neu-ral networks with a differentiable VLAD aggregation layer, enabling end-to-end training for VPR. Generalized Mean Pooling (GeM) (Radenovi ´c et al., 2018) further simplified global aggregation while maintaining competitive perfor-mance. As VPR-specific datasets became available, sub-sequent works reformulated VPR as a classification prob-lem to enable scalable training. CosPlace (Berton et al., 2022) and EigenPlaces (Berton et al., 2023) introduced VPR-oriented training paradigms that learn highly discrim-inative global descriptors. MixVPR (Ali-Bey et al., 2023) further enhanced aggregation by combining deep features with MLPs. While these CNN-based approaches achieve strong performance, they typically rely on fully trained back-bones and are limited in robustness under severe appearance changes. More recently, robust visual foundation models such as DINOv2 (Oquab et al., 2023) have emerged as pow-erful local feature extractors for VPR. In particular, ViT variants are well suited for VPR due to their ability to model long-range dependencies and capture global context. Any-Loc (Keetha et al., 2023) demonstrates that DINOv2 fea-tures can be directly applied to VPR without task-specific training. SALAD (Izquierdo & Civera, 2024) further ad-vances this direction by formulating token-to-cluster assign-ment as an OT problem and introducing a dustbin cluster to absorb uninformative tokens, establishing a strong base-line with minimal fine-tuning. Similarly, SuperVLAD (Lu et al., 2024c) fine-tunes ViT-based DINOv2 and proposes a compact single-cluster formulation with ghost clusters. Beyond global descriptor retrieval, several works explore segment-level or two-stage VPR pipelines. SegVLAD (Garg et al., 2024) and MuSSel-V(Zeng et al., 2026) adopt DI-NOv2 as the backbone and perform coarse retrieval over image segments, trading efficiency for improved robustness. SelaVPR (Lu et al., 2024b) proposes a hybrid global–local adaptive framework that integrates DINOv2 into a two-stage VPR system. While these approaches are complementary to our work, the improved efficiency and representation quality of our feature extraction can naturally benefit such pipelines. 
+
+Token Pruning. Efficiency is a critical requirement for large-scale VPR systems, particularly in downstream ap-plications operating under strict latency and power con-straints (Berton et al., 2023). Most existing efficiency-oriented methods focus on descriptor-level optimizations, such as dimensionality reduction (Izquierdo & Civera, 2024; Keetha et al., 2023) or aggregation-side sparsification (Lu et al., 2024c), while leaving the feature extraction process unchanged. However, with the increasing adoption of ViT-based foundation models, feature extraction has become the dominant computational bottleneck due to the large num-ber of redundant patch tokens. Token pruning has recently emerged as an effective strategy for accelerating transformer-based models by dynamically removing tokens that con-tribute little to downstream tasks. This line of research has been explored in both NLP and computer vision, with prun-ing criteria based on attention scores (Liang et al., 2022), token similarity (Kim et al., 2024; Bolya et al., 2022), or learned importance predictors (Rao et al., 2021; Tang et al., 2023; Kim et al., 2022). More recently, numerous pruning methods requiring no training have also been explored (Ye et al., 2025; Chen et al., 2024; Fayyaz et al., 2022; Wang et al., 2024). Despite its clear relevance, token pruning has not yet been investigated in the context of VPR. Unlike recognition tasks that focus on localized semantics, VPR requires globally consistent representations while tolerating substantial local redundancy. This makes VPR particularly well-suited for importance-guided token reduction. Our work bridges this gap by introducing a VPR-oriented token 3Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+pruning strategy that leverages aggregation-induced token importance, enabling efficient feature extraction without compromising place recognition performance. 
+
+3. Method 
+
+3.1. Preliminary Problem Statement. VPR aims to retrieve the most likely reference image depicting the same place as a given query image. Given a query image I(q) and a reference database 
+
+D = {I(r) 
+
+> k
+
+}Rk=1 , where R is the number of references, a typi-cal pipeline consists of three stages. First, an image encoder 
+
+F (·) extracts a set of patch-level features X = {xi}Ni=1 ,where xi ∈ Rd denotes the i-th patch token embedding, and a global [CLS] token xCLS . Second, all tokens are aggregated into a global descriptor g ∈ RD tailored for VPR. Finally, retrieval is performed by computing a similar-ity metric ( e.g. , cosine or Euclidean distance) between the query descriptor g(q) and reference descriptors {g(r) 
+
+> k
+
+}Mk=1 .
+
+Local Feature Extraction. We adopt a ViT as the image encoder due to its ability to model global context via self-attention and its robustness across diverse visual conditions. Given an input image I ∈ RH×W ×C , it is partitioned into non-overlapping patches of size p × p, where p = 14 . This results in an initial set of N0 = HW/p 2 patch tokens. The patch tokens, together with a global [CLS] token, are pro-cessed by a ViT consisting of L transformer layers. Without token pruning, the encoder outputs 
+
+F (I) = {xi}N0 
+
+> i=1
+
+∪ { xCLS }, (1) where xi ∈ Rd. When token pruning is applied, the number of tokens decreases after layer ℓ. Let Nℓ denote the number of patch tokens at layer ℓ. We assume a fixed retention ratio 
+
+ρ ∈ (0 , 1] , such that Nℓ ≈ ρN ℓ−1, where pruning is applied only once in WeiToP . Accordingly, N ≈ ρN 0, where N
+
+denotes the number of final output tokens. The pruning strategy is detailed in Sec. 3.3. 
+
+Feature Aggregation and Retrieval. The extracted patch tokens are aggregated into a compact global descriptor g =
+
+A(X), where A(·) denotes a feature aggregation operator. In WeiAD , we focus on OT-based aggregation, which is introduced in Sec. 3.2. Given a query descriptor g(q) and a reference descriptor g(r), retrieval is performed using a distance metric 
+
+d(g(q), g(r)) = ∥g(q) − g(r)∥22. (2) The top-K retrieved reference images are obtained as 
+
+π(q) 
+
+> K
+
+= arg min 
+
+> i1,...,i K
+
+d(g(q), g(r)1 ), . . . , d (g(q), g(r) 
+
+> K
+
+). (3) 
+
+3.2. Weighted OT-based Aggregation 
+
+3.2.1. OT-BASED AGGREGATION 
+
+The framework of our methods is shown in Fig.3. As in SALAD (Izquierdo & Civera, 2024), we formulate fea-ture aggregation as an entropy-regularized OT problem that softly assigns patch tokens to a set of clusters, enforc-ing bidirectional constraints between tokens and clusters, which results in more balanced assignments. Sinkhorn Al-gorithm (Sinkhorn & Knopp, 1967; Cuturi, 2013) is applied for OT assignment. Different to SALAD, we introduce M
+
+learnable clusters together with bidirectional dustbins, i.e. ,a dustbin cluster and a ghost token, yielding (N + 1) source nodes and (M + 1) target nodes. A transport score ma-trix S = fs(X) ∈ RN ×M is learned, where Sij measures the affinity between patch token i and cluster j. Following SuperGlue (Sarlin et al., 2020), we introduce a learnable dustbin score z ∈ R to handle unmatched elements. Specifi-cally, we augment the score matrix by adding both a dustbin cluster and a ghost token, yielding an extended score matrix 
+
+˜S =
+
+ S z 1 N
+
+z 1 ⊤ 
+
+> M
+
+z
+
+
+
+∈ R(N +1) ×(M +1) . (4) The additional row corresponds to a dustbin cluster that absorbs unmatched tokens, while the additional column represents a ghost token that allows clusters with no cor-responding tokens to remain unassigned. Both extensions share the same learnable score z, ensuring a symmetric and parameter-efficient treatment of unmatched mass. The OT plan P ∈ R(N +1) ×(M +1) + is obtained by solving 
+
+max   
+
+> P∈Π( a,b )
+
+⟨P, ˜S⟩ + ε X
+
+> i,j
+
+Pij log Pij , (5) where ε > 0 is the entropy regularization coefficient. This formulation is equivalent to the classical entropy-regularized OT problem with cost matrix C by setting ˜S = −C, but is more convenient for similarity-based matching, as it directly maximizes affinities rather than minimizing costs. Finally, a factorized solution is modeled: 
+
+P⋆ = diag( u) K diag( v), Kij = exp ˜Sij 
+
+ε
+
+!
+
+, (6) where u ∈ RN +1 + and v ∈ RM +1 + are scaling vectors ob-tained via the Sinkhorn algorithm. 3.2.2. W EIGHTED AGGREGATION 
+
+We first compress patch tokens and the [CLS] token into spaces with lower dimensionalities: ˜xi = f1(xi) and 
+
+˜xCLS = f2(xCLS ), where f1 and f2 are lightweight MLPs. Unlike aggregation methods that treat all clusters equally, we estimate the relative importance of each cluster based 4Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+Figure 4. We activate WeiToP after an early layer during inference. Input tokens undergo WeiToP processing to obtain importance logits, which are then combined with token norms to compute importance scores. The top-α selected tokens are retained and fed into the subsequent blocks. 
+
+on its effective mass transported from real patch tokens. Specifically, for cluster j, we define its raw contribution score as 
+
+αj =
+
+> N
+
+X
+
+> i=1
+
+P⋆ij − λ P⋆  
+
+> (N+1) j
+
+, (7) where P⋆ij denotes the OT mass from patch token i to cluster 
+
+j, and P⋆  
+
+> (N+1) j
+
+represents the mass assigned from the ghost token to cluster j. The hyperparameter λ > 0 controls the penalty on ghost assignments. This formulation favors clusters that are strongly supported by real tokens while suppressing those dominated by ghost mass. Clusters are ranked in descending order according to their contribution scores {αj } and partitioned into T (w) rank-based tiers with fixed sizes {c0, c 1, . . . , c T (w)−1}, where 
+
+PT (w)−1 
+
+> t=0
+
+ct = M . Each tier t is associated with a shared learnable weight wt. To encourage a monotonic impor-tance hierarchy, we parameterize the tier weights as a non-increasing sequence: 
+
+wt = max exp( θ0) −
+
+> t
+
+X
+
+> k=1
+
+softplus( θ∆,k ), δ 
+
+!
+
+, (8) where t ∈ { 0, . . . , T (w) − 1}. Here, θ0 and {θ∆,k } are learnable parameters, and δ is a small constant for numerical stability. Each cluster j inherits the weight wτ (j) of its assigned tier τ (j), which is determined by its rank in the sorted list. The final aggregated representation for cluster j is computed and the global descriptor is formed by concatenating all weighted cluster descriptors together with the projected 
+
+[CLS] token: 
+
+g = {vj }M ∪ { ˜xCLS }, vj =
+
+> N
+
+X
+
+> i=1
+
+wτ (j) P⋆ij ˜xi, (9) 
+
+3.3. VPR-Oriented Token Pruning 
+
+3.3.1. T OKEN IMPORTANCE SELF -D ISTILLATION 
+
+Although weighted OT-based aggregation improves repre-sentation quality, the computational cost of extracting a large number of patch tokens remains a major bottleneck for efficient VPR. To accelerate feature extraction, we aim to prune less informative patch tokens at an early layer of the ViT backbone during inference, while preserving the semantic cues critical for VPR. According to Eq. 9, the con-tribution Ii of a patch token xi to VPR is explicitly captured by its aggregated transport mass: 
+
+Ii =
+
+> M
+
+X
+
+> j=1
+
+wτ (j) P⋆ij , (10) which reflects how strongly token i participates in aggrega-tion. We treat Ii as a soft supervision signal that encodes token-level importance for VPR. To enable early pruning, we distill this aggregation-induced importance from the final aggregation stage to an early layer of the ViT. Specifically, we introduce a lightweight token importance predictor, termed WeiToP , implemented as a shared MLP fz operating on early-layer token embed-dings. During training, WeiToP predicts importance logits 
+
+z(s) = {z(s) 
+
+> i
+
+}N0 
+
+> i=1
+
+from the first transformer block, while the aggregation-derived importance Ii serves as the teacher signal. Following Hinton et al. (2015), we define softened probability distributions using a temperature T :
+
+p(t) 
+
+> i
+
+= exp( Ii/T )
+
+PN0 
+
+> k=1
+
+exp( Ik/T ) , p(s) 
+
+> i
+
+=exp 
+
+
+
+z(s) 
+
+> i
+
+/T 
+
+PN0 
+
+> k=1
+
+exp 
+
+
+
+z(s) 
+
+> k
+
+/T 
+
+ .
+
+(11) The distillation objective encourages the student predictor to match the teacher distribution: 
+
+Ldistill = T 2 · 1
+
+N0
+
+> N0
+
+X
+
+> i=1
+
+p(t) 
+
+> i
+
+log p(t)
+
+> i
+
+p(s)
+
+> i
+
+. (12) Notably, WeiToP is trained jointly with the full VPR pipeline but remains inactive during training, ensuring that pruning does not interfere with representation learning. 3.3.2. F LEXIBLE PRUNING DURING INFERENCE 
+
+At inference time, WeiToP is activated to enable efficient token pruning. Given early-layer patch token embeddings, WeiToP predicts token-wise importance logits {z(s) 
+
+> i
+
+}N0
+
+> i=1
+
+,which reflect their estimated relevance to VPR. To obtain a comparable importance scale, the logits are first normalized using min–max normalization. In addition to the learned importance, we incorporate the magnitude of token embed-dings as a complementary saliency prior. Specifically, the 5Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+final pruning score for each token is defined as a convex combination of the normalized importance and the token embedding norm: 
+
+ˆzi = κ z(s) 
+
+> i
+
+− min j z(s)
+
+> j
+
+max j z(s) 
+
+> j
+
+− min j z(s) 
+
+> j
+
++ ϵ + (1 − κ) ∥xi∥2 , (13) where ϵ is a small constant for numerical stability, xi denotes the corresponding patch token embedding and κ ∈ [0 , 1] 
+
+controls the balance between learned importance and feature magnitude. Tokens are ranked according to {ˆzi}, and only the top-ρ fraction is retained: 
+
+Sρ = TopK 
+
+
+
+{ˆzi}N0
+
+> i=1
+
+, ⌈ρN 0⌉
+
+
+
+, (14) where ρ ∈ (0 , 1] controls the pruning ratio. Only the se-lected tokens Sρ are propagated through the remaining trans-former layers and aggregated by WeiAD. This design en-ables a flexible efficiency–accuracy trade-off at inference time without retraining. 
+
+3.4. Loss Function 
+
+The overall training objective consists of a retrieval loss and a token importance distillation loss. We adopt the multi-similarity loss (Wang et al., 2019) to supervise global de-scriptor learning. Given a query descriptor gi, positive set 
+
+Pi, and negative set Ni, the loss is defined as 
+
+Lretr = 1
+
+α log 
+
+1 + X
+
+> p∈P i
+
+exp( −α(sip − λ)) 
+
+
+
++ 1
+
+β log 1 + X
+
+> n∈N i
+
+exp( β(sin − λ)) 
+
+!
+
+,
+
+(15) where sij denotes the cosine similarity between descriptors, and α, β, and λ are hyperparameters. 
+
+Overall objective. The final training objective is 
+
+Ltotal = Lretr + γ Ldistill , (16) where γ balances retrieval and pruning supervision. 
+
+4. Experiments 
+
+4.1. Implementation Details 
+
+All experiments use PyTorch on a single RTX 3090. We adopt DINOv2 ViT-B/14 as the backbone, freezing all but the last four transformer layers. Models are trained on GSV-Cities (Ali-bey et al., 2022) for 4 epochs ( ˜32 min). We use AdamW with an initial LR of 6 × 10 −5 and linear decay. Images are resized to 224 × 224 for training ( N0 = 14 × 14 )and 322 × 322 for inference ( N0 = 23 × 23 ). For WeiAD ,we set M = 64 clusters. Patch tokens are projected from 768 →128 dims and the [CLS] token from 768 →256, yield-ing a 128 × 64 + 256 global descriptor. A tiered weighted aggregation with T (w) = 4 tiers uses {24 , 20 , 16 , 4} clus-ters (high →low importance). The base weight is initialized as exp( θ0) = 1 , weight deltas are uniform, and all tier weights are lower-bounded by 10 −3. The penalty weight λ
+
+is 0.5. WeiToP is trained jointly but inactive. At inference, WeiToP predicts token importance and keeps the top-ρ frac-tion ( ρ ∈ (0 , 1] ); pruning is enabled when ρ < 1. The coeffi-cient κ is 0.5. WeiADs are supervised with Multi-Similarity loss ( α = 1 .0, β = 20 , λ = 0 ). The distillation temperature 
+
+T = 0 .1 and the weighting factor weight γ = 0 .1.
+
+Datasets and evaluation metrics. We evaluate WeiAD 
+
+(+ WeiToP ) on a diverse set of standard VPR benchmarks covering large-scale urban scenes, seasonal variation, and long-term appearance changes including MSLS-val idation set (Warburg et al., 2020), MSLS-C hallenge, Nordland 
+
+test set (S ¨underhauf et al., 2013), Pitts250k-test set (Arand-jelovic et al., 2016), SPED-test set (Chen et al., 2018), and 
+
+AmsterTime dataset (Yildiz et al., 2022). More details are in Appendix C. We follow standard VPR protocols and report Recall@1 and Recall@5. Efficiency is measured us-ing the R2Former (Zhu et al., 2023) VPR latency metric, which captures end-to-end inference time from image input to global descriptor generation, including feature extrac-tion. We further analyze the efficiency–accuracy trade-off of WeiToP by reporting inference latency and computational load under different token retention ratios ρ, flexible control over accuracy and computational cost at inference. 
+
+4.2. Performance on VPR 
+
+We benchmark WeiAD against a wide range of state-of-the-art single-stage VPR methods. These include representative CNN-based approaches with fully trained backbones, such as Conv-AP (Ali-bey et al., 2022), NetVLAD (Arandjelovic et al., 2016), CosPlace (Berton et al., 2022), MixVPR (Ali-Bey et al., 2023), and EigenPlaces (Berton et al., 2023), as well as recent ViT-based methods built upon DINOv2 with light fine-tuning, including CricaVPR (Lu et al., 2024a), SuperVLAD (Lu et al., 2024c), and SALAD (Izquierdo & Civera, 2024). For a fair comparison, SALAD and our method ( WeiAD + WeiToP ) are each trained five times with different random seeds, and we report the averaged performance. Implementation details of all methods and the complete results are provided in Appendix D.1 and E.1. Tab. 1 summarizes the VPR performance across all eval-uated benchmarks. Our method consistently outperforms prior approaches on all datasets and metrics. While per-formance on MSLS-val, Pitts250k-test, and SPED-test ap-pears close to saturation for existing methods, WeiAD still achieves consistent improvements. More notably, on chal-6Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+Table 1. Comparison of WeiAD with state-of-the-art methods on diverse VPR datasets. The best results are highlighted in bold , and the second-best results are underlined . WeiToP , with different retention ratios ρ based on WeiAD , is also compared. Bold red indicates that the performance after pruning still achieves or surpasses the best results.                                                                                                                                                                                                                                       
+
+> Method Backbone ρLatency MSLS-C MSLS-val NordLand Pitts250k-test SPED AmsterTime Mean
+> (ms) R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 NetVLAD VGG-16 /1.41 35.1 47.4 82.6 89.6 32.6 47.1 90.5 96.2 78.7 88.3 18.4 32.4 56.3 66.8 CosPlace VGG-16 /2.59 67.2 78.0 87.4 93.0 44.2 59.7 92.1 97.5 80.1 89.6 47.4 70.2 69.7 81.3 Conv-AP ResNet-50 /1.22 54.2 66.6 83.1 90.3 42.7 58.9 92.9 97.7 79.2 88.6 34.6 54.4 64.5 76.1 MixVPR ResNet-50 /1.37 64.0 75.9 88.0 92.7 58.4 74.6 94.6 98.3 85.2 92.1 41.2 59.6 71.9 82.2 EigenPlaces ResNet-50 /2.65 67.4 77.1 89.3 93.7 54.4 68.8 94.1 98.0 69.9 82.9 48.8 68.8 70.7 81.5 SuperVLAD DINOv2-B /7.38 74.2 79.3 91.5 95.9 60.6 76.0 95.2 98.6 90.6 95.4 54.7 75.5 77.8 86.8 SALAD DINOv2-B /2.41 75.4 87.4 91.4 96.2 71.1 85.6 94.9 98.5 90.3 95.4 58.0 78.6 80.2 90.3 WeiAD DINOv2-B 1.00 2.41 76.2 87.8 91.7 96.2 73.1 86.7 95.1 98.8 90.6 95.4 58.4 79.5 80.9 90.7
+> + WeiToP DINOv2-B 0.95 2.23 76.3 87.9 91.8 96.3 72.8 86.7 95.0 98.6 90.4 95.3 58.4 79.4 80.8 90.7
+> + WeiToP DINOv2-B 0.70 1.68 75.3 86.8 91.3 96.1 69.5 84.7 94.0 98.3 89.2 94.4 55.3 76.9 79.1 89.5 + WeiToP DINOv2-B 0.50 1.30 71.6 84.2 90.4 95.9 62.3 80.0 91.5 97.4 85.5 92.5 48.7 70.6 75.0 86.8 + WeiToP DINOv2-B 0.40 1.09 68.2 81.9 87.7 94.8 53.3 71.0 88.2 96.2 82.4 90.9 41.8 64.0 70.3 83.1 1.2 1.4 1.6 1.8 2.0 2.2 2.4
+> Latency (ms/img) ( )
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Recall@1 (%) (  )
+> DynamicViT
+> ToMe
+> FastV
+> ToFu
+> WeiToP 40 50 60 70 80 90
+> Computational Load (GFLOP) ( )
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Recall@1 (%) (  )
+> DynamicViT
+> ToMe
+> FastV
+> ToFu
+> WeiToP
+
+Figure 5. Comparison of WeiToP (star lines) with other token pruning methods with different retention ratios ρ.
+
+Figure 6. Efficiency-accuracy trade-off performance of WeiAD +
+
+WeiToP (star lines) with different model sizes of DINOv2. 
+
+lenging benchmarks that exhibit severe seasonal and tempo-ral variations, such as Nordland and AmsterTime, our ap-proach yields substantial gains by leveraging more discrimi-native representations. On the MSLS-C benchmark, WeiAD 
+
+achieves a clear margin over existing methods, demonstrat-ing strong generalization under strict evaluation protocols. 
+
+Flexible efficiency–accuracy trade-offs. Beyond accu-racy, we further analyze efficiency in terms of inference latency. Without token pruning, WeiAD exhibits the same latency as SALAD and is consistently faster than other ViT-based methods. CNN-based methods, particularly MixVPR and Conv-AP, remain strong baselines in terms of raw effi-ciency. However, when WeiToP is activated, our method achieves a favorable accuracy–efficiency trade-off. At a token retention ratio of ρ = 0 .5, WeiAD + WeiToP is faster than MixVPR while maintaining higher Recall@1 by 3.1% .When further reducing the ratio to ρ = 0 .4, our method becomes 0.29 ms /image faster than the fastest CNN-based baseline (Conv-AP), while still improving average Recall@1 by 5.8% . Such improvements are particularly impactful for large-scale deployment scenarios involving thousands or millions of images, where faster global retrieval leads to multiplicative gains in end-to-end system responsiveness. Moreover, since ρ is adjustable at inference time, our frame-work allows practical systems to dynamically trade accu-racy for efficiency based on deployment constraints. 
+
+4.3. Comparison to other Token Pruning 
+
+We further compare VPR-Oriented token pruning WeiToP 
+
+with existing methods. To this end, we integrate several state-of-the-art generic token pruning approaches into our VPR pipeline, including DynamicViT (Rao et al., 2021), ToMe (Bolya et al., 2022), FastV (Chen et al., 2024), and 7Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+(a) (b) Figure 7. Visual examples under different conditions. (a) Visualization of the transport mass each token adsorbed in WeiAD , i.e. ,
+
+PMj=1 wτ (j) P⋆ij , compared with PMj=1 P⋆ij in SALAD . (b) Tokens retained after applying WeiToP with retention ratios ρ = 0 .95 and 
+
+0.5, compared with ToFu , FastV , DynamicViT , and ToMe at approximately ρ = 0 .5. *Blank - removed tokens; Orange - merged tokens. 
+
+Figure 8. Efficiency-accuracy trade-off of the WeiToP pruning module located after different layers. 
+
+ToFu (Kim et al., 2024). These methods are designed for general vision tasks and are integrated into our framework using their default configurations detailed in Appendix D.2. Fig. 5 reports Recall@1 under varying ρ, together with cor-responding computational load and VPR latency. When ρ
+
+is high, all methods exhibit comparable computational cost, and WeiToP achieves slightly higher Recall@1 than generic pruning approaches. As the ρ decreases, however, generic trimmers suffer from severe performance degradation. By leveraging aggregation-induced supervision through self-distillation, WeiToP consistently achieves a superior effi-ciency–accuracy trade-off across different pruning regimes. Fig. 7b qualitatively demonstrates the pruning rationale of 
+
+WeiToP by discarding VPR-specific uninformative tokens compared to other methods. We additionally implemented WeiToP on DINOv2 ViT-S&-L shown in Fig. 6. The results demonstrate WeiToP’s scalability. Across models of varying sizes, flexible pruning strategies allow the model to maintain the upper bound on accuracy. 
+
+Table 2. Effect of bidirectional dustbins and tiered weighting.                                                                       
+
+> Dustbin Ghost Tiered Mean w/o MSLS-C
+> Cluster Token Weighting R@1 R@5 R@10 R@20
+> ×××81.2 ±0.84 90.8 ±0.63 93.4 ±0.55 95.2 ±0.37
+> Bidirectional Dustbin
+> ✓××81.1 ±0.99 90.9 ±0.77 93.2 ±0.62 94.9 ±0.52
+> ×✓×81.5 ±1.05 91.0 ±0.80 93.1 ±0.68 94.9 ±0.52
+> ✓✓×81.5 ±0.73 91.2 ±0.48 93.2 ±0.56 95.3 ±0.44
+> Tiered Weighting
+> ××✓81.3 ±1.28 90.9 ±1.07 92.8 ±0.83 94.6 ±0.61
+> ✓✓✓81.8 ±0.82 91.3 ±0.71 93.4 ±0.71 95.2 ±0.48
+
+4.4. Ablation Study 
+
+We conduct a series of ablation studies to analyze the im-pact of key design choices in both WeiAD and WeiToP . All ablations are performed on representative benchmarks, and detailed numerical results and the choices of hyperparame-ters are provided in Appendix E.2. 
+
+Effect of bidirectional dustbins and tiered weighting. 
+
+We evaluate the roles of the dustbin cluster and ghost token in OT-based aggregation (Tab. 2). Using only a dustbin clus-ter (as in SALAD) consistently improves performance over removing both. The ghost token alone also brings gains, while combining both achieves the best results, showing that bidirectional mass absorption is most effective when unmatched tokens and ambiguous clusters are jointly mod-eled. Adding importance-based cluster weighting further boosts performance, highlighting the benefit of differen-tiating clusters by their relevance to VPR. Visualizations (Fig. 7a) qualitatively show that the weighted-aggregated de-scriptors absorb more mass from VPR-relevant regions ( e.g. ,buildings) while suppressing irrelevant ones ( e.g. , roads and 8Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+sky), resulting in more discriminative descriptors. 
+
+Location of WeiToP. We study where to place the prun-ing module in the ViT. Fig. 8 illustrates that placing it too late reduces the accuracy–efficiency trade-off since fewer layers benefit from pruning. We therefore place the student after the first transformer block, achieving the best balance between representation quality and pruning effectiveness. 
+
+5. Conclusion 
+
+In this work, we propose WeiAD , a wei ghted OT-based 
+
+aggregated descriptor. By introducing tiered weighting into OT-based clustering, WeiAD produces more discriminative 
+
+global representations. To address the efficiency bottleneck of feature extraction, we further propose WeiToP , a VPR-oriented to ken pruning module that distills aggregation-induced token importance into early transformer layers. Un-like generic token pruning methods, WeiToP leverages task-specific supervision derived from the aggregation process, enabling flexible and effective pruning at inference time. Extensive experiments on diverse VPR benchmarks demon-strate that WeiAD improves performance and that WeiToP achieves a favorable accuracy–efficiency trade-off for VPR. Notably, this work provides the first principled integration of token pruning into VPR, enabling flexible and efficient systems while maintaining the performance upper bound. Our approach offers a principled direction for VPR and can be naturally extended to cross-scenario, large-scale, multi-stage, or segment-level VPR pipelines, and combined with other efficiency-enhancing techniques such as lightweight models and dimensionality reduction. 
+
+Acknowledgment 
+
+This work was mainly supported by the Engineering and Physical Sciences Research Council through an industrial CASE studentship with Ordnance Survey (Grant number EP/W522077/1 and EP/X524840/1). This work was sup-ported in part by National Natural Science Foundation of China under Grant No. 62503166, in part by Helmholtz Association of German Research Centers, in part by the Ministry of Science, Research and the Arts of Baden-W ¨urttemberg (MWK) through the Cooperative Graduate School Accessibility through AI-based Assistive Technol-ogy (KATE) under Grant BW6-03, and in part by the Helmholtz Association Initiative and Networking Fund on the HAICORE@KIT and HOREKA@KIT partition. 
+
+References 
+
+Ali-bey, A., Chaib-draa, B., and Giguere, P. Gsv-cities: Toward appropriate supervised visual place recognition. 
+
+Neurocomputing , 513:194–203, 2022. Ali-Bey, A., Chaib-Draa, B., and Giguere, P. Mixvpr: Fea-ture mixing for visual place recognition. In Proceedings of the IEEE/CVF winter conference on applications of computer vision , pp. 2998–3007, 2023. Arandjelovic, R., Gronat, P., Torii, A., Pajdla, T., and Sivic, J. Netvlad: Cnn architecture for weakly supervised place recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition , pp. 5297–5307, 2016. Berton, G., Masone, C., and Caputo, B. Rethinking visual geo-localization for large-scale applications. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 4878–4888, 2022. Berton, G., Trivigno, G., Caputo, B., and Masone, C. Eigen-places: Training viewpoint robust models for visual place recognition. In Proceedings of the IEEE/CVF Interna-tional Conference on Computer Vision , pp. 11080–11090, 2023. Bolya, D., Fu, C.-Y., Dai, X., Zhang, P., Feichtenhofer, C., and Hoffman, J. Token merging: Your vit but faster. arXiv preprint arXiv:2210.09461 , 2022. Chen, L., Zhao, H., Liu, T., Bai, S., Lin, J., Zhou, C., and Chang, B. An image is worth 1/2 tokens after layer 2: Plug-and-play inference acceleration for large vision-language models. In European Conference on Computer Vision , pp. 19–35. Springer, 2024. Chen, Z., Liu, L., Sa, I., Ge, Z., and Chli, M. Learning context flexible attention model for long-term visual place recognition. IEEE Robotics and Automation Letters , 3 (4):4015–4022, 2018. Cuturi, M. Sinkhorn distances: Lightspeed computation of optimal transport. Advances in neural information processing systems , 26, 2013. Fayyaz, M., Koohpayegani, S. A., Jafari, F. R., Sengupta, S., Joze, H. R. V., Sommerlade, E., Pirsiavash, H., and Gall, J. Adaptive token sampling for efficient vision transformers. In European conference on computer vision , pp. 396–414. Springer, 2022. Garg, K., Puligilla, S. S., Kolathaya, S., Krishna, M., and Garg, S. Revisit anything: Visual place recognition via image segment retrieval. In European Conference on Computer Vision , pp. 326–343. Springer, 2024. Hinton, G., Vinyals, O., and Dean, J. Distilling the knowledge in a neural network. arXiv preprint arXiv:1503.02531 , 2015. Izquierdo, S. and Civera, J. Optimal transport aggregation for visual place recognition. In Proceedings of the ieee/cvf 
+
+9Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+conference on computer vision and pattern recognition ,pp. 17658–17668, 2024. Johnson, J., Douze, M., and J ´egou, H. Billion-scale similar-ity search with GPUs. IEEE Transactions on Big Data , 7 (3):535–547, 2019. Keetha, N., Mishra, A., Karhade, J., Jatavallabhula, K. M., Scherer, S., Krishna, M., and Garg, S. Anyloc: Towards universal visual place recognition. IEEE Robotics and Automation Letters , 2023. Khaliq, A., Xu, M., Hausler, S., Milford, M., and Garg, S. Vlad-buff: burst-aware fast feature aggregation for visual place recognition. In European Conference on Computer Vision , pp. 447–466. Springer, 2024. Kim, M., Gao, S., Hsu, Y.-C., Shen, Y., and Jin, H. Token fusion: Bridging the gap between token pruning and token merging. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pp. 1383– 1392, 2024. Kim, S., Shen, S., Thorsley, D., Gholami, A., Kwon, W., Hassoun, J., and Keutzer, K. Learned token pruning for transformers. In Proceedings of the 28th ACM SIGKDD conference on knowledge discovery and data mining , pp. 784–794, 2022. Liang, Y., Ge, C., Tong, Z., Song, Y., Wang, J., and Xie, P. Not all patches are what you need: Expedit-ing vision transformers via token reorganizations. In 
+
+International Conference on Learning Representations ,2022. URL https://openreview.net/forum? id=BjyvwnXXVn_ .Lin, L., Liu, Y., Hu, Y., Yan, X., Xie, K., and Huang, H. Cap-turing, reconstructing, and simulating: the urbanscene3d dataset. In European Conference on Computer Vision , pp. 93–109. Springer, 2022. Loshchilov, I. and Hutter, F. Decoupled weight decay regu-larization. arXiv preprint arXiv:1711.05101 , 2017. Lu, F., Lan, X., Zhang, L., Jiang, D., Wang, Y., and Yuan, C. Cricavpr: Cross-image correlation-aware representation learning for visual place recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 16772–16782, 2024a. Lu, F., Zhang, L., Lan, X., Dong, S., Wang, Y., and Yuan, C. Towards seamless adaptation of pre-trained models for vi-sual place recognition. arXiv preprint arXiv:2402.14505 ,2024b. Lu, F., Zhang, X., Ye, C., Dong, S., Zhang, L., Lan, X., and Yuan, C. Supervlad: Compact and robust image descriptors for visual place recognition. Advances in Neural Information Processing Systems , 37:5789–5816, 2024c. Matsumoto, Y., Inaba, M., and Inoue, H. Visual navigation using view-sequenced route representation. In Proceed-ings of IEEE International conference on Robotics and Automation , volume 1, pp. 83–88. IEEE, 1996. Meng, L., Li, H., Chen, B.-C., Lan, S., Wu, Z., Jiang, Y.-G., and Lim, S.-N. Adavit: Adaptive vision transformers for efficient image recognition. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 12309–12318, 2022. Milford, M. and Wyeth, G. Persistent navigation and map-ping using a biologically inspired slam system. The Inter-national Journal of Robotics Research , 29(9):1131–1153, 2010. Mur-Artal, R., Montiel, J. M. M., and Tardos, J. D. Orb-slam: A versatile and accurate monocular slam system. 
+
+IEEE transactions on robotics , 31(5):1147–1163, 2015. Nister, D. and Stewenius, H. Scalable recognition with a vocabulary tree. In 2006 IEEE Computer Society Con-ference on Computer Vision and Pattern Recognition (CVPR’06) , volume 2, pp. 2161–2168. Ieee, 2006. Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al. Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 ,2023. Radenovi ´c, F., Tolias, G., and Chum, O. Fine-tuning cnn image retrieval with no human annotation. IEEE transac-tions on pattern analysis and machine intelligence , 41(7): 1655–1668, 2018. Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., et al. Learning transferable visual models from natural language supervision. In International conference on machine learning , pp. 8748–8763. PmLR, 2021. Rao, Y., Zhao, W., Liu, B., Lu, J., Zhou, J., and Hsieh, C.-J. Dynamicvit: Efficient vision transformers with dynamic token sparsification. Advances in neural information processing systems , 34:13937–13949, 2021. Sarlin, P.-E., DeTone, D., Malisiewicz, T., and Rabinovich, A. Superglue: Learning feature matching with graph neural networks. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , pp. 4938–4947, 2020. Schleiss, M., Rouatbi, F., and Cremers, D. Vpair–aerial visual place recognition and localization in large-scale 10 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+outdoor environments. arXiv preprint arXiv:2205.11567 ,2022. Sim ´eoni, O., Vo, H. V., Seitzer, M., Baldassarre, F., Oquab, M., Jose, C., Khalidov, V., Szafraniec, M., Yi, S., Ramamonjisoa, M., et al. Dinov3. arXiv preprint arXiv:2508.10104 , 2025. Sinkhorn, R. and Knopp, P. Concerning nonnegative ma-trices and doubly stochastic matrices. Pacific Journal of Mathematics , 21(2):343–348, 1967. S ¨underhauf, N., Neubert, P., and Protzel, P. Are we there yet? challenging seqslam on a 3000 km journey across all four seasons. In Proc. of workshop on long-term autonomy, IEEE international conference on robotics and automation (ICRA) , pp. 2013. Citeseer, 2013. Tang, Q., Zhang, B., Liu, J., Liu, F., and Liu, Y. Dynamic token pruning in plain vision transformers for semantic segmentation. In Proceedings of the IEEE/CVF Inter-national Conference on Computer Vision , pp. 777–786, 2023. Wang, H., Dedhia, B., and Jha, N. K. Zero-tprune: Zero-shot token pruning through leveraging of the attention graph in pre-trained transformers. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 16070–16079, 2024. Wang, X., Han, X., Huang, W., Dong, D., and Scott, M. R. Multi-similarity loss with general pair weighting for deep metric learning. In Proceedings of the IEEE/CVF con-ference on computer vision and pattern recognition , pp. 5022–5030, 2019. Warburg, F., Hauberg, S., Lopez-Antequera, M., Gargallo, P., Kuang, Y., and Civera, J. Mapillary street-level se-quences: A dataset for lifelong place recognition. In 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pp. 2626–2635, 2020. Ye, W., Wu, Q., Lin, W., and Zhou, Y. Fit and prune: Fast and training-free visual token pruning for multi-modal large language models. Proceedings of the AAAI Conference on Artificial Intelligence , 39(21): 22128–22136, Apr. 2025. doi: 10.1609/aaai.v39i21. 34366. URL https://ojs.aaai.org/index. php/AAAI/article/view/34366 .Yildiz, B., Khademi, S., Siebes, R. M., and Van Gemert, J. Amstertime: A visual place recognition benchmark dataset for severe domain shift. In 2022 26th Interna-tional Conference on Pattern Recognition (ICPR) , pp. 2749–2755. IEEE, 2022. Zeng, Z., Goo, J. M., and Boehm, J. Dilated superpixel aggregation for visual place recognition. IEEE Robotics and Automation Letters , 11(2):2002–2009, 2026. Zheng, J., Dai, R., Liu, R., Zeng, Z., Chen, Y., Wang, F., Peng, K., Yang, K., Zhang, J., and Stiefelhagen, R. Rho: Robust holistic osm-based metric cross-view geo-localization. arXiv preprint arXiv:2603.27758 , 2026. Zhu, S., Shah, M., and Chen, C. Transgeo: Transformer is all you need for cross-view image geo-localization. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 1162–1171, 2022. Zhu, S., Yang, L., Chen, C., Shah, M., Shen, X., and Wang, H. R2former: Unified retrieval and reranking transformer for place recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,pp. 19370–19380, 2023. 11 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+A. Further Analysis of Motivation and Validity 
+
+In this section, we provide additional analysis to support the motivations and validity of our design choices. We first examine the motivation and effectiveness of weighted cluster aggregation. We then analyze the rationale and empirical validity of token pruning. 
+
+A.1. Weighted Aggregation 
+
+As discussed in Section 1 of the main paper, clusters learned by VLAD-style aggregation are not homogeneous. They exhibit clear differences in both semantic content and spatial distribution. As illustrated in Fig. 9, some clusters predominantly absorb patches corresponding to sky or background regions, which are typically less informative for VPR. In contrast, other clusters focus on structural elements such as buildings, which are more robust to viewpoint and scale variations (Lu et al., 2024b). In addition, certain clusters demonstrate strong spatial preferences, activating consistently in specific image regions. These semantic and spatial disparities suggest that different clusters may contribute unequally to VPR performance. To empirically verify this observation, we conduct a controlled analysis within the SALAD framework: we construct global descriptors using tokens assigned to a single cluster j at a time, i.e. , vj = PNi=1 P⋆ij ˜xi, while discarding all others. On the MSLS-Val dataset, the resulting Recall@1 varies substantially across clusters, ranging from 34.6% (worst-performing cluster) to 49.9% (best-performing cluster), with a gap of 15.3%. Cluster 1 Cluster 2 Cluster 3 Cluster 4 Cluster 5 Cluster 6 Cluster 7 Cluster 8  
+
+> Figure 9. Cluster-to-patch transport heatmaps showing that spatial and semantic patterns of different clusters are distinct.
+
+This large performance variance provides direct evidence that clusters contribute to VPR with differing degrees of importance. We revisit a traditional method for recognition, i.e. , vocabulary tree (Nister & Stewenius, 2006), which applies a weighting mechanism that suppresses nodes with lower discriminative power (such as common background textures) by assigning them lower weights, whilst assigning higher weights to nodes with greater discriminative power. Inspired by this, we ask whether these inherent differences can be explicitly exploited: Specifically, we ask whether amplifying clusters with higher VPR relevance while suppressing less informative ones can lead to a stronger global representation. This question forms the basis of our weighted aggregation design. Beyond quantitative analysis, Fig. 7a provides qualitative support for this motivation. Compared with uniform aggregation, the weighted global descriptor exhibits higher discriminability, with stronger responses on structurally stable regions such as buildings while attenuating background-dominated areas. This behavior is consistent with the cluster-level semantic and spatial biases discussed above. Quantitatively, the ablation study in Tab. 2 further confirms the effectiveness of weighted aggregation. Introducing cluster weighting consistently improves overall VPR performance across benchmarks, validating that explicitly modeling unequal cluster importance leads to a more informative global representation. 
+
+A.2. Token Pruning for VPR 
+
+Having established the necessity of weighted aggregation, we next investigate how such importance can be estimated early and exploited for efficient token pruning. Efficiency is a critical factor for the practical deployment of VPR systems. Even millisecond-level improvements in global descriptor extraction can be substantially amplified in large-scale settings, such as segment-level coarse retrieval, multi-stage retrieval pipelines, and city-scale applications involving millions of images ( e.g. ,urban navigation (Matsumoto et al., 1996), UAV localization (Schleiss et al., 2022)), as well as downstream tasks such as visual SLAM (Milford & Wyeth, 2010) and 3D reconstruction (Lin et al., 2022). Most existing efficiency-oriented VPR methods focus on descriptor-level compression to accelerate retrieval and reduce storage requirements. However, feature extraction typically dominates the overall computational budget and directly affects all subsequent stages. Improving feature extraction speed is commonly achieved by sacrificing representational capacity, for 12 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+example by adopting lighter CNN-based backbones or smaller Vision Transformers. In contrast, as discussed in the previous subsection, many patch tokens correspond to regions that are uninformative or even detrimental to VPR performance, such as sky or road areas. This observation naturally raises the following question: can such tokens be discarded at an early stage to simultane-ously improve efficiency and maintain or even enhance performance? This question forms the basis of our token pruning design. To the best of our knowledge, this work is the first to introduce token pruning into VPR. As qualitatively shown in Fig. 13, the proposed pruning module is able to discard uninformative or low-importance patch tokens at early layers, while preserving tokens corresponding to structurally stable regions. Quantitatively, Tab. 1 and 4 further validate the effectiveness of this strategy. At relatively high retention ratios, removing harmful tokens can even lead to improved VPR performance. When more tokens are pruned, performance degrades gracefully, while computational speed improves significantly. Importantly, this pruning mechanism is applied only at inference time and allows the retention ratio to be adjusted on the fly, enabling a flexible afficiency–eccuracy trade-off without retraining. This elasticity allows a single model to operate in either a high-accuracy or high-speed regime depending on downstream requirements, which underlies our faster or stronger design motivation. A natural question is why pruning is needed when smaller backbones ( e.g. , ViT-S) can already be faster and sometimes more accurate than a pruned larger model ( e.g. , ViT-B). The key distinction lies in flexibility. Choosing a larger backbone determines a higher performance upper bound, while token pruning provides a continuous and adaptive mechanism to trade accuracy for efficiency at inference time. These two approaches therefore play complementary roles rather than competing ones. As further demonstrated in Fig. 6 and Tab. 5, the proposed pruning module generalizes well across Vision Transformers of different sizes, confirming its broad applicability. 
+
+B. Additional Algorithmic Details 
+
+B.1. Optimal Transport Formulation 
+
+The soft assignment for aggregation is defined as an entropy-regularized OT problem. Following SuperGlue (Sarlin et al., 2020) and SALAD (Izquierdo & Civera, 2024), the classical Sinkhorn algorithm (Sinkhorn & Knopp, 1967; Cuturi, 2013) can be formulated as (left): 
+
+min  
+
+> P∈Π( a,b )
+
+⟨P, C⟩ + ε X
+
+> i,j
+
+Pij log Pij → max   
+
+> P∈Π( a,b )
+
+⟨P, ˜S⟩ + ε X
+
+> i,j
+
+Pij log Pij . (17) This variant formulation (right) is equivalent to the classical entropy-regularized OT problem with cost matrix C by setting 
+
+S = −C, but is more convenient for similarity-based matching, as it directly maximizes affinities rather than minimizing costs. The feasible set 
+
+Π( a, b ) = P ≥ 0 P1 = a, P⊤1 = b , P ∈ R(N +1) ×(M +1) + , a ∈ RN +1 + , b ∈ RM +1 + (18) enforces marginal constraints with source mass a and target mass b. The additional row and column correspond to a ghost token and a dustbin cluster, respectively, enabling the model to absorb uninformative or unmatched content in a bidirectional manner. 
+
+B.2. Auxiliary Projection and Prediction Modules 
+
+In this subsection, we provide additional details of the lightweight modules used for dimension reduction, transport score projection, and early importance prediction. All modules are implemented as shallow MLPs and introduce negligible computational overhead. Dimension reduction and score projection are adopted from SALAD (Izquierdo & Civera, 2024). 
+
+Dimension Reduction We apply two lightweight MLPs to project patch tokens and the [CLS] token into lower-dimensional spaces before OT matching. Given patch token embeddings X = [ x1, . . . , xN ] ∈ RN ×D and the [CLS] token 
+
+xCLS ∈ RD , the projections are defined as: 
+
+˜X = f1(X) = W (1) 2 σ
+
+
+
+W (1) 1 X + b(1) 1
+
+
+
++ b(1) 2 , (19) 13 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+˜xCLS = f2(xCLS ) = W (2) 2 σ
+
+
+
+W (2) 1 xCLS + b(2) 1
+
+
+
++ b(2) 2 , (20) where σ(·) denotes the ReLU activation. Both f1 and f2 reduce the feature dimensionality from D to d ≪ D, which stabilizes OT matching and reduces computational cost. 
+
+Score Projection To compute affinities between patch tokens and clusters, we learn a transport score matrix using another lightweight MLP: 
+
+S = fs( ˜X) = W (s)2 σ
+
+
+
+W (s)1 ˜X + b(s)1
+
+
+
++ b(s)2 , (21) where S ∈ RN ×M and Sij measures the affinity between patch token i and cluster j. This score matrix serves as the similarity input to the entropy-regularized OT formulation described above. 
+
+Student Importance Predictor (WeiToP) To enable early token pruning, we introduce a lightweight student module, termed WeiToP , which predicts token importance from early-layer features. Specifically, WeiToP operates on token embeddings X(s) ∈ RN0×D extracted from the first transformer block and outputs importance logits: 
+
+z(s) = fz (X(s)) = W (z)2 σ
+
+
+
+W (z)1 X(s) + b(z)1
+
+
+
++ b(z)2 , (22) where z(s) = {z(s) 
+
+> i
+
+}N0
+
+> i=1
+
+. During training, WeiToP is supervised by aggregation-derived token importance scores Ii through a distillation objective, while at inference time it enables adaptive token pruning without modifying the backbone. 
+
+C. Dataset Description                   
+
+> Dataset MSLS-C MSLS-val Nordland Pitts250k-test SPED AmsterTime Num. of Q. 27092 740 2706 8280 607 1231
+> Num. of R. 38770 18871 27592 83952 607 1231
+> Characteristic
+> Long-term Online challenge Close evaluation Temporal diversity Large-scale Seasonal variations Fixed viewpoints Temporal shifts Seasonal variation Visual distractors Large-scale Varying poses Fixed viewpoints Lighting variations Environmental challenges Temporal shifts Modality challenge Viewpoint variations
+
+Table 3. Dataset details for comparison. 
+
+GSV-Cities dataset (Ali-bey et al., 2022) is a large-scale, high-precision dataset covering locations worldwide. Owing to its accurate annotations and rich diversity, it has been widely adopted as a high-quality training source for modern deep learning models. 
+
+MSLS dataset (Warburg et al., 2020) is also a large-scale dataset covering 30 cities, specifically created for image- and sequence-based visual place recognition (VPR). It contains over one million images from multiple cities, although only a small subset is used for evaluation. Following common practice (Berton et al., 2023; 2022), we evaluate on its validation set. The dataset incorporates diverse viewpoints, long-term seasonal changes, and dynamic urban objects, and also includes a small number of nighttime and side-view images. In addition, a more stringent online benchmark is provided for evaluation and comparison (hosted on the CodaLab online platform 1). 
+
+Pitts dataset (Arandjelovic et al., 2016) is one of the most commonly used benchmarks in VPR. It is constructed using Google Street View images from downtown Pittsburgh, ensuring that the database and query images are collected from different years. It is mainly used to evaluate the robustness of algorithms to significant viewpoint changes in urban environments. We use the test set of the larger Pitts250k split for evaluation. 
+
+Nordland dataset (S ¨underhauf et al., 2013) consists of perfectly aligned railway videos captured across four seasons, and serves as a standard benchmark for testing pure appearance robustness to severe seasonal changes without considering viewpoint variations. Similar to previous works (Izquierdo & Civera, 2024), we use the summer trajectory as the query set and all remaining data as the reference set. 
+
+SPED dataset (Chen et al., 2018) is composed of images captured by surveillance cameras around the world. We use a subset of this dataset, which contains images captured by fixed outdoor surveillance cameras and covers extreme appearance 
+
+> 1
+
+Since the CodaLab platform officially stopped accepting submissions on January 20, submissions to the MSLS challenge have also been suspended. 
+
+14 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+changes such as day–night transitions, seasonal variations, and weather changes. This dataset emphasizes long-term visual changes under fixed viewpoints, making it particularly suitable for evaluating robustness to illumination and temporal variations in place recognition tasks. 
+
+AmsterTime dataset (Yildiz et al., 2022) combines historical archival images with modern street-view imagery, challenging algorithms to recognize places across long time spans and structural environmental changes. These image pairs exhibit multiple domain gaps, including viewpoint differences, long-term temporal changes, modality differences (RGB vs. grayscale), and different camera types. As a result, AmsterTime is one of the most challenging datasets. 
+
+D. Implementation Details of Comparative Methods 
+
+D.1. VPR Methods NetVLAD (Arandjelovic et al., 2016) is the pioneer of deep learning in visual localization, transforming traditional VLAD algorithms into differentiable neural network layers to achieve end-to-end feature aggregation. 
+
+CosPlace (Berton et al., 2022) abandons complex metric learning. It reframes location recognition as a large-scale classification problem, demonstrating that simple aggregation paired with a strong classification loss function can also achieve SOTA performance. 
+
+Conv-AP (Ali-bey et al., 2022) pioneers a novel approach by directly optimizing the final retrieval metric Average Precision (AP) during training, thereby maximizing the ranking quality of retrieval results. 
+
+MixVPR (Ali-Bey et al., 2023) is a fast and lightweight model, employing a fully MLP architecture to fuse features across channels and spatial dimensions, achieving inference efficiency far surpassing traditional convolutional models. 
+
+EigenPlaces (Berton et al., 2023) focuses on the challenge of extreme viewpoint variations by establishing eigenclasses through mining images from different viewpoints of the same location, achieving exceptional viewpoint robustness. 
+
+SuperVLAD 2 (Lu et al., 2024c) is a compact refinement of NetVLAD, aiming to generate lower-dimensional, more generalizable global descriptors through decentralized or optimized codebooks. 
+
+SALAD 3 (Izquierdo & Civera, 2024) incorporates optimal transport theory and a “garbage can” mechanism to efficiently filter background noise like sky and moving objects, precisely aggregating landmark features. For NetVLAD, Conv-AP, MixVPR, and EigenPlaces, we adopt the results reported in SALAD, as their experimental settings are consistent with ours. For SuperVLAD, SALAD, and our methods (WeiAD and WeiAD+WeiToP), we measure inference latency on a single NVIDIA RTX 3090 GPU, using the same evaluation settings as SALAD, following the evaluation protocol of R2Former 4, using an input resolution of 322×322 and a batch size of 256. SuperVLAD is evaluated using the official DINOv2 ViT-B checkpoint with the additional cross-image encoder disabled. Since our method is built upon SALAD, we report results for both SALAD and our methods averaged over five runs with different random seeds. 
+
+D.2. Token Pruning Methods DynamicViT 5 (Rao et al., 2021) dynamically generates masks by incorporating learnable prediction modules between layers, enabling it to directly discard unimportant background tokens. We integrate DynamicViT into WeiAD by embedding its three-stage learnable token prediction modules into the backbone network. Models are trained with different token retention ratios at each stage (0.86, 0.80, 0.75, 0.70, 0.60, 0.50, 0.47), resulting in overall retention ratios ρ of (0.64, 0.51, 0.42, 0.34, 0.22, 0.13, 0.10). All other settings follow the original paper, and token pruning is applied after the 3rd, 6th, and 9th layers. 
+
+ToMe 6 (Bolya et al., 2022) employs a binary matching algorithm to pair and merge similar tokens, achieving lossless reduction without retraining. We integrate the token matching and merging mechanism of ToMe into WeiAD. Following the original paper, and for better performance, ToMe is re-trained with different numbers of tokens merged at each layer (17, 19, 
+
+> 2https://github.com/lu-feng/SuperVLAD
+> 3https://github.com/serizba/salad
+> 4https://github.com/bytedance/R2Former
+> 5https://github.com/raoyongming/DynamicViT
+> 6https://github.com/facebookresearch/ToMe
+
+15 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+Table 4. Complete results of WeiAD + WeiToP , our reproduced SALAD , and WeiAD + DynamicViT , + ToMe , + ToFu , and + FastV 
+
+token pruning strategies. The best results without pruning are highlighted in bold . Bold red indicates that the performance after pruning still achieves or surpasses the best results. *The MSLS challenge suspended submissions due to the closure of platform on Jan 20th in 2026, so we can only report partial results. 
+
+Method ρ Latency MSLS-C MSLS-Val NordLand Pitts250k-test SPED AmsterTime Mean w/o MSLS-C 
+
+(ms) R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 
+
+VPR Methods 
+
+SALAD / 2.41 ±0.00 75.4 ±0.70 87.4 ±0.61 91.4 ±0.69 96.2 ±0.28 71.1 ±2.45 85.6 ±2.03 94.9 ±0.20 98.5 ±0.20 90.3 ±0.50 95.4 ±0.36 58.0 ±1.10 78.6 ±0.98 81.1 ±0.99 90.9 ±0.77 
+
+WeiAD 100 2.41 ±0.00 76.2 ±0.32 87.8 ±0.54 91.7 ±0.47 96.2 ±0.26 73.1 ±2.43 86.7 ±2.02 95.1 ±0.20 98.8 ±0.07 90.6 ±0.30 95.4 ±0.44 58.4 ±0.72 79.5 ±0.75 81.8 ±0.82 91.3 ±0.71 
+
+WeiAD (+ Token Pruning) 
+
+> + WeiToP
+
+0.95 2.23 ±0.00 76.3 ±0.43 87.9 ±0.58 91.8 ±0.60 96.3 ±0.10 72.8 ±2.22 86.7 ±1.81 95.0 ±0.23 98.6 ±0.05 90.4 ±0.18 95.3 ±0.42 58.4 ±0.88 79.4 ±0.76 81.7 ±0.82 91.2 ±0.63 
+
+0.90 2.13 ±0.00 - - 91.8 ±0.68 96.3 ±0.17 71.5 ±2.21 85.9 ±1.97 94.9 ±0.25 98.6 ±0.03 90.0 ±0.16 95.2 ±0.34 57.7 ±1.00 79.1 ±0.70 81.2 ±0.86 91.0 ±0.64 
+
+0.85 2.03 ±0.01 - - 91.9 ±0.64 96.3 ±0.17 70.8 ±2.20 85.5 ±2.06 94.8 ±0.22 98.6 ±0.04 89.6 ±0.28 95.0 ±0.28 56.9 ±0.93 78.6 ±0.87 80.8 ±0.85 90.8 ±0.68 
+
+0.80 1.94 ±0.01 - - 91.8 ±0.46 96.3 ±0.22 70.5 ±2.03 85.1 ±2.08 94.6 ±0.25 98.5 ±0.06 89.6 ±0.54 94.7 ±0.46 56.6 ±1.24 78.2 ±0.67 80.6 ±0.90 90.6 ±0.70 
+
+0.75 1.83 ±0.00 - - 91.6 ±0.42 96.1 ±0.14 70.1 ±1.69 84.8 ±2.08 94.3 ±0.22 98.4 ±0.05 89.5 ±0.64 94.6 ±0.45 56.0 ±1.28 77.8 ±1.04 80.3 ±0.85 90.3 ±0.75 
+
+0.70 1.68 ±0.01 75.3 ±0.34 86.8 ±0.58 91.3 ±0.31 96.1 ±0.34 69.5 ±1.42 84.7 ±2.03 94.0 ±0.16 98.3 ±0.06 89.2 ±0.72 94.4 ±0.36 55.3 ±1.06 76.9 ±0.77 79.9 ±0.73 90.1 ±0.71 
+
+0.60 1.50 ±0.01 - - 91.1 ±0.61 96.0 ±0.27 67.6 ±1.49 83.6 ±1.64 93.1 ±0.23 98.0 ±0.09 87.5 ±0.43 93.8 ±0.30 53.0 ±1.08 75.0 ±0.63 78.5 ±0.77 89.3 ±0.58 
+
+0.50 1.30 ±0.00 71.6 ±0.54 84.2 ±0.42 90.4 ±0.73 95.9 ±0.30 62.3 ±1.43 80.0 ±1.52 91.5 ±0.39 97.4 ±0.12 85.5 ±0.44 92.5 ±0.40 48.7 ±1.20 70.6 ±1.67 75.7 ±0.84 87.3 ±0.80 
+
+0.40 1.09 ±0.00 68.2 ±0.64 81.9 ±0.71 87.7 ±0.88 94.8 ±0.47 53.3 ±1.70 71.0 ±1.55 88.2 ±0.50 96.2 ±0.22 82.4 ±1.22 90.9 ±0.60 41.8 ±1.71 64.0 ±1.68 70.7 ±1.20 83.4 ±0.90 
+
+> + DynamicViT
+
+0.64 2.05 ±0.01 - - 87.6 ±2.55 94.5 ±0.87 56.0 ±2.89 73.9 ±3.08 93.1 ±0.43 97.6 ±0.42 88.0 ±0.95 93.7 ±0.81 50.4 ±2.92 72.1 ±3.07 75.0 ±1.95 86.4 ±1.65 
+
+0.51 1.87 ±0.01 - - 86.0 ±1.84 93.1 ±1.13 45.6 ±9.42 65.0 ±9.72 92.5 ±0.46 97.4 ±0.38 85.9 ±1.42 93.4 ±0.53 48.6 ±3.04 70.7 ±2.67 71.7 ±3.24 83.9 ±2.89 
+
+0.42 1.75 ±0.00 - - 84.5 ±3.21 92.0 ±2.14 42.8 ±11.22 61.5 ±12.32 92.1 ±0.51 97.2 ±0.32 84.4 ±2.37 93.2 ±1.03 47.1 ±2.81 69.4 ±3.72 70.2 ±4.03 82.7 ±3.91 
+
+0.34 1.60 ±0.00 - - 78.2 ±4.52 88.6 ±2.66 34.0 ±15.20 51.7 ±17.80 90.1 ±1.14 96.2 ±0.71 82.1 ±2.90 91.4 ±1.25 39.3 ±2.95 61.6 ±3.29 64.7 ±5.34 77.9 ±5.14 
+
+0.22 1.39 ±0.00 - - 71.7 ±6.44 84.9 ±4.03 20.9 ±9.16 35.7 ±13.22 86.3 ±2.12 94.8 ±1.27 72.6 ±7.50 84.7 ±5.96 33.7 ±1.32 55.0 ±2.98 57.0 ±5.31 71.1 ±5.49 
+
+0.13 1.20 ±0.01 - - 60.9 ±8.70 77.2 ±7.06 12.4 ±7.24 24.1 ±12.27 79.2 ±2.80 91.9 ±1.49 63.2 ±6.01 78.8 ±3.82 25.9 ±5.70 45.8 ±7.53 48.3 ±6.09 63.5 ±6.43 
+
+0.10 1.15 ±0.01 - - 60.8 ±6.11 77.3 ±4.71 11.8 ±5.71 23.8 ±9.84 74.5 ±2.23 88.3 ±1.54 55.6 ±7.49 72.2 ±6.11 27.4 ±3.88 48.0 ±4.37 46.0 ±5.08 61.9 ±5.31 
+
+> + ToMe
+
+0.62 2.15 ±0.00 - - 89.8 ±0.45 95.2 ±0.35 64.4 ±2.08 81.4 ±1.38 93.8 ±0.27 98.1 ±0.11 88.6 ±0.58 94.9 ±0.41 52.6 ±1.14 74.9 ±0.78 77.8 ±0.91 88.9 ±0.61 
+
+0.58 2.09 ±0.00 - - 88.1 ±0.77 94.6 ±0.72 64.6 ±2.79 82.4 ±2.06 93.4 ±0.30 97.9 ±0.17 86.7 ±0.28 93.8 ±0.89 50.5 ±0.47 73.1 ±0.82 76.7 ±0.92 88.4 ±0.93 
+
+0.44 1.91 ±0.01 - - 80.7 ±0.79 89.4 ±0.32 29.1 ±2.50 48.2 ±2.98 87.5 ±0.41 95.4 ±0.27 77.4 ±0.56 88.5 ±0.93 39.4 ±0.82 62.3 ±1.54 62.8 ±1.02 76.7 ±1.21 
+
+0.33 1.78 ±0.01 - - 71.1 ±1.99 83.6 ±1.35 12.6 ±0.75 23.0 ±1.72 80.8 ±1.25 91.4 ±0.63 69.4 ±1.86 82.6 ±1.68 32.8 ±2.20 54.9 ±3.06 53.3 ±1.61 67.1 ±1.69 
+
+0.11 1.50 ±0.01 - - 27.4 ±4.02 43.8 ±6.32 1.7 ±0.38 4.0 ±0.72 44.2 ±2.90 67.4 ±3.58 46.1 ±3.83 66.4 ±3.24 13.8 ±1.31 29.1 ±3.53 26.6 ±2.49 42.1 ±3.48 
+
+0.02 1.26 ±0.00 - - 10.4 ±1.04 21.0 ±1.91 0.4 ±0.04 1.1 ±0.20 24.9 ±1.35 44.7 ±1.65 25.8 ±2.80 42.5 ±3.32 6.0 ±0.41 14.3 ±1.04 13.5 ±1.13 24.7 ±1.62 
+
+> + ToFu
+
+0.61 2.20 ±0.00 - - 91.5 ±0.80 96.3 ±0.17 68.2 ±2.53 82.9 ±2.17 94.9 ±0.27 98.7 ±0.13 90.3 ±0.51 95.7 ±0.34 56.6 ±0.14 78.2 ±0.80 80.3 ±0.85 90.4 ±0.72 
+
+0.48 2.00 ±0.01 - - 91.3 ±0.64 96.2 ±0.15 69.0 ±1.98 84.1 ±1.97 94.3 ±0.11 98.5 ±0.26 89.5 ±0.74 95.4 ±0.37 55.7 ±0.57 77.2 ±0.74 80.0 ±0.81 89.3 ±0.70 
+
+0.37 1.80 ±0.00 - - 89.3 ±0.48 95.5 ±0.07 66.5 ±1.62 83.5 ±1.17 93.6 ±0.15 98.2 ±0.10 90.0 ±0.82 94.9 ±0.62 55.9 ±0.60 76.0 ±1.04 79.0 ±0.73 89.6 ±0.60 
+
+0.28 1.68 ±0.01 - - 89.7 ±0.61 95.7 ±0.57 62.6 ±1.02 78.8 ±0.98 93.7 ±0.21 98.1 ±0.13 88.1 ±1.07 94.6 ±0.23 51.1 ±0.77 73.5 ±1.03 77.0 ±0.74 88.1 ±0.59 
+
+0.14 1.34 ±0.00 - - 86.9 ±2.21 95.0 ±1.60 54.0 ±0.54 72.4 ±0.81 89.7 ±1.04 96.6 ±0.65 81.7 ±1.01 92.1 ±0.51 39.5 ±0.81 61.9 ±0.96 70.4 ±1.12 83.6 ±0.91 
+
+0.07 1.15 ±0.00 - - 83.0 ±0.45 90.7 ±1.41 34.6 ±0.05 53.8 ±0.12 89.0 ±0.47 96.2 ±1.20 80.7 ±2.05 91.8 ±1.75 37.7 ±0.26 60.8 ±0.37 65.0 ±0.66 78.7 ±0.97 
+
+> + FastV
+
+0.95 2.30 ±0.00 - - 91.4 ±0.11 96.3 ±0.23 71.2 ±2.14 85.8 ±1.93 94.9 ±0.27 98.6 ±0.19 90.4 ±0.16 95.4 ±0.21 56.9 ±0.68 78.7 ±0.67 80.9 ±0.67 91.0 ±0.65 
+
+0.70 1.86 ±0.00 - - 89.5 ±0.66 95.3 ±0.17 60.9 ±2.47 78.7 ±2.10 93.8 ±0.25 98.4 ±0.21 89.1 ±0.28 95.2 ±0.08 49.4 ±0.10 71.0 ±1.01 76.5 ±0.75 87.7 ±0.71 
+
+0.50 1.53 ±0.00 - - 85.6 ±0.07 93.8 ±0.62 46.6 ±1.69 66.8 ±1.92 91.7 ±0.25 97.8 ±0.15 86.7 ±0.64 93.5 ±0.28 38.8 ±0.34 60.5 ±0.84 69.9 ±0.60 82.5 ±0.76 
+
+0.40 1.35 ±0.00 - - 81.8 ±1.44 91.8 ±0.77 35.1 ±1.17 55.4 ±1.58 89.8 ±0.32 97.1 ±0.13 83.5 ±0.61 91.7 ±0.64 33.5 ±0.87 53.3 ±0.91 64.7 ±0.88 77.9 ±0.81 
+
+25, 30, 40, 50), corresponding to overall retention ratios ρ of (0.62, 0.58, 0.44, 0.33, 0.11, 0.02). All other settings follow the original paper, and token merging is applied after each transformer layer. 
+
+ToFu (Kim et al., 2024) absorbs redundant token information into core tokens through clustering or feature aggregation, achieving higher fidelity than simple pruning. We integrate ToFu into WeiAD by adopting its token clustering and feature aggregation strategy as the token reduction module. Models are trained with different per-layer token retention ratios ρ
+
+(0.96, 0.94, 0.92, 0.90, 0.85, 0.80), corresponding to overall keep ratios of (0.61, 0.48, 0.37, 0.28, 0.14, 0.07). All other settings follow the original paper. A hybrid token reduction strategy is employed, where token pruning is applied after each of the first 6 layers, and token merging is applied after each of the last 6 layers. 
+
+FastV 7 (Chen et al., 2024) targets multimodal large models by directly eliminating low-contribution visual tokens in deep networks based on attention weight rankings. In contrast, FastV is applied to WeiAD in a training-free manner. We directly adopt its attention-based token importance scores to prune visual tokens during the inference stage of WeiAD, with retention ratios ρ of 0.95, 0.70, 0.50, and 0.40. All other settings follow the original paper, and pruning is applied after the 2nd layer. All methods are trained or evaluated five times with different random seeds for each configuration. 
+
+E. Complete Result 
+
+E.1. General Result 
+
+Tab.4 shows the complete results from extensive experiments for comparison. Beyond the results discussed in Sec. 4, we observe that as ρ is gradually reduced to 0.80, WeiToP consistently achieves the best or near-best performance on MSLS-Val, and remains close to the best-performing methods on Pitts250k-test. In contrast, a more noticeable performance degradation is observed on other datasets. These results suggest that for conventional urban street-view scenarios, WeiToP serves as an effective and flexible VPR solution, as redundant background regions can be safely discarded under standard viewpoints. However, for more challenging datasets, non-canonical viewpoints often contain harder-to-discriminate visual cues or exhibit 
+
+7https://github.com/pkunlp-icler/FastV 
+
+16 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+little spatial redundancy across the entire image, making aggressive token pruning less favorable. The visual examples across different datasets in Fig. 13 further support this observation. In addition, ToFu and FastV also achieve competitive or near-optimal performance on MSLS-Val and Pitts250k when the token retention ratio is relatively high. However, on more challenging datasets such as Nordland and AmsterTime, their performance drops more significantly compared to WeiToP. This indicates that although these methods can effectively remove redundant information under standard urban viewpoints, they are less robust when non-canonical viewpoints or globally informative scenes leave limited room for token redundancy. As one of the earliest baselines, DynamicViT still demonstrates reasonably strong performance on VPR tasks, with a moderate accuracy–efficiency trade-off. ToMe, which relies solely on token merging, exhibits less severe degradation at high keep ratios, but suffers from substantial performance loss when more aggressive reduction is required to further accelerate inference. In contrast, ToFu, which adopts a hybrid strategy combining token pruning and merging, better exploits the complementary strengths of both operations, achieving the strongest performance among existing methods aside from WeiToP and showing higher suitability for VPR. FastV, despite being training-free or requiring only lightweight joint learning, also achieves a favorable trade-off between efficiency and accuracy. Nevertheless, we observe that layer-wise token reduction methods such as DynamicViT, ToMe, and ToFu often require aggressive pruning ( i.e. , very low keep ratios) to reach lower latency, which may partially explain their abrupt performance degradation. Similarly, FastV applies pruning immediately after the second transformer layer, leading to limited efficiency gains. Notably, when WeiToP is also placed after the second layer with a keep ratio of 0.4, it achieves an average Recall@1 of 69.4 (Fig. 8), outperforming FastV by 4.7%. Overall, these results demonstrate that WeiToP provides a more flexible and VPR-oriented token pruning strategy, achieving a superior balance between robustness and efficiency across diverse scenarios. 
+
+E.2. Ablation Study 
+
+E.2.1. D IFFERENT BACKBONES 
+
+To investigate the scalability of WeiAD and WeiToP, we apply both modules to DINOv2 ViT-S and ViT-L backbones and compare against SALAD under the same settings. The results in Tab. 5 show that WeiAD consistently outperforms SALAD across backbones of different capacities. Moreover, consistent with the observations on ViT-B, WeiToP achieves near-optimal performance on MSLS-Val and Pitts250k-test with mild token pruning when applied to both ViT-S and ViT-L. Notably, as illustrated in Fig. 6, the performance gains from WeiToP become more pronounced as the backbone size increases. These results further highlight that larger models offer a higher performance upper bound for VPR, while integrating WeiToP enables a more favorable accuracy–efficiency trade-off during online inference, particularly for high-capacity backbones. E.2.2. D IFFERENT LAYERS 
+
+We further investigate the effect of placing the pruning module at different transformer layers. For each placement, we conduct five repeated runs and report averaged results across datasets, excluding MSLS-C for consistency. As shown in Fig. 8, placing the pruning module immediately after the first transformer layer achieves the most favorable accuracy–efficiency trade-off in ViT backbones. We additionally explore inserting the pruning module before the transformer, i.e. , directly after the initial patch embedding. In this case, VPR performance degrades sharply, and joint learning further interferes with the full-retention performance of WeiAD, as illustrated in Fig. 10. We report the Recall@1 when ρ is 0.4. These results indicate that excessively early pruning disrupts the formation of stable and discriminative visual representations.    
+
+> Figure 10. Efficiency-accuracy trade-off of the WeiToP pruning module located after different layers of ViT and the initial tokenizer.
+
+17 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+Table 5. Complete results of WeiAD + WeiToP , and our reproduced SALAD in different sizes of DINOv2. The best results without pruning are highlighted in bold . Bold red indicates that the performance after pruning still achieves or surpasses the best results. *The MSLS challenge suspended submissions due to the closure of platform on Jan 20th in 2026, so we can only report partial results. 
+
+Method ρ Latency MSLS-val NordLand Pitts250k-test SPED AmsterTime Mean 
+
+(ms) R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 R@1 R@5 DINOv2 ViT-S (Dim. Size 384 Params. 21M )SALAD / 1.22 ±0.03 90.1 ±0.43 95.4 ±0.13 64.9 ±3.07 81.4 ±2.88 94.6 ±0.25 98.4 ±0.05 88.3 ±0.58 93.7 ±0.19 53.5 ±0.98 74.5 ±0.66 78.3 ±1.06 88.7 ±0.78 
+
+WeiAD 1.00 1.04 ±0.02 90.7 ±0.31 95.8 ±0.23 65.4 ±2.33 81.5 ±1.82 94.6 ±0.07 98.5 ±0.15 88.0 ±0.84 93.9 ±0.36 54.0 ±1.00 75.0 ±0.56 78.6 ±0.91 88.9 ±0.62 
+
+> + WeiToP
+
+0.95 0.97 ±0.02 90.8 ±0.44 95.9 ±0.23 64.3 ±2.20 81.1 ±1.55 94.5 ±0.14 98.4 ±0.14 87.8 ±0.61 93.7 ±0.21 53.5 ±1.04 75.0 ±0.70 78.2 ±0.89 88.8 ±0.57 
+
+0.90 0.93 ±0.02 90.9 ±0.33 95.9 ±0.29 64.0 ±2.26 81.1 ±1.49 94.4 ±0.18 98.3 ±0.13 87.8 ±0.63 93.5 ±0.28 53.1 ±1.02 74.8 ±0.83 78.0 ±0.88 88.7 ±0.61 
+
+0.85 0.90 ±0.02 90.7 ±0.46 95.9 ±0.22 63.8 ±2.27 80.8 ±1.60 94.2 ±0.17 98.2 ±0.12 87.4 ±0.95 93.2 ±0.56 52.5 ±1.03 74.3 ±0.40 77.7 ±0.97 88.5 ±0.58 
+
+0.80 0.86 ±0.02 90.4 ±0.44 96.0 ±0.10 63.4 ±2.12 80.6 ±1.47 94.1 ±0.06 98.2 ±0.15 86.3 ±1.03 92.9 ±0.27 52.4 ±0.95 74.2 ±0.42 77.3 ±0.92 88.4 ±0.48 
+
+0.75 0.83 ±0.02 90.1 ±0.64 95.8 ±0.18 63.1 ±2.43 80.3 ±1.51 93.8 ±0.08 98.1 ±0.17 85.5 ±0.81 92.3 ±0.22 51.9 ±0.78 74.1 ±0.40 76.9 ±0.95 88.1 ±0.50 
+
+0.70 0.76 ±0.03 90.0 ±0.65 95.5 ±0.22 62.4 ±2.09 79.7 ±1.64 93.4 ±0.12 98.0 ±0.19 84.1 ±1.33 91.9 ±0.42 51.1 ±1.09 73.4 ±0.72 76.2 ±1.06 87.7 ±0.64 
+
+0.60 0.69 ±0.02 89.3 ±0.36 95.4 ±0.52 60.0 ±2.51 77.8 ±1.97 92.2 ±0.15 97.5 ±0.14 82.2 ±1.69 91.1 ±0.29 48.9 ±1.09 70.8 ±0.32 74.5 ±1.16 86.5 ±0.65 
+
+0.50 0.63 ±0.02 88.1 ±0.43 94.9 ±0.19 54.6 ±2.18 73.3 ±1.89 90.6 ±0.38 96.8 ±0.06 79.5 ±1.53 89.4 ±0.58 44.9 ±1.22 67.0 ±1.16 71.5 ±1.15 84.3 ±0.77 
+
+0.40 0.53 ±0.02 85.3 ±0.63 93.9 ±0.42 46.1 ±2.09 64.6 ±2.52 87.7 ±0.20 95.7 ±0.23 75.7 ±0.98 86.3 ±0.74 38.2 ±0.94 60.0 ±0.77 66.6 ±0.97 80.1 ±0.93 
+
+DINOv2 ViT-B (Dim. Size 768 Params. 86M )SALAD / 2.41 ±0.00 91.4 ±0.69 96.2 ±0.28 71.1 ±2.45 85.6 ±2.03 94.9 ±0.20 98.5 ±0.20 90.3 ±0.50 95.4 ±0.36 58.0 ±1.10 78.6 ±0.98 81.1 ±0.99 90.9 ±0.77 
+
+WeiAD 1.00 2.41 ±0.00 91.7 ±0.47 96.2 ±0.26 73.1 ±2.43 86.7 ±2.02 95.1 ±0.20 98.8 ±0.07 90.6 ±0.30 95.4 ±0.44 58.4 ±0.72 79.5 ±0.75 81.8 ±0.82 91.3 ±0.71 
+
+> + WeiToP
+
+0.95 2.23 ±0.00 91.8 ±0.60 96.3 ±0.10 72.8 ±2.22 86.7 ±1.81 95.0 ±0.23 98.6 ±0.05 90.4 ±0.18 95.3 ±0.42 58.4 ±0.88 79.4 ±0.76 81.7 ±0.82 91.2 ±0.63 
+
+0.90 2.13 ±0.00 91.8 ±0.68 96.3 ±0.17 71.5 ±2.21 85.9 ±1.97 94.9 ±0.25 98.6 ±0.03 90.0 ±0.16 95.2 ±0.34 57.7 ±1.00 79.1 ±0.70 81.2 ±0.86 91.0 ±0.64 
+
+0.85 2.03 ±0.01 91.9 ±0.64 96.3 ±0.17 70.8 ±2.20 85.5 ±2.06 94.8 ±0.22 98.6 ±0.04 89.6 ±0.28 95.0 ±0.28 56.9 ±0.93 78.6 ±0.87 80.8 ±0.85 90.8 ±0.68 
+
+0.80 1.94 ±0.01 91.8 ±0.46 96.3 ±0.22 70.5 ±2.03 85.1 ±2.08 94.6 ±0.25 98.5 ±0.06 89.6 ±0.54 94.7 ±0.46 56.6 ±1.24 78.2 ±0.67 80.6 ±0.90 90.6 ±0.70 
+
+0.75 1.83 ±0.00 91.6 ±0.42 96.1 ±0.14 70.1 ±1.69 84.8 ±2.08 94.3 ±0.22 98.4 ±0.05 89.5 ±0.64 94.6 ±0.45 56.0 ±1.28 77.8 ±1.04 80.3 ±0.85 90.3 ±0.75 
+
+0.70 1.68 ±0.01 91.3 ±0.31 96.1 ±0.34 69.5 ±1.42 84.7 ±2.03 94.0 ±0.16 98.3 ±0.06 89.2 ±0.72 94.4 ±0.36 55.3 ±1.06 76.9 ±0.77 79.9 ±0.73 90.1 ±0.71 
+
+0.60 1.50 ±0.01 91.1 ±0.61 96.0 ±0.27 67.6 ±1.49 83.6 ±1.64 93.1 ±0.23 98.0 ±0.09 87.5 ±0.43 93.8 ±0.30 53.0 ±1.08 75.0 ±0.63 78.5 ±0.77 89.3 ±0.58 
+
+0.50 1.30 ±0.00 90.4 ±0.73 95.9 ±0.30 62.3 ±1.43 80.0 ±1.52 91.5 ±0.39 97.4 ±0.12 85.5 ±0.44 92.5 ±0.40 48.7 ±1.20 70.6 ±1.67 75.7 ±0.84 87.3 ±0.80 
+
+0.40 1.09 ±0.00 87.7 ±0.88 94.8 ±0.47 53.3 ±1.70 71.0 ±1.55 88.2 ±0.50 96.2 ±0.22 82.4 ±1.22 90.9 ±0.60 41.8 ±1.71 64.0 ±1.68 70.7 ±1.20 83.4 ±0.90 
+
+DINOv2 ViT-L (Dim. Size 1024 Params. 300M )SALAD / 7.01 ±0.06 92.7 ±0.58 96.8 ±0.15 74.6 ±2.60 88.2 ±1.82 95.8 ±0.11 98.9 ±0.06 92.8 ±0.15 96.9 ±0.21 62.9 ±0.81 82.9 ±0.55 83.8 ±0.85 92.7 ±0.56 
+
+WeiAD 1.00 7.10 ±0.01 92.7 ±0.61 96.7 ±0.49 75.6 ±1.46 89.0 ±1.39 95.8 ±0.28 98.9 ±0.15 93.1 ±0.39 97.0 ±0.24 63.4 ±0.42 83.7 ±0.19 84.1 ±0.63 93.1 ±0.49 
+
+> + WeiToP
+
+0.95 6.62 ±0.02 92.7 ±0.66 96.7 ±0.33 73.7 ±1.57 86.8 ±1.31 95.9 ±0.28 99.0 ±0.15 92.5 ±0.13 96.7 ±0.39 62.3 ±0.49 83.6 ±0.23 83.4 ±0.63 92.6 ±0.48 
+
+0.90 6.32 ±0.02 92.5 ±0.67 96.8 ±0.31 73.3 ±1.43 86.5 ±1.28 95.8 ±0.23 98.9 ±0.13 92.4 ±0.30 96.5 ±0.19 62.6 ±0.47 83.4 ±0.35 83.3 ±0.62 92.4 ±0.45 
+
+0.85 6.01 ±0.05 92.6 ±0.58 96.8 ±0.26 72.6 ±1.21 86.0 ±1.22 95.6 ±0.23 98.9 ±0.13 92.2 ±0.22 96.3 ±0.34 62.3 ±0.43 83.2 ±0.44 83.1 ±0.53 92.3 ±0.48 
+
+0.80 5.68 ±0.01 92.5 ±0.49 96.8 ±0.23 71.9 ±1.12 85.7 ±1.14 95.4 ±0.24 98.8 ±0.14 92.0 ±0.63 96.2 ±0.43 61.7 ±0.54 83.5 ±0.22 82.7 ±0.60 92.2 ±0.43 
+
+0.75 5.38 ±0.02 92.3 ±0.69 96.8 ±0.20 71.1 ±1.12 85.0 ±1.05 95.2 ±0.26 98.8 ±0.13 91.3 ±0.08 95.8 ±0.47 61.4 ±0.63 82.7 ±0.38 82.3 ±0.56 91.8 ±0.45 
+
+0.70 4.92 ±0.02 92.3 ±0.48 96.7 ±0.24 69.9 ±1.09 84.0 ±0.97 95.0 ±0.28 98.7 ±0.18 90.7 ±0.56 95.4 ±0.62 60.9 ±0.68 82.3 ±0.43 81.8 ±0.62 91.4 ±0.49 
+
+0.60 4.32 ±0.02 91.8 ±0.49 96.4 ±0.30 66.8 ±1.25 81.5 ±1.05 94.0 ±0.44 98.5 ±0.18 89.4 ±0.68 95.1 ±0.36 58.6 ±0.79 79.9 ±1.40 80.1 ±0.73 90.3 ±0.66 
+
+0.50 3.69 ±0.02 91.1 ±0.46 96.4 ±0.18 60.2 ±1.82 75.7 ±1.63 92.5 ±0.65 98.0 ±0.23 87.7 ±1.04 94.3 ±0.48 54.3 ±0.73 76.4 ±0.93 77.2 ±0.94 88.2 ±0.69 
+
+0.40 2.97 ±0.01 89.4 ±0.46 95.8 ±0.16 50.4 ±2.03 66.2 ±1.89 89.7 ±0.59 97.1 ±0.31 84.5 ±1.09 93.0 ±0.37 46.5 ±0.54 69.4 ±1.42 72.1 ±0.94 84.3 ±0.83 
+
+E.2.3. C HOICE OF HYPERPARAMETERS 
+
+Following SALAD, we adopt a set of common hyperparameters for all experiments. We fine-tune only the last 4 transformer layers. Each training batch contains 60 locations from the GSV-Cities dataset (Ali-bey et al., 2022), with 4 images per location. We use the AdamW optimizer (Loshchilov & Hutter, 2017) with an initial learning rate of 6 × 10 −5 and a linear decay schedule. We set most hyperparameters following prior work and empirical validation. Some key hyperparameters are further analyzed. We first study the distribution of cluster tiers and find that a head-heavy configuration {24 , 20 , 16 , 4} performs best, while tail-heavy or uniform distributions lead to inferior results, as reported in Tab. 6. 
+
+Table 6. Distribution of clusters {c0, c 1, . . . , c T (w)−1} in each tier. 
+
+Cluster Number of Each Tier (Important → Unimportant) Mean w/o MSLS-C 
+
+exp( θ0) exp( θ0) − softplus( θ∆) exp( θ0) − 2 · softplus( θ∆) exp( θ0) − 3 · softplus( θ∆)) R@1 R@5 R@10 R@20 4 16 20 24 81.0 ±0.81 91.2 ±0.73 93.1 ±0.67 95.0 ±0.63 
+
+16 16 16 16 81.2 ±0.74 91.0 ±0.69 93.5 ±0.62 95.2 ±0.68 
+
+24 20 16 4 81.8 ±0.82 91.3 ±0.71 93.4 ±0.71 95.2 ±0.48 
+
+We also analyze the balancing coefficient κ between the learned importance scores and token feature magnitudes. Empirically, 
+
+κ = 0 .5 achieves the best performance, as shown in Fig. 11. Using only the normalized predicted importance logits from WeiToP ( i.e. , κ = 1 ) still outperforms relying solely on the ℓ2 norm of token features ( κ = 0 ) and remains close to the best performance. A relatively high weight, such as κ = 0 .75 , also yields competitive results, whereas a lower value ( κ = 0 .25 )leads to a noticeable performance degradation. Finally, we explore the weight γ of the distillation loss and find that γ = 0 .1 is optimal, as illustrated in Fig. 12. 18 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 1.2 1.4 1.6 1.8 2.0 2.2 2.4   
+
+> Latency (ms/img) ( )
+> 67.5
+> 70.0
+> 72.5
+> 75.0
+> 77.5
+> 80.0
+> 82.5
+> Recll@1 (%) (  )
+> = 0 - L2-Norm
+> = 0.25
+> = 0.5 - Default
+> = 0.75
+> = 1 - Normalized z
+
+Figure 11. Efficiency-accuracy trade-off with different balancing coefficient κ for token-level importance scores. 10 3 10 2 10 1 10 0 10 1 
+
+> 78
+> 79
+> 80
+> 81
+> 82
+> 83
+> 84
+> Recall@1 (%) (  )
+> Performance
+> Best = 0.1
+
+Figure 12. Performance of WeiAD under different magnitudes of γ during joint learning. 
+
+F. Limitations and Future Work 
+
+Despite its effectiveness, our approach has several limitations that suggest promising directions for future research. First, our weighted aggregation relies on a fixed cluster structure learned during training. Although empirical results demonstrate that clusters exhibit stable semantic and spatial biases, the optimal number of clusters and their partition into tiers are still treated as hyperparameters. Automatically adapting the cluster structure or learning the weighting hierarchy in a data-driven or task-adaptive manner could further improve robustness and generalization. Second, token importance in our framework is estimated primarily from early-layer features. While this design enables efficient pruning and flexible inference-time control, early representations may lack high-level semantic context in extremely challenging scenarios, such as severe viewpoint or appearance changes. Incorporating multi-layer aggregated importance signals, while maintaining efficiency, remains an open problem. Finally, although our method generalizes well across different Vision Transformer backbones, its current formulation is primarily designed for transformer-based architectures. Exploring analogous weighting and pruning mechanisms for other representation paradigms, such as hybrid pruning-merging models (Kim et al., 2024) or emerging vision foundation models like DINOv3 (Sim ´eoni et al., 2025), is a promising direction for future work. Beyond these directions, we plan to further extend the proposed self-distilled pruning framework to a broader range of architectures and investigate hybrid strategies that combine token pruning with feature- or descriptor-level fusion. Another important avenue is to integrate our framework into multi-stage retrieval pipelines (Zhu et al., 2023; Lu et al., 2024b), segment-level VPR systems (Garg et al., 2024; Zeng et al., 2026), and cross-view geolocalization (Zhu et al., 2022; Zheng et al., 2026), as well as to explore its impact on large-scale visual localization, SLAM, and other downstream applications. 19 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+20 Faster or Stronger: Towards Flexible Visual Place Recognition via Weighted Aggregation and Token Pruning 
+
+Figure 13. Visual examples across different cities under different conditions. Heatmap of token importance scores and tokens retained after applying WeiToP with retention ratios ρ = 0 .95 , 0.9, 0.8, 0.7, 0.6, 0.5, and 0.4. *Blank indicates removed tokens. 
+
+21
