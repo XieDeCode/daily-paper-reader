@@ -6,32 +6,34 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-29
-- 运行时间：2026-05-29 21:47:16 UTC
+- 最新运行日期：2026-05-30
+- 运行时间：2026-05-30 20:32:52 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：2
-- 速读区：2
+- 本次总论文数：3
+- 精读区：0
+- 速读区：3
 
 ### 今日简报（AI）
-今日推荐4篇，精读2篇聚焦遥感分布偏移鲁棒性基准与多模态变化检测框架。最值得看：EarthShift评估真实世界分布偏移，OmniCD推进多模态语义变化检测。建议下一步尝试将EarthShift应用于现有遥感模型，或基于OmniCD框架开发变化检测应用。
-- 详情：[/202605/29/README](/202605/29/README)
+今日速读3篇论文，聚焦遥感分割、空间推理与非结构化环境感知。
+
+最值得关注方向：Coarse-to-Fine域增量学习用于多光谱图像挖掘足迹分割，以及视觉基础模型向非结构化户外环境可通行性估计的迁移。
+
+若想跟进，建议重点探索渐进式知识蒸馏如何在多领域迁移中的效率，以及几何感知机制对MLLM空间智能的提升效果。
+- 详情：[/202605/30/README](/202605/30/README)
 
 ### 精读区论文标签
-1. [EarthShift: a benchmark for measuring robustness to real-world distribution shifts in Earth observation](/202605/29/2605.29330v1-earthshift-a-benchmark-for-measuring-robustness-to-real-world-distribution-shifts-in-earth-observation)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：地球观测分布偏移基准，评估地理空间基础模型
-2. [OmniCD: A Foundational Framework for Remote Sensing Image Change Detection Guided by Multimodal Semantics](/202605/29/2605.30168v1-omnicd-a-foundational-framework-for-remote-sensing-image-change-detection-guided-by-multimodal-semantics)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：遥感变化检测的基础框架，融合多模态语义
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Leveraging pretrained RGB denoisers for hyperspectral image restoration](/202605/29/2605.24769v1-leveraging-pretrained-rgb-denoisers-for-hyperspectral-image-restoration)  
-   标签：评分：7.0/10、query:rs-fm
-   evidence：利用预训练RGB去噪器用于遥感高光谱图像恢复
-2. [VertiCue-Bench: Diagnosing Whether MLLMs Use Height Cues to Resolve 2D Ambiguity in Remote Sensing Natural Scenes](/202605/29/2605.25784v1-verticue-bench-diagnosing-whether-mllms-use-height-cues-to-resolve-2d-ambiguity-in-remote-sensing-natural-scenes)  
+1. [Coarse-to-Fine Domain Incremental Learning with Attentive Distillation for Mining Footprint Segmentation in Multispectral Imagery](/202605/30/2605.24460v2-coarse-to-fine-domain-incremental-learning-with-attentive-distillation-for-mining-footprint-segmentation-in-multispectral-imagery)  
    标签：评分：6.0/10、query:rs-fm
-   evidence：诊断MLLMs是否利用高度线索解决遥感自然场景中的模糊性
+   evidence：遥感深度学习分割与域增量学习
+2. [Dual-Pathway Geometry-Aware MLLM for Spatial Intelligence](/202605/30/2605.25334v1-dual-pathway-geometry-aware-mllm-for-spatial-intelligence)  
+   标签：评分：6.0/10、query:rs-fm
+   evidence：提出双路径几何感知多模态大语言模型用于空间智能，与地理空间基础模型相关
+3. [From General Vision to Reliable Traversability Estimation: Adapting Vision Foundation Models for Unstructured Outdoor Environments](/202605/30/2605.29565v1-from-general-vision-to-reliable-traversability-estimation-adapting-vision-foundation-models-for-unstructured-outdoor-environments)  
+   标签：评分：6.0/10、query:rs-fm
+   evidence：适配视觉基础模型用于户外穿越性估计
 
 
 <div class="dpr-home-promo-card">
