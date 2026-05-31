@@ -6,34 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-30
-- 运行时间：2026-05-30 20:32:52 UTC
+- 最新运行日期：2026-05-31
+- 运行时间：2026-05-31 20:20:37 UTC
 - 运行状态：成功
-- 本次总论文数：3
+- 本次总论文数：2
 - 精读区：0
-- 速读区：3
+- 速读区：2
 
 ### 今日简报（AI）
-今日速读3篇论文，聚焦遥感分割、空间推理与非结构化环境感知。
-
-最值得关注方向：Coarse-to-Fine域增量学习用于多光谱图像挖掘足迹分割，以及视觉基础模型向非结构化户外环境可通行性估计的迁移。
-
-若想跟进，建议重点探索渐进式知识蒸馏如何在多领域迁移中的效率，以及几何感知机制对MLLM空间智能的提升效果。
-- 详情：[/202605/30/README](/202605/30/README)
+今日速读两篇论文：遥感时序融合去云与视觉基础模型适应户外越野环境。
+最值得关注的是《Asynchronous Remote Sensing Time-Series Fusion for Cloud Removal and Anytime Reconstruction》（7.0分），其异步融合框架可高效去云并实现任意时刻重建。
+建议优先精读该文以掌握时序融合思路，或结合第二篇的迁移学习策略拓展到户外可通行性估计。
+- 详情：[/202605/31/README](/202605/31/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Coarse-to-Fine Domain Incremental Learning with Attentive Distillation for Mining Footprint Segmentation in Multispectral Imagery](/202605/30/2605.24460v2-coarse-to-fine-domain-incremental-learning-with-attentive-distillation-for-mining-footprint-segmentation-in-multispectral-imagery)  
+1. [Asynchronous Remote Sensing Time-Series Fusion for Cloud Removal and Anytime Reconstruction](/202605/31/2605.27726v1-asynchronous-remote-sensing-time-series-fusion-for-cloud-removal-and-anytime-reconstruction)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：遥感时间序列融合方法，适用于遥感任务的预训练模型
+2. [From General Vision to Reliable Traversability Estimation: Adapting Vision Foundation Models for Unstructured Outdoor Environments](/202605/31/2605.29565v1-from-general-vision-to-reliable-traversability-estimation-adapting-vision-foundation-models-for-unstructured-outdoor-environments)  
    标签：评分：6.0/10、query:rs-fm
-   evidence：遥感深度学习分割与域增量学习
-2. [Dual-Pathway Geometry-Aware MLLM for Spatial Intelligence](/202605/30/2605.25334v1-dual-pathway-geometry-aware-mllm-for-spatial-intelligence)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：提出双路径几何感知多模态大语言模型用于空间智能，与地理空间基础模型相关
-3. [From General Vision to Reliable Traversability Estimation: Adapting Vision Foundation Models for Unstructured Outdoor Environments](/202605/30/2605.29565v1-from-general-vision-to-reliable-traversability-estimation-adapting-vision-foundation-models-for-unstructured-outdoor-environments)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：适配视觉基础模型用于户外穿越性估计
+   evidence：将视觉基础模型适应于户外环境穿越性估计
 
 
 <div class="dpr-home-promo-card">

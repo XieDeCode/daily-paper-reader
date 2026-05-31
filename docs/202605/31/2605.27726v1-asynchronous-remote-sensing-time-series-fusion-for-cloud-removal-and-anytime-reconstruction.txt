@@ -1,0 +1,343 @@
+Title: Asynchronous Remote Sensing Time-Series Fusion for Cloud Removal and Anytime Reconstruction
+
+URL Source: https://arxiv.org/pdf/2605.27726v1
+
+Published Time: Thu, 28 May 2026 00:25:09 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Asynchronous Remote Sensing Time-Series Fusion for Cloud Removal and Anytime Reconstruction 
+
+# Forouzan Fallah 1 Chia-Yu Hsu 2 Wenwen Li 2 * Anna Liljedahl 3 Yezhou Yang 11 School of Computing and Augmented Intelligence, Arizona State University  
+
+> 2
+
+# School of Geographical Sciences and Urban Planning, Arizona State University  
+
+> 3
+
+# Woodwell Climate Research Center 
+
+# Abstract 
+
+Frequent cloud cover severely limits the usability of Sentinel-2 (S2) optical time series for Earth surface mon-itoring. Sentinel-1 (S1) SAR provides all-weather com-plementary observations, but practical S1/S2 fusion re-mains difficult because acquisitions are irregular and asyn-chronous. Many existing approaches assume temporally aligned inputs (or require external nearest-date matching) and typically restore only observed timestamps, limiting re-construction under long gaps and preventing on-demand synthesis. We propose AGFlow (Time-Aligned Generative 
+
+Flow Matching), a spatiotemporal flow-matching model for S1/S2 cloud removal and time-series reconstruction with three capabilities: (1) timestamp-conditioned internal alignment that fuses asynchronous S1 and cloudy S2 ob-servations without preprocessing-based pairing; (2) spa-tiotemporal, context-aware denoising that models spatial structure jointly with temporal dynamics (rather than in-dependent per-pixel time series); and (3) anytime query-ing, enabling generation of cloud-free S2 frames at both observed and user-specified timestamps within the monitor-ing window. We evaluate on the RESTORE-DiT benchmark protocol with quantitative metrics, qualitative comparisons, and component ablations. AGFlow notably improves fully missing-frame reconstruction (MAE and RMSE reduce by 16–19% over RESTORE-DiT) and provides reliable recon-structions under persistent gaps, while also yielding com-petitive cloud removal performance and flexible temporal querying for downstream tasks such as dense vegetation monitoring. Project page: AGFlow-model.github.io 
+
+# 1. Introduction 
+
+Dense optical satellite image time series are central for Earth monitoring. They support tracking land dynamics  
+
+> *Corresponding author: wenwen@asu.edu
+
+such as vegetation seasonality, farming activity, land-cover change, and rapid mapping after hazards. Among public missions, Sentinel-2 (S2) is widely used because it provides multi-spectral imagery at up to 10 m resolution with global repeat coverage [4]. In practice, however, cloud and shadow reduce the us-ability of S2 time series, creating large spatial gaps and ir-regular temporal sampling. At a global scale, cloud cover is persistent and widespread (e.g., Moderate Resolution Imag-ing Spectroradiometer (MODIS)-derived cloud fractions on the order of ∼67% globally) [8], so even frequent-revisit sensors can experience multi-week periods with few usable observations. This breaks downstream applications that re-quire temporally dense and spatially consistent reflectance, such as crop growth monitoring or subtle change detection. This motivates the problem of cloud removal [12] and time-series reconstruction: given cloud-contaminated S2 observations and their acquisition dates, recover a cloud-free S2 series that is spatially coherent (preserving bound-aries and fine structures) and temporally consistent (cap-turing seasonal dynamics and abrupt events). Real-world reconstruction is often challenging under persistent cloud cover, and practical sequences are irregularly sampled due to orbit geometry and quality filtering. This pushes toward models that couple spatial structure with temporal evolution rather than treating pixels independently. A natural remedy is to integrate all-weather observations from Sentinel-1 (S1) synthetic aperture radar (SAR), which is insensitive to clouds and illumination conditions [20, 21]. However, leveraging SAR to reconstruct optical reflectance across time remains nontrivial. S1 and S2 acquisitions are typically asynchronous, and the relationship between SAR backscatter and optical reflectance is indirect, so effective fusion must handle timestamp mismatch and modality gaps without assuming a deterministic co-temporal mapping. Many existing SAR-optical cloud removal pipelines ei-ther assume (near-)paired S1/S2 inputs [1, 12] or construct                       
+
+> arXiv:2605.27726v1 [cs.CV] 26 May 2026 Figure 1. Overview of AGFlow. Given an irregular Sentinel-2 optical sequence xwith missing pixels or frames and a co-registered Sentinel-1 SAR sequence s, images are tokenized into spatio-temporal patches and enriched with acquisition-date embeddings. A Sequential Denoising Transformer (SDT) with time-aligned cross-attention fuses SAR features and predicts a masked velocity field vθ(zτ, τ, cond) ,where zτ=m⊙yτ+ (1 −m)⊙xclamps observed pixels. Starting from noise at ( τ= 1 ) an ODE solver integrates to ( τ= 0 )while updating only masked regions, producing the reconstructed optical sequence. By changing m, the same formulation supports both cloud/sensor-gap removal and anytime generation.
+
+aligned sequences via external nearest-date matching [16], which adds workflow complexity and can introduce tempo-ral mismatches. Recent work has started to model asyn-chronous inputs and enable query-time decoding at user-specified timestamps, but remains pixel-wise and deter-ministic, limiting its use of spatial image structure [19]. Uncertainty-aware reconstruction further improves reliabil-ity, yet existing approaches are often constrained to short windows or produce only a single output frame, rather than a generative, time-conditioned model that supports dense reconstruction and arbitrary-time querying across the mon-itoring period [1, 11]. In this work, we propose AGFlow (Time-Aligned 
+
+Generative Flow Matching), a timestamp-conditioned spa-tiotemporal flow-matching [9] framework that addresses these practical constraints. The model treats acquisition times as first-class inputs to perform internal alignment across irregular, asynchronous S1 and cloudy S2 observa-tions, and it supports arbitrary-time querying: generating cloud-free S2 frames at both observed S2 timestamps (cloud removal) and user-specified timestamps within the window (on-demand synthesis). By operating on spatiotemporal im-age representations, the denoising backbone jointly mod-els spatial structure and temporal dynamics, while diffusion sampling provides a natural mechanism to represent uncer-tainty under long cloud-induced gaps. We evaluate under the RESTORE-DiT benchmark pro-tocol [16] and additionally assess arbitrary-time querying using a trajectory-agreement evaluation inspired by Any-timeFormer [19]. Our main contributions are: • Internal timestamp-conditioned alignment for ir-regular and asynchronous S1/S2 fusion, eliminating preprocessing-based temporal pairing. • Spatially aware spatiotemporal conditional flow matching for cloud removal and reconstruction, preserv-ing spatial structure beyond independent per-pixel mod-eling and enabling sampling-based uncertainty. • Anytime querying that synthesizes cloud-free S2 at both observed and user-specified timestamps within the mon-itoring window, unifying cloud removal, missing-frame reconstruction, and on-demand generation. 
+
+# 2. Related Work 
+
+S1/S2 cloud removal and reconstruction (paired inputs). 
+
+A common SAR-optical formulation assumes temporally paired S1 and cloudy S2 observations, and reconstructs a cloud-free S2 image at the same timestamp. Classical CNN-based fusion methods such as DSen2-CR [12] adopt this paired-input assumption and output a single determin-istic reconstruction from one cloudy S2 conditioned on co-temporal S1. More recent work explores conditional dif-fusion for single-pair restoration (e.g., EDM-CR [1]) to improve robustness and perceptual quality in challenging scenes [6]. While effective when co-temporal S1 is avail-able, these approaches do not directly address the prevalent case where S1 and S2 are acquired asynchronously and ir-regularly across a monitoring window. 
+
+Multi-temporal S1/S2 reconstruction (fixed window or aligned sequences). To improve robustness under per-sistent cloud-induced gaps, multi-temporal methods incor-porate longer temporal context. Several designs operate on short or fixed-length windows (e.g., UNCRtainTS [5], MTS2ONet [3]) and typically output reconstructions at observed S2 timestamps. Sequence-to-sequence models such as U-TILISE [17] target full time-series reconstruc-tion, and can be extended with SAR inputs (U-TILISE-SAR) to use S1 as additional context. More recently, diffusion-based sequence frameworks further strengthen performance by modeling conditional generation over time (e.g., RESTORE-DiT [16]; EMRDM [11]). However, many practical pipelines still construct aligned multi-modal se-quences during preprocessing (e.g., nearest-date matching of S1 acquisitions to S2 timestamps) to satisfy paired-input assumptions inside the network. Such external alignment adds workflow complexity and can introduce temporal mis-match by distorting the original acquisition timing, moti-vating approaches that perform alignment internally while respecting irregular and asynchronous acquisition. 
+
+Irregular-time modeling, asynchronous fusion, and in-ternal alignment. A growing line of work explicitly tar-gets irregular sampling and/or asynchronous multi-sensor acquisition via timestamp encoding and time-aware atten-tion. In the S1/S2 setting, AnytimeFormer [19] directly addresses irregular and asynchronous fusion and enables decoding at user-specified query times, but it models per-pixel temporal trajectories and is deterministic, which can limit spatial fidelity (e.g., boundaries and fine structures) and does not naturally represent uncertainty under long gaps. Beyond purely pixel-wise formulations, STORI [10] incorporates local spatial neighborhood information by ex-tracting spatiotemporal features from blocks centered on a target pixel and modeling temporal evolution; however, it still relies on local blocks rather than jointly modeling full-frame spatial structure across time, and it does not pro-vide query-time synthesis at arbitrary timestamps. Beyond SAR-optical fusion, optical-only cross-sensor time-series works demonstrate the value of irregular-time modeling and query-time decoding in related settings (e.g., TAMRFSITS [13]; MISR-S2 [14]), but they do not address SAR-assisted cloud removal under persistent cloud gaps. 
+
+Generative reconstruction and uncertainty. Determinis-tic reconstruction is widely used for cloud removal due to its simplicity and efficiency, but it can be brittle when ob-servations are missing for extended periods. GAN-based approaches (e.g., MTS2ONet [3]) can generate sharper out-puts but may be harder to stabilize temporally. Diffu-sion models provide a strong alternative for conditional restoration and naturally support sampling-based uncer-tainty, which is valuable when persistent cloud cover yields underconstrained reconstructions (e.g., EDM-CR [1]; RESTORE-DiT [16]; EMRDM [11]). Nevertheless, as dis-cussed above, many existing diffusion pipelines for S1/S2 reconstruction still assume paired inputs or depend on pre-processing alignment rather than performing timestamp-conditioned alignment internally. These gaps motivate our approach, which integrates (i) internal timestamp-conditioned alignment for irregular and asynchronous S1/S2 fusion, (ii) spatially aware spatiotem-poral modeling (beyond per-pixel trajectories), and (iii) anytime querying to synthesize cloud-free S2 at both ob-served and user-specified timestamps within a monitoring window. An overview of AGFlow pipeline is shown in Fig-ure 1. 
+
+# 3. Method 
+
+AGFlow learns a continuous-time vector field that recon-structs missing values in a satellite image time series while clamping all observed pixels. This single formulation cov-ers (i) cloud/sensor-gap removal (pixel-level masks) and (ii) anytime generation (full-frame masks), by changing only the missingness mask. 
+
+3.1. Problem setup 
+
+Let x ∈ RT ×C×H×W denote an optical sequence (S2) of length T , with C bands and spatial size H ×W . We assume an underlying clean sequence y ∈ RT ×C×H×W . A binary mask m ∈ { 0, 1}T ×1×H×W indicates missingness, where 
+
+mi, 1,u,v = 1 means pixel (u, v ) at frame i is unknown and must be generated, and mi, 1,u,v = 0 means it is observed. The mask is broadcast across channels in all elementwise products. The observed tensor x stores the measured values on known pixels and a constant fill value vfill on unknown pix-els: 
+
+x = (1 − m) ⊙ y + m ⊙ vfill 1, (1) where ⊙ is elementwise multiplication and 1 is an all-ones tensor of appropriate shape. 
+
+SAR conditioning. We condition on a co-registered SAR sequence (S1) s ∈ RTs×Cs×H×W with length Ts and Cs
+
+channels. We also use acquisition dates (in days since a ref-erence): {di}Ti=1 for optical and {d(s) 
+
+> j
+
+}Ts 
+
+> j=1
+
+for SAR. Our goal is to predict y on masked pixels ( m = 1 ) while pre-serving all observed pixels ( m = 0 ). 
+
+3.2. Unifying cloud removal and anytime generation 
+
+AGFlow treats both tasks as masked reconstruction. 
+
+Cloud/sensor-gap removal. In the standard setting, m
+
+encodes pixel-level missing regions (clouds, shadows, sen-sor gaps), so the model inpaints only those pixels. 
+
+Anytime generation via full-frame masking. To en-able synthesis of an arbitrary time step, during training we sample a query index q ∈ { 1, . . . , T } and set the entire query frame to unknown: 
+
+mq, :,:,: ← 11×H×W , xq, :,:,: ← vfill 1C×H×W . (2) Thus, the model must reconstruct the full query frame from the remaining temporal context (and SAR), while still handling pixel-level missingness in other frames. At test time, anytime generation is performed by setting the desired frame(s) to m = 1 (even if the frame is fully missing). 
+
+3.3. Masked Flow Matching 
+
+AGFlow learns a vector field that transports samples from noise to data, while restricting learning and updates to masked pixels. For each training sample, we draw Gaussian noise ϵ ∼N (0, I) with the same shape as y, and sample a continuous flow time τ ∼ U (0 , 1) . We define a linear path between data and noise: 
+
+yτ = (1 − τ )y + τ ϵ. (3) Differentiating gives the target velocity field (constant along the path): 
+
+v⋆ = dyτ
+
+dτ = ϵ − y. (4) To ensure observed pixels are clamped in the network input, we replace known regions by x:
+
+zτ = m ⊙ yτ + (1 − m) ⊙ x. (5) Let vθ (·) denote the learned vector field. We minimize mean-squared error only on masked pixels :
+
+L(θ) = Ey, ϵ, τ 
+
+h
+
+∥m ⊙ (vθ (zτ , τ, cond) − (ϵ − y)) ∥2
+
+> F
+
+i
+
+,
+
+(6) where ∥ · ∥ F is the Frobenius norm and cond includes dates and optional SAR. 
+
+Sampling with fixed observed pixels. At inference, we start from ˜y1 = ϵ and solve the ordinary differential equa-tion (ODE) backward from τ = 1 to τ = 0 :
+
+˜zτ = m ⊙ ˜yτ + (1 − m) ⊙ x, (7) 
+
+d˜yτ
+
+dτ = m ⊙ vθ (˜ zτ , τ, cond) . (8) Because the RHS is multiplied by m, all observed pixels (m = 0 ) have zero velocity and remain fixed for any nu-merical solver. We parameterize vθ with Sequential Denoising Trans-former (SDT), a Transformer over spatio-temporal patch to-kens. With patch size p × p, each frame has N = HW p2
+
+patches. A linear patch embedding maps each patch to a token of width M . For each frame i, we obtain 
+
+H(0)  
+
+> i
+
+= PatchEmbed( zτ [i]) ∈ RN ×M . (9) We add a fixed 2D sine/cosine spatial embedding P ∈
+
+RN ×M :
+
+H(0)  
+
+> i
+
+← H(0)  
+
+> i
+
++ P. (10) Stacking over time yields H(0) ∈ RT ×N ×M .We embed the continuous flow time τ via a sinusoidal embedding followed by an MLP: 
+
+c = ψ(τ ) ∈ RM . (11) We also encode acquisition dates. Let ϕ(·) be a date en-coder producing vectors in RM . We compute absolute and (optionally) query-relative date embeddings: 
+
+eabs  
+
+> i
+
+= ϕ(di), e∆ 
+
+> i
+
+= ϕ(di − dq ), (12) and combine them with learned scalars 
+
+ei = λabs eabs  
+
+> i
+
++ λ∆e∆ 
+
+> i
+
+∈ RM . (13) The resulting ei is added to all patch tokens of frame i.Each Transformer block is conditioned on c using adap-tive LayerNorm (AdaLN) [15] with gating: 
+
+AdaLN( X; c) = (1 + γ(c)) ⊙ LN( X) + β(c), (14) 
+
+X ← X + g(c) ⊙ f AdaLN( X; c), (15) where γ(·), β(·), and g(·) are learned linear projections of 
+
+c and f (·) denotes an attention or MLP sublayer. 
+
+3.4. Time-Aligned cross-attention for SAR fusion 
+
+We tokenize s analogously. For each SAR frame j:
+
+G(0)  
+
+> j
+
+= PatchEmbed( s[j]) + P + e(s) 
+
+> j
+
+∈ RN ×M , (16) where e(s) 
+
+> j
+
+= ϕ(d(s) 
+
+> j
+
+) is broadcast to all SAR patch tokens. Stacking gives G(0) ∈ RTs×N ×M .We fuse SAR features into SDT using Time-Aligned Cross-Attention consisting of: 
+
+(i) Spatial cross-attention (frame-wise). For each opti-cal frame i, optical patch tokens attend to SAR patch to-kens (same spatial grid), which helps match local structures across sensors. 
+
+(ii) Temporal cross-attention (patch-wise). For a fixed patch index n ∈ { 1, . . . , N }, we reshape sequences across time:  ˜Hn ∈ RT ×M , ˜Gn ∈ RTs×M . (17) Multi-head cross-attention is 
+
+Attn( Q, K, V) = softmax 
+
+ QK ⊤
+
+√dh
+
++ BS2 ←S1 
+
+> ∆d
+
+
+
+V, (18) where Q = ˜HnWQ, K = ˜GnWK , V = ˜GnWV , dh
+
+is the head dimension, and BS2 ←S1  
+
+> ∆d
+
+is a learned bias based on cross-sensor day differences. This explicitly encourages matching the most relevant SAR times for each optical time. 
+
+3.5. Real-date temporal encoding 
+
+AGFlow injects real acquisition times only into attention layers that mix across time: (i) temporal self-attention and (ii) temporal cross-attention (Eq. (18)). 
+
+Relative time bias (within optical). For temporal atten-tion within the optical sequence, we add a learned bias that depends on day differences: 
+
+Attn( Q, K, V) = softmax 
+
+ QK ⊤
+
+√dh
+
++ B∆d
+
+
+
+V, (19) Figure 2. The irregular and asynchronous distribution of times-tamps across both sensors reflects the combined effect of satellite revisit cycles, orbit geometry, and cloud-induced data gaps in the optical record. 
+
+with: 
+
+B∆d[h, i, k ] = bh(ρ(∆ dik )) , ∆dik = di − dk, (20) where ρ(·) buckets day differences and bh(·) is a learned embedding for head h.
+
+Cross-sensor bias (optical ← SAR). For temporal cross-attention from SAR to optical, we use 
+
+∆di,j = di − d(s) 
+
+> j
+
+, BS2 ←S1  
+
+> ∆d
+
+[h, i, j ] = bh(ρ(∆ di,j )) .
+
+(21) 
+
+Rotary temporal encoding (RoPE). In addition, we ap-ply RoPE [18] to temporal attention by rotating Q and K
+
+using time positions derived from real dates (day values). This gives smooth, continuous phase shifts for irregular sampling, while the learned biases handle coarse alignment and sensor-specific timing. 
+
+# 4. Experiments & results 
+
+4.1. Dataset, Protocol, and Preprocessing 
+
+Dataset and sensors. We follow the RESTORE-DiT benchmark and use S2 optical time series as the reconstruc-tion target, with S1 SAR time series as an all-weather con-dition signal. S2 uses atmospherically corrected products with 10 spectral bands (excluding atmospheric bands). S1 uses Ground Range Detected (GRD) products processed to backscatter (dB) and orthorectified to 10 m resolution. We represent S1 with three channels (VV, VH, and VV/VH) and use ascending-orbit acquisitions for consistency. 
+
+Regions and splits. Training and main evaluation are on the France site from PASTIS-R [7], collected from four tiles (30UXV, 32ULU, 31TFM, 31TFJ). After cropping and filtering, the dataset contains 2433 non-overlapping patches of size 128 × 128 pixels ( ≈ 1.28 × 1.28 km). The temporal span covers more than one year (Sep 2018–Nov 2019), with 38–61 S2 acquisitions per series and ∼70 S1 acquisitions per series. We use the official 5-fold split: four folds for training and one fold for testing. During training, we simulate missingness by sampling masks from the real mask pool and overlaying them on the cloud-free sequences, so the missing-data distribution matches real cloud patterns. This produces (i) a masked S2 observation sequence, (ii) a mask sequence indicating miss-ing pixels, and (iii) the corresponding cloud-free S2 target sequence. 
+
+Normalization and windowing. We clip S2 values to a fixed reflectance range, standardize S1 with dataset statis-tics, and rescale both modalities to a common normalized range for training. We use fixed-length temporal windows (length 15); longer sequences are processed with a sliding-window strategy. 
+
+Evaluation protocol and metrics. We report standard reconstruction metrics: mean absolute error (MAE), root mean squared error (RMSE), spectral angle mapper (SAM), peak signal-to-noise ratio (PSNR), and structural similarity index (SSIM). For pixel-wise metrics, we evaluate only on missing/occluded pixels; SSIM is computed on frames that contain missing regions. We evaluate (i) cloud/sensor-gap removal where masks are pixel-level, and (ii) missing-frame reconstruction where a full S2 frame is removed and recon-structed from the remaining temporal context (and SAR). Anytime querying is evaluated by fully masking the queried frame(s) at test time. Moreover, all baselines and AGFlow are trained from scratch and evaluated on the same official split (train folds vs the held-out test fold). 
+
+Irregular temporal sampling. The dataset comprises multi-source satellite time series with irregular temporal sampling (Figure 2). Observations from S1 and S2 are ac-quired at different and non-uniform intervals, resulting in asynchronous timestamp lists across sensors. The Day of Year (DOY) axis is anchored to September 1, 2018 as the reference date, spanning a full seasonal cycle. 
+
+4.2. Implementation details. 
+
+We use an SDT with depth 4, hidden size 256, patch size 
+
+4 × 4, 4 attention heads, and MLP ratio 4.0, operating on 
+
+128 × 128 crops with a fixed temporal window T = 15 .Inputs are S2 (10 bands) and S1 (3 channels). S2 values are clipped to [0 , 8000] ; S1 is standardized using dataset statistics, clipped to [−2, 2] . Cloud masks are sampled from the provided real mask pool; masked pixels are filled with value 1 (in normalized space). For anytime training, the query frame is fully masked and the loss is the MSE on masked pixels using flow matching with τ ∼ U (0 , 1) , linear interpolation yτ = (1 − τ )y + τ ϵ , and target velocity ϵ − y.We train with Adam (lr 2 × 10 −4, batch size 16) for 3000 epochs and use a MultiStepLR schedule. Model ↓MAE ↓RMSE ↓SAM ↑PSNR ↑SSIM RESTORE-DiT 0.0214 0.0322 2.95 32.17 0.914                                        
+
+> AGFlow (full) 0.0179 0.0261 2.78 32.87 0.942
+> Table 1. Missing-frame (gap filling) results. One S2 frame is fully removed at a random time index and reconstructed from the re-maining temporal context. Methods ↓MAE ↓RMSE ↓SAM ↑PSNR ↑SSIM Linear 0.0257 0.0401 4.35 28.40 0.929 U-TILISE 0.0202 0.0314 3.76 30.38 0.936 U-TILISE-SAR 0.0193 0.0298 3.66 30.77 0.937 RESTORE-DiT 0.0140 0.0224 2.64 33.32 0.959
+> AGFlow (ours) 0.0133 0.0217 2.45 33.65 0.964
+> Table 2. Quantitative evaluation on the France test set for cloud removal. Metrics are computed over all ten S2 bands and only on cloud-corrupted pixels. Best and second-best results are high-lighted in bold and underline, respectively. Linear and U-TILISE use optical inputs only; U-TILISE-SAR, RESTORE-DiT, and AGFlow use optical+SAR.
+
+4.3. Missing frame / gap filling 
+
+For each test sequence, we randomly choose one time in-dex t and remove the corresponding S2 frame (all bands, all pixels). The model then generates the missing frame ˆxt
+
+conditioned on the remaining observed S2 frames and all S1 frames. We compare ˆxt with the held-out ground truth 
+
+xt (Table 1). Table 1 shows that AGFlow outperforms the diffusion baseline RESTORE-DiT on all metrics. AGFlow reduces MAE from 0.0214 to 0.0179 ( −16 .4% ) and RMSE from 0.0322 to 0.0261 ( −18 .9% ), indicating lower overall recon-struction error when the target frame is missing. It also improves spectral consistency (SAM: 2.9514 → 2.7761) and image quality (PSNR: 32.1755 → 32.8671; SSIM: 0.9139 → 0.9420). These results support that AGFlow’s temporally-aligned conditioning better leverages surround-ing observations in the fully-missing-frame setting. 
+
+4.4. Cloud removal 
+
+Table 2 reports quantitative results on the France test set. Methods that use temporal inputs outperform the single-image baseline (Linear), confirming that temporal context is important for cloud removal. Among learning-based base-lines, U-TILISE improves over Linear, and adding SAR (U-TILISE-SAR) yields a further but modest gain, suggesting SAR helps but simple concatenation does not fully exploit asynchronous SAR timing. Diffusion-based restoration is strongest overall in this benchmark. RESTORE-DiT is the best baseline, and 
+
+AGFlow achieves the top performance . Compared to RESTORE-DiT, AGFlow improves MAE from 0.0140 to 0.0133 ( −5.0% ), RMSE from 0.0224 to 0.0217 ( −3.1% ), and SAM from 2.64 to 2.45 ( −7.2% ). It also slightly im-proves perceptual quality (PSNR: 33.32 → 33.65; SSIM: 0.959 → 0.964). Overall, the gains are consistent and strongest on spectral fidelity (SAM) and SSIM. Figure 3 provides a qualitative comparison against RESTORE-DiT and the ground truth. In the shown ex-ample(s), AGFlow produces reconstructions that are closer to the ground truth with fewer visible artifacts in cloud-covered regions. For example, for images captured on 06-08-2019 and 06-18-2019, AGFlow is able to remove clouds based on inferences from the time sequence. 
+
+4.5. Anytime generation 
+
+Figure 4 shows qualitative examples where AGFlow gen-erates cloud-free S2 outputs at unobserved query dates. In anytime generation, the model is asked to generate plau-sible optical observations for time steps where no optical measurement is available. In our target setting, there is no aligned ground-truth S2 frame for these generated times-tamps, so direct supervised evaluation is not possible. To still quantify the outputs, we follow the evaluation strategy used in AnytimeFormer [19] and leverage the Rap-idAI4EO corpus [2]. RapidAI4EO is a large-scale European time-series dataset sampled at 500,000 non-overlapping lo-cations (each covering a ∼600 m × 600 m footprint) and provides analysis-ready, regular-cadence products designed for land monitoring. In particular, RapidAI4EO pairs (i) S2 mosaics (monthly) with (ii) a high-cadence, cloud-free har-monized product (Planet Fusion) over the same locations, along with land-cover labels (CORINE/CLC) [2]. In our experiments, we use the RapidAI4EO subset covering the same geographic region as our test site, and treat the cloud-free product as an auxiliary reference for evaluating tempo-ral vegetation dynamics. We compute Normalized Difference Vegetation Index (NDVI) from the generated S2 images and compare it against NDVI computed from the RapidAI4EO auxiliary reference. We use the standard NDVI definition: 
+
+NDVI = ρNIR − ρRed 
+
+ρNIR + ρRed 
+
+, (22) where ρNIR and ρRed are the near-infrared (NIR) and red reflectances. Although RapidAI4EO provides observations over the same locations, the auxiliary reference is not perfectly aligned with our generated timestamps and differs in sens-ing/processing (cross-sensor harmonization, mosaicking, and product-specific pipelines). Because of this domain and timing gap, a strict pixel-wise comparison is not meaning-ful. Instead, we compare NDVI in a more robust way using regional summary statistics and temporal trend agreement Figure 3. Missing-frame reconstruction and cloud removal. The top row shows degraded S2 inputs with masks indicating invalid pixels: white regions indicate total occlusion (such as thick clouds or missing data), while pink and dark red regions denote secondary artifacts like cloud shadows or thin clouds. AGFlow demonstrates superior performance in heavily obscured frames. Notably, on dates 2019-06-08 and 2019-06-18, RESTORE-DiT struggles with spatial distortion and leaves residual cloudy artifacts. In contrast, AGFlow produces reconstructions with fewer artifacts and sharper structures, and it reduces cloud residuals when masked frames contain clouds. 
+
+> Figure 4. Anytime querying examples. For each sequence, we query AGFlow at dates marked (Q) that are not observed by S2. We show surrounding observed frames for context and the generated cloud-free output at the query date.
+
+(Figure 5), reporting how well the generated NDVI distribu-tion and regional dynamics match the auxiliary reference. 
+
+4.6. Ablation study 
+
+We design ablations to isolate the main components of AGFlow beyond the SDT backbone. All variants use the same SDT architecture, training schedule, and training data. 
+
+Internal time alignment (relative time bias). We re-move the learned relative time bias used in temporal atten-tion (Eq. 19). This tests whether explicit alignment cues inside attention are necessary when learning from irregular time gaps. 
+
+Query-relative timing for anytime. We remove the query-relative date embedding by setting λ∆ = 0 in Eq. 13 (i.e., the model only receives absolute dates). This tests whether conditioning on the time difference to the query date improves the anytime setting. 
+
+SAR fusion mechanism. We replace the Time-Aligned temporal cross-attention with a weaker fusion strategy (spatial-only cross-attention). This removes temporal matching during fusion and tests whether gains truly come from temporally-aware SAR–optical fusion. 
+
+Results and discussion. Table 3 summarizes perfor-mance on missing-frame reconstruction. The full AGFlow model (last row) is best on all metrics. All ablations re-duce performance, so the gains are not explained by the SDT backbone or training budget. The largest degradation comes from replacing Time-Aligned fusion with spatial-only fusion. Compared to the full model, MAE increases from 0.0179 to 0.0190, PSNR Figure 5. NDVI-based anytime evaluation against an auxiliary cloud-free reference (RapidAI4EO). We compute NDVI from AGFlow outputs at queried dates and compare it to NDVI from the auxiliary reference using regional summary statistics over time. The goal is to check whether generated seasonal dynamics are plausible and consistent at the region level, despite sensor and timestamp mismatch. Model (variant) ↓MAE ↓RMSE ↓SAM ↑PSNR ↑SSIM w/ spatial-only SAR fusion 0.0190 0.0274 3.39 32.13 0.914 w/o relative time bias (Eq. 19) 0.0187 0.0268 3.33 32.33 0.915 w/o query-relative timing ( λ∆ = 0 ) 0.0182 0.0264 2.79 32.78 0.941 AGFlow (full) 0.0179 0.0261 2.77 32.86 0.942 
+
+> Table 3. Ablation results for missing-frame reconstruction. All variants share the same SDT backbone, training budget, and data.
+
+drops from 32.8671 to 32.1383, and SSIM drops from 0.9420 to 0.9147. The spectral error also increases strongly (SAM: 2.7761 → 3.3959, +0.6198). This indicates that temporal matching during SAR fusion is important not only for pixel accuracy (MAE/RMSE, PSNR/SSIM), but also for preserving spectral consistency (SAM). Removing the learned relative time bias also causes a clear regression, especially in SAM and SSIM (SAM: 2.7761 → 3.3358, +0.5597; SSIM: 0.9420 → 0.9154, -0.0266), while the increase in MAE/RMSE is smaller than the fusion ablation. This pattern suggests that internal time alignment mainly helps the model choose the correct tem-poral evidence, which is critical for spectral fidelity. Finally, removing query-relative timing yields a smaller but consistent drop across all metrics (e.g., MAE: 0.0179 
+
+→ 0.0182, +0.0003; PSNR: 32.8671 → 32.7849, -0.0822). This shows that query-relative conditioning provides an ex-tra benefit for anytime reconstruction, even when absolute dates are available. 
+
+# 5. Conclusion and Limitations 
+
+Conclusion. We presented AGFlow for multimodal S1/S2 time-series reconstruction under irregular sampling and asynchronous acquisition. AGFlow uses a unified masked formulation that covers both pixel-level cloud/sensor-gap removal and full-frame masking for query-time reconstruc-tion, while preserving all observed pixels. Across the RESTORE-DiT benchmark protocol, AGFlow improves missing-frame reconstruction over the diffusion baseline and produces more reliable reconstructions under persis-tent gaps, supporting flexible downstream use such as dense vegetation monitoring. 
+
+Limitations. First, the approach assumes reliable spa-tial co-registration between S1 and S2; misregistration can degrade fusion quality. Second, to control compute and memory we rely on fixed-length temporal windows; very long-range dependencies outside the window may be only partially captured. Finally, the method is trained and tuned on Sentinel-1/2 processing conventions; adapting to other sensors, resolutions, or regions with different scatter-ing/reflectance behavior may require additional retraining and calibration. Acknowledgment 
+
+This research is supported in part by Google.org’s Impact Challenge for Climate Innovation Program and the Na-tional Science Foundation under award 2120943. We thank Google Cloud Platform and the Research Computing (RC) at Arizona State University (ASU) for their support in pro-viding computing resources to support this research. 
+
+# References 
+
+[1] Jiajun Cai, Bo Huang, and Hao Liu. Fusing sentinel-1 and sentinel-2 data with diffusion models for cloud removal. Re-mote Sensing of Environment , 331:115049, 2025. 1, 2, 3 [2] Timothy Davis, Benjamin Bischke, Patrick Helber, Caglar Senaras, Akhil Rana, Annett Wania, Ruben Van De Ker-chove, Daniele Zanaga, Wanda De Keersmaecker, Myroslava Lesiv, Franck Ranera, and Giovanni Marchisio. Rapidai4eo: A corpus of dense time series satellite imagery, 2023. 6 [3] Chunyu Dong, Gang Yang, Yumiao Wang, Weiwei Sun, Xi-angchao Meng, and Binjie Chen. Integrating multitempo-ral sar and optical information for missing optical imagery generation. IEEE Transactions on Geoscience and Remote Sensing , 62:1–14, 2024. 2, 3 [4] Matthias Drusch, Umberto Del Bello, S´ ebastien Carlier, Olivier Colin, Veronica Fernandez, Ferran Gascon, Bianca Hoersch, Claudia Isola, Paolo Laberinti, Philippe Martimort, et al. Sentinel-2: Esa’s optical high-resolution mission for gmes operational services. Remote sensing of Environment ,120:25–36, 2012. 1 [5] Patrick Ebel, Vivien Sainte Fare Garnot, Michael Schmitt, Jan Dirk Wegner, and Xiao Xiang Zhu. Uncrtaints: Un-certainty quantification for cloud removal in optical satellite time series. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 2086– 2096, 2023. 2 [6] Forouzan Fallah, Wenwen Li, Chia-Yu Hsu, Hyunho Lee, and Yezhou Yang. Rareflow: Physics-aware flow-matching for cross-sensor super-resolution of rare-earth features. arXiv preprint arXiv:2510.23816 , 2025. 2 [7] Vivien Sainte Fare Garnot, Loic Landrieu, and Nesrine Chehata. Multi-modal temporal attention models for crop mapping from satellite time series. ISPRS Journal of Pho-togrammetry and Remote Sensing , 187:294–305, 2022. 5 [8] Michael D King, Steven Platnick, W Paul Menzel, Steven A Ackerman, and Paul A Hubanks. Spatial and temporal dis-tribution of clouds observed by modis onboard the terra and aqua satellites. IEEE transactions on geoscience and remote sensing , 51(7):3826–3852, 2013. 1 [9] Yaron Lipman, Ricky T. Q. Chen, Heli Ben-Hamu, Maxi-milian Nickel, and Matt Le. Flow matching for generative modeling. In International Conference on Learning Repre-sentations (ICLR) , 2023. 2 [10] Shuaijun Liu, Hui Chen, Kai Tang, Yang Chen, Hongtao Shu, Tianyu Zan, Yong Xue, and Jin Chen. Innovative sar-optical data fusion for reflectance time series reconstruction in vegetation-covered regions. International Journal of Ap-plied Earth Observation and Geoinformation , 140:104567, 2025. 3 [11] Yi Liu, Wengen Li, Jihong Guan, Shuigeng Zhou, and Yichao Zhang. Effective cloud removal for remote sens-ing images by an improved mean-reverting denoising model with elucidated design space. In Proceedings of the Com-puter Vision and Pattern Recognition Conference , pages 17851–17861, 2025. 2, 3 [12] Andrea Meraner, Patrick Ebel, Xiao Xiang Zhu, and Michael Schmitt. Cloud removal in sentinel-2 imagery using a deep residual neural network and sar-optical data fusion. ISPRS Journal of Photogrammetry and Remote Sensing , 166:333– 346, 2020. 1, 2 [13] Julien Michel and Jordi Inglada. Temporal attention multi-resolution fusion of satellite image time-series, applied to landsat-8/9 and sentinel-2: all bands, any time, at best spa-tial resolution. Remote Sensing of Environment , 334:115159, 2026. 3 [14] Aimi Okabayashi, Nicolas Audebert, Simon Donike, and Charlotte Pelletier. Cross-sensor super-resolution of irreg-ularly sampled sentinel-2 time series. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 502–511, 2024. 3 [15] William Peebles and Saining Xie. Scalable diffusion mod-els with transformers. In Proceedings of the IEEE/CVF In-ternational Conference on Computer Vision (ICCV) , pages 4195–4205, 2023. 4 [16] Qidi Shu, Xiaolin Zhu, Shuai Xu, Yan Wang, and Denghong Liu. Restore-dit: Reliable satellite image time series re-construction by multimodal sequential diffusion transformer. 
+
+Remote Sensing of Environment , 328:114872, 2025. 2, 3 [17] Corinne Stucker, Vivien Sainte Fare Garnot, and Konrad Schindler. U-TILISE: A sequence-to-sequence model for cloud removal in optical satellite time series. IEEE Trans-actions on Geoscience and Remote Sensing , 61:1–16, 2023. 2[18] Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha, Bo Wen, and Yunfeng Liu. RoFormer: Enhanced transformer with rotary position embedding. Neurocomputing , 568: 127063, 2024. 5 [19] Kai Tang, Xuehong Chen, Tianyu Liu, Anqi Li, Yao Tang, Peng Yang, and Jin Chen. Anytimeformer: Fusing irregular and asynchronous sar-optical time series to reconstruct re-flectance at any given time. Remote Sensing of Environment ,333:115120, 2026. 2, 3, 6 [20] Ram´ on Torres, Paul Snoeij, Malcolm Davidson, David Bibby, and Svein Lokas. The sentinel-1 mission and its appli-cation capabilities. In 2012 IEEE International Geoscience and Remote Sensing Symposium , pages 1703–1706. IEEE, 2012. 1 [21] Ramon Torres, Paul Snoeij, Dirk Geudtner, David Bibby, Malcolm Davidson, Evert Attema, Pierre Potin, Bj ¨ Orn Rom-men, Nicolas Floury, Mike Brown, et al. Gmes sentinel-1 mission. Remote sensing of environment , 120:9–24, 2012. 1
