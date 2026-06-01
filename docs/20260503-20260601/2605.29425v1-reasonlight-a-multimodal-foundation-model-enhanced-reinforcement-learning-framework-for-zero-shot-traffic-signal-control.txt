@@ -1,0 +1,860 @@
+Title: ReasonLight: A Multimodal Foundation Model-Enhanced Reinforcement Learning Framework for Zero-Shot Traffic Signal Control
+
+URL Source: https://arxiv.org/pdf/2605.29425v1
+
+Published Time: Fri, 29 May 2026 00:41:49 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# REASON LIGHT : A M ULTIMODAL FOUNDATION 
+
+# MODEL -E NHANCED REINFORCEMENT LEARNING FRAMEWORK FOR ZERO -S HOT TRAFFIC SIGNAL CONTROL 
+
+Aoyu Pang 1, Maonan Wang 2,3, Yuejiao Xie 1, Chung Shue Chen 4, Zhiwei Yang 1, and Man-On Pun 1
+
+> 1
+
+School of Science and Engineering, The Chinese University of Hong Kong, Shenzhen, China 
+
+> 2
+
+Department of Mechanical and Automation Engineering, The Chinese University of Hong Kong, Hong Kong 
+
+> 3
+
+Shanghai AI Laboratory, Shanghai, China 
+
+> 4
+
+Nokia Bell Labs, Paris-Saclay, France 
+
+## ABSTRACT 
+
+Reinforcement learning (RL) has shown promise in traffic signal control (TSC). However, its re-liance on predefined states limits responsiveness to observable open-world events that are absent from training data. IoT-enabled intersections provide heterogeneous observations from roadside sensors and cameras, creating opportunities to improve RL adaptability to such event. To this end, we propose ReasonLight—a multimodal foundation model-enhanced RL framework for zero-shot TSC. ReasonLight integrates three sources of information: structured traffic measurements, multi-view camera observations, and candidate phase decisions from a pre-trained RL controller. Given an RL-proposed phase, ReasonLight extracts visual semantics from multi-view images and aligns them with compact sensor-derived scene descriptions. This alignment enables a semantic-guided refinement module to either preserve or adjust the proposed action according to traffic rules and event semantics. To ensure operational reliability, refined actions are constrained by the set of avail-able phases. Any invalid decisions rejected by falling back to the original RL action. We evaluate ReasonLight on two types of rare events not seen during RL training: emergency vehicle priority and temporary traffic regulation. Experimental results show that ReasonLight achieves zero-shot adaptation without retraining. It reduces emergency vehicle waiting time by up to 88.7% compared the RL-only backbone while preserving comparable routine traffic performance. 
+
+## 1 Introduction 
+
+Traffic signal control (TSC) is a critical component of modern intelligent transportation systems for mitigating urban congestion. Traditional TSC approaches primarily relied on rule-based or adaptive systems that adjust signal timings based on fixed control logic or historical statistics [1, 2]. However, these methods often struggle to cope with highly dynamic traffic fluctuations. To address this, reinforcement learning (RL) has emerged as a prominent data-driven approach, demonstrating strong performance by interacting with environments to optimize long-term traffic metrics [3, 4]. Despite this success, existing RL-based TSC frameworks fundamentally rely on predefined, low-dimensional structured state representations, such as queue lengths and vehicle counts [5, 6, 7, 8, 9, 10]. This inherent represen-tational bottleneck limits the ability of RL agents to perceive and respond to open-world uncertainties. In reality, intersections frequently encounter complex and long-tail situations, including emergency vehicles, temporary traffic regulations, occlusions, and noisy observations [11, 12], as illustrated in Fig. 1(a). Since these events are unpredictable and often underrepresented during training, conventional RL agents can exhibit brittle zero-shot generalization, failing to adapt to previously unseen traffic conditions without costly and unsafe retraining. To bridge the gap between closed-world training and open-world deployment, IoT-enabled intersections provide an increasingly rich sensing substrate: roadside units and loop detectors offer structured measurements such as flow, oc-cupancy, and signal status, while intersection cameras capture visual events that are difficult to encode as predefined numerical states. Multimodal foundation models (FMs) [13], particularly vision-language models (VLMs) [14], pro-vide a promising tool for interpreting such visual observations [15, 16, 17, 18, 19]. By processing camera views, VLMs 
+
+> arXiv:2605.29425v1 [cs.AI] 28 May 2026
+
+Rare Events Dynamic Regulations 
+
+Partial Observability Uncertain Perception  
+
+> Sensor
+> Noise
+> Blur Detection
+> Errors
+
+(a) 
+
+Visual 
+
+Obs .
+
+Structured 
+
+Traffic State 
+
+TSC Agent 
+
+(b) Figure 1: Open-world traffic scenarios and multimodal IoT sensing for zero-shot TSC. (a) Complex and long-tail situations such as emergency vehicle priority and temporary traffic regulations require visual semantics that are not captured by predefined structured states alone. (b) ReasonLight combines structured traffic measurements from road-side sensors with multi-view camera observations, grounding rare-event reasoning in both quantitative traffic states and visual context. can recognize semantic traffic events such as approaching emergency vehicles, temporary lane closures, and abnormal road conditions. However, vision-dominant or language-dominant controllers remain insufficient for real-time TSC because they often lack reliable access to fine-grained quantitative traffic dynamics, including lane-level flow rates, queue lengths, and occupancy patterns [20]. Moreover, language-based decision modules may produce unstable or invalid phase decisions when they are not grounded in structured traffic states and admissible signal constraints [21]. These observations suggest that open-world TSC should not rely on either structured sensing or visual reasoning alone. Instead, a practical IoT traffic controller should combine their complementary strengths. As depicted in Fig. 1(b), structured infrastructure measurements provide stable quantitative grounding for routine control, while camera-based visual semantics expose rare events that are invisible to standard RL state vectors. In this work, we therefore study a policy-agnostic refinement paradigm: an existing RL controller remains responsible for routine optimization, and a multimodal FM is introduced only as a constrained semantic evaluator that can refine the RL-proposed phase when visual and sensor-derived context indicates an unseen event. Motivated by this synergy, we propose ReasonLight , a multimodal FM-enhanced RL framework for zero-shot TSC in IoT-enabled intersections. ReasonLight is designed to be compatible with existing RL-based TSC algorithms: it only requires the candidate phase output by an RL controller and does not modify the original policy architecture or reward function. During inference, multi-view camera observations are analyzed by a VLM to extract visual semantics, while structured sensor measurements are converted into a compact textual scene description. A semantic-guided action refinement module then jointly considers the visual semantics, sensor-derived scene description, and RL-proposed action under basic traffic rules and available phase constraints. The main contributions are summarized as follows: • We propose ReasonLight, an IoT-oriented multimodal TSC framework that fuses camera-based visual semantics with structured traffic measurements from roadside infrastructure. This design enables the controller to recognize visually observable long-tail events while preserving quantitative grounding from traffic sensors. • We develop a policy-agnostic semantic-guided action refinement module that can be attached to existing RL con-trollers without retraining or reward modification. The module evaluates the RL-proposed phase using multimodal 2Table 1: Comparison with representative language- and vision-based TSC methods. Method Input modalities RL usage Visual input Structured state Uses RL Role of RL Reusable backbone 
+
+LLM-based methods 
+
+LA-Light [27] ✗ ✓ ✓ Tool ✓
+
+iLLM-TSC [15] ✗ ✓ ✓ Backbone ✓
+
+LLMLight [17] ✗ ✓ ✗ – –Traffic-R1 [19] ✗ ✓ ✗ – –
+
+VLM-based methods 
+
+VLMLight [28] ✓ ✗ ✓ Coupled ✗
+
+Ours 
+
+ReasonLight ✓ ✓ ✓ Backbone ✓
+
+context and only outputs actions from the available traffic phase set, with fallback to the RL decision for invalid outputs. • We evaluate ReasonLight on two fully unseen open-world scenarios using only basic traffic-rule prompts during inference. Experiments show that combining visual semantics with sensor-derived scene descriptions provides a more balanced and reliable decision basis than either RL-only or vision-dominant control. The remainder of this paper is organized as follows. Section 2 reviews related work. Section 3 introduces the prelimi-naries and open-world traffic scenarios. Section 4 details the proposed ReasonLight framework. Section 5 reports the experimental evaluation, and Section 6 concludes the paper. 
+
+## 2 Related Work 
+
+RL-Based Traffic Signal Control. Recent research on TSC has increasingly focused on RL to enable adaptive and real-time decision making. Traditional rule-based methods [1, 2] have been widely deployed in urban areas but often fail to adapt to the stochastic and dynamic nature of real-world traffic, resulting in suboptimal performance. To address this limitation, RL has been introduced into TSC to enable adaptive and real-time decision-making [22, 23, 10, 24]. RL-based methods typically deploy trainable agents at intersections that dynamically adjust signals based on real-time traffic states and have demonstrated promising results in simulation studies. However, deploying these methods in real-world scenarios remains challenging due to issues such as long-tail events [25] and noisy or missing observations [26], which are often underrepresented during training. To bridge the gap between controlled simulations and real-world complexity, this work proposes integrating FMs into RL-based TSC frameworks, leveraging their generalization and representation capabilities to enhance robustness and adaptability. 
+
+LLM-Based Traffic Signal Control. Developing TSC systems with strong adaptability remains a longstanding chal-lenge. Recent studies have explored the use of LLMs to enhance high-level reasoning and decision making in TSC tasks [27, 15, 17, 19]. LA-Light [27] formulates the LLM as an AI agent that can reason over complex traffic contexts and invoke external traffic-control tools, including RL-based controllers, to support human-mimetic signal decisions. iLLM-TSC [15] further integrates LLMs with RL by first allowing an RL agent to generate a signal decision and then using the LLM to evaluate and revise unreasonable actions under degraded observations or rare events. More recent methods, such as LLMLight [17] and Traffic-R1 [19], investigate LLMs as traffic signal agents or reinforced reason-ing models for improving generalization and decision interpretability. Despite these advances, most LLM-based TSC methods rely primarily on structured or textual traffic descriptions and do not directly exploit multi-view visual obser-vations from camera-equipped IoT intersections. As a result, visually grounded events such as emergency vehicles, roadwork signs, temporary barriers, or lane closures must be manually encoded or indirectly inferred from non-visual states. 
+
+Multimodal Foundation Models for Traffic Signal Control. Multimodal FMs, including VLMs, have demonstrated strong perception and cross-modal reasoning capabilities across various domains [29, 30, 31, 32, 33, 34]. Their ability to interpret camera observations makes them attractive for open-world TSC, where rare events are often visually ob-servable before they are reflected in structured traffic states. Recent VLM-based approaches, such as VLMLight [28], show that visual scene understanding can improve safety-critical traffic control. However, vision-dominant control can be unreliable for fine-grained traffic optimization, as VLMs may misestimate vehicle counts, queues, and lane 3(a) 
+
+# (b) 
+
+# (c) 
+
+## Phase -3
+
+## Phase -2
+
+## Phase -4
+
+## Phase -1
+
+Emergency Case 
+
+Regulation Case Figure 2: Illustration of the intersection environment and the evaluated open-world scenarios. (a) A standard four-way intersection layout, detailing directional traffic movements and signal phase modeling. (b) An emergency vehicle passage scenario. (c) A temporary traffic regulation scenario. occupancy in complex scenes. As summarized in Table 1, existing LLM-based methods mainly rely on structured or textual inputs, while VLM-based methods introduce visual perception but are often tied to specific control pipelines. In contrast, ReasonLight grounds visual semantics in structured traffic states and treats RL as a reusable backbone for multimodal action refinement. 
+
+## 3 Preliminaries 
+
+In this section, we formalize the TSC problem by introducing the essential traffic terminology and signal modeling. Subsequently, we detail the specific open-world traffic scenarios and the multimodal simulation environment used to evaluate the zero-shot adaptability of our proposed framework. 
+
+3.1 Intersection Topology and Signal Modeling 
+
+To illustrate the problem formulation, a standard four-way intersection is adopted in this study. As shown in Fig. 2, the layout of an intersection typically consists of multiple incoming approaches and departure legs. Each approach comprises several lanes that direct traffic into specific directional streams, formally referred to as movements (e.g., through, left-turn, and right-turn). Specifically, a movement represents the continuous traffic flow from an incoming lane group to a designated departure leg. To manage these directional streams, the signal control process is structured around signal phases . A signal phase represents a combination of non-conflicting movements that are granted the right-of-way simultaneously during a specific control interval. For instance, as illustrated in Fig. 2(a), Phase-1 is currently green, indicating that the corre-sponding through and left-turn movements are permitted to proceed. Furthermore, to ensure traffic safety and clear the intersection during phase transitions, a fixed yellow clearance interval is inserted between consecutive phases. 
+
+3.2 Open-World Traffic Scenarios 
+
+Real-world TSC tasks extend far beyond merely minimizing vehicle waiting times under normal conditions; they must also navigate various open-world uncertainties. In this study, we consider two representative long-tail traffic 4scenarios. First, as illustrated in Fig. 2(b), we evaluate the emergency vehicle passage scenario. In this safety-critical event, emergency vehicles (e.g., ambulances) approach the intersection and require immediate priority. This disrupts regular traffic flow and demands the TSC system to visually identify the approaching vehicle and promptly preempt the normal signal cycle to grant safe passage. Second, Fig. 2(c) illustrates the temporary traffic regulations scenario, which simulates ad-hoc disruptions such as unexpected lane closures or roadworks. These conditions fundamentally alter the spatial dynamics of the intersection. The common challenge in both scenarios is their heavy reliance on unstructured visual semantics, which predefined numerical states in standard RL fail to capture. To effectively emulate these visual-dependent conditions, we adopt TransSimHub [35], a vision-enabled traffic simulation platform built upon SUMO [36]. By leveraging the diverse multi-view images generated by this platform, we establish these open-world uncertainties as our primary testbed. This multimodal environment allows us to comprehensively demonstrate how integrating visual reasoning can achieve zero-shot adaptability without prior retraining. Detailed experimental configurations, including different intersection layouts, are deferred to Section 5.1. IoT Intersection Sensor State 𝑱 𝒕 
+
+Camera Views {𝑰 𝒕 
+
+> 𝒅
+
+} 
+
+> Flow Phase Occupancy
+
+RL Backbone 
+
+Semantic Encoding  
+
+> Visual Semantics
+> Structured traffic Info.
+
+Action Refinement    
+
+> Open -World Traffic Scenarios
+> {𝐼 !
+> "}
+> 𝐽 !𝑠 !
+
+## … Actor Network    
+
+> Critic Network
+> Junction
+> Encoder  𝝅 𝜽
+> 𝝊 𝝓
+> 𝒂 𝒕
+> 𝑹𝑳
+> Final Executed Action
+
+𝑎 #
+
+> ∗
+> 𝑠 !
+
+𝑖𝑓 𝑎 %! ∈ 𝐴 !
+
+> Context
+> Aggregation
+> 𝜴 𝒗
+> 𝜴 𝒔
+> VLM
+> LLM
+> No
+> Yes
+
+𝑎 ! 
+
+> ∗
+
+= 𝑎 %! 𝑎 ! 
+
+> ∗
+
+= 𝑎 !     
+
+> #$
+> Refined
+> Action
+> Origin RL
+> Action
+> {𝑎 !
+> "# ,𝛺 $,𝛺 %,𝐴 !,𝒢 }
+> 𝑎 "!,ℰ!
+
+Figure 3: Overall architecture of ReasonLight for zero-shot TSC in IoT-enabled intersections. The RL backbone generates a candidate phase from structured traffic states, while the action refinement block uses camera views and sensor-derived scene descriptions to evaluate whether the RL action should be preserved or refined under available-phase constraints. 
+
+## 4 Methodology 
+
+This section presents ReasonLight, an IoT-oriented multimodal refinement framework for RL-based TSC. We first introduce the overall architecture and inference flow, then describe the Sensor State representation, RL Backbone, Semantic Encoding module, and Action Refinement module. 
+
+4.1 ReasonLight Architecture and Inference Flow 
+
+As illustrated in Fig. 3, ReasonLight operates on an IoT intersection equipped with infrastructure sensors and multi-view cameras. At each timestep t, the intersection provides a sensor state Jt and a set of camera views {Idt }Dd=1 , where 
+
+d indexes the traffic direction and D is the number of observed directions. The sensor state Jt records structured traffic measurements such as flow, occupancy, and signal phase status. It is used by the RL backbone to generate a candidate signal phase, and is also combined with the camera views for semantic encoding. The RL backbone uses a junction encoder, an actor network πθ , and a critic network ψϕ. Given st constructed from recent sensor states, the actor network outputs the RL candidate action aRL t . In parallel, the semantic encoding module produces two complementary contexts: Ωs from structured traffic information and Ωv from visual semantics. The action refinement module performs context aggregation over (aRL t , Ωs, Ωv , At, G), where G denotes the prede-fined traffic rules and At denotes the set of signal phases available under current traffic-safety constraints. It then proposes a refined action ˜at and accepts it only if ˜at ∈ A t; otherwise, the original RL action is retained. The final executed action a∗ 
+
+> t
+
+is applied back to the IoT intersection. 5Instantiated Context Prompt     
+
+> SYSTEM PROMPT &TRAFFIC RULES :
+
+You are an traffic -signal control expert .
+
+Follow the rules below control the light :
+
+- Balance delay and queue clearance ;
+
+- Avoid blocked movements 
+
+- […]Camera Image to Scene Description 
+
+There are three barriers 
+
+placed across the rightmost 
+
+lane near the intersection, 
+
+likely indicating lane closure 
+
+or construction activity [... ]
+
+Traffic Control Knowledge 
+
+ü Movement definitions : m1 = Dir -1 → Dir -3, through ;
+
+m2 = Dir -1 → Dir -4, left -turn ; [... ]
+
+ü Phase mapping : Phase -1 = {m 1, m3}; Phase -2 = […]
+
+ü Feasibility rules : avoid blocked movements ; satisfy 
+
+min -green ; keep phase IDs valid 
+
+Intersection Statistics to Text             
+
+> 𝑚 !
+> "𝑓𝑙𝑜𝑤 𝑞𝑢𝑒𝑢𝑒 …𝑠𝑖𝑔𝑛𝑎𝑙
+> …………𝑠𝑖𝑔𝑛𝑎𝑙
+> 𝑚 !
+> #𝑓𝑙𝑜𝑤 𝑞𝑢𝑒𝑢𝑒 …𝑠𝑖𝑔𝑛𝑎𝑙
+
+The queue length 
+
+at movement 1 is  
+
+> (3)
+
+vehicles [...] 
+
+RL Recommendation Action 
+
+ü RL recommended action : Phase -2 (North -South, Left) 
+
+ü Available Phases : {Phase -1, Phase -2, Phase -3, Phase -4} 
+
+> STRUCTURED DATA :
+
+Movement 2 currently has a relatively long 
+
+queue and belongs to Phase 2. Movement 
+
+1 also shows congestion and belongs to 
+
+Phase 1, while traffic in the other 
+
+directions is not congested.  
+
+> VLM OBSERVATION :
+
+There is a temporary blockage in this 
+
+Direction, which is associated with Phase 2 
+
+and Phase 4. This indicates that Phase 2 & 
+
+4 are currently not passable.   
+
+> RL EXPERT RECOMMENDATIO N:
+
+The RL policy recommends Phase 2 
+
+because this phase can best alleviate the 
+
+current congestion. The currently feasible 
+
+signal phases are Phase 1, Phase 2, Phase 
+
+3, and Phase 4. 
+
+𝒞 /
+
+Action Refinement Prompt  
+
+> ANSWER FORMAT
+
+The final response must be in JSON 
+
+format. The JSON object should contain 
+
+two keys: " final_action " and "explanation". 
+
+{
+
+"final_action ": "Phase -1", 
+
+"explanation": "The RL -recommended 
+
+Phase -2 is modified because […]" 
+
+}  
+
+> LOGICAL REASONING CHAIN
+
+1. Analyze visual observations for special 
+
+conditions, map affected directions to 
+
+movements and phases. 
+
+2. Inspect traffic statistics for queueing. 
+
+3. Verify whether the RL action satisfies 
+
+decision guidelines, and output the final 
+
+action with explanation .
+
+4. […]  
+
+> DECISION GUIDELINE
+
+1. Prioritize emergency vehicles. 
+
+2. For congestion, select the feasible phase 
+
+associated with the most affected lane. 
+
+3. […] Figure 4: Sequential prompt workflow for action refinement. Multimodal traffic information, traffic rules, the RL-recommended action, and available phases are first assembled into the unified context Ct; a three-component action-refinement prompt then guides PAR through output-format constraints, logical reasoning, and decision guidelines to produce the final action a∗
+
+t .
+
+4.2 RL Backbone for Candidate Action Generation 
+
+The RL backbone provides the routine-traffic control policy and supplies the candidate action refined by ReasonLight. ReasonLight is policy-agnostic with respect to this backbone: semantic encoding and action refinement do not assume a specific RL algorithm, reward design, or network architecture, but only consume the safety-checked candidate action 
+
+aRL t . In this study, the backbone learns from the sensor state and remains unchanged when the multimodal modules are added. This subsection defines the state, action, reward, and training objective used by the instantiated backbone. 
+
+State: At each timestep t, the intersection state is represented as a structured feature tensor: 
+
+Jt = [ m1
+
+t , . . . , mMt ] ∈ RM ×Df , (1) where M denotes the total number of movements at the intersection, and each movement mit is represented by a 
+
+Df -dimensional feature vector: 
+
+mit =
+
+h
+
+qit, O max ,i t , O mean ,i t , I type 
+
+i , L i, I green ,i t , I minG ,i t
+
+i
+
+, (2) where qit denotes the average flow rate of movement i at time t; Omax ,i t and Omean ,i t are the maximum and mean occupancy ratios, respectively; Itype 
+
+i ∈ { 0, 1, 2} encodes the movement type, corresponding to through, left-turn, and right-turn movements; Li is the number of lanes; and Igreen ,i t and IminG ,i t indicate whether movement i is currently under green and whether the minimum-green constraint is satisfied. To model temporal traffic dynamics, the agent observes a sequence of the past K timesteps: 
+
+st = [ Jt−K+1 , . . . , Jt] ∈ RK×M ×Df , (3) where K denotes the length of the observation window. This temporal stacking mechanism exposes short-term traffic evolution, allowing the policy to capture dependencies in vehicle arrivals, queue propagation, and phase transitions. 
+
+Action: The action space is a predefined discrete phase set: 
+
+P = {p1, p 2, . . . , p |P| }, (4) 6where P denotes the set of admissible signal phases and |P| represents the total number of phases. Each phase pk
+
+corresponds to a predefined group of mutually non-conflicting traffic movements. The cardinality of P depends on the intersection geometry; for example, |P| = 4 for a standard four-leg intersection and |P| = 3 for a three-leg (T-shaped) intersection under direction-level phase modeling. 
+
+Reward: To improve traffic efficiency, the reward penalizes average vehicle delay at timestep t. Let Vt denote the set of vehicles present at the intersection, and let wvt represent the accumulated waiting time of vehicle v ∈ V t. The reward is then defined as: 
+
+rt = − 1
+
+|V t|
+
+X
+
+> v∈V t
+
+wvt . (5) Following common RL-based TSC studies, the RL backbone optimizes routine traffic efficiency using average vehicle waiting time as the reward signal. ReasonLight keeps this objective unchanged; zero-shot rare-event adaptation is introduced later through inference-time action refinement rather than retraining or reward redesign. 
+
+Backbone Inference and Optimization: In our implementation, sequential observations st are encoded by a junction encoder into a latent representation [10]. This representation is shared by the actor network πθ and the critic network 
+
+ψϕ, where the actor outputs signal control actions and the critic estimates the corresponding state values. During inference, the actor maps the observed state to an RL candidate phase: 
+
+aRL t = πθ (st). (6) The available phase subset At ⊆ P is obtained from the intersection phase configuration and current signal-control state, ensuring that actions considered by ReasonLight correspond to admissible phases at the intersection. In this study, the backbone is optimized using Proximal Policy Optimization (PPO) [37]. PPO jointly updates the actor and critic by minimizing the following objective: 
+
+min  
+
+> θ,ϕ
+
+−L p(θ) + λLv (ϕ), (7) where Lp is the clipped policy objective for the actor, Lv is the value loss for the critic, and λ balances the two terms. The actor term is defined as: 
+
+Lp(θ) = Et
+
+h
+
+min 
+
+
+
+ρt(θ) ˆAt, clip( ρt(θ), 1 − ϵ, 1 + ϵ) ˆAt
+
+i 
+
+, (8) where ρt(θ) = πθ (aRL t | st)/π θold (aRL t | st) is the policy probability ratio between the updated and old actors, and 
+
+ϵ is the clipping threshold that limits excessive policy updates. The term ˆAt measures whether the selected action performs better than the critic baseline. In implementation, it is estimated using generalized advantage estimation (GAE): 
+
+δt = rt + γψ ϕ(st+1 ) − ψϕ(st), (9) 
+
+ˆAt = 
+
+> T−t
+
+X
+
+> ℓ=0
+
+(γλ GAE )ℓ δt+ℓ, (10) where λGAE controls the bias–variance trade-off in the advantage estimate, and T is the rollout horizon. The corre-sponding return target for critic training is ˆGt = ˆAt + ψϕ(st).The critic term measures the squared error between the value estimate and the return target: 
+
+Lv (ϕ) = Et
+
+
+
+ψϕ(st) − ˆGt
+
+2
+
+, (11) where ˆGt is the value target induced by the advantage estimate and γ is the discount factor. PPO is used only as the instantiated backbone in our experiments; the ReasonLight refinement interface can be coupled with other RL policies as long as they provide a candidate action aRL t .
+
+4.3 Semantic Encoding and Prompt Construction 
+
+As illustrated in Fig. 3 and Fig. 4, ReasonLight first converts heterogeneous observations into textual descriptions and then assembles them into a unified prompt template for action refinement. This process contains two text-conversion branches and one template-construction step. 7Image-to-text conversion: At each timestep t, camera views are processed by a VLM to produce textual visual semantics rather than raw phase decisions. Let Idt denote the image captured from direction d ∈ { 1, . . . , D } at timestep t. The VLM extracts a direction-level semantic description: 
+
+vdt = fVLM (Idt ), (12) where vdt describes visually observable traffic cues such as emergency vehicle presence, blocked lanes, queue distri-bution, and abnormal road conditions. The direction-level descriptions are aggregated into a global visual context: 
+
+Ωv = Aggregate( {vdt }Dd=1 ), (13) which summarizes the visual state of the intersection. 
+
+Structured-data-to-text conversion: Meanwhile, the sensor state Jt is converted into a compact structured traffic description. This branch uses an LLM to summarize key traffic statistics such as vehicle flow, lane occupancy, current signal status, and minimum-green satisfaction: 
+
+Ωs = fLLM (Jt). (14) 
+
+Prompt template construction: The textual visual semantics Ωv , structured traffic description Ωs, RL-recommended action aRL t , available phase set At, and general traffic rules G are assembled into a unified prompt context: 
+
+Ct = Template(Ω s, Ωv , a RL t , At, G), (15) where G contains traffic-control knowledge and feasibility constraints, such as movement definitions, phase-movement mappings, and minimum-green requirements. It specifies what actions are valid under the signal-control setting, while leaving the prioritization among feasible actions to the refinement prompt. The resulting Ct is passed to the semantic-guided action refinement module. 
+
+4.4 Semantic-Guided Action Refinement Module 
+
+The semantic-guided action refinement module operates over the available phase set At defined above. Given the prompt context Ct constructed in Fig. 4, we use an LLM-based refinement function PAR as an implicit semantic evaluator rather than defining a closed-form differentiable utility: 
+
+˜at, Et = PAR (Ct), (16) where ˜at is the candidate refined phase and Et is the explanation trace. As summarized in the refinement-prompt part of Fig. 4, PAR evaluates Ct together with three fixed prompt components. The Decision Guidelines translate traffic-control priorities into preferences for preserving or revising the RL action. The Logical Reasoning Chain organizes the comparison among the RL proposal, visual semantics, structured traffic conditions, and feasible phases. The Output Format Constraint requires a machine-parseable phase identifier and concise rationale for automatic validity checking. The refinement function evaluates whether the RL-proposed phase is consistent with structured traffic conditions, visual semantics, and the traffic rules encoded in G, then obtains the final executed action through validity checking: 
+
+a∗ 
+
+> t
+
+=
+
+˜at, if ˜at ∈ A t,aRL t , otherwise. (17) If the generated output cannot be parsed or the candidate phase is not in At, the system retries up to k times. If all attempts fail, ReasonLight executes the original RL action aRL t under the same traffic-safety constraints as the backbone controller. This constrained design reduces model-induced control errors and prevents the action refinement module from issuing an unavailable traffic phase. 
+
+## 5 Experiment 
+
+5.1 Experimental Setup 
+
+All experiments are conducted on the TransSimHub [35] platform, which integrates the SUMO [36] traffic simulator with multi-view camera rendering to provide synchronized structured and visual observations. This setting matches an IoT-enabled intersection deployment, where roadside infrastructure sensors provide quantitative traffic states and cameras provide complementary visual observations. To ensure realistic traffic dynamics, the simulation enforces standard urban traffic regulations, setting the minimum green phase to 10 seconds and the fixed yellow phase to 8Algorithm 1 ReasonLight Inference Process 
+
+Require: πθ , fLLM , fVLM , PAR , G, P, maximum attempts k
+
+Ensure: Executed action sequence {a∗ 
+
+> t
+
+}
+
+1: Initialize the TSC environment 
+
+2: for each timestep t do 
+
+3: Observe state st, views {Idt }Dd=1 , and phases At
+
+4: Generate RL candidate aRL t ← πθ (st)
+
+5: Encode traffic state Ωs ← fLLM (Jt)
+
+6: Encode visual context Ωv ← fVLM ({Idt }Dd=1 )
+
+7: Assemble prompt Ct from Ωs, Ωv , a RL t , At, G
+
+8: Initialize a∗ 
+
+> t
+
+← aRL t
+
+9: for i = 1 to k do 
+
+10: (˜ at, Et) ← PAR (Ct)
+
+11: if ˜at ∈ A t then 
+
+12: a∗ 
+
+> t
+
+← ˜at
+
+13: break 
+
+14: end if 
+
+15: end for 
+
+16: Execute a∗
+
+> t
+
+17: Observe next state st+1 
+
+18: end for Time   
+
+> Traffic Flow
+> Dir -1
+> Dir -2
+> Dir -3
+> Dir -4
+> Dir -1
+> Dir -2
+> Dir -3
+> Time
+> Traffic Flow
+> Dir -1
+> Dir -2
+> Dir -3
+> Dir -4
+> Avg Flow
+> Dir -1
+> Dir -2
+> Dir -3
+> Avg Flow
+
+(a) Time   
+
+> Traffic Flow
+> Dir -1
+> Dir -2
+> Dir -3
+> Dir -4
+> Dir -1
+> Dir -2
+> Dir -3
+> Time
+> Traffic Flow
+> Dir -1
+> Dir -2
+> Dir -3
+> Dir -4
+> Avg Flow
+> Dir -1
+> Dir -2
+> Dir -3
+> Avg Flow
+
+(b) 
+
+Figure 5: Two real-world-inspired intersection environments used in the experiments: (a) a four-leg intersection in Yau Ma Tei, Hong Kong, and (b) a T-junction in Massy, France. 
+
+3 seconds. Additionally, a minimum vehicle headway of 2.5 meters is maintained to simulate safe car-following behaviors. To evaluate ReasonLight, we select two real-world intersections with distinct topological characteristics. The Yau Ma Tei intersection in Hong Kong, shown in Fig. 5a, represents a dense urban grid with complex turning restrictions and frequent congestion. The Massy intersection in France, shown in Fig. 5b, is a suburban T-junction featuring wider lanes and simpler traffic patterns. The RL backbone is trained only under routine traffic, while emergency vehicle priority and temporary traffic regulations are evaluated zero-shot without policy retraining, VLM fine-tuning, 9Table 2: Regular-vehicle efficiency under unseen emergency vehicle priority scenarios. ↓ indicates lower is better; †,
+
+> ‡
+
+, and § denote first, second, and third within each intersection and metric.                                                                                                                                   
+
+> Yau Ma Tei, Hong Kong Massy, France Category Model Avg. Travel Time ↓Avg. Waiting Time ↓Avg. Travel Time ↓Avg. Waiting Time ↓
+> Rule-based FixTime 67 .63 ±4.57 40 .00 ±2.28 75 .84 ±4.46 28 .19 ±1.58
+> Webster [39] 56 .26 ±3.39 28 .62 ±1.23 68 .92 ±2.15 20 .89 ±0.79
+> MaxPressure [40] 41 .36 ±2.22 13 .33 ±0.40 64 .82 ±4.01 15 .25 ±0.86
+> RL-based IntelliLight [41] 69 .10 ±2.86 13 .73 ±0.52 58 .29 ±0.81 10 .87 ±0.53
+> UniTSA [10] 38 .10 ±1.28 †10 .29 ±0.50 †57 .84 ±1.91 †10 .91 ±0.54 ‡
+> CCDA [42] 41 .60 ±2.02 11 .23 ±0.45 ‡62 .83 ±2.42 11 .19 ±0.38 §
+> RL Backbone 39 .54 ±1.39 ‡11 .51 ±0.16 §59 .29 ±1.41 ‡10 .77 ±0.18 †
+> VLM-based Vanilla-VLM 62 .45 ±8.76 17 .62 ±2.45 68 .40 ±6.91 18 .25 ±2.01
+> VLMLight [28] 45 .42 ±7.18 16 .68 ±3.10 62 .18 ±0.58 13 .12 ±0.13
+> ReasonLight (Ours) 41 .05 ±0.73 §12 .73 ±0.75 61 .89 ±0.94 §12 .93 ±0.37
+
+Table 3: Emergency vehicle responsiveness under unseen emergency vehicle priority scenarios. All entries report average times for EMVs.                                                                                                                                   
+
+> Yau Ma Tei, Hong Kong Massy, France Category Model EMV Travel Time ↓EMV Waiting Time ↓EMV Travel Time ↓EMV Waiting Time ↓
+> Rule-based FixTime 82 .67 ±3.23 53 .17 ±2.14 73 .60 ±4.62 27 .80 ±1.06
+> Webster [39] 59 .67 ±4.11 30 .83 ±1.79 65 .20 ±3.04 19 .80 ±0.61
+> MaxPressure [40] 36 .17 ±2.39 8.83 ±0.27 72 .40 ±2.83 22 .40 ±0.92
+> RL-based IntelliLight [41] 65 .59 ±2.80 8.14 ±0.49 57 .50 ±5.70 7.67 ±2.19
+> UniTSA [10] 33 .19 ±1.92 5.17 ±0.35 §64 .90 ±2.28 9.81 ±0.41
+> CCDA [42] 36 .24 ±1.45 5.65 ±0.31 58 .80 ±2.40 7.20 ±0.49
+> RL Backbone 41 .03 ±0.55 13 .22 ±1.19 58 .08 ±2.55 12 .27 ±0.46
+> VLM-based Vanilla-VLM 27 .79 ±3.79 ‡5.86 ±0.69 53 .01 ±8.34 §3.52 ±0.67 §
+> VLMLight [28] 32 .00 ±2.86 §2.57 ±0.93 ‡47 .32 ±6.29 †2.04 ±2.17 †
+> ReasonLight (Ours) 25 .67 ±3.30 †1.50 ±1.81 †49 .20 ±0.92 ‡2.53 ±0.50 ‡
+
+or scenario-specific prompts. At test time, ReasonLight uses Ωs and Ωv to refine the RL candidate action aRL t within the available phase set At and executes the validated action a∗ 
+
+> t
+
+.In our implementation, the PPO backbone is trained with a batch size of 128 , a rollout horizon of T = 512 , 10 
+
+optimization epochs per update, a linearly decayed learning rate initialized at 3 × 10 −4, a discount factor of γ = 0 .99 ,a generalized-advantage parameter of λGAE = 0 .95 for estimating ˆAt, a clipping threshold of ϵ = 0 .2, a value-function loss coefficient of λ = 0 .5, and an entropy coefficient of 0.01 . For semantic encoding and action refinement, Qwen3-VL [14] is deployed as the VLM encoder fVLM , while Qwen3 [38] is used as the structured encoder fLLM 
+
+and the LLM-based refinement function PAR . The resulting average decision latency is approximately 4 seconds per timestep. ReasonLight is model-agnostic and can integrate other vision-language models with minimal modifications. 
+
+5.2 Compared Methods 
+
+We compare ReasonLight with three categories of baselines: 
+
+Rule-based methods : We select three representative strategies: 1) FixTime, a static control policy where we adopt FixTime-30 with a constant phase duration of 30 seconds; 2) Webster [39], a classical approach that calculates optimal cycle lengths and phase splits based on traffic demand; and 3) MaxPressure [40], a dynamic strategy that greedily selects the phase maximizing the pressure, defined as the difference between upstream and downstream queue lengths. 
+
+RL-based methods : We evaluate three existing models and one internal ablation: 1) IntelliLight [41], a deep Q-learning approach operating at 5-second intervals using a balanced replay buffer; 2) UniTSA [10], an RL framework that enhances generalization via junction matrix representations and state augmentation; 3) CCDA [42], a centralized-critic and decentralized-actor method adjusting phase durations every 10 seconds; and 4) RL Backbone, an internal ablation of ReasonLight that executes the same actor network πθ but disables semantic encoding and action refinement. 
+
+VLM-based methods : To validate the multimodal design, we compare against: 1) Vanilla-VLM, an ablation baseline where the VLM directly outputs signal phase decisions without the RL module or structured sensor grounding; and 2) VLMLight [28], a recent vision-language TSC framework. 10 Table 4: Zero-shot performance under temporary traffic regulations at Yau Ma Tei, Hong Kong.                                                          
+
+> Method Avg. Travel Time ↓Avg. Waiting Time ↓EMV Travel Time ↓EMV Waiting Time ↓
+> FixTime 82 .60 ±0.04 55 .49 ±0.21 79 .67 ±4.67 50 .67 ±4.17
+> RL Backbone 50 .64 ±1.22 20 .51 ±0.87 61 .75 ±2.47 29 .59 ±2.00
+> VLMLight 50 .00 ±0.08 20 .23 ±0.11 36 .35 ±1.91 6.67 ±1.65
+> ReasonLight (Ours) 45 .58 ±1.56 16 .67 ±0.48 35 .59 ±1.29 6.13 ±0.06
+> (a) (b)
+
+Figure 6: Impact of the number of EMVs on ReasonLight performance: (a) traffic efficiency and (b) number of RL actions preserved by the VLM. 
+
+5.3 Evaluation Metrics 
+
+To evaluate regular-vehicle efficiency, we use Average Travel Time (ATT) and Average Waiting Time (AWT), which quantify how effectively each signal control policy mitigates congestion and reduces delays for non-emergency traffic. To assess responsiveness to safety-critical traffic, we further report Average Emergency Travel Time (AETT) and Average Emergency Waiting Time (AEWT). These metrics focus on emergency vehicles (EMVs) and directly measure whether a controller can prioritize emergency traffic while preserving feasible signal decisions. 
+
+5.4 Overall Performance 
+
+As reported in Tables 2 and 3, together with Table 4, we evaluate ReasonLight from three aspects: routine traffic efficiency, emergency vehicle response, and robustness under temporary traffic regulations. 
+
+5.4.1 Routine Traffic Efficiency 
+
+Table 2 evaluates whether ReasonLight preserves regular-vehicle efficiency when emergency vehicle priority scenarios are introduced at test time. Compared with conventional rule-based controllers, ReasonLight consistently achieves lower Avg. Travel Time and Avg. Waiting Time across both intersections. In Hong Kong, it reduces Avg. Waiting Time from 40 .00 s for FixTime and 28 .62 s for Webster to 12 .73 s , and slightly improves over MaxPressure ( 12 .73 s 
+
+versus 13 .33 s ). In France, ReasonLight also outperforms all rule-based methods, reducing Avg. Waiting Time from 
+
+15 .25 s for MaxPressure to 12 .93 s . These results show that multimodal reasoning does not compromise the basic efficiency requirement of traffic signal control. Compared with RL-based baselines, ReasonLight shows a modest efficiency trade-off on routine traffic metrics. For example, UniTSA achieves the best routine metrics in Hong Kong, while the RL Backbone obtains the lowest Avg. Waiting Time in France. This is expected because these controllers are optimized primarily for structured-state traffic efficiency, whereas ReasonLight additionally incorporates semantic cues for unseen safety-critical events. Compared with vision-dominant baselines, however, ReasonLight provides more stable routine control: it reduces Avg. Waiting Time from 17 .62 s for Vanilla-VLM and 16 .68 s for VLMLight to 12 .73 s in Hong Kong, and remains comparable to VLMLight in France ( 12 .93 s versus 13 .12 s ). Overall, ReasonLight maintains competitive routine efficiency while enabling the emergency-response capability evaluated next. 11 Table 5: Ablation of prompt reasoning components at Yau Ma Tei, Hong Kong.                              
+
+> Modules Metrics Format Chain Guidelines Avg. Travel Time ↓Avg. Waiting Time ↓EMV Travel Time ↓EMV Waiting Time ↓
+> ✓✗✗48 .88 19 .92 40 .83 11 .33
+> ✓✗✓44 .90 16 .12 33 .67 4.67
+> ✓✓✓41 .05 12 .73 25 .67 1.50
+
+5.4.2 Emergency Vehicle Efficiency 
+
+Table 3 explains the benefit behind this routine-efficiency trade-off by reporting emergency vehicle responsiveness. Compared with the RL Backbone, ReasonLight substantially reduces EMV Waiting Time from 13 .22 s to 1.50 s 
+
+in Hong Kong and from 12 .27 s to 2.53 s in France, corresponding to improvements of approximately 88 .7% and 
+
+79 .4% , respectively. Since the RL policy is not retrained and the structured numerical state does not explicitly encode emergency-vehicle semantics, these gains come from using visual context to refine the RL candidate action under the available phase constraints. Compared with VLM-based baselines, ReasonLight is strongest in the more complex Hong Kong intersection, where it achieves the lowest EMV Travel Time and EMV Waiting Time. In France, VLMLight obtains lower EMV Travel Time and EMV Waiting Time, indicating that vision-dominant control can be highly responsive in simpler intersec-tion layouts. However, considered together with Table 2, ReasonLight provides a stronger balance between routine traffic efficiency and emergency response by grounding visual semantics in structured sensor states and retaining the RL candidate phase as a reliable fallback. This trade-off is important for IoT traffic deployments, where rare-event responsiveness should not destabilize routine traffic operation. 
+
+5.4.3 Temporary Regulation Robustness 
+
+To further assess robustness under non-stationary conditions, we introduce a 50 s period of temporary traffic regulations on the Phase-1 approach at the Yau Ma Tei intersection. This setting represents a blocked-movement scenario: vehicles on the affected approach cannot discharge even when the corresponding signal phase is green. It is fully unseen during RL training and is not described by scenario-specific prompt examples. As shown in Table 4, FixTime and the RL Backbone exhibit clear performance degradation under this disruption, especially in terms of Avg. Waiting Time and EMV Waiting Time. The RL Backbone observes the accumulated queue and waiting time on the affected movement, but it lacks visual information indicating that the road is blocked. It may therefore assign green time to the congested phase under the usual assumption that green service will release queued vehicles, which becomes ineffective in this scenario. VLMLight can observe the road barrier from visual inputs, but it must infer the affected movement, its corresponding phase, and the quantitative queue demand mainly from vision-language reasoning alone; this makes its decisions less stable when movement-phase relationships must be resolved precisely. In contrast, ReasonLight achieves the strongest overall performance under temporary traffic regulations by linking the observed blockage with structured traffic states and phase definitions. The visual context helps identify that the affected movement cannot be served normally, while the structured queue, waiting-time, and phase information clarifies which signal actions are impacted and which movements remain serviceable. Compared with VLMLight, ReasonLight reduces Avg. Waiting Time from 20 .23 s to 16 .67 s and Avg. Travel Time from 50 .00 s to 45 .58 s , corresponding to improvements of approximately 17 .6% and 8.8% , respectively. It also maintains the lowest EMV Waiting Time at 6.13 s . These results indicate that integrating visual semantics with structured traffic states enables ReasonLight to make more reliable phase decisions under unseen disruptions by balancing scene-level understanding with traffic-control feasibility. 
+
+5.5 Robustness under Varying Emergency Demand 
+
+Beyond the three scenario-level evaluations above, we further vary the number of EMVs to test whether ReasonLight remains stable as emergency demand increases. Fig. 6 presents the statistical results on how different numbers of EMVs affect system performance. Specifically, Fig. 6a reports traffic efficiency under varying emergency demand, while Fig. 6b shows the retention of RL-proposed actions after action refinement. Fig. 6a shows that increasing emergency demand introduces only a limited impact on the efficiency of regular vehicles. In particular, when no EMV is present in the environment, the AWT of regular vehicles is 11 .05 s ; when the number of 12 Decision Reasoning Visual Evidence and Semantic Context 
+
+Visual Evidence 
+
+Semantic Context                                      
+
+> Police
+> Car
+> Dir -1
+> Dir -2
+> Dir -3
+> Dir -4
+> Dir -1
+> Dir -2
+> Dir -3
+> Dir -4
+> Emergency vehicles are detected in Dir -1,including an ambulance and a
+> police car entering the intersection, indicating ahigh -priority EMV scenario .
+> Since Dir -1has priority ,the corresponding signal phase sh sould be
+> activated .The congestion is moderate with no significant delays .[…]
+
+VLM 
+
+Output 
+
+Structu 
+
+red                                   
+
+> At this step, the RL agent selects an action corresponding to Phase 3.The
+> sensor -to -phase mapping indicates that Dir -1corresponds to Phase -0,
+> Dir -2to Phase -1….The mean vehicle occupancy for each movement is
+> 12 .3%for m1,[…]
+
+Decision Guidelines: 
+
+Logical Reasoning Chain: 
+
+Answer Format :
+
+Correct Decision 
+
+Phase -3
+
+注意： 
+
+1. 不同区域的⾼亮颜⾊ 
+
+2. ⽂字按我的⽅式，你 
+
+3. 最后的 decision 最好 
+
+1. 框的颜⾊ ，⽂字 hight 
+
+1. Phase 和图 对应 
+
+加⼀个图标 
+
+三个模块 / 消融 
+
+gudline 
+
+推理 
+
+format                                                
+
+> E m e rg e n c y ve h ic le s m u st b e g ra n te d
+> priority through the intersection ;if their
+> path is clear of blockages and safety
+> conflicts, the final decision should select the
+> corresponding signal phase .[... ]
+> Dir -1contains an ambulance and apolice
+> car under moderate congestion,
+> to
+> suppor t safe and efficient em ergency
+> passage .[... ]
+> Final Action :Phase -0
+> Explanations :Activate Phase -0because
+> Dir -1contains high -priority emergency
+> vehicles, […]
+
+{
+
+}
+
+Phase -0Figure 7: Case Study 1: ReasonLight Decision Pipeline for Emergency Vehicle Prioritization. EMVs increases to 5, the AWT rises only to 13 .10 s . This indicates that ReasonLight can support stronger emergency priority requirements while maintaining stable routine traffic performance under different traffic pressures. Fig. 6b further shows the retention of RL-proposed actions after semantic-guided action refinement. As the number of EMVs increases, ReasonLight preserves fewer RL-proposed actions, indicating that the system refines RL actions more frequently to better satisfy the priority requirements of emergency vehicles. Conversely, as the number of EMVs decreases, both the action refinement rate and the AWT gradually decrease. These results indicate that the proposed framework can adaptively adjust its behavior according to observed emergency-demand levels, rather than applying unnecessary semantic intervention under routine traffic conditions. 
+
+5.6 Ablation Analysis 
+
+To examine the fixed refinement prompt inside PAR , we conduct ablation studies at the Yau Ma Tei intersection in Hong Kong. All variants share the prompt context Ct, including the traffic rules G, and differ only in the prompt-level controls used by PAR . Since the controller requires a parseable phase identifier, the output format constraint is retained in every variant. We then incrementally add Decision Guidelines and the Logical Reasoning Chain to evaluate their contribution to semantic-guided action refinement. The results are summarized in Table 5. The format-only variant can produce executable actions, but it lacks explicit priorities for applying the traffic rules to the current decision. As a result, it obtains relatively high Avg. Waiting Time and EMV Waiting Time. Adding Decision Guidelines substantially improves both routine efficiency and emergency response, reducing EMV Waiting Time from 11 .33 s to 4.67 s . This indicates that control-oriented priorities, such as serving feasible emergency-vehicle movements and avoiding blocked movements, help PAR translate the rules in G into more traffic-aware refinement decisions. The full ReasonLight setting further adds the Logical Reasoning Chain, which instructs PAR to compare the RL-recommended action with visual semantics, structured traffic conditions, and feasible phases before producing the refined action. This yields the best performance, with Avg. Waiting Time and EMV Waiting Time reduced to 12 .73 s 
+
+and 1.50 s , corresponding to reductions of 36% and 87% relative to the format-only setting, respectively. These results support the design in Sec. 4.4: prompt-level controls make the LLM-based evaluator more disciplined, auditable, and aligned with traffic-signal constraints. 13 Decision Reasoning Visual Evidence and Semantic Context 
+
+Visual Evidence 
+
+Semantic Context                                    
+
+> Temporary
+> blockage
+> Dir -1
+> Dir -2
+> Dir -3
+> Dir -4
+> Dir -1
+> Dir -2
+> Dir -3
+> Dir -4
+> There are three barriers placed in Dir -2at the intersection, likely indicating
+> alane closure .Since Dir -2corresponds to Phase 1,green signals for these
+> phases should be avoided .No special conditions are observed in the other
+> directions .[…]
+
+VLM 
+
+Output 
+
+Structu 
+
+red                                      
+
+> At this step, the RL agent selects Action 1,which corresponds to Phase -1.
+> The sensor -to -phase mapping indicates that Dir -1corresponds to Phase -0,
+> Dir -2to Phase -1….The observed vehicle counts for the four movements
+> are 4vehicles in Direction 1.[…]
+
+Correct Decision 
+
+注意： 
+
+1. 不同区域的⾼亮颜⾊ 
+
+2. ⽂字按我的⽅式，你 
+
+3. 最后的 decision 最好 
+
+1. 框
+
+Decision Guidelines:                                 
+
+> Road barriers indicate and
+> restrict passage in the affected direction .
+> Therefore, any signal phase serving this
+> movement should be regarded as infeasible
+> and avoided .Afeasible alternative phase
+> should be selected to ensure safe and
+> efficient intersection operation .[... ]
+
+Logical Reasoning Chain:                                
+
+> are observed in Dir -2,
+> indicating this movement is restricted .Since
+> Dir -2corresponds to Phase -1,the phase is
+> .The RL agent selects Phase -1,
+> which conflicts with the constraint, so it is
+> rejected and refined to Phase -2.[…]
+
+Phase -1 Phase -0
+
+Answer Format :           
+
+> Final Action :Phase -0
+> Explanations :Since Traffic Phase -1is
+> under active control vehicles ,[…]
+
+{
+
+}Figure 8: Case Study 2: ReasonLight Decision Pipeline for Temporary Traffic Regulations. 
+
+5.7 Qualitative Case Studies 
+
+Finally, we examine the reasoning behavior of ReasonLight through two representative case studies: EMV prioriti-zation and temporary traffic regulation, as illustrated in Fig. 7 and Fig. 8. These two scenarios correspond to safety-critical event handling and dynamic traffic organization changes, respectively. They are used to verify the capability of the proposed framework to integrate multimodal information and make context-aware decisions in complex traffic environments. In the EMV prioritization case shown in Fig. 7, the visual inputs consist of multi-view observations, denoted as Scene-
+
+i, where each view corresponds to an incoming direction and its associated signal phase. A bird’s-eye view (BEV) is also included to provide global spatial context. ReasonLight identifies the approaching emergency vehicle from visual observations and refines the RL-proposed action when the original phase does not sufficiently prioritize the emergency route. This illustrates how visual semantics compensate for the absence of EMV information in structured sensor states. In the temporary traffic regulation case shown in Fig. 8, lane closures and traffic control measures alter the effective traffic layout, making predefined numerical states insufficient to describe the scene. ReasonLight uses visual cues such as blocked lanes and barrier placement together with structured traffic features, including signal phase, queue length, and waiting time, to evaluate the candidate action. Although the VLM may produce imperfect fine-grained descriptions, such as inaccurate vehicle counts, the final decision remains grounded in structured states and constrained by the available phase set. This case highlights the benefit of combining visual semantics with sensor-based traffic measurements rather than relying on visual reasoning alone. 
+
+## 6 Conclusion 
+
+This work presents ReasonLight, an IoT-oriented multimodal TSC framework that integrates RL control, structured traffic sensing, and visual semantic reasoning. By preserving the RL controller as the primary policy and introduc-ing a constrained semantic-guided refinement layer, ReasonLight enhances adaptability to visually observable rare events without requiring retraining or reward redesign. Experiments on two real-world-inspired intersections demon-strate that ReasonLight improves emergency vehicle response and robustness under temporary traffic regulations while maintaining competitive routine traffic performance. 14 Future work will focus on improving multimodal perception through traffic-domain adaptation of FMs and incorpo-rating V2X communication to further enhance situational awareness. Extending ReasonLight to large-scale multi-intersection coordination and developing continual learning strategies for long-term adaptation are also important directions. Overall, this work highlights the potential of integrating multimodal foundation models with RL for robust, context-aware, and IoT-enabled traffic signal control. 
+
+## References 
+
+[1] P. Lowrie, “SCATS, sydney co-ordinated adaptive traffic system: A traffic responsive method of controlling urban traffic,” Roads and Traffic Authority NSW, Traffic Control Section (Darlinghurst, NSW) , 1990. [2] P. Koonce and L. Rodegerdts, “Traffic signal timing manual.” United States. Federal Highway Administration, Tech. Rep., 2008. [3] H. Wei, G. Zheng, V. Gayah, and Z. Li, “A survey on traffic signal control methods,” arXiv preprint arXiv:1904.08117 , 2019. [4] Z. Zhai, R. Hao, B. Cui, and S. Wang, “Hgat and multi-agent rl-based method for multi-intersection traffic signal control,” IEEE Transactions on Intelligent Transportation Systems , vol. 26, no. 5, pp. 6848–6864, 2025. [5] M. Noaeen, A. Naik, L. Goodman, J. Crebo, T. Abrar, Z. S. H. Abad, A. L. Bazzan, and B. Far, “Reinforcement learning in urban network traffic signal control: A systematic literature review,” Expert Systems with Applica-tions , vol. 199, p. 116830, 2022. [6] H. Zhao, C. Dong, J. Cao, and Q. Chen, “A survey on deep reinforcement learning approaches for traffic signal control,” Engineering Applications of Artificial Intelligence , vol. 133, p. 108100, 2024. [7] H. Kamal, W. Y´ anez, S. Hassan, and D. Sobhy, “Digital-twin-based deep reinforcement learning approach for adaptive traffic signal control,” IEEE Internet of Things Journal , vol. 11, no. 12, pp. 21 946–21 953, 2024. [8] A. Pang, Z. Xu, M. Wang, M.-O. Pun, and Y. Kan, “Reinforcement learning-based traffic signal control using delayed observations for v2x,” in ICC 2023 - IEEE International Conference on Communications , 2023, pp. 4020–4025. [9] M. Wang, Y. Chen, Y. Kan, C. Xu, L. Michael, M.-O. Pun, and X. Xiong, “Traffic Signal Cycle Con-trol with Centralized Critic and Decentralized Actors under Varying Intervention Frequencies,” arXiv preprint arXiv:2406.08248 , 2024. [10] M. Wang, X. Xiong, Y. Kan, C. Xu, and M.-O. Pun, “UniTSA: A universal Reinforcement Learning Framework for V2X Traffic Signal Control,” IEEE Transactions on Vehicular Technology , pp. 1–16, 2024. [11] G. Dulac-Arnold, N. Levine, D. J. Mankowitz, J. Li, C. Paduraru, S. Gowal, and T. Hester, “Challenges of real-world reinforcement learning: definitions, benchmarks and analysis,” Machine Learning , vol. 110, no. 9, pp. 2419–2468, 2021. [12] M. Chen, Y. Bai, H. V. Poor, and M. Wang, “Efficient rl with impaired observability: Learning to act with delayed and missing state observations,” Advances in Neural Information Processing Systems , vol. 36, 2024. [13] C. Li, Z. Gan, Z. Yang, J. Yang, L. Li, L. Wang, and J. Gao, “Multimodal foundation models: From specialists to general-purpose assistants,” Foundations and Trends in Computer Graphics and Vision , vol. 16, no. 1-2, pp. 1–214, 2024. [14] S. Bai, Y. Cai, R. Chen, K. Chen, X. Chen, Z. Cheng, L. Deng, W. Ding, C. Gao, C. Ge et al. , “Qwen3-VL technical report,” arXiv preprint arXiv:2511.21631 , 2025. [15] A. Pang, M. Wang, M.-O. Pun, C. S. Chen, and X. Xiong, “iLLM-TSC: Integration reinforcement learning and large language model for traffic signal control policy improvement,” arXiv preprint arXiv:2407.06025 , 2024. [16] T. Cui, X. Lin, S. Li, M. Chen, Q. Yin, Q. Li, and K. Xu, “Trafficllm: Enhancing large language models for network traffic analysis with generic traffic representation,” arXiv preprint arXiv:2504.04222 , 2025. [17] S. Lai, Z. Xu, W. Zhang, H. Liu, and H. Xiong, “Llmlight: Large language models as traffic signal control agents,” in Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 1 ,2025, pp. 2335–2346. [18] Z. Yuan, S. Lai, and H. Liu, “Collmlight: Cooperative large language model agents for network-wide traffic signal control,” arXiv preprint arXiv:2503.11739 , 2025. [19] X. Zou, Y. Yang, Z. Chen, X. Hao, Y. Chen, C. Huang, and Y. Liang, “Traffic-r1: Reinforced llms bring human-like reasoning to traffic signal control systems,” arXiv preprint arXiv:2508.02344 , 2025. 15 [20] C. Meng, X. Wang, Q. Tu, Z. Mao, and J. Shen, “Sl-seg: A cnn-transformer fusion network for road surface and lane segmentation in complex scenarios,” IEEE Transactions on Intelligent Transportation Systems , 2025. [21] Z. Pu, Z. Cui, J. Tang, S. Wang, and Y. Wang, “Multimodal traffic speed monitoring: A real-time system based on passive wi-fi and bluetooth sensing technology,” IEEE Internet of Things Journal , vol. 9, no. 14, pp. 12 413– 12 424, 2022. [22] A. Pang, M. Wang, Y. Chen, M.-O. Pun, and M. Lepech, “Scalable Reinforcement Learning Framework for Traffic Signal Control under Communication Delays,” IEEE Open Journal of Vehicular Technology , 2024. [23] A. Oroojlooy, M. Nazari, D. Hajinezhad, and J. Silva, “Attendlight: Universal attention-based reinforcement learning model for traffic signal control,” Advances in Neural Information Processing Systems , vol. 33, pp. 4079–4090, 2020. [24] G. Zhang, H. Huang, and F. Chang, “TS-PVL: Two-stage deep-reinforcement-learning-based traffic light with pedestrian-vehicle control in mixed-autonomy traffic,” IEEE Internet of Things Journal , vol. 12, no. 15, pp. 31 001–31 014, 2025. [25] H. Su, Y. D. Zhong, B. Dey, and A. Chakraborty, “EMVLight: A decentralized reinforcement learning framework for efficient passage of emergency vehicles,” in Proceedings of the AAAI Conference on Artificial Intelligence ,vol. 36, 2022, pp. 4593–4601. [26] Y. Feng, S. Hou, H. Lin, Y. Zhu, P. Wu, W. Dong, J. Sun, Q. Yan, and Y. Zhang, “Difflight: integrating content and detail for low-light image enhancement,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 6143–6152. [27] M. Wang, A. Pang, Y. Kan, M.-O. Pun, C. S. Chen, and B. Huang, “LLM-Assisted Light: Leveraging Large Language Model Capabilities for Human-Mimetic Traffic Signal Control in Complex Urban Environments,” 
+
+arXiv preprint arXiv:2403.08337 , 2024. [28] M. Wang, Y. Chen, A. Pang, Y. Cai, C. S. Chen, Y. Kan, and M.-O. Pun, “VLMLight: Safety-critical traffic signal control via vision-language meta-control and dual-branch reasoning architecture,” in Proceedings of the Thirty-Ninth Annual Conference on Neural Information Processing Systems (NeurIPS) , 2025. [29] R. Zhang, B. Zhang, Y. Li, H. Zhang, Z. Sun, Z. Gan, Y. Yang, R. Pang, and Y. Yang, “Improve vision language model chain-of-thought reasoning,” arXiv preprint arXiv:2410.16198 , 2024. [30] Y. Xu, Y. Hu, Z. Zhang, G. P. Meyer, S. K. Mustikovela, S. Srinivasa, E. M. Wolff, and X. Huang, “Vlm-ad: End-to-end autonomous driving through vision-language model supervision,” arXiv preprint arXiv:2412.14446 ,2024. [31] S. Yin, C. Fu, S. Zhao, K. Li, X. Sun, T. Xu, and E. Chen, “A survey on multimodal large language models,” 
+
+National Science Review , vol. 11, no. 12, p. nwae403, 2024. [32] R. Zhao, Q. Yuan, J. Li, Z. Wang, Y. Li, Z. Gao, H. Hu, and F. Gao, “Vlm-driver: Human-like autonomous driving decision-making via vision language model,” IEEE Transactions on Vehicular Technology , 2025. [33] W. Dong, S. Lu, X. Chen, S. Zhang, Q. Liu, Z. Liu, L. Chen, H. Wang, and Y. Cai, “End-to-end autonomous driving: From classic paradigm to large model empowerment—a comprehensive survey,” IEEE Internet of Things Journal , vol. 13, no. 3, pp. 3870–3898, 2026. [34] F. Liu, X. Li, W. Gao, J. Xiong, G. Niu, and C. S. Chen, “MSET: Multimodal semantic-enhanced real-world beam prediction via temporal modeling with visual foundation models,” IEEE Internet of Things Journal , pp. 1–1, 2026. [35] M. Wang, Y. Chen, Y. Cai, A. Pang, Y. Xie, Z. Ma, C. Xu, K. Jiang, D. Wang, L. Roullet et al. , “Transimhub: A unified air-ground simulation platform for multi-modal perception and decision-making,” arXiv preprint arXiv:2510.15365 , 2025. [36] D. A. Guastella, E. Montero-Porras, A. Morales-Hern´ andez, and G. Bontempi, “Traffic modeling with SUMO: A tutorial,” arXiv preprint arXiv:2304.05982 , 2023. [37] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Proximal policy optimization algorithms,” 
+
+arXiv preprint arXiv:1707.06347 , 2017. [38] A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv et al. , “Qwen3 technical report,” arXiv preprint arXiv:2505.09388 , 2025. [39] F. V. Webster, “Traffic signal settings,” Road Research Laboratory, Road Research Technical Paper No. 39, 1958. [40] P. Varaiya, “Max pressure control of a network of signalized intersections,” Transportation Research Part C: Emerging Technologies , vol. 36, pp. 177–195, 2013. 16 [41] H. Wei, G. Zheng, H. Yao, and Z. Li, “Intellilight: A reinforcement learning approach for intelligent traffic light control,” in Proceedings of the 24th ACM SIGKDD international conference on knowledge discovery & data mining , 2018, pp. 2496–2505. [42] M. Wang, Y. Chen, Y. Kan, C. Xu, M. Lepech, M.-O. Pun, and X. Xiong, “Traffic signal cycle control with cen-tralized critic and decentralized actors under varying intervention frequencies,” IEEE Transactions on Intelligent Transportation Systems , 2024. 17

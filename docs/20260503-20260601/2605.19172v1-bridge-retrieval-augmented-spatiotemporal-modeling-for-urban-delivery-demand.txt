@@ -1,0 +1,508 @@
+Title: Bridge: Retrieval-Augmented Spatiotemporal Modeling for Urban Delivery Demand
+
+URL Source: https://arxiv.org/pdf/2605.19172v1
+
+Published Time: Wed, 20 May 2026 00:26:05 GMT
+
+Number of Pages: 6
+
+Markdown Content:
+2026 IEEE 29th International Conference on Intelligent Transportation Systems (ITSC 2026) 
+
+# BRIDGE : Retrieval-Augmented Spatiotemporal Modeling for Urban Delivery Demand 
+
+Yihong Tang 1 Tong Nie 2 Junlin He 2 Qianjun Huang 3 Dingyi Zhuang 4 Lijun Sun 1 B
+
+> 1
+
+McGill University 2The Hong Kong Polytechnic University 3University of Toronto 4MIT 
+
+yihong.tang@mail.mcgill.ca , lijun.sun@mcgill.ca (Corresponding) 
+
+Abstract —Forecasting urban delivery demand becomes sub-stantially more challenging when newly added service regions lack historical records. Existing spatiotemporal forecasters effec-tively model spatial dependence once sufficient node histories are available. Still, they remain parametric and therefore struggle to recover short-term operational dynamics in cold-start regions. Geospatial embeddings help identify where a region is and what function it serves, yet they do not directly reveal how a similar re-gion behaves under a comparable temporal context. We propose BRIDGE , a retrieval-augmented spatiotemporal graph framework that combines an inductive contextual graph backbone with a time-aware memory of region-time windows. For each target region, BRIDGE retrieves future demand patterns from the memory using both regional context and recent dynamics, and refines the backbone forecast through a gated fusion mechanism. To align retrieval with forecasting utility, we further train the retriever with a future-aware objective that favors entries whose future trajectories best match the target. Experiments on four real-world delivery datasets show that B RIDGE consistently im-proves over competitive spatiotemporal baselines in both within-city cold-start and cross-city transfer with partial observations. The results show that retrieval augmentation provides a useful operational memory for cold-start urban demand forecasting when parametric graph generalization alone is insufficient. 
+
+Index Terms —Urban Logistics, Delivery Demand Forecasting, Retrieval Augmentation, Intelligent Transportation Systems 
+
+I. I NTRODUCTION 
+
+Urban delivery demand forecasting is a core component of last-mile logistics because it directly affects locker de-ployment, depot planning, courier dispatching, and service reliability [1]–[4]. As e-commerce networks expand, demand estimation is no longer needed only for mature service zones with long operational records. Operators frequently open new delivery regions, add parcel lockers, or expand to suburban districts where little or no demand history is available. In such cases, the forecasting problem is inherently inductive: the model must infer future demand for regions that cannot be treated as fully supervised time series. Real-world delivery networks are dynamic by nature. Oper-ators expand parcel-locker systems, open new service areas, or reorganize regions, and newly introduced locations often have little or no historical demand at deployment time. Even in existing cities, some regions may only be partially observed due to recent rollout or limited data collection. As a result, forecasting must operate under partial observability: the model needs to estimate future demand for regions with weak or missing local histories, rather than simply extrapolating well-observed time series. Figure 1 illustrates a representative ex-New Parcel Lockers 
+
+Figure 1. Parcel-locker expansion in Berlin, 2025. The left and right panels show lockers deployed in the first and second halves of the year, respectively. New facilities may be important but initially lack local demand histories. 
+
+pansion scenario, where newly deployed lockers are geograph-ically and operationally important but lack sufficient historical records to support conventional graph-based forecasting. Graph-based spatiotemporal models are a natural founda-tion for this problem because delivery demand is spatially correlated across nearby or functionally similar regions [5]– [9]. By propagating information over a graph, these models can transfer signals from well-observed regions to those with limited data. However, they remain fully parametric: when a region has little history or exhibits a regime that is un-derrepresented in training, the model must rely solely on its learned parameters to extrapolate future demand. Even when enhanced with geospatial embeddings from large language models (LLMs) that encode static regional semantics [10]– [12], the predictor still lacks explicit access to how similar regions evolved under comparable short-term conditions. To address this limitation, we introduce retrieval augmenta-tion into spatiotemporal forecasting. Instead of requiring the graph networks to implicitly memorize diverse demand dy-namics, we maintain a memory of historical regional delivery patterns and their corresponding future demands. For a target region at the current time, the model retrieves past windows that are similar in regional context and recent dynamics, and uses their stored futures as a prior. This way, retrieval directly supplies candidate future patterns, complementing the graph model when local observations are sparse or missing. Based on this idea, we propose B RIDGE , short for Bank-Retrieval Inductive Demand Graph lEarning. B RIDGE com-bines an inductive contextual graph backbone with time-aware retrieval of future priors, a gated fusion mechanism in prediction space, and a future-aware retriever objective aligned with forecasting utility. The design is intentionally targeted at the two settings above: single-city cold-start forecasting and cross-city transfer with partial target observations. The contributions of this paper are threefold: 1 
+
+> arXiv:2605.19172v1 [cs.LG] 18 May 2026 2026 IEEE 29th International Conference on Intelligent Transportation Systems (ITSC 2026)
+> •
+
+We study delivery demand forecasting under partial ob-servability, where some regions have little or no historical demand at prediction time, and frame it as a retrieval-augmented spatiotemporal learning problem.  
+
+> •
+
+We propose B RIDGE , which integrates an inductive contex-tual graph backbone with time-aware retrieval of possible fu-ture demand patterns and gated forecast refinement, together with a future-aware training objective for the retriever.  
+
+> •
+
+We conduct comprehensive experiments on four real-world delivery datasets. Results show that our method consistently outperforms powerful baselines in both within-city cold-start and cross-city transfer scenarios. II. R ELATED WORK 
+
+a) Delivery Demand Forecasting: Prior work studies demand estimation, route prediction, and platform-level fore-casting using statistical and deep learning models [2], [13], [14]. Most methods assume sufficient historical records for all regions. In practice, however, delivery networks evolve con-tinuously, and newly deployed or sparsely monitored regions often lack adequate history, leading to structural missingness at the regional level. Recent work such as I MPEL [4] explores inductive training strategies to improve generalization to un-seen regions, but these approaches remain fully parametric and must extrapolate demand patterns solely from learned weights. 
+
+b) Spatiotemporal Graph Modeling: Spatiotemporal graph neural networks (STGNNs) model correlated regional demand via spatial propagation and temporal dynamics [5]– [7], [15]. Extensions to graph-based imputation and kriging address partially observed nodes [16]–[18]. Compared with imputation, our setting requires forecasting future demand for all regions while some are cold-start at prediction time, and considers deployment across cities under partial observability. 
+
+c) Geospatial Representations and Retrieval: Large lan-guage models (LLMs) have been used to derive transferable geospatial embeddings from textual and urban metadata [10], [11]. These embeddings provide static semantic priors but do not capture short-term demand dynamics. Retrieval-augmented learning reuses non-parametric historical examples [19] and offers a complementary mechanism. In this work, we retrieve historical region-time windows and their future demand pat-terns to support cold-start delivery forecasting. III. P ROBLEM FORMULATION 
+
+We consider city-wide delivery demand aggregated to a set 
+
+R of regions of interest (ROIs). Let ri ∈ R denote the i-th region. The delivery demand xit is defined as the number of orders whose pickup locations fall into region ri during the 
+
+t-th time interval. Given a historical window of length W and a forecasting horizon of length H, we denote the historical and future delivery demands of region i as 
+
+xit−W +1: t ∈ RW , yit+1: t+H ∈ RH . (1) Stacking all N regions yields: 
+
+Xt−W +1: t ∈ RW ×N , Yt+1: t+H ∈ RH×N . (2) Not all regions are assumed to have observable histories. Let 
+
+RO 
+
+> t
+
+⊆ R = {r1, . . . , r N } denote the set of regions whose historical demand is observable at time t, and let RU 
+
+> t
+
+= R\RO
+
+> t
+
+denote the set of unobserved (cold-start) regions. We define a binary observation mask mt ∈ { 0, 1}N such that mit = 1 if 
+
+ri ∈ RO 
+
+> t
+
+and mit = 0 otherwise. Then the input at time t is: 
+
+XO  
+
+> t−W+1: t
+
+= {xit−W +1: t | ri ∈ RO 
+
+> t
+
+}. (3) Each region ri is associated with a vector ci ∈ Rdc that could summarize its geographic and demographic contexts. These regional contexts are constructed from region-level metadata and are assumed to be time-invariant. Let C =[c1, . . . , cN ]⊤ ∈ RN ×dc denote the contexts of all regions, the forecasting objective is to learn a predictor fθ :
+
+bYt+1: t+H = fθ
+
+ XO 
+
+> t−W+1: t
+
+, C, mt
+
+ , (4) that estimates future demand for all regions, including those in RU 
+
+> t
+
+whose histories are unavailable. IV. M ETHOD 
+
+Figure 2 gives an overview of the B RIDGE framework. 
+
+A. Regional Context Embedding 
+
+The first design question is how to represent a region. In our task, cold-start regions provide little or no demand history, so the model cannot rely on time series alone to identify their roles in the urban system. We therefore require a region descriptor that is available for both observed and unobserved regions and remains comparable across cities. In practice, the regional context ci is derived from geographic and demographic attributes collected from OpenStreetMap and related public urban metadata. These structured descriptions are encoded using LLMG EO VEC [12], which maps textual region-level information into a dense vector representation, providing a unified description of region function, land-use, and surrounding urban context compared with manually en-gineered covariates. Such static contextual information com-plements dynamic demand signals and provides a transferable prior for regions with limited or missing histories. To obtain a compact representation for downstream retrieval and graph construction, we map ci into a dg -dimensional latent space: 
+
+gi = ϕc(ci) = Wcci ∈ Rdg . (5) The projection ϕc(·) reduces the embedding dimension and is optimized with the forecasting objective. 
+
+B. Contextual Graph Learning 
+
+To enable forecasting under partial observability, the model must propagate information from regions with available histo-ries to those without. At each time t, only a subset of regions 
+
+RO 
+
+> t
+
+has observed demand histories. Training directly on a fixed observed set may overfit transductively to seen nodes, while deployment requires inductive generalization to unseen or newly revealed regions. Therefore, at each training instance, we randomly sample a subset Ract  
+
+> t
+
+⊆ RO 
+
+> t
+
+as the active regions whose historical inputs are retained, and treat the remaining 22026 IEEE 29th International Conference on Intelligent Transportation Systems (ITSC 2026) Retrieval Memory       
+
+> ……
+> Similarity  …
+> Top -K
+> Retrieve
+> Weighted Avg.
+> Future Prior Retrieval Future -aware
+> Retrieval Trainin g
+> Margin -based
+> Best Retrieved
+> Candidate
+> Optimize
+> Future
+> Prior
+> Predicted
+> Deman d
+> Gated Fusion
+> Future Prior Fusion
+> LLMGeoVec
+> Regional
+> Context
+> Pretrained LLMs
+> Delivery
+> Deman d
+> GCN
+> Inductive Training
+> Inference
+> Message
+> Passing
+> 𝐡 !inactive active
+> unobservable
+> 𝐳 !
+> 𝐠 !
+> Context Graph Learning Regional Context Embeddin g
+> Future
+> Prior
+> Figure 2. Overview of B RIDGE . Region contexts and historical demand are encoded for inductive graph forecasting; a time-aware memory retrieves future priors from similar region-time patterns; the retrieved priors are then fused with the graph forecast for final prediction.
+
+regions Rinact  
+
+> t
+
+= RO 
+
+> t
+
+\ Ract  
+
+> t
+
+as inactive , whose histories are masked to simulate cold-start conditions. During training, we construct an inductive graph over the observable region set 
+
+RO 
+
+> t
+
+. At inference time, we build the graph over all regions 
+
+R, where edges are defined by contextual similarity computed from {gi}. Therefore, the adjacency matrix at time t is: 
+
+At = softmax  GeLU( GtG⊤ 
+
+> t
+
+) , (6) where Gt stacks the contextual representations of regions participating in the graph at time t. During training, this corresponds to regions in RO 
+
+> t
+
+, while at inference time it includes all regions in R. The graph structure is independent of demand availability, allowing both active and inactive regions to participate in message passing. For each region ri, we extract a temporal representation from its historical demand: 
+
+zi = ϕt
+
+ exit−W +1: t
+
+ ∈ Rdz , (7) where ϕt(·) is a temporal encoder as a linear projection over the history window. The masked history is defined as: 
+
+exit−W +1: t =
+
+(
+
+xit−W +1: t, ri ∈ Ract  
+
+> t
+
+,
+
+0, ri ∈ Rinact  
+
+> t
+
+.
+
+Thus, inactive regions remain in the graph but do not con-tribute to temporal signals. The initial node representation is formed by concatenating temporal and contextual components: 
+
+h(0)  
+
+> i
+
+= [ zi ∥ gi]. Message passing [20] is then performed as: 
+
+H(ℓ+1) = GCN 
+
+
+
+H(ℓ), At
+
+
+
++ H(ℓ), ℓ = 0 , . . . , L − 1, (8) where H(0) = [ h(0) 1 , . . . , h(0)  
+
+> |RO
+> t|
+
+]⊤. This contextual backbone enables information propagation from active to inactive re-gions, encouraging the model to learn inductive transfer across nodes while maintaining a shared parametric predictor. 
+
+C. Learning to Retrieve Future Priors 
+
+Cold-start demand forecasting is often governed by short-term operational dynamics, such as lunch peaks, evening surges, and time-of-day specific patterns. These patterns are highly regular in the sense that similar regional contexts can exhibit similar dynamics under comparable temporal condi-tions, yet they are difficult to infer from parameters alone when historical observations are missing. We therefore equip the model with a time-aware retrieval mechanism that provides a future prior by reusing region-time patterns stored in memory. 
+
+1) Memory Construction and Representation: Let B denote the retrieval memory bank. Each entry corresponds to a region-time window of total length W + H ending at time τ . For a region rj and a window ending at τ , we store 
+
+bτ,j =
+
+
+
+cj , exjτ −W +1: τ , yjτ +1: τ +H , h τ
+
+
+
+, (9) where cj is the regional context, exjτ −W +1: τ is the historical demand segment used as the retrieval key, yjτ +1: τ +H is the corresponding future demand, and hτ denotes the time-of-day indicator of the window. This design ensures that retrieval reflects both regional context and short-term dynamics. Given a region ri at time t, we form a query embedding: 
+
+qi = ϕr
+
+ ci, exit−W +1: t, h t
+
+ . (10) For regions without observable histories, exit−W +1: t is zero-masked, so retrieval remains applicable under cold-start con-ditions. For each memory entry, a key embedding is: 
+
+kτ,j = ϕr
+
+
+
+cj , exjτ −W +1: τ , h τ
+
+
+
+, (11) where ϕr (·) is a retrieval encoder. For any context feature c,temporal feature x, and time indicator h, we first compute: 
+
+ec = Wr c, ex = Wx[x ∥ eh], (12) where eh denotes the embedding encoding the time of day h.The retrieval representation is then normalized by: 
+
+ϕr (c, x, h ) = ψr ([ ec ∥ ex]) 
+
+∥ψr ([ ec ∥ ex]) ∥2
+
+, (13) where ψr (·) is a fusion MLP network. Retrieval is thus performed in a joint context-and-dynamics space: regional contexts identify functionally similar regions, while short-term histories and time information identify temporal dynamics. 32026 IEEE 29th International Conference on Intelligent Transportation Systems (ITSC 2026) 
+
+2) Time-aware Retrieval: Since demand patterns are strongly conditioned on time-of-day patterns, we restrict re-trieval to memory entries observed under the same time win-dow as the query, which also reduces computational overhead: 
+
+Ωt = {(τ, j ) ∈ B : hτ = ht} . Similarity is computed as: 
+
+si,τ,j = q⊤ 
+
+> i
+
+kτ,j , (14) followed by top-K temperature-scaled normalization: 
+
+αi,τ,j = exp( si,τ,j /T r )
+
+P  
+
+> (τ′,j ′)∈TopK( i)
+
+exp( si,τ ′,j ′ /T r ) . (15) The retrieved future prior for region ri is defined as the weighted average of the corresponding stored futures: 
+
+pi = X
+
+> (τ,j )∈TopK( i)
+
+αi,τ,j yjτ +1: τ +H . (16) 
+
+3) Future-aware Retrieval Training: Since the retrieved trajectories are used as forecasting priors, retrieval quality should be measured by alignment with the target future. We therefore introduce a future-aware auxiliary objective that directly optimizes the retriever with respect to this criterion. For each query, we first keep the top-K candidates based on encoder similarity, and select the candidate whose future pattern is closest to the query’s future: 
+
+(τ ⋆, j ⋆) = arg min  
+
+> (τ,j )∈TopK( i)
+
+yit+1: t+H − yjτ +1: τ +H 2
+
+. (17) We then encourage the query embedding to align with this future-nearest key via a margin-based loss: 
+
+Lret = 1
+
+NtNtX
+
+> i=1
+
+ 1 − q⊤ 
+
+> i
+
+kτ ⋆,j ⋆
+
+ , (18) where Nt denotes the number of regions in the current forecasting instance. This objective connects retrieval learning with forecasting utility, pushing the retriever toward entries that provide accurate future priors. 
+
+D. Future Prior Fusion 
+
+After L layers of contextual message passing, each region ri
+
+obtains a latent representation h(L) 
+
+> i
+
+. A forecasting head ϕf (·)
+
+maps this representation to a backbone prediction: 
+
+eyit+1: t+H = ϕf
+
+
+
+h(L)
+
+> i
+
+
+
+∈ RH . (19) The retrieved future prior pi serves as an additive correction. We first align it to the prediction space: 
+
+epi = Wppi. (20) A gating vector conditioned on both signals is computed as 
+
+ui = σ Wg
+
+eyit+1: t+H ∥ epi
+
+ , (21) where σ(·) denotes the sigmoid function. The final prediction for region ri is 
+
+byit+1: t+H = eyit+1: t+H + β ui ⊙ epi, (22) where β is a learnable scalar initialized at zero and ⊙ denotes element-wise multiplication. This design preserves the graph backbone as the primary predictor while allowing retrieval to provide instance-specific adjustments when beneficial. Stacking over all regions yields bYt+1: t+H . At inference time, for regions without observable histories, temporal en-codings are zero-masked, and prediction relies on contextual graph propagation and retrieved future priors. 
+
+E. Training Objective 
+
+The model is trained with a masked forecasting loss together with the future-aware retrieval objective. Since predictions are defined at the region level as byt+1: t+H,i ∈ RH , we use an ℓ1
+
+loss over the forecasting horizon: 
+
+Lpred = 1
+
+|RO 
+
+> t
+
+| · H
+
+X
+
+> ri∈RO
+> t
+
+byit+1: t+H − yit+1: t+H 1 . (23) Together with the retrieval loss Lret , the overall objective is 
+
+L = Lpred + λret Lret , (24) where λret controls the strength of retrieval supervision. V. E XPERIMENTS 
+
+A. Datasets and Experimental Settings 
+
+We evaluate on four processed delivery datasets [21]: Shanghai (SH), Hangzhou (HZ), Yantai (YT), and Chongqing (CQ). Each sample contains a 24-step history window and a 24-step prediction horizon. Table I summarizes the number of regions and data splits. All cities contain around 30 regions, which makes the benchmark suitable for studying node-level cold-start forecasting under sparse supervision.                     
+
+> Table I DATASET STATISTICS USED IN THIS PAPER .
+> Cities #Nodes #Train #Val #Test Shanghai 30 2540 847 847 Hangzhou 31 2617 872 872 Yantai 30 2616 872 872 Chongqing 30 2617 872 873
+
+We study two settings. In single-city cold-start forecasting ,10 regions are held out as cold-start targets, and an additional 6 observable regions are randomly masked in each training batch to simulate inductive deployment. In cross-city transfer with partial target observations , a model is pretrained on a source city and then directly evaluated on a target city where 10 regions are treated as unobserved at test time. Following the current implementation, training in this setting uses the source-city graph only, while inference is performed on the full target graph with unavailable target histories masked out. The backbone architecture uses a node embedding dimen-sion of 32, a hidden dimension of 64, three MLP blocks, and one message-passing layer. Retrieval augmentation is enabled with time-aware candidate filtering and a source-memory bank built from source training windows. In the reported runs, the main retrieval hyper-parameters are K = 8, retriever dimension is 128 , and λret = 0.2. We compare B RIDGE 
+
+against its graph-only backbone and a broader family of spatiotemporal baselines, including DCRNN, STGCN, Graph WaveNet, MTGNN, SATCN, MPGRU, GRIN, IGNNK, and IMPEL [4]–[7], [15]–[17], [22]. We mainly report MAE and 42026 IEEE 29th International Conference on Intelligent Transportation Systems (ITSC 2026) 
+
+Table II CROSS -CITY TRANSFER RESULTS . L OWER MAE/RMSE IS BETTER ; HIGHER R2 IS BETTER .Source 7 → Target BRIDGE (Ours) IMPEL MTGNN IGNNK STGCN 
+
+MAE ↓ RMSE ↓ R2 ↑ MAE ↓ RMSE ↓ R2 ↑ MAE ↓ RMSE ↓ R2 ↑ MAE ↓ RMSE ↓ R2 ↑ MAE ↓ RMSE ↓ R2 ↑
+
+Chongqing 7 → Hangzhou 5.18 9.75 0.902 5.37 10 .11 0.894 6.92 14 .70 0.775 7.45 15 .27 0.756 7.33 15 .14 0.758 
+
+Chongqing 7 → Shanghai 4.00 6.29 0.904 4.28 6.60 0.894 5.11 9.42 0.803 5.24 9.82 0.786 5.27 9.71 0.790 
+
+Chongqing 7 → Yantai 2.92 4.79 0.945 2.99 4.86 0.943 3.44 6.50 0.898 3.38 6.20 0.906 3.73 6.98 0.885 
+
+Hangzhou 7 → Chongqing 3.64 6.06 0.935 3.86 6.37 0.928 4.79 8.93 0.859 4.89 8.85 0.861 4.92 9.06 0.854 
+
+Hangzhou 7 → Shanghai 3.10 4.84 0.926 3.35 5.23 0.913 4.12 7.56 0.819 4.02 7.29 0.831 4.35 7.91 0.808 
+
+Hangzhou 7 → Yantai 2.27 3.67 0.939 2.43 3.89 0.931 2.87 5.01 0.885 2.89 5.10 0.881 3.14 5.47 0.863 
+
+Shanghai 7 → Chongqing 2.95 4.75 0.949 3.09 5.02 0.943 3.45 6.16 0.913 3.35 5.98 0.918 3.63 6.43 0.904 
+
+Shanghai 7 → Hangzhou 5.24 9.15 0.905 5.54 9.50 0.896 7.14 14 .29 0.773 7.13 14 .52 0.765 8.02 15 .44 0.740 
+
+Shanghai 7 → Yantai 2.79 4.51 0.952 2.82 4.57 0.951 3.38 6.26 0.907 3.38 6.19 0.909 3.68 6.80 0.890 
+
+Yantai 7 → Chongqing 3.64 6.01 0.940 3.71 6.10 0.938 4.53 8.29 0.885 4.25 7.71 0.901 4.62 8.52 0.879 
+
+Yantai 7 → Hangzhou 5.33 9.34 0.901 5.58 9.68 0.892 7.08 14 .32 0.769 7.21 14 .58 0.760 7.64 14 .89 0.751 
+
+Yantai 7 → Shanghai 3.70 5.76 0.918 3.83 5.99 0.912 4.92 9.17 0.792 4.68 8.78 0.810 4.91 9.22 0.790 
+
+RMSE for the single-city setting, and MAE, RMSE, and R2
+
+for cross-city transfer with partial target observations. 
+
+B. Cross-City Transfer with Partial Target Observations HZ SH YT          
+
+> 4.825
+> 4.850
+> 4.875
+> 4.900
+> RMSE
+> -0.2%
+> -0.1%
+> -1.4%
+> Target: CQ
+> CQ SH YT
+> 9.2
+> 9.4
+> 9.6
+> 9.8 -0.4%
+> -0.7%
+> -1.7%
+> Target: HZ
+> CQ HZ YT
+> 8.4
+> 8.5
+> 8.6
+> 8.7
+> -0.2%
+> -0.2%
+> -1.7%
+> Target: SH
+> CQ HZ SH
+> 4.4
+> 4.5
+> 4.6
+> -2.6%
+> -0.7%
+> -0.7%
+> Target: YT
+> w/o ret
+> w/ ret
+
+Figure 3. Ablation of the Lret in the cross-city transfer setting. 
+
+Table II summarizes the cross-city transfer results over all 12 ordered source-target pairs. B RIDGE achieves the best MAE, RMSE, and R2 in every pair, outperforming the graph-only backbone as well as MTGNN, IGNNK, and STGCN. The gains over the graph-only backbone are sometimes modest, but they are consistent: the average MAE decreases from 3.904 to 3.730, and the average RMSE decreases from 6.494 to 6.229 across all transfer pairs. Two patterns are worth highlighting. First, transfer between the larger and more active cities remains challenging, yet retrieval still yields reliable improvements, such as Chongqing 7 → Hangzhou and Shanghai 7 → Hangzhou. Second, when the target city is relatively easier to predict, such as Yantai, B RIDGE still provides measurable gains, indicating that retrieval does not only help under severe mismatch but also acts as a useful prior under moderate transfer shifts. Overall, these results support the main motivation of the paper: cross-city cold-start forecasting benefits from a non-parametric future prior that complements graph generalization. Figure 3 shows that the Lret consistently reduces RMSE for every evaluated source-target pair, indicating that explicitly training the retriever toward future-useful memories improves cross-city transfer robustness. 
+
+C. Single-City Cold-Start Results 
+
+Table III reports the single-city results. Across all four cities, BRIDGE consistently improves over the baselines by a clear margin. Averaged over the four cities, retrieval augmentation reduces MAE from 3.245 to 3.152 and RMSE from 6.733 to 6.480 relative to the graph-only backbone. The gains are consistent: B RIDGE achieves the best MAE and RMSE across four datasets. The improvement is especially meaningful be-cause the backbone already uses contextual region embeddings and inductive masking. This means the benefit does not 
+
+Table III EXPERIMENTAL RESULTS OF SPATIOTEMPORAL DELIVERY DEMAND JOINT ESTIMATION AND PREDICTION IN PACKAGE DELIVERY DATASETS .
+
+Models Shanghai Hangzhou Chongqing Yantai 
+
+MAE RMSE MAE RMSE MAE RMSE MAE RMSE HA 6.96 16.41 8.94 20.56 4.00 8.85 3.82 8.42 DCRNN [5] 5.65 11.86 7.33 14.59 3.53 6.15 3.21 6.17 STGCN [22] 5.07 11.62 6.38 14.26 2.99 6.00 2.80 5.79 GWNET [6] 5.22 11.67 7.99 15.90 3.06 6.03 2.93 6.01 MTGNN [7] 5.09 11.56 6.23 13.89 2.97 5.91 2.73 5.70 IGNNK [16] 5.22 11.50 7.25 15.06 3.22 6.06 2.97 5.93 SATCN [23] 4.75 9.38 7.64 14.77 3.04 5.27 2.83 5.02 MPGRU [15] 6.30 13.43 7.95 16.03 3.91 7.60 3.58 7.45 GRIN [17] 5.08 11.64 6.30 14.56 3.05 6.08 2.86 6.02 IMPEL [4] 3.76 7.93 4.52 9.90 2.47 4.92 2.23 4.18 
+
+BRIDGE 3.71 7.67 4.30 9.46 2.41 4.71 2.19 4.08 
+
+come merely from adding static place semantics; instead, it comes from retrieving future patterns that complement the graph predictor when a region lacks local history. The largest RMSE reduction is observed in Hangzhou, while Chongqing shows the largest relative MAE improvement, suggesting that retrieval is especially effective in cities with recurring short-term demand dynamics that can be matched from memory. 
+
+D. Qualitative Analysis 
+
+Figure 4 provides qualitative examples from both settings. The left column shows node-level forecasting examples from Hangzhou and Chongqing, where B RIDGE tracks the repeated peaks and sparse intervals of the ground truth with high fidelity. The middle column shows a retrieval example from the Shanghai single-city cold-start setting. The right column shows a retrieval example when transferring from Yantai to Shanghai under partial target observations. In both retrieval examples, the retrieved future prior already matches the broad temporal pattern of the true future, including the timing of the major rise and the subsequent decay. The bottom panels further show that several top-k retrieved futures share similar shapes, indicating that the retriever is not relying on a single brittle match but is aggregating a consistent set of candidate futures. These visualizations illustrate the intended role of retrieval in B RIDGE . The graph backbone supplies a stable parametric forecast, while retrieval contributes an operational prior that captures short-lived patterns such as peak timing 52026 IEEE 29th International Conference on Intelligent Transportation Systems (ITSC 2026) Demand Prediction Result of Region #14, Hangzhou 
+
+> Demand Prediction Result of Region #15, Chongqing
+
+Figure 4. Qualitative forecasting examples. Left column: predicted and ground-truth demand curves for representative regions in Hangzhou and Chongqing. Middle column: retrieval behavior for a Shanghai single-city cold-start example, including the query history, retrieved future prior, and top-k retrieved future patterns. Right column: retrieval behavior for a cross-city example, transferring from Yantai to Shanghai. In both cases, the retrieved trajectories capture the target temporal pattern and provide useful priors for the final fused forecast. 
+
+and amplitude changes. When the retrieved futures are well aligned with the target pattern, the fused prediction becomes noticeably sharper than what a graph-only predictor would produce from masked histories alone. VI. C ONCLUSION 
+
+We presented B RIDGE , a retrieval-augmented spatiotem-poral graph framework for cold-start urban delivery demand forecasting. The key idea is to complement inductive graph forecasting with a memory of delivery patterns, so the model can recover short-term operational dynamics when local histo-ries are missing or only partially observed. Across two prac-tical cold-start settings, B RIDGE consistently improves over the graph-only backbone and strong spatiotemporal baselines. These results indicate that future-prior retrieval is a practical way to strengthen delivery demand forecasting under realistic cold-start deployment conditions. REFERENCES [1] G. Yannis, J. Golias, and C. Antoniou, “Effects of urban delivery restric-tions on traffic movements,” Transportation Planning and Technology ,vol. 29, no. 4, pp. 295–311, 2006. 1 [2] A. Hess, S. Spinler, and M. Winkenbach, “Real-time demand forecast-ing for an urban delivery platform,” Transportation Research Part E: Logistics and Transportation Review , vol. 145, p. 102147, 2021. 1, 2 [3] S. Srinivas, S. Ramachandiran, and S. Rajendran, “Autonomous robot-driven deliveries: A review of recent developments and future direc-tions,” Transportation research part E: logistics and transportation review , vol. 165, p. 102834, 2022. 1 [4] T. Nie, J. He, Y. Mei, G. Qin, G. Li, J. Sun, and W. Ma, “Joint estimation and prediction of city-wide delivery demand: A large language model empowered graph-based learning approach,” Transportation Research Part E: Logistics and Transportation Review , vol. 197, p. 104075, 2025. 1, 2, 4, 5 [5] Y. Li, R. Yu, C. Shahabi, and Y. Liu, “Diffusion convolutional re-current neural network: Data-driven traffic forecasting,” arXiv preprint arXiv:1707.01926 , 2017. 1, 2, 4, 5 [6] Z. Wu, S. Pan, G. Long, J. Jiang, and C. Zhang, “Graph wavenet for deep spatial-temporal graph modeling,” arXiv preprint arXiv:1906.00121 ,2019. 1, 2, 4, 5 [7] Z. Wu, S. Pan, G. Long, J. Jiang, X. Chang, and C. Zhang, “Con-necting the dots: Multivariate time series forecasting with graph neural networks,” in Proceedings of the 26th ACM SIGKDD international conference on knowledge discovery & data mining , 2020, pp. 753–763. 1, 2, 4, 5 [8] A. Cini, I. Marisca, D. Zambon, and C. Alippi, “Graph deep learning for time series forecasting,” arXiv preprint arXiv:2310.15978 , 2023. 1 [9] Y. Tang, A. Qu, A. H. Chow, W. H. Lam, S. C. Wong, and W. Ma, “Domain adversarial spatial-temporal network: A transferable frame-work for short-term traffic forecasting across cities,” in Proceedings of the 31st ACM international conference on information & knowledge management , 2022, pp. 1905–1915. 1 [10] W. Gurnee and M. Tegmark, “Language models represent space and time,” arXiv preprint arXiv:2310.02207 , 2023. 1, 2 [11] R. Manvi, S. Khanna, G. Mai, M. Burke, D. Lobell, and S. Ermon, “Geollm: Extracting geospatial knowledge from large language models,” 
+
+arXiv preprint arXiv:2310.06213 , 2023. 1, 2 [12] J. He, T. Nie, and W. Ma, “Geolocation representation from large language models are generic enhancers for spatio-temporal learning,” in 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 16, 2025, pp. 17 094–17 104. 1, 2 [13] J. Liang, J. Ke, H. Wang, H. Ye, and J. Tang, “A poisson-based distribution learning framework for short-term prediction of food de-livery demand ranges,” IEEE Transactions on Intelligent Transportation Systems , 2023. 2 [14] H. Wen, Y. Lin, L. Wu, X. Mao, T. Cai, Y. Hou, S. Guo, Y. Liang, G. Jin, Y. Zhao et al. , “A survey on service route and time prediction in instant delivery: Taxonomy, progress, and prospects,” IEEE Transactions on Knowledge and Data Engineering , 2024. 2 [15] J. Gao and B. Ribeiro, “On the equivalence between temporal and static equivariant graph representations,” in International Conference on Machine Learning . PMLR, 2022, pp. 7052–7076. 2, 4, 5 [16] Y. Wu, D. Zhuang, A. Labbe, and L. Sun, “Inductive graph neural networks for spatiotemporal kriging,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 35, no. 5, 2021, pp. 4478– 4485. 2, 4, 5 [17] A. Cini, I. Marisca, and C. Alippi, “Filling the g_ap_s: Multivari-ate time series imputation by graph neural networks,” arXiv preprint arXiv:2108.00298 , 2021. 2, 4, 5 [18] T. Wei, Y. Lin, S. Guo, Y. Lin, Y. Zhao, X. Jin, Z. Wu, and H. Wan, “Inductive and adaptive graph convolution networks equipped with constraint task for spatial–temporal traffic data kriging,” Knowledge-Based Systems , vol. 284, p. 111325, 2024. 2 [19] P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. Küttler, M. Lewis, W.-t. Yih, T. Rocktäschel et al. , “Retrieval-augmented generation for knowledge-intensive nlp tasks,” Advances in Neural Information Processing Systems , vol. 33, pp. 9459–9474, 2020. 2[20] T. N. Kipf and M. Welling, “Semi-supervised classification with graph convolutional networks,” arXiv preprint arXiv:1609.02907 , 2016. 3 [21] L. Wu, H. Wen, H. Hu, X. Mao, Y. Xia, E. Shan, J. Zhen, J. Lou, Y. Liang, L. Yang et al. , “Lade: The first comprehensive last-mile delivery dataset from industry,” arXiv preprint arXiv:2306.10675 , 2023. 4[22] B. Yu, H. Yin, and Z. Zhu, “Spatio-temporal graph convolutional networks: A deep learning framework for traffic forecasting,” arXiv preprint arXiv:1709.04875 , 2017. 4, 5 [23] Y. Wu, D. Zhuang, M. Lei, A. Labbe, and L. Sun, “Spatial aggregation and temporal convolution networks for real-time kriging,” arXiv preprint arXiv:2109.12144 , 2021. 5 
+
+6

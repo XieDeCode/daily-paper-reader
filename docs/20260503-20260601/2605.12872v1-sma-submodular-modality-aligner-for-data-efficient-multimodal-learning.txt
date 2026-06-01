@@ -1,0 +1,700 @@
+Title: SMA: Submodular Modality Aligner For Data Efficient Multimodal Learning
+
+URL Source: https://arxiv.org/pdf/2605.12872v1
+
+Published Time: Thu, 14 May 2026 00:27:59 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# SMA: Submodular Modality Aligner For Data Efficient Multimodal Learning 
+
+Truong Pham ∗ Anay Majee ∗ Rishabh Iyer 
+
+The University of Texas at Dallas 
+
+firstname.lastname@utdallas.edu 
+
+# Abstract 
+
+Despite the recent success of Multimodal Foundation Models (FMs), their reliance on massive paired datasets limits their applicability in low-data and rare-scenario settings where aligned data is scarce and expensive. A key bottleneck is the adoption of an instance-level formulation, which learns alignment by maximizing correlation between individual image-text pairs while neglecting the underlying geometric structure across modalities resulting in a modality gap across input modalities. In this paper, we propose a combinatorial paradigm for multimodal alignment that moves beyond pairwise learning and introduce the Submodular Modality Aligner (SMA) , which treats multiple augmentations and descriptions of an entity as a set, leveraging multiple descriptions of the data to capture richer cross-modal structure. We instantiate SMA using a principled objective based on Submodular Mutual Information (SMI), which jointly maximizes inter-modality mutual information while reducing cross-modal divergence. This formulation enables the model to effectively utilize multiple positive associations and extract significantly more information from limited data. We evaluate SMA on 14 zero-shot classification and retrieval tasks from the CLIP benchmark and demonstrate consistent gains in the low-data regime. Notably, SMA achieves strong multimodal generalization using only tens of thousands of samples. This is orders of magnitude fewer than standard approaches. Our results highlight the importance of set-based formulations and submodular objectives for data-efficient multimodal learning. 
+
+# 1 Introduction 
+
+Interacting with the real-world oftentimes involves comprehending a subset of visual, auditory, textual etc. signals together towards decision making tasks. Although unimodal foundational vision and language models have shown commendable improvements in real-world understanding, reasoning and free-form generation tasks, they do not generalize to multimodal tasks. Pioneering works in multimodal learning like CLIP [ 44 ], SigLIP [ 52 ] etc. have challenged the status-quo by projecting unimodal feature representations into a shared space to facilitate modeling of cross-modal interactions relevant for downstream understanding and reasoning tasks. Even though these models achieve universal alignment across modalities, they rely on large scale paired data points (millions if not billions) for learning model alignment which maybe infeasible to collect for rare scenarios. In practice, paired data is frequently scarce, expensive, or inherently limited , leading to a regime where only a small number of aligned samples are available and standard contrastive objectives (e.g., InfoNCE) tend to overfit, suffer from poor negative sampling, and fail to generalize. This challenge is particularly prominent in domains such as medical imaging (radiology images paired with expert reports), remote sensing (satellite imagery with limited annotations), 
+
+> ∗Equal Contributions. Preprint.
+> arXiv:2605.12872v1 [cs.LG] 13 May 2026
+
+Figure 1: Architcture of SMA. Comparison between CLIP, SigLIP, SAIL and our alginment structure. SAIL has frozen pretrained encoders and only trains on a small projection layer, in contrast to the end-to-end training by CLIP and SigLIP. However, all 3 methods are instance based alignment training and can only extract information from singleton positive pairs. Our SMA losses are trained on top of frozen encoders and can efficiently exploit the shared representation information across modalities of a single object. 
+
+autonomous driving (rare edge-case scenarios), security/surveillance (weak or delayed labeling), and scientific/biological data, where collecting large-scale paired datasets is difficult or infeasible. In this work, we introduce a combinatorial (set-based) formulation into multimodal learning to adapt unimodal vision and language models to low-data downstream zero-shot tasks under both data and compute constraints. We build on the observation that present datasets used for multimodal alignment are not necessary combinatorial (instance based) and methods built on them aim at modeling the correlation between a single pair of associated image and text embedding of an object without taking into consideration the multiple views and descriptions to describe one object. We argue that this limitation is not merely empirical but structural: pairwise contrastive objectives are fundamentally insufficient to model the multi-view nature of real-world entities, leading to inefficient use of data and persistent modality gaps. In contrast to existing works, in Section 3.2 we reformulate existing datasets by arguing that a unimodal datapoint and its multiple descriptions constitute a set, injecting a combinatorial view. Unlike prior extensions of contrastive learning that incorporate multiple positives independently, our formulation explicitly models their joint combinatorial structure as a set. A key limitation of pairwise contrastive learning is that it treats each positive pair independently, even when multiple views or descriptions correspond to the same underlying entity. This leads to two issues: (i) inefficient use of data, since each pair captures only a fraction of the available semantic information, and (ii) conflicting optimization signals, where different views of the same entity may be pushed apart due to negative sampling. As a result, existing methods fail to fully exploit multi-view structure and struggle to reduce the modality gap, particularly in low-data regimes. Additionally, we observe from [ 50 , 33 , 45 ] that the robustness of a multimodal alignment model is its ability to 2jointly maximize Mutual Information (MI) and minimize divergence across sets from orthogonal modalities, and that the widely observed modality gap is in part a consequence of pairwise contrastive formulations. Maximizing MI ensures statistical correlation between image and text embeddings. On the other hand, minimizing divergence ensures associated image and text datapoints are closer in the embedding space. While most recent techniques like CLIP [ 44 ], SigLIP [ 52 ] and SAIL [ 53 ] optimize for alignment, they often overlook the minimization of the modality gap (also shown in Table 5). In a quest to create data efficient alignment loss we introduce a novel learning objective (loss) formulation, namely Submodular Modality Aligner ( SMA ) based on Submodular Mutual Information (SMI). As shown in Figure 2 we show that SMI can effectively correlate between multiple positive pairs of datapoints, unlike CLIP [ 44 ], SigLIP [ 52 ] and SAIL [ 53 ]. This allows our formulation to rapidly generalize unimodal architectures to multimodal tasks in the low-data regime with only tens of thousands of human annotated examples rather than hundreds of millions of paired exemplars. We evaluate our model on 14 different tasks with varying difficulties in the CLIP benchmark spanning zero-shot classification and retrieval and demonstrate consistent performance gains in the limited data regime. Our contributions can be summarized as -• We introduce a novel combinatorial, set-based formulation for multimodal alignment that models multiple views and descriptions of an entity jointly rather than independently, enabling richer supervision in low-data regimes. • We show that this formulation naturally enables joint modeling of alignment (correlation) and modality gap (divergence), and instantiate it via a principled objective based on Submodular Mutual Information (SMI). • We demonstrate that SMA achieves strong empirical gains, with up to 25% relative improvement and consistent performance across 14 tasks, while using orders of magnitude fewer samples. Beyond empirical gains, our work highlights a broader conceptual shift: multimodal alignment should be formulated over sets of related instances rather than isolated pairs. 
+
+# 2 Related Work 
+
+Multimodal Alignment foundation. Multimodel alignment methods project the embeddings from unimodal models into a shared space to correlate different representations of the same object, in this case texts and images. The shared space is used for general-purpose downstream tasks such as zero-classification, zero-shot retrieval, question answering, etc. The majority of multimodal alignment methods conform to CLIP [ 44 ] and ALIGN [ 19 ] approaches by using contrastive learning [ 52 , 51 , 1]. Despite its success, the standard CLIP training paradigm requires training both unimodal encoders and their linear alignment layers from scratch using hundreds of millions of data points, a process that is highly time-consuming and demands prohibitive computational resources [ 44 ]. Recent work by [ 53 ] shows that higher performance can be achieved much more efficiently by freezing strong pretrained unimodal encoders such as DinoV2 [ 43 ] and NVEmbed [ 31 ] and limits training only on the inexpensive alignment layers. Investigations into the aligning power of CLIP’s variant of the InfoNCE contrastive loss [ 44 ] has shown that while correlation between text and image embeddings of the same object can be learned, the projected unimodal embeddings do not align on top of each other [ 50 , 45 , 33 , 54 , 33 ] demonstrates a phenomenon called the "modality gap", exacerbated by InfoNCE’s two conflicting components: the alignment component that pulls embeddings of the same representation together and the uniform embedding distribution that pushes away any embedding not representing the exact same object. 
+
+Efficient Alignment. Many works try to find fast and data efficient ways to align unimodal embed-dings by leveraging frozen pretrained encoders. ASIF [ 42 ] proposes a fully training free method by applying nearest neighbor like method onto the extracted embeddings of the training data for retrieval tasks. Other methods like CSA [ 12 ] and CKA [ 39 ] analyze the latent repsentation of unimodal embed-dings to find shared representations across modalities. However, these methods do not create a shared embedding space but rely only on the structure of the unimodal spaces and their sample level correla-tion. Recent methods that create a projection space to unite all modalities rely on CLIP with additional components to extract more information from smaller datasets. [ 10 ] added regularizations to preserve the neighborhood structures in unimodal embeddings spaces, keeping the geometric semantics of the pretrained models. [47] is a mixup like method to augments the embeddings for alignment training. 3Submodularity in Machine Learning. Combinatorial functions is a niche method in Machine Learn-ing that is gaining foothold in a wide range of applications through Submodular Functions [ 4 ]. These functions have been extensively researched in areas such as data subset selection [24, 28, 17, 8, 25], active learning [ 49 , 27 , 3, 21 ], and video summarization [ 20 , 23 , 22 ]. Submodular functions also proved to be powerful continuous loss, specifically for contrastive learning [ 36 , 37 , 35 , 46 ]. Maximizing submodular functions create a diverse representative [ 18 ] set while minimizing them encourage cooperation and representation [ 30 ]. Both are desirable properties for modeling diverse feature clusters in representation learning tasks. Naturally, Submodular functions are promising candidates from alignment learning, since the first successful and most popular alignment framework is a contrastive learning one [44]. 
+
+# 3 The Submodular Multimodal Aligner Framework 
+
+3.1 Preliminaries: Submodularity 
+
+Submodular functions [ 9, 14 , 4 ] are set functions popular for being to analytically describe di-minishing returns. In particular, a set function f : 2 V → R, defined over a ground set V, is considered submodular iff it satisfies the inequality f (Ai) + f (Aj ) ≥ f (Ai ∪ Aj ) + f (Ai ∩ Aj )
+
+for all subsets Ai, A j ⊆ V [ 9]. Traditionally, subset selection and summarization tasks are mod-eled as a discrete optimization problem through submodular maximization [ 9 , 41 ] under a knap-sack constraint [ 41 ]. This can be fairly approximated with a (1 − e−1) constant factor guaran-tee [ 41 ] using greedy optimization techniques [ 41 , 40 ]. The Submodular Mutual Information Functions If (A; Q) (SMIs) are Information Measure versions of Submodular Functions [ 16 ], Table 1: Formulations of FLVMI and FLQMI. 
+
+Method Formulation 
+
+FLVMI X
+
+> i∈U
+
+min 
+
+
+
+max  
+
+> j∈A
+
+sij , max  
+
+> j∈Q
+
+sij 
+
+
+
+FLQMI X
+
+> i∈Q
+
+max  
+
+> j∈A
+
+sij + X
+
+> i∈A
+
+max  
+
+> j∈Q
+
+sij 
+
+specifically the Combinatorial version of Mu-tual Information. Indeed, Entropic Functions are known to be strictly subsets of Submod-ular Functions [ 16 , 13 ], that is, all Entropic Functions are Submodular. Although Mutual Information Function is not entropic, SMIs are submodular if Q is a constant set. Maxi-mizing Submodular Information Functions 
+
+(SIMs) [ 15 , 16 , 4] f (A) like Facility-Location, Graph-Cut etc. promotes selection of diverse examples within a set A, while maximiz-ing Submodular Mutual Information Func-tions If (A; Q) selects examples that share maximum information in A ∩ Q. Interestingly, recent approaches [ 36 , 37 ] have also applied com-binatorial functions as learning objectives in continuous optimization problems. Specifically, [ 36 ]introduces combinatorially inspired loss functions (in this case SIMs) which model intra-group com-pactness (cooperation) when minimized and inter-group separation when maximized. Additionally, [ 37 ] introduces SMI as loss function to model interactions between abundant and rare examples in data-efficient (few-shot) representation learning tasks. We extend the application of combinatorial loss to align through two SMI functions: Facility Location Submodular Mutual Information Function (FLVMI) and Facility Location Submodular Variant Mutual Infomration Function (FLQMI) [ 28 ] (Table 1). In targeted subset selection, FLVMI and FLQMI are known for their ability to effectively represent the query set [ 26 , 2]. This means, higher the value of If , the more representative A is of Q. By setting A and Q according to their labels, we can manipulate the embedding space using gradient descent to force A to represent Q, which is relevant to our case aligning image and text embeddings. 
+
+3.2 Submodular Multimodal Aligner Objective 
+
+Existing multimodal alignment objectives such as CLIP and SigLIP operate on pairwise similarities between image and text embeddings, differing primarily in how these similarities are aggregated (e.g., softmax-based contrastive normalization or sigmoid-based binary classification). In contrast, we lift this formulation to operate on sets of embeddings corresponding to multiple views and descriptions of an entity. This allows us to replace pairwise similarity scores with set-level information measures, leading to a more expressive alignment objective. We adopt the same training scheme as CLIP for 4Figure 2: Illustration of the Loss formulation in Submodular Modality Aligner (SMA) - Given a image and text pair we first (a) augment them separately alleviating the need for large datasets. Then we train only the alignment layers using the combinatorial SMA loss formulation LSM A which jointly models (b) cross-modal alignments (correlations between image and text sets) and (c) minimizes divergence across modalities. 
+
+the alignment task, using contrastive loss to align positive pairs together and achieve a uniform distribution of the embeddings [48]. Specifically, we partition the data into two parts: the positive sets and the negative sets. A collection of positive pairs, embeddings that represent the same object, will form a positive set A+ 
+
+> i
+
+, with 
+
+i ∈ { 1, 2, ..., N} and N is the number of objects in the dataset. Intuitively, each positive set A+
+
+> i
+
+contains multiple views (image augmentations) and descriptions (text variants) of the same underlying entity, while A− 
+
+> i
+
+captures mismatched image-text combinations across entities. Given a ground set 
+
+V = {{ xi, y i}} N 
+
+> 1
+
+that contains all pairs in the dataset, every negative set A− 
+
+> i
+
+is a negative counterpart of a positive set A+ 
+
+> i
+
+with all negative pairs from the positive set, meaning A− 
+
+> i
+
+= {{ x, y }| x ∈ A+ 
+
+> i
+
+, y / ∈
+
+A+ 
+
+> i
+
+} ∪ {{ x, y }| x / ∈ A+ 
+
+> i
+
+, y ∈ A+ 
+
+> i
+
+} . Note that size of V is D, which contains all image and text instances which can be multiple for each object. We further define the partition of the ground set V to be the union of all positive sets V = {A+1 ∪ A+2 ∪ ... ∪ A+ 
+
+> N
+
+}, and A+1 ∩ A+2 ∩ ... ∩ A+ 
+
+> N
+
+= ∅ or there are no data pairs that represent multiple objects. As with contrastive learning, the embeddings in the positive sets should be pulled together, representing the alignment component of the contrastive loss; while the embeddings in the negative sets should be pulled away from their positive counterpart to create a uniform representation. We provide a general definition for Submodular Multimodal Alignment loss: 
+
+Definition 3.1. Given a ground set V = {xi, y i}D 
+
+> 1
+
+comprises of D embedding pairs x and y, and a SMI function If , we provide a Submodular Multimodal Alignment loss: 
+
+LSM A =
+
+> N
+
+X
+
+> i=1
+
+If (Ax+ 
+
+> i
+
+, A y+ 
+
+> i
+
+) −
+
+> N
+
+X
+
+> i=1
+
+If (Ax− 
+
+> i
+
+, A y− 
+
+> i
+
+) (1) Here, V = {A+1 ∪ A+2 ∪ ... ∪ A+ 
+
+> N
+
+}; A+1 ∩ A+2 ∩ ... ∩ A+ 
+
+> N
+
+= ∅; A− 
+
+> i
+
+= {{ x, y }| x ∈ A+ 
+
+> i
+
+, y /∈
+
+A+ 
+
+> i
+
+} ∪ {{ x, y }| x / ∈ A+ 
+
+> i
+
+, y ∈ A+ 
+
+> i
+
+}; Axi = {x ∈ Ai} and Ayi = {y ∈ Ai}.This objective encourages high mutual information between sets of aligned image and text embeddings while simultaneously reducing information shared between mismatched sets. Following the training scheme by CLIP, we also perform alignment from image to text and text to image in the training loop [ 1 ]. We provide two instances of LSM A as defined earlier by varying the choice of SMI functions for the alignment loss (FLVMI and FLQMI as defined in Section 3.1): 
+
+Definition 3.2. Facility Location Information Alignment loss or FLVMIA loss: 
+
+LF LV M I SM A =
+
+> N
+
+X
+
+> i=1
+
+X
+
+> j∈Ax+
+> i
+
+min max 
+
+> k∈Ax+
+> i
+
+sjk , max 
+
+> k∈Ay+
+> i
+
+sjk 
+
+!
+
+−
+
+> N
+
+X
+
+> i=1
+
+X
+
+> j∈Ax−
+> i
+
+min max 
+
+> k∈Ax−
+> i
+
+sjk , max 
+
+> k∈Ay−
+> i
+
+sjk 
+
+!
+
+(2) Note, that computation of If requires modeling of interactions between datapoints which we achieve through the cosine similarity kernel as used in combinatorial representation learning literature[ 36 , 37 ]. 5Defined in [ 28 ], FLVMI is widely used in guided subset selection to select a subset most representative of its query set [ 24 ] (add more subset selection papers). In this case, the query set is replaced by half of the positive pair or negative pairs and the selected subset is already chosen to be the other half. Maximizing this function will force Ax+ to be representative of Ay+ and pushes Ax− away from Ay−. This is similar to how contrastive loss is being used in representation learning, where embeddings of similar classes should cluster together and move away from the other classes [ 36 ]. We also introduce a variant of FLVMI: 
+
+Definition 3.3. Facility Location Variant Mutual Information Alignment loss or FLQMIA loss: 
+
+LF LQM I SM A =
+
+> N
+
+X
+
+> i=1
+
+X
+
+> j∈Ax+
+> i
+
+max 
+
+> k∈Ay+
+> i
+
+sjk −
+
+> N
+
+X
+
+> i=1
+
+X
+
+> j∈Ax−
+> i
+
+max 
+
+> k∈Ay−
+> i
+
+sjk (3) Intuitively, these objectives encourage each element in one modality (e.g., image embeddings) to be well-represented by at least one element in the corresponding set from the other modality (e.g., text embeddings), capturing cross-modal coverage and alignment. FLQMI is a different form of FLVMI [ 28 ]. While both belong to the family of facility-location-based submodular mutual information functions, they differ in how cross-set interactions are aggregated. In particular, FLVMI emphasizes coverage through a min-max structure, encouraging balanced representation across modalities, whereas FLQMI adopts a max-based formulation that focuses on strongest cross-modal associations. 
+
+3.3 Connections to CLIP and SigLIP 
+
+We now show how our formulation relates to widely used multimodal alignment objectives such as CLIP and SigLIP. These methods operate on pairwise similarities between image and text embeddings, differing primarily in how these similarities are aggregated across positive and negative pairs. 
+
+Reduction to CLIP. In the special case where each object is associated with a single image-text pair, the positive sets reduce to singletons, i.e., |A+ 
+
+> i
+
+| = 1 . Under this setting, the FLQMIA objective simplifies significantly. Using the log-sum-exp approximation to the max operator, we obtain: 
+
+> N
+
+X
+
+> i=1
+
+log ( esii ) −
+
+> N
+
+X
+
+> i=1
+
+log 
+
+ X
+
+> j∈A−
+> i
+
+esij 
+
+ =
+
+> N
+
+X
+
+> i=1
+
+log esii 
+
+P
+
+> j∈A−
+> i
+
+esij 
+
+!
+
+.
+
+This is precisely the NT-Xent loss used in SimCLR [ 5], and closely matches the CLIP objective [ 44 ], showing that CLIP-style contrastive learning arises as a special case of our formulation under singleton set constructions. 
+
+Relation to SigLIP. SigLIP adopts a different pairwise alignment strategy based on independent binary classification over image-text pairs using a sigmoid loss. Specifically, it optimizes a softplus-based objective of the form log(1 + exp( −zij sij )) , where zij denotes whether a pair is matched or mismatched. This can be interpreted as a smooth max-margin objective, where each pair is treated independently. In contrast, our formulation replaces pairwise similarity scores with set-level submodular mutual information. While SigLIP operates on individual pairs, our framework jointly models interactions across multiple views and descriptions within each set. Thus, SigLIP can be viewed as a pairwise member of the broader family of alignment objectives that our framework lifts to the set level. Overall, our formulation generalizes multimodal alignment objectives from pairwise similarity functions to set-level information measures. Standard objectives such as CLIP and SigLIP emerge as special or degenerate cases when sets collapse to singletons, whereas our formulation enables richer modeling of multi-view structure in the general case. 
+
+3.4 Connection to the Modality Gap 
+
+CLIP and its variance have been shown to suffer from Modality Gap. This is a phenomenon where a linear separation can be found between the image and text embeddings even in the shared projection space [ 45 ]. In brief details, the two components of InfoNCE: alignment and uniformity, are necessary 6Table 2: Benchmark Results on Zero-shot classification accuracy (%) across benchmarks for multiple positive pair setting. Alignment is performed on frozen pretrained DINOv2 and GTE-1.5. Best results are in Bold while the second best in in italics .                                                                                    
+
+> Method Caltech101 Cars CIFAR-10 DTD EuroSAT FGVC Flowers
+> SAIL w/ CLIP [53] 55.66 2.55 92.32 13.99 34.70 2.37 7.17 SAIL w/ SigLIP [53] 58.23 2.55 93.16 17.18 32.84 1.74 8.75
+> CSA [12] 46.28 1.42 87.19 17.29 26.00 3.51 5.24 FLQMIA 59.06 3.15 94.42 21.44 40.18 1.83 8.28
+> FLVMIA 53.30 2.29 93.54 21.60 39.93 2.37 6.57
+> Method GTSRB Pets STL-10 Imagenet-v1 Food101 CIFAR-100 MMVP
+> SAIL w/ CLIP [53] 6.48 14.06 87.83 20.20 29.61 45.22 16.30 SAIL w/ SigLIP [53] 7.20 14.58 90.62 25.03 35.28 50.50 14.81 CSA [12] 5.78 12.56 85.40 24.62 31.76 44.18 15.56 FLQMIA 8.90 15.10 92.65 28.04 39.81 53.31 17.78
+> FLVMIA 7.90 15.97 91.34 27.12 36.68 51.69 18.52
+
+but opposing forces, requiring a balancing between complete alingment which pulls embeddings together and uniformity which pushes embeddings away. We shows that solving the modality gap is a submodular problem (Appendix A.1). 
+
+Remark 3.4 . Minimizing the Modality Gap is the same as maximizing the Submodular Mutual Information Function The proof from Appendix A.1 shows that maximizing the SMI function If (Ax, A y ) where A = V ,meaning the subset A covers everything, will effectively reduce the Modality Gap. This is a direct link between the Modality Gap and Submodular Mutual Information function. However, this connection ignores the other crucial component alignment contrastive loss: the uniformity or the negative com-ponent. This leads to a conclusion that while SMI can help alleviate the modality gap phenomenon, it is not the cure to this problem. This is supported by our experimental results that shows smaller modality gaps between distributions when using SMA but not an entire overlap (Table 5). 
+
+# 4 Experiments 
+
+Datasets - Since the primary goal of this work is to learn under data scarcity, we use the MS-COCO [ 34 ] Captions dataset as the primary training data to extract maximal cross-modal information from limited paired data rather than relying on large-scale pretraining. Each image in MS-COCO is associated with at least 5 different captions (human annotated) which serve as natural augmentations while being a relatively small-scale benchmark of 80K images. This also follows prior works in data-efficient multimodal alignment such as STRUCTURE [ 10 ] and CSA [ 12 ] who also adopt MS-COCO (or its subset) during alignment training. We evaluate on 14 zero shot classification tasks and Flickr30k for zero shot retrieval task using the Clip Benchmark test [44]. 
+
+Experimental Setup - We follow the experimental setup of SAIL [ 53 ] since it provides a testbed for experimenting with several unimodal models for multimodal adaptation allowing us to evaluate several zero-shot downstream tasks. We compare SMA to two different types of data efficient alignment methods: CSA which is an analytical method using Cannonical Correlation Analysis [ 12 ], and SAIL [ 53 ] which modifies the alignment layer to be more efficient with frozen pretrained modal. While SAIL is not made for efficient data training, it follows the CLIP alignment framework but with Gated Linear Unit (GLU) as the alignment layer and SigLIP loss instead of InfoNCE. We also include a version of SAIL with InfoNCE as the alignment loss instead of just SigLIP. For CSA, we use 500 for the latent space dimension. We also use SAIL’s GLU for the alignment architecture for fair comparison between the losses. Although SAIL trains on dataset several hundred times bigger than out training dataset, they still use much smaller datasets than CLIP’s original dataset with better performance. To maintain uniformity across tasks we use DINOv2 as the image encoder and GTE-1.5 as the text coder (accounting for compute limitations). For CLIP and SigLIP we maintain a 7Table 4: Results from Zero-shot classification accuracy (%) across benchmarks for singular positive pair setting. Alignment is performed on frozen pretrained DINOv2 and GTE-1.5. Best results are in 
+
+Bold while the second best in in italics .                                                                      
+
+> Method Caltech101 Cars CIFAR-10 DTD EuroSAT FGVC Flowers
+> SAIL w/ CLIP [53] 53.73 2.29 91.10 16.12 36.30 1.56 7.40
+> SAIL w/ SigLIP [53] 45.59 1.42 90.30 9.84 29.99 2.16 4.10 CSA [12] 41.09 0.93 85.39 13.62 23.90 2.76 4.11 FLVMIA 53.72 2.00 92.22 14.73 36.33 1.74 8.08
+> Method GTSRB Pets STL-10 Imagenet-v1 Food101 CIFAR-100 MMVP
+> SAIL w/ CLIP [53] 6.75 11.47 85.38 18.90 27.48 43.54 14.07 SAIL w/ SigLIP [53] 4.36 11.61 80.45 14.32 23.40 37.49 14.07 CSA [12] 7.78 8.45 83.73 19.73 29.82 40.80 18.52
+> FLVMIA 7.92 11.23 86.92 21.59 30.86 46.25 14.81
+
+batch size of ∼32K (as used in the original paper) while for our SMA objectives we maintain a batch size of ∼16K for FLQMIA and ∼1K for FLVMIA (computes multiple similarity kernels). We set an initial learning rate of 1e-5 and adopt the Lion [ 6] optimizer for training. The entire experiment is done on one RTX A6000 GPU with 48 GB of memory. 
+
+Zero-shot classification. We experiment on an extensive zero-shot image classification baselines with 14 tasks of various difficulties in Table 2. Since we implement our loss functions without the memory optimization from deep learning packages on the massive cross similarity losses, our version of the loss can run only run on 16k batch size for FLQMIA and 1k batch size for FLVMIA, while SAIL is being trained on ∼32k batch size. We still train till 50 epoch just like in SAIL, but we also use validation loss to stop overfitting in our loss. Early stopping is also done on SAIL but it’s either not needed or the saturation point of validation loss is very close to epoch 50, therefore, this does not effect SAIL’s performance. According to Table 2, we see significant gains compare to both versions of SAIL and CSA when using our set formulations on multiple positive pairs dataset. On CIFAR10 [ 29 ] and STL10 [ 7], accuracies are close to 90%, which means they are close to being solved, the gains present but minimal with only 1-2%. On the other hand, we can expect gains from 15-20% performance boost percentage wise between our best loss and SAIL’s best configuration and CSA. This is true across harder datasets with accuracies close to 5% and datasets with average accuracies higher than 10%. The only exceptions are Caltech 101 [ 32 ] with low performance gains and Flowers [ 11 ] and FGVC [ 38 ] which we do not beat SAIL and CSA. Moreover, Table 2 shows both of our set formulations are almost always the second best performing loss if not the best. Table 3: Flickr30k zero-shot retrieval Recall@1 (%).                       
+
+> (a) Multiple positive pair Method I2T T2I
+> SAIL w/ CLIP [53] 48.40 39.16
+> SAIL w/ SigLIP [53] 33.70 24.90 CSA [12] 34.80 25.44 FLVMIA 50.50 37.70
+> (b) Single positive pairs Method I2T T2I
+> SAIL w/ CLIP [53] 53.80 43.16 SAIL w/ SigLIP [53] 57.70 47.28
+> CSA w [12] 44.00 30.92 FLQMIA 63.00 51.24
+> FLVMIA 59.50 47.08
+
+This is a good show case of the benefits of alignment set formulations in efficient data regime. by leveraging multi-ple labels, we can extract more invariant semantics from a smaller training dataset. This performance can be improved in the future with better memory optimization to increase our batch size, helping to include more positive pairs per batch. We also include experimental results for single positive pair setting with 80k pairs from MSCOCO dataset. We compare SAIL and CSA with FLVMIA, since FLQMIA is too sim-ilar to InfoNCE in this setting and the different batch sizes can affect the comparison. Although this problem affects FLVMIA, since our batch size is only 1k, we are already at a disadvantage. However, Table 4 shows FLVMIA only performs worse than SAIL on 5/14 datasets while still being the second best or having minimal difference in accuracy to the better losses. FLVMIA is better than CSA in all but one dataset. Furthermore, we let SAIL trains for longer epochs, with the InfoNCE version of SAIL reaching 200 epochs and original SAIL with SigLIP reaches 92 epochs, while FLVMIA converges at 11 epochs. These increase 8in epochs compare to the standard 50 epoch by SAIL is because we see those losses can still benefit from more training based on the evaluation loss. 
+
+Zero-shot Retrieval. Flickr30k is a standard zero-shot retrieval benchmark for multimodal alignment. We perform the same set of experiments on Flickr30k and yield the same results: FLVMI and FLQMI are better than SAIL and CSA in both single positive pair and multiple positive pair settings. In more detail, FLQMIA performs best with a 4–5% increase in retrieval accuracy, with FLVMIA being the second best or only a few points off. The only exception is in the single positive pair setting (Table 3) where SAIL with InfoNCE manages to beat our method on the Text-to-Image task. This is consistent with the pattern from zero-shot classification: when there are no multiple positive pairs in the training data, our loss is not as competitive. The strong results in the multiple positive pair setting (Table 3) further evidence our effectiveness at processing multiple positive pairs and their importance in low-data settings such as MSCOCO. Table 5: avg. ℓ2 distance ( ↓).          
+
+> (a) Multiple positive pair Method L2
+> SAIL w/ CLIP [53] 22.28 SAIL w/ SigLIP [53] 15.40 FLQMIA 13.85
+> FLVMIA 12.82 (b) Single positive pair Method L2
+> SAIL w/ CLIP [53] 18.76 SAIL w/ SigLIP [53] 11.93
+> FLVMIA 8.58
+
+Analysis on Modality Gap We address the claim that our functions are more effective in reducing the alignment gap during training by comparing the average ℓ2-norm. In order of least effective to most effective, we have the following: FLQMIA (the multiple positive pair setting), FLVMIA, SAIL, SAIL with InfoNCE. InfoNCE is by far the least effective method to reduce the gap, although this does not necessary reflect the loss’ ability to generalize. SigLIP is surprisingly more effective at closing the gap with a 30% reduction in average distance in the multiple positive pair setting and 36% in single pair setting. This is a much better reduction than FLVMIA compare to SigLIP which is at 10% in multiple pair setting and 28% in single pair setting, while FLQMI is only marginally better than FLVMIA in the multiple pair setting. However, this is still proof that our set formations can both correlate and align modalities better than the popular frameworks. Overall, we see significant performance gain in the multiple positive pair setting across both tasks (Table 2, Table 3). We see up to 25% accuracy gain when using multiple positive pairs and an average of 7.7% proportional gain across zero shot classification tasks (Table 2) and around 5% again for retrieval tasks (Table 3). These are significant gains across 16 total tasks, giving credence to our set formulations. The gains are weaker when there is only one positive pair per object. However, we are only performing worse in the edge cases where the datasets are very difficult with accuracies close to random noise such as cars and air craft with 192 and 100 classes respectively (Table 4). We still see gains up to 9% on 66% of the tasks, despite the fact that we are using much smaller batch size. We are also better than traditional contrastive losses at reducing the gap between modalities (Table 5). 
+
+# 5 Conclusion 
+
+In this work, we tackle multimodal alignment from a data-efficient lens and argue that current paradigms, despite their success, remain fundamentally limited by their reliance on large-scale paired datasets and instance-level formulations. To address these challenges, we introduced a combinatorial, set-based perspective for multimodal learning and proposed Submodular Modality Aligner (SMA), a novel objective grounded in Submodular Mutual Information. By jointly maximizing mutual information between multiple possitive pairs and minimizing cross-modal divergence, SMA explicitly models both alignment and modality gap two aspects that are often decoupled or under-emphasized in prior approaches. We demonstrate strong multimodal generalization in the low-data regime, requiring only tens of thousands of samples while consistently outperforming existing baselines across diverse zero-shot classification and retrieval tasks. Beyond performance gains, our formulation highlights the importance of set structure and submodular objectives in learning robust cross-modal representations. We believe this work opens up a promising direction for principled, data-efficient multimodal learning, with future avenues including extending the framework to more modalities (e.g., audio, video), exploring adaptive set construction strategies, and integrating SMA into larger-scale foundation models for broader real-world deployment. 9References 
+
+[1] Aishwarya Agarwal, Srikrishna Karanam, and Vineet Gandhi. Liteembed: Adapting clip to rare classes, 2026. [2] Nathan Beck, Truong Pham, and Rishabh Iyer. Theoretical analysis of submodular information measures for targeted data subset selection. ArXiv , abs/2402.13454, 2024. [3] Nathan Beck, Durga Sivasubramanian, Apurva Dani, Ganesh Ramakrishnan, and Rishabh K. Iyer. Effective evaluation of deep active learning on image classification tasks. ArXiv ,abs/2106.15324, 2021. [4] Jeff Bilmes. Submodularity in machine learning and artificial intelligence. ArXiv ,abs/2202.00132, 2022. [5] Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey E. Hinton. A simple framework for contrastive learning of visual representations. ArXiv , abs/2002.05709, 2020. [6] Xiangning Chen, Chen Liang, Da Huang, Esteban Real, Kaiyuan Wang, Yao Liu, Hieu Pham, Xuanyi Dong, Thang Luong, Cho-Jui Hsieh, Yifeng Lu, and Quoc V. Le. Symbolic discovery of optimization algorithms, 2023. [7] Adam Coates, Honglak Lee, and Andrew Y. Ng. Stanford stl-10 image dataset. [8] Sivasubhramanian Durga, Rishabh Iyer, Ganesh Ramakrishnan, and Abir De. Training data subset selection for regression with controlled generalization error. In International Conference on Machine Learning , pages 9202–9212. PMLR, 2021. [9] Satoru Fujishige. Submodular Functions and Optimization , volume 58. Elsevier, 2005. [10] Fabian Gröger, Shuo Wen, Huyen Le, and Maria Brbic. With limited data for multimodal alignment, let the STRUCTURE guide you. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. [11] Ayesha Gurnani, Viraj Mavani, Vandit Gajjar, and Yash Khandhediya. Flower categorization using deep convolutional neural networks, 2017. [12] Po han Li, Sandeep P. Chinchali, and ufuk topcu. CSA: Data-efficient mapping of unimodal features to multimodal features. In The Thirteenth International Conference on Learning Representations , 2025. [13] Rishabh Iyer. Explicit entropic constructions for coverage, facility location, and graph cuts, 2026. [14] Rishabh Iyer and Jeff Bilmes. Polyhedral aspects of submodularity, convexity and concavity. 
+
+ArXiv , abs/1506.07329. [15] Rishabh Iyer, Ninad Khargoankar, Jeff Bilmes, and Himanshu Asanani. Submodular combina-torial information measures with applications in machine learning. In Algorithmic Learning Theory , pages 722–754. PMLR, 2021. [16] Rishabh Iyer, Ninad Khargonkar, Jeff Bilmes, and Himanshu Asnani. Generalized submod-ular information measures: Theoretical properties, examples, optimization algorithms, and applications. IEEE Transactions on Information Theory , 68(2):752–781, 2021. [17] Eeshaan Jain, Tushar Nandy, Gaurav Aggarwal, Ashish V. Tendulkar, Rishabh K Iyer, and Abir De. Efficient data subset selection to generalize training across models: Transductive and inductive networks. In Thirty-seventh Conference on Neural Information Processing Systems (NeurIPS) , 2023. [18] S. Jegelka and J. Bilmes. Submodularity beyond submodular energies: coupling edges in graph cuts. pages 1897–1904, Piscataway, NJ, USA, June 2011. IEEE. [19] Chao Jia, Yinfei Yang, Ye Xia, Yi-Ting Chen, Zarana Parekh, Hieu Pham, Quoc V. Le, Yun-Hsuan Sung, Zhen Li, and Tom Duerig. Scaling up visual and vision-language representation learning with noisy text supervision. In International Conference on Machine Learning , 2021. 10 [20] V. Kaushal, R. Iyer, K. Doctor, A. Sahoo, P. Dubal, S. Kothawade, R. Mahadev, K. Dargan, and G. Ramakrishnan. Demystifying multi-faceted video summarization: Tradeoff between diversity, representation, coverage and importance. In 2019 IEEE Winter Conference on Applications of Computer Vision (WACV) , pages 452–461, 2019. [21] Vishal Kaushal, Rishabh Iyer, Suraj Kothawade, Rohan Mahadev, Khoshrav Doctor, and Ganesh Ramakrishnan. Learning from less data: A unified data subset selection and active learning framework for computer vision. In 2019 IEEE Winter Conference on Applications of Computer Vision (WACV) , 2019. [22] Vishal Kaushal, Suraj Kothawade, Anshul Tomar, Rishabh Iyer, and Ganesh Ramakrishnan. How good is a video summary? a new benchmarking dataset and evaluation framework towards realistic video summarization. ArXiv , abs/2101.10514, 2021. [23] Vishal Kaushal, Sandeep Subramanian, Suraj Kothawade, Rishabh Iyer, and Ganesh Ramakr-ishnan. A framework towards domain specific video summarization. In 2019 IEEE winter conference on applications of computer vision (WACV) , pages 666–675. IEEE, 2019. [24] Krishnateja Killamsetty, Guttu Sai Abhishek, Aakriti, Ganesh Ramakrishnan, Alexandre V. Evfimievski, Lucian Popa, and Rishabh Iyer. AUTOMATA: gradient based data subset selec-tion for compute-efficient hyper-parameter tuning. In Proceedings of the 36th International Conference on Neural Information Processing Systems , 2024. [25] Krishnateja Killamsetty, Changbin Li, Chen Zhao, Feng Chen, and Rishabh Iyer. A nested bi-level optimization framework for robust few shot learning. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 36, pages 7176–7184, 2022. [26] Suraj Kothawade, Nathan Beck, Krishnateja Killamsetty, and Rishabh Iyer. SIMILAR: Sub-modular information measures based active learning in realistic scenarios. Advances in Neural Information Processing Systems , 34, 2021. [27] Suraj Kothawade, Saikat Ghosh, Sumit Shekhar, Yu Xiang, and Rishabh K. Iyer. Talisman: Targeted active learning for object detection with rare classes and slices using submodular mutual information. In Computer Vision - ECCV 2022 - 17th European Conference , 2022. [28] Suraj Kothawade, Vishal Kaushal, Ganesh Ramakrishnan, Jeff A. Bilmes, and Rishabh K. Iyer. PRISM: A rich class of parameterized submodular information measures for guided data subset selection. In Thirty-Sixth AAAI Conference on Artificial Intelligence, AAAI , pages 10238–10246, 2022. [29] Alex Krizhevsky. Learning multiple layers of features from tiny images. 2009. [30] Lilly Kumari, Shengjie Wang, Arnav Das, Tianyi Zhou, and Jeff Bilmes. An end-to-end submodular framework for data-efficient in-context learning. In Findings of the Association for Computational Linguistics: NAACL 2024 , pages 3293–3308, 2024. [31] Chankyu Lee, Rajarshi Roy, Mengyao Xu, Jonathan Raiman, Mohammad Shoeybi, Bryan Catanzaro, and Wei Ping. Nv-embed: Improved techniques for training llms as generalist embedding models. ArXiv , abs/2405.17428, 2024. [32] Fei-Fei Li, Marco Andreeto, Marc’Aurelio Ranzato, and Pietro Perona. Caltech 101, Apr 2022. [33] Weixin Liang, Yuhui Zhang, Yongchan Kwon, Serena Yeung, and James Y. Zou. Mind the gap: Understanding the modality gap in multi-modal contrastive representation learning. ArXiv ,abs/2203.02053, 2022. [34] Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Dollár, and C. Lawrence Zitnick. Microsoft COCO: Common objects in context. In 
+
+Computer Vision – ECCV 2014 , Cham, 2014. Springer International Publishing. [35] Anay Majee, Amitesh Gangrade, and Rishabh Iyer. Looking beyond the known: Towards a data discovery guided open-world object detection, 2025. 11 [36] Anay Majee, Suraj Nandkishor Kothawade, Krishnateja Killamsetty, and Rishabh K Iyer. SCoRe: Submodular combinatorial representation learning. In Proceedings of the 41st International Conference on Machine Learning , volume 235, pages 34327–34349, 2024. [37] Anay Majee, Ryan Sharp, and Rishabh Iyer. SMILe: Leveraging submodular mutual information for robust few-shot object detection. In European Conference on Computer Vision (ECCV) ,2024. [38] S. Maji, J. Kannala, E. Rahtu, M. Blaschko, and A. Vedaldi. Fine-grained visual classification of aircraft. Technical report, 2013. [39] Mayug Maniparambil, Raiymbek Akshulakov, Yasser Abdelaziz Dahou Djilali, Sanath Narayan, Mohamed El Amine Seddik, Karttikeya Mangalam, and Noel E. O’Connor. Do vision and language encoders represent the world similarly?, 2024. [40] Baharan Mirzasoleiman, Ashwinkumar Badanidiyuru, Amin Karbasi, Jan Vondrak, and Andreas Krause. Lazier than lazy greedy. Proceedings of the AAAI Conference on Artificial Intelligence ,29(1), 2015. [41] G. L. Nemhauser, L. A. Wolsey, and M. L. Fisher. An analysis of approximations for maximizing submodular set functions—i. Mathematical Programming , 14(1):265–294, 1978. [42] Antonio Norelli, Marco Fumero, Valentino Maiorca, Luca Moschella, Emanuele Rodolà, and Francesco Locatello. Asif: Coupled data turns unimodal models to multimodal without training, 2023. [43] Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy V. Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, Mahmoud Assran, Nicolas Ballas, Wojciech Galuba, Russ Howes, Po-Yao (Bernie) Huang, Shang-Wen Li, Ishan Misra, Michael G. Rabbat, Vasu Sharma, Gabriel Synnaeve, Hu Xu, Hervé Jégou, Julien Mairal, Patrick Labatut, Armand Joulin, and Piotr Bojanowski. Dinov2: Learning robust visual features without supervision. ArXiv , abs/2304.07193, 2023. [44] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agar-wal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervision. CoRR ,abs/2103.00020, 2021. [45] Peiyang Shi, Michael C. Welle, Mårten Björkman, and Danica Kragic. Towards understanding the modality gap in CLIP. In ICLR 2023 Workshop on Multimodal Representation Learning: Perks and Pitfalls , 2023. [46] Hyun Oh Song, Stefanie Jegelka, Vivek Rathod, and Kevin Murphy. Deep metric learning via facility location, 2017. [47] Noël Vouitsis, Zhaoyan Liu, Satya Krishna Gorti, Valentin Villecroze, Jesse C. Cresswell, Guangwei Yu, Gabriel Loaiza-Ganem, and Maksims Volkovs. Data-efficient multimodal fusion on a single gpu, 2024. [48] Tongzhou Wang and Phillip Isola. Understanding contrastive representation learning through alignment and uniformity on the hypersphere. ArXiv , abs/2005.10242, 2020. [49] Kai Wei, Rishabh Iyer, and Jeff Bilmes. Submodularity in data subset selection and active learning. In ICML , 2015. [50] Wenzhe Yin, Zehao Xiao, Pan Zhou, Shujian Yu, Jiayi Shen, Jan Jakob Sonke, and Efstratios Gavves. Distributional vision-language alignment by cauchy-schwarz divergence. ArXiv ,abs/2502.17028, 2025. [51] Mert Yuksekgonul, Federico Bianchi, Pratyusha Kalluri, Dan Jurafsky, and James Y. Zou. When and why vision-language models behave like bags-of-words, and what to do about it? ArXiv ,abs/2210.01936, 2022. 12 [52] Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language image pre-training. 2023 IEEE/CVF International Conference on Computer Vision (ICCV) , pages 11941–11952, 2023. [53] Le Zhang, Qian Yang, and Aishwarya Agrawal. Assessing and learning alignment of unimodal vision and language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 14604–14614, June 2025. [54] Chenliang Zhou, Fangcheng Zhong, and Cengiz Oztireli. Clip-pae: Projection-augmentation embedding to extract relevant features for a disentangled, interpretable, and controllable text-guided face manipulation, 2025. 
+
+# A Appendix 
+
+A.1 Modularity Gap connection to Submodularity 
+
+Consider the Submodular function f (X) = −(P 
+
+> x∈X
+
+x)2, we have a version of SMI function: 
+
+If (X, Y ) = f (X) + f (Y ) − f (X ∪ Y )= − X
+
+> x∈X
+
+x
+
+!2
+
+−
+
+X
+
+> y∈Y
+
+y
+
+
+
+> 2
+
++ X
+
+> x∈X∪Y
+
+x X
+
+> y∈X∪Y
+
+y (4) The Modality Gap is defined as: 
+
+Definition A.1. The Modality Gap is the ℓ2 distance between the center mean across modalities [ 33 ]: 
+
+P 
+
+> i∈X
+
+xi
+
+D −
+
+P 
+
+> j∈Y
+
+yj
+
+D
+
+> 2
+
+Without loss of generality, the gap can be calculated as: 
+
+P 
+
+> i∈X
+
+xi
+
+D −
+
+P 
+
+> j∈Y
+
+yj
+
+D
+
+> 2
+
+=
+
+ P  
+
+> i∈X
+
+xi
+
+D
+
+2
+
++
+
+ P  
+
+> i∈Y
+
+yj
+
+D
+
+2
+
+− 2
+
+ P  
+
+> i∈X
+
+xi
+
+P 
+
+> i∈Y
+
+yj
+
+D2
+
+
+
+=
+
+ P  
+
+> i∈X
+
+xi
+
+D
+
+2
+
++
+
+ P  
+
+> i∈Y
+
+yj
+
+D
+
+2
+
+− 2
+
+ P  
+
+> i∈X∪Y
+
+xi
+
+P 
+
+> j∈X∪Y
+
+yj
+
+D2
+
+
+
++ 2 
+
+ P  
+
+> i∈X
+
+xi
+
+D2
+
+2
+
++ 2 
+
+ P  
+
+> i∈Y
+
+yj
+
+D2
+
+2
+
+=( D + 2) 
+
+ P  
+
+> i∈X
+
+xi
+
+D2
+
+2
+
++ ( D + 2) 
+
+ P  
+
+> i∈Y
+
+yj
+
+D2
+
+2
+
+(5) 
+
+− 2
+
+ P  
+
+> i∈X∪Y
+
+xi
+
+P 
+
+> j∈X∪Y
+
+yj
+
+D2
+
+
+
+Since D is constant, minimizing Equation 5 is the same as maximizing Equation 4. Therefore, minimizing the Modality Gap is the same as maximizing Mutual Information Function 
+
+A.2 Social Impact 
+
+This paper presents work whose goal is to advance the field of Machine Learning in general and Representation Learning in particular. There are many potential societal consequences of our work, none which we feel must be specifically highlighted here. 13 A.3 Limitations 
+
+One major limitation of our method is the unoptimized cross similarity matrices. This is especially apparent in FLVMI since it requires 3 different cross similarity matrices. This problem is less severe in FLQMI which contributed to its better performance compared to FLVMI. Better memory scheme needs to be applied to increase the number of positive pairs and objects per training batch. Another limitation is our neglect our other SMIs: Graph Cut Mutual Information (GCMI) and Log-determinant Mutual Information (LOGDETMI). These are prominent SMIs with applications as contrastive losses in other works [ 37 , 35 , 36 , 28 ]. However, the balance between positive and negative makes it difficult for GCMI since the negative pairs are multiples of positive pairs and thus disproportionally affect the loss. LOGDETMI is harder to optimize and usually yields worse results than its FL counterparts [36] 
+
+A.4 Evaluation Datasets 
+
+Table 6: Datasets used for classification and retrieval tasks. 
+
+Task Dataset Number of Classes Train size Test size 
+
+Classification Caltech101 101 3,060 6,084 Cars 196 8,144 8,041 CIFAR-10 10 50,000 10,000 DTD 47 3,760 1,880 EuroSAT 10 10,000 5,000 FGVC Aircraft 100 6,667 3,333 Flowers 102 2,040 6,149 GTSRB 43 26,640 12,630 Pets 37 3,680 3,669 STL-10 10 5,000 8,000 Imagenet-v1 1000 1,281,167 50,000 Food101 101 75,750 25,250 CIFAR-100 100 50,000 10,000 MMVP 9 N/A 270 Retrieval Flickr30k N/A 29,783 5,000 
+
+A.5 Training Configurations 
+
+Table 7: Default hyperparameters and datasets used throughout the paper. 
+
+Category Hyperparameter / Dataset Value 
+
+Training setup Training dataset MS COCO Cap-tions Encoders Image encoder DINOv2 Text encoder GTE-1.5 Alignment layer GLU Frozen backbone Yes Optimization Optimizer LION Initial learning rate 1e-5 Batch size (FLQMIA) 16K Batch size (FLVMIA) 1K Batch size (SAIL baseline) 32K Max training epochs - multiple postive pairs pairs 50 Max training epochs - singular postive pairs pairs 200 14

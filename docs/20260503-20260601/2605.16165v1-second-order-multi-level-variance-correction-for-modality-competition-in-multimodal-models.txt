@@ -1,0 +1,920 @@
+Title: Second-Order Multi-Level Variance Correction for Modality Competition in Multimodal Models
+
+URL Source: https://arxiv.org/pdf/2605.16165v1
+
+Published Time: Mon, 18 May 2026 01:25:14 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# Second-Order Multi-Level Variance Correction for Modality Competition in Multimodal Models 
+
+Yishun Lu and Wes Armour 
+
+University of Oxford, Oxford, United Kingdom 
+
+yishun.lu@eng.ox.ac.uk, wes.armour@oerc.ox.ac.uk 
+
+Abstract. Autoregressive next-token training offers a unified formula-tion for image generation and text understanding, but it also creates strong modality competition that destabilizes optimization and limits large-batch scaling. We show that first-order optimizers such as AdamW are vulnerable to cross-modality gradient heterogeneity, while second-order preconditioning, particularly SOAP, provides a more stable basis for multimodal alignment. Building on this insight, we propose ML-FOP-SOAP , a second-order optimization framework with Multi-Level Vari-ance Correction. Our Fisher-Orthogonal Projection suppresses variance-induced modality conflicts, reducing the trade-off between visual genera-tion and textual understanding. To make this practical under large gradi-ent accumulation, we introduce a hierarchical folding strategy that cap-tures fine-grained variance with low micro-step overhead. Experiments on Janus and Emu3 show consistent gains across both modalities and stable training at batch size 8192. Compared with AdamW, our method improves sample efficiency by up to 1.4× and accelerates wall-clock train-ing by up to 1.5×, offering a robust optimizer for scaling multimodal foundation models. 
+
+Keywords: Multimodal Alignment · Modality Competition · Second-Order Optimization · Variance Control · Large-Batch Training 
+
+1 Introduction 
+
+In recent years, unifying image generation and text understanding under the au-toregressive next-token prediction paradigm has become a major trend in the de-velopment of vision-language foundation models. However, this deep multi-modal integration introduces a severe modality competition problem during pretrain-ing, which often makes joint training highly unstable and convergence extremely slow. To address this challenge, most existing approaches in the literature pri-marily focus on model architecture. For example, researchers have attempted to physically disentangle modality-specific representations by designing decoupled visual encoders, introducing multi-way attention mechanisms, or constructing dedicated alignment modules [2, 9, 21, 23, 25]. Beyond architectural modifications, existing efforts to alleviate modality con-flict, such as dynamic loss weighting, curriculum scheduling, and gradient bal-ancing [3,4,7,19], remain largely external to the optimizer. In practice, parameter  
+
+> arXiv:2605.16165v1 [cs.CV] 15 May 2026 2Yishun Lu and Wes Armour
+
+updates are still governed by first-order methods like AdamW [13], which rely on diagonal moment estimates. These methods fail to model the underlying local curvature of the loss surface or the geometric coupling between modalities. This reliance on first-order optimization becomes a critical bottleneck be-cause multi-modal training induces gradient estimators with vastly different noise patterns and curvature sensitivities [8]. Specifically, visual objectives often involve high-dimensional and spatially diffuse prediction errors, whereas tex-tual objectives are typically concentrated on a more compact semantic manifold [26]. This geometric mismatch creates a complex cross-modal covariance struc-ture. Consequently, under standard diagonal preconditioning, modalities associ-ated with larger gradient variance (vision) exert a disproportionate influence on the update trajectory, suppressing lower-variance but semantically dense signals (text) [18, 24]. To resolve this variance conflict at the optimization level, the recently pro-posed Fisher-Orthogonal Projection (FOP) [14] accelerates convergence by pro-jecting gradients in Fisher geometry. However, its original reliance on K-FAC [15] is memory-prohibitive for the massive vocabularies and wide hidden layers of modern foundation models. To address this, we leverage structured two-dimensional (2D) tensor preconditioners. Interestingly, our empirical analysis reveals that while standard methods like Shampoo [20] are easily destabilized by early-stage visual outliers, the SOAP optimizer [1, 22] provides a highly robust, memory-efficient surrogate for local optimization metrics. Yet, even with SOAP, we ob-serve a lingering trade-off where textual understanding is inadvertently sacrificed to accommodate high-entropy visual noise. Thus, integrating FOP with SOAP becomes essential to fully neutralize these cross-modality conflicts. Furthermore, scaling these unified models to ultra-large global batch sizes (e.g., 8192) requires massive gradient accumulation across numerous micro-steps. Applying variance correction only at the coarse boundaries of a long accumu-lation window fails to preserve the fine-grained gradient discrepancies arising within the window. Inspired by the telescoping coarse-to-fine viewpoint of the Multi-Level Monte Carlo (MLMC) paradigm [5], we propose a novel Multi-level Hierarchical Gradient Folding mechanism via Fisher-Orthogonal Projec-tion (ML-FOP) . Instead of classical scalar expectation estimation, our approach recursively fuses computationally lightweight cumulative snapshots to preserve intra-step multi-scale variance to achieve multi-level variance correction. Through this methodology, we present a new optimization framework that natively mitigates modality competition and enables the training of unified au-toregressive models with ultra-large global data batches, dramatically improving hardware utilization on modern GPU clusters. Specifically, our contributions are as follows: 
+
+– Second-Order Optimization for Modality Competition. We system-atically investigate the optimization dynamics of unified multi-modal au-toregressive models. We reveal that while first-order methods (AdamW [13]) and standard uncentered second-order methods (Shampoo [20]) struggle with extreme visual gradient outliers, the SOAP optimizer [22] inherently miti-Abbreviated paper title 3
+
+gates this cross-modality heterogeneity, establishing a robust foundation for multi-modal alignment. Compared to AdamW, our ML-FOP-SOAP frame-work delivers a 1.4× gain in sample efficiency and a 1.5× acceleration in end-to-end wall-clock time, uniquely preserving robust performance across both modalities. 
+
+– Variance Control via Fisher-Orthogonal Projection (FOP). Build-ing upon the SOAP baseline, we introduce a geometry-aware FOP mecha-nism. We demonstrate that projecting gradient differences orthogonally to the primary descent trajectory actively neutralizes modality competition. This effectively eliminates the conventional trade-off between textual under-standing and visual generation, yielding strict Pareto improvements across both tasks. 
+
+– Efficient Multi-Level FOP for Massive Accumulation. To make FOP tractable under massive gradient accumulation, we propose an efficient Multi-Level hierarchical folding mechanism (ML-FOP). This dyadic telescoping strategy captures fine-grained, cross-modality variance across accumulation segments without the prohibitive computational wall-clock overhead of ap-plying projections at every micro-step. 
+
+– Ultra-Large-Batch multi-modal Alignment Benchmark. We validate our framework on representative unified architectures (Janus and Emu3) scaled on massive datasets (LLaVA-3M and 12M [11, 12]). We successfully scale the global batch size up to 8192, a regime where existing optimizers suffer catastrophic degradation. 
+
+2 Related Work 
+
+2.1 Native Unified Vision-Language Models 
+
+The dominant paradigm in vision-language foundation models has recently shifted towards unifying image and text modalities within a single autoregressive next-token prediction framework [21,23,25]. Unlike earlier compositional architectures that connect a pre-trained vision encoder (e.g., CLIP) to a Large Language Model via projection layers [2, 9], native autoregressive models map all contin-uous visual signals into discrete tokens, treating both modalities equally. While this architectural convergence enables seamless generation and understanding, it inevitably exacerbates modality competition during joint pre-training. Our work does not alter these advanced model architectures; rather, we provide the optimization infrastructure necessary to stabilize their training and scale them to unprecedented batch sizes. 
+
+2.2 Modality Competition and Multitask Optimization 
+
+The phenomenon of modality conflict is closely related to gradient interference in multitask learning. Traditional approaches to alleviate this include dynamic loss weighting [3], gradient projection techniques, and curriculum-based data 4 Yishun Lu and Wes Armour 
+
+scheduling [4, 7, 19]. However, these methods operate largely external to the optimizer itself. Parameter updates in foundation models are still universally governed by first-order optimizers like AdamW [13]. AdamW relies on diagonal preconditioning, which independently scales coordinates but fundamentally fails to capture the complex, non-diagonal cross-modal covariance structure and the distinct local geometry induced by high-variance visual objectives and dense textual signals [8]. 
+
+2.3 Efficient Second-Order Preconditioning 
+
+To address the limitations of first-order methods, second-order optimization ex-plicitly models the local curvature of the loss surface. The gold standard for this is Natural Gradient Descent (NGD), which preconditions the Euclidean gradient 
+
+g using the inverse of the Fisher Information Matrix (FIM), F , yielding the op-timal update direction ˜g = F −1g. However, computing and inverting the exact FIM is fundamentally intractable for deep neural networks. Previous methods often employ explicit approximations, such as K-FAC [15], to make the inver-sion feasible. The recently proposed Fisher-Orthogonal Projection (FOP) [14] successfully leverages K-FAC to accelerate multi-modal convergence. Unfortu-nately, explicitly modeling curvature via K-FAC still incurs catastrophic mem-ory overhead when applied to modern VLMs with massive vocabularies and wide hidden layers. To scale geometry-aware optimization, we turn to lightweight tensor pre-conditioners like Shampoo [20] and SOAP [1, 22], which construct precondition-ers based on empirical second-order gradient statistics. Crucially, while stan-dard Shampoo utilizes uncentered second moments that are highly vulnerable to early-stage visual gradient outliers, SOAP projects gradients into a skewed eigenbasis and applies coordinate-wise adaptive normalization. This provides a highly robust, memory-efficient surrogate for the natural gradient: P(g) ≈ F −1g.By replacing explicit Fisher inversions with SOAP, our framework amortizes the prohibitive memory overhead while capturing the local geometry necessary for multi-modal training. 
+
+3 Methodology 
+
+3.1 Mathematical Formulation of Modality Competition 
+
+Our goal is to formalize modality competition in unified autoregressive multi-modal models, such as Janus [25] and Emu3 [23], as an optimization imbalance induced by heterogeneous stochastic gradients. Consider a model parameterized by θ, trained on both image and text data. The joint objective can be written as 
+
+L(θ) = Ex∼D img [Limg (θ; x)] + Ey∼D text [Ltext (θ; y)]  (1) In stochastic optimization, the full gradient ∇L (θ) is approximated using minibatches Bimg ⊂ D img and Btext ⊂ D text . The practical update is therefore based on the stochastic gradient: Abbreviated paper title 5
+
+g = gimg + gtext = 1
+
+|B img |
+
+X
+
+> x∈B img
+
+∇θ Limg (θ; x) + 1
+
+|B text |
+
+X
+
+> y∈B text
+
+∇θ Ltext (θ; y) (2) which serves as a Monte Carlo estimator of the full gradient ∇L (θ). The key difficulty is that the image and text components generally induce gradient es-timators with substantially different noise scales and covariance structures. Let 
+
+Σimg = Cov( gimg ) , Σtext = Cov( gtext ). In many multi-modal training scenarios, it can be observed that a strong imbalance between these covariance scales, often reflected by Tr( Σimg ) ≫ Tr( Σtext ). Examples can be seen in the supplementary material. This imbalance does not merely affect the magnitude of the stochastic gradient, but also its effective optimization geometry in the shared parameter space. Under first-order adaptive optimizers such as AdamW [13], the update is constructed from per-parameter first and second moment estimates. Abstracting away bias correction for clarity, the update takes the form dt = mt√vt+ϵ , where 
+
+mt and vt denote the exponential moving averages of the gradient and squared gradient. Since this update rule relies on diagonal preconditioning, it can only rescale coordinates independently and does not explicitly model cross-parameter coupling or curvature interactions across modalities [1]. As a result, when one modality contributes disproportionately high gradient variance, its noisy direc-tions may dominate the optimization trajectory, while weaker but semantically informative signals from another modality are underutilized. 
+
+3.2 Fisher Information for Curvature Awareness 
+
+To resolve modality conflict induced by Euclidean first-order updates, we seek an optimization geometry that reflects the intrinsic structure of the model distri-bution rather than raw coordinate-wise gradient magnitudes. Natural gradient descent [17] provides such a perspective by measuring parameter perturbations through the change they induce in the predictive distribution. Specifically, for a small parameter step ∆θ , the Kullback–Leibler divergence between the model before and after the update admits the local approximation 
+
+DKL (pθ ∥ pθ+∆θ ) ≈ 12 ∆θ ⊤F ∆θ  (3) where, F is the Fisher information matrix, defined as 
+
+F = Ez∼p(·| θ)
+
+∇ log p(z | θ)∇ log p(z | θ)⊤ (4) Equation (3) shows that the Fisher information matrix defines the local metric of the statistical manifold. Unlike diagonal first-order preconditioners in AdamW, F captures structured curvature information and parameter coupling, thereby providing a geometry-aware notion of distance in parameter space. This is especially important in multi-modal training. High-variance visual gradients may correspond to directions that are statistically noisy or locally 6 Yishun Lu and Wes Armour 
+
+flat, while lower-variance textual gradients may align with sharper and more informative directions for joint generalization. Preconditioning the gradient by 
+
+F −1 yields the natural gradient update 
+
+dNGD = F −1g (5) Under this transformation, updates are no longer determined solely by Eu-clidean scale, but are normalized with respect to the local geometry of the model distribution. Consequently, directions associated with large stochastic variance can be damped when they are not supported by informative curvature, whereas lower-variance but high-curvature directions can be preserved or amplified. This provides the mathematical motivation for introducing Fisher-aware optimiza-tion in order to balance multi-modal training dynamics. The details of proof are shown in Supplementary section A. 
+
+3.3 Tractable Curvature via Tensor Preconditioners 
+
+To make curvature-aware optimization tractable for large multi-modal autore-gressive models, we must address the prohibitive computational and memory costs of the exact Fisher Information Matrix F . For a neural network with N
+
+parameters, the Fisher matrix F ∈ RN ×N requires O(N 3) for explicit inversion, which is fundamentally infeasible for models with billions of parameters. Structured tensor preconditioners, such as Shampoo [20] and SOAP [22], provide a scalable approximation to the geometry induced by F . Consider a parameter tensor whose gradient is represented as a matrix G ∈ Rm×n, and let g = vec( G) be its vectorized form. These methods approximate the local curvature by assuming a Kronecker-factored structure of the second-moment matrix:  ˆF ≈ L ⊗ R (6) where the left and right factors L ∈ Rm×m and R ∈ Rn×n capture the correla-tions along the respective tensor dimensions: 
+
+L ≈ E[GG ⊤], R ≈ E[G⊤G] (7) Crucially, unlike Natural Gradient Descent (NGD) which typically applies the inverse Fisher F −1, tensor preconditioners like SOAP aim to approximate the 
+
+inverse square-root of the Fisher matrix, F −1/2, to achieve adaptive coordinate-wise scaling in the spectral domain. Under the property (L ⊗ R)−1/2 = L−1/2 ⊗
+
+R−1/2, the preconditioned update can be computed without materializing the full N × N matrix. In practice, to maintain symmetric preconditioning for the matrix G, the update is applied as: 
+
+P(g) = vec 
+
+
+
+L−1/4GR −1/4
+
+(8) where L−1/4 and R−1/4 are computed via eigendecomposition (as in SOAP) or iterative methods (as in Shampoo). Equation (8) is mathematically equivalent Abbreviated paper title 7
+
+to applying (R1/4 ⊗ L1/4)−1g, providing a memory-efficient surrogate for the geometry-aware update. Despite this efficiency, applying such preconditioning directly to the averaged batch gradient ¯g still suffers from severe modality competition. The fundamental limitation lies in the sequential nature of the standard update: 
+
+∆θ SOAP ∝ P (¯ g), where ¯g = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+gi (9) During the averaging step, fine-grained gradient discrepancies between micro-batches are smoothed out. In multi-modal training, where image and text sam-ples produce gradients with vastly different noise scales and directions, the av-eraged vector ¯g becomes biased towards the modality with higher variance (typ-ically vision). Consequently, the preconditioner P(·) only adjusts the coarse, batch-level geometry of an already biased signal; it cannot recover the modality-specific informative directions that were neutralized during the initial averaging process. This motivates the need for variance-aware correction before the pre-conditioning stage. 
+
+3.4 Variance Control via Fisher-Orthogonal Projection 
+
+To recover the critical intra-batch variance information that is prematurely lost when simply averaging gradients, we introduce Fisher-Orthogonal Projection (FOP) on gradient differences. During gradient accumulation, let g1 and g2 de-note two stochastic gradients computed from distinct micro-batches. We define their average and difference as: 
+
+gavg = 12 (g1 + g2), gdiff = g1 − g2 (10) Here, gdiff inherently captures the micro-level variance and heterogeneity within the accumulation window. In the context of multi-modal alignment, it explicitly encodes the optimization conflict between processing an image-centric micro-batch and a text-centric micro-batch. Instead of explicitly forming the prohibitive Fisher matrix F to perform ge-ometric projections, we construct a lightweight forward metric proxy M(v) ≈
+
+F v directly from the internal states of the tensor preconditioners (e.g., Sham-poo or SOAP). Using this computationally efficient proxy, we extract a Fisher-orthogonal residual g⊥ 
+
+> diff
+
+by projecting gdiff away from the mean descent direction 
+
+gavg in the Riemannian manifold: 
+
+g⊥ 
+
+> diff
+
+= gdiff −
+
+ ⟨gdiff , M(gavg )⟩⟨gavg , M(gavg )⟩ + ϵ
+
+
+
+gavg  (11) where ϵ is a small numerical stabilizer. By construction, this residual satisfies 
+
+⟨g⊥ 
+
+> diff
+
+, M(gavg )⟩ ≈ ⟨ g⊥ 
+
+> diff
+
+, F g avg ⟩ = 0 . It perfectly isolates the pure cross-modality variance without interfering with the primary optimization trajectory. 8 Yishun Lu and Wes Armour 
+
+The final combined gradient direction is then constructed by augmenting the average gradient with this variance-aware correction: 
+
+gcomb = gavg + βg ⊥ 
+
+> diff
+
+(12) where β is an adaptive mixing coefficient. This combined direction is subse-quently mapped back to the parameter space using the preconditioner P(·) to obtain the final update step: 
+
+dFOP = F −1gcomb  (13) This formulation elegantly injects variance control into the preconditioned subspace without breaking the tractable O(m3 + n3) complexity bound. The detailed step-by-step mathematical derivation, including the computation of the optimal adaptive coefficient β, is provided in Supplementary material Section B. Standard SOAP or Shampoo updates are inherently restricted to the one-dimensional subspace defined by the batch mean, yielding an update dSOAP ≈
+
+F −1gavg . By contrast, FOP expands the search space by injecting the Fisher-orthogonal variance residual g⊥ 
+
+> diff
+
+. As we show in Supplementary material Section C, under a local quadratic surrogate objective J(d) governing the natural gra-dient descent, the FOP update satisfies an inequality: 
+
+JFOP (β) < J SOAP , ∀β̸ = 0  (14) 
+
+3.5 Multi-Scale Variance Correction via MLMC-Inspired Hierarchical Folding 
+
+To scale multi-modal autoregressive models to ultra-large batch sizes (e.g., 8192), training must rely on extensive gradient accumulation across K micro-steps. Applying standard FOP only once, using coarse summaries from the start and end of a long accumulation window, would fail to explicitly preserve intermediate fine-scale gradient discrepancies arising within the window. To address this, we borrow the telescoping coarse-to-fine viewpoint of the Multi-Level Monte Carlo (MLMC) paradigm [5]. In classical computational statis-tics, MLMC achieves optimal variance reduction by telescoping an expecta-tion across a hierarchy of discretization resolutions, effectively combining coarse global estimates with fine local corrections. Unlike classical MLMC, our objective here is not to estimate a scalar expec-tation via unbiased multi-level sampling, but rather to preserve the rich, within-step variance structure of gradients during massive accumulation. We propose a Multi-level Hierarchical Gradient Folding mechanism. We discretize the accumulation window into a dyadic hierarchy of L levels, where the snapshot intervals Lj ∈ { 1, 2, 4, 8, . . . , K }.Instead of discarding intermediate gradients, we record computationally lightweight cumulative average snapshots: 
+
+¯g1: k = 1
+
+k
+
+> k
+
+X
+
+> i=1
+
+gi (15) Abbreviated paper title 9
+
+By simple algebra on cumulative averages, we reconstruct the missing segment averages (the segment-level averages), bridging adjacent dyadic levels without explicitly storing every micro-batch: 
+
+¯gLj−1+1: Lj = Lj ¯g1: Lj − Lj−1 ¯g1: Lj−1
+
+Lj − Lj−1
+
+(16) By treating these recovered segment averages as multi-scale summaries whose discrepancies encode variance across the accumulation hierarchy, we perform a recursive, bottom-up folding process using our FOP operator: 
+
+z0 = ¯ g1:1 , zj = FOP accum (zj−1, ¯gLj−1+1: Lj ) (17) where FOP accum (·, ·) combines the previous folded state with the recovered seg-ment average through Fisher-aware residual filtering. 
+
+4 Experimental Setup 
+
+4.1 Model and dataset 
+
+To systematically evaluate the efficacy of our hierarchical folding optimization, we conduct experiments on two representative unified multi-modal autoregres-sive architectures: Janus [25] and Emu3 [23]. While both models utilize an autore-gressive framework for unified multi-modal alignment, they adopt fundamentally distinct visual encoding paradigms. Emu3 relies on a purely discrete tokenizer, fully converting continuous visual signals into a discrete space to share Fa sin-gle, unified vocabulary with text. In contrast, Janus employs a decoupled visual encoding strategy: it extracts continuous semantic features (via SigLIP [27]) for multi-modal understanding, while utilizing a VQ tokenizer [16] to map im-ages into discrete IDs specifically for visual generation. To accommodate their respective architectural designs and spatial resolution requirements, we config-ure the maximum training sequence length to 1024 for the Janus variants and 5120 for the Emu3 variant. Furthermore, rather than directly adopting the mas-sive parameter scales from their original papers (which typically range from 7B to over 8B parameters ), we construct three scaled-down, intermediate-capacity variants: Janus-400M , and Emu3-600M .The primary motivation for this downscaling is computational tractability and ablation rigor. Investigating the intricate optimization dynamics of modality competition under ultra-large batch sizes (e.g., 8192) requires extensive hyper-parameter tuning and hundreds of gradient accumulation steps. Evaluating full-scale 8B models under these extreme accumulation settings is computationally prohibitive. By systematically scaling down the network capacity while main-taining the core architectural proportions, these intermediate variants perfectly preserve the severe cross-modality gradient heterogeneity observed in full-scale models. This allows us to rigorously and efficiently ablate our multi-scale vari-ance control mechanisms. The exact scaling configurations, layer depths, and 10 Yishun Lu and Wes Armour 
+
+parameter counts for each variant are detailed in Supplementary material sec-tion D. To thoroughly evaluate the robustness and efficacy of our optimization meth-ods under realistic, large-scale conditions, we construct a massive multi-modal pre-training corpus by combining the widely adopted LLaVA-3M and LLaVA-12M datasets [10–12]. By jointly training our scaled-down autoregressive mod-els on this combined dataset, we expose the optimization trajectory to highly diverse and extensive image-text pairs. This comprehensive data scale is specifi-cally designed to induce severe cross-modality gradient heterogeneity, providing a rigorous testbed for validating our multi-scale variance control under massive gradient accumulation settings. 
+
+4.2 Implementation Details 
+
+To ensure balanced multi-modal alignment, both architectures are jointly trained on Image-to-Text (I2T) and Text-to-Image (T2I) tasks with a 50%/50% proba-bility split. However, the specific mixing strategies are tailored to their respective architectural paradigms. For Janus , we utilize step-level synchronous task rout-ing across distributed ranks. In each training step, a specific task (understanding or generation) is randomly sampled and synchronized across all ranks to main-tain consistent gradient directions for the decoupled encoders. In contrast, Emu3 
+
+leverages its unified next-token prediction framework to implement sample-level mixing within each batch. To further enhance bidirectional alignment and pre-vent positional bias, we randomly permute the relative order of image tokens and text captions within each micro-batch. All experiments are executed on a high-performance cluster equipped with 
+
+AMD MI300X GPUs, each providing 192GB of VRAM. To handle the mem-ory demands of large-scale pre-training, especially for Emu3’s extended sequence length of 5120 tokens, we employ gradient checkpointing across all model vari-ants. The micro-batch size per GPU is configured as 64 for Janus-400M and 8 for Emu3-600M . We utilize gradient accumulation to reach the target global batch size, and to maintain stable optimization dynamics, we strictly adhere to the square-root learning rate scaling rule ( ηscaled = ηbase × pBtotal /1024 ). For hyperparameter tuning, we conduct a systematic grid search to identify the optimal peak learning rate for each optimizer and model variant. Regarding the learning rate schedules, we use a 10% warmup ratio by default. We uses cosine decay with a minimum LR floor of 1e-6. Crucially, Janus defaults to freezing all vision-related modules, tightly focusing the optimization on the autoregressive backbone and naturally accounting for the gap between its trainable and total parameter counts. 
+
+5 Experiments 
+
+The overall training efficiency and convergence behaviors of the proposed op-timization strategies are first evaluated under a baseline batch size of 1024. In Abbreviated paper title 11 0 1 2 3 4 5 6                          
+
+> Train Tokens (MB) 1e3
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> Loss
+> Janus-400M Shampoo
+> AdamW
+> SHAMPOO
+> FOP-SHAMPOO
+> ML-FOP-SHAMPOO
+> MUON
+> 0123456
+> Train Tokens (MB) 1e3
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> Loss
+> Janus-400M SOAP
+> AdamW
+> SOAP
+> FOP-SOAP
+> ML-FOP-SOAP
+> MUON
+> 0510 15 20 25 30 35 40
+> Wallclock Time (s) 1e3
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> Loss
+> Janus-400M Shampoo
+> AdamW
+> SHAMPOO
+> FOP-SHAMPOO
+> ML-FOP-SHAMPOO
+> MUON
+> 0510 15 20 25 30 35 40
+> Wallclock Time (s) 1e3
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> Loss
+> Janus-400M SOAP
+> AdamW
+> SOAP
+> FOP-SOAP
+> ML-FOP-SOAP
+> MUON
+
+Fig. 1: 2x2 train-loss comparison for pretraining Janus-400M. Left column: SHAMPOO family; right column: SOAP family. Top row: loss vs trained tokens; bottom row: loss vs wallclock time. 
+
+Figure 1, a comparative analysis of the training loss for the Janus-400M architec-ture is presented across the SHAMPOO (left column) and SOAP (right column) optimizer families. To rigorously define the optimization plateau, the dashed horizontal lines indicate the convergence thresholds established by extending the AdamW baseline training for 20 × the standard token volume according to a “Chinchilla-optimal” scaling law [6]. Under this regime, the SHAMPOO family underperforms the AdamW base-line. Early-stage vision-text gradient outliers heavily skew SHAMPOO’s uncen-tered second-moment matrices. Conversely, SOAP mitigates this by projecting gradients into the skewed eigenbasis and applying coordinate-wise adaptive nor-malization, effectively insulating the network from divergence. Consequently, standard SOAP reaches the convergence threshold at merely 3.2B tokens—a 
+
+∼ 1.4× sample efficiency improvement over AdamW (4.5B tokens), while MUON entirely fails to approach it. Crucially, applying the Fisher-Orthogonal Projection (FOP) to the SOAP op-timizer amplifies stability. By neutralizing variance-induced cross-modality con-flicts, FOP-SOAP and ML-FOP-SOAP break through vanilla SOAP’s plateau to achieve lower global losses. Furthermore, the Multi-Level (ML) mechanism successfully amortizes FOP’s projection latency. As a result, ML-FOP-SOAP hits the target threshold in around 3.1B tokens (a ∼ 1.4× efficiency gain over AdamW) and requires around 5.5 hours of wall-clock time. This yields an end-to-end actual training acceleration of ∼ 1.5× compared to AdamW’s 8.3 hours. 12 Yishun Lu and Wes Armour 
+
+Table 1: Cross-architecture throughput and memory comparison between Janus-400M and Emu3-600M under global batch sizes (BS) of 1024 and 8192. For each architecture, the results are split into two sub-rows: the first row reports the average time per global training step (seconds), and the second row reports the peak VRAM consumption (GB). Batch Size BS = 1024 BS = 8192 Arch Metric AdamW MUON Sham. F-Sh. ML-F-Sh. SOAP F-So. ML-F-So. AdamW MUON Sham. F-Sh. ML-F-Sh. SOAP F-So. ML-F-So.                                                          
+
+> Janus Time 7.76 7.85 12.93 15.64 13.87 8.40 12.22 8.62 60.94 60.90 59.91 74.48 114.32 65.53 78.93 67.43 VRAM 121.86 121.48 128.49 126.92 126.93 129.39 127.28 131.65 121.86 121.48 128.49 126.92 126.93 129.39 127.28 131.65
+> Emu3 Time 236.91 252.51 N/A N/A N/A 250.63 273.56 259.67 1859.13 1949.13 N/A N/A N/A 1945.83 2135.59 1971.47 VRAM 144.38 139.91 N/A N/A N/A 145.61 146.77 151.08 144.38 139.91 N/A N/A N/A 145.61 146.77 151.08
+
+These findings substantiate that robust second-order preconditioners estab-lish a critical multi-modal foundation, while FOP-based variance control unlocks deeper convergence. Given SHAMPOO’s vulnerability to early-stage outliers, subsequent analyses will focus exclusively on the SOAP family. Train Tokens (MB)                  
+
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> 4.5
+> Loss
+> Janus-400M I2T Loss
+> AdamW
+> SOAP
+> ML-FOP-SOAP
+> MUON
+> Train Tokens (MB)
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> 4.5
+> Loss
+> Emu3-600M I2T Loss
+> AdamW
+> SOAP
+> ML-FOP-SOAP
+> MUON
+> 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+> Train Tokens (MB) 1e3
+> 5.0
+> 5.5
+> 6.0
+> 6.5
+> 7.0
+> 7.5
+> 8.0
+> Loss
+> Janus-400M T2I Loss
+> AdamW
+> SOAP
+> ML-FOP-SOAP
+> MUON
+> 012345678
+> Train Tokens (MB) 1e3
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> Loss
+> Emu3-600M T2I Loss
+> AdamW
+> SOAP
+> ML-FOP-SOAP
+> MUON
+
+Fig. 2: Decoupled training loss curves for image-to-text (I2T) and text-to-image (T2I) tasks across Janus-400M (left) and Emu3-600M (right) architectures. 
+
+To explicitly verify how the proposed strategies resolve modality competi-tion, the overall objective is decoupled into Image-to-Text (I2T) and Text-to-Image (T2I) losses in Figure 2. In the Janus-400M architecture (left column), the global optimization trajectory is heavily dominated by the high-entropy T2I generation task, which consistently exhibits a much larger numerical magni-tude than the I2T understanding task. Under this severe gradient heterogene-ity, first-order methods like AdamW are overwhelmed by visual noise, result-ing in sub-optimal convergence. The second-order SOAP optimizer establishes Abbreviated paper title 13 0 1 2 3 4 5 6                        
+
+> Train Tokens (MB) 1e3
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> Loss
+> Janus-400M SOAP
+> AdamW
+> SOAP
+> FOP-SOAP
+> ML-FOP-SOAP
+> MUON
+> 0246810
+> Train Tokens (MB) 1e3
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> Loss
+> Emu3-600M SOAP
+> AdamW
+> SOAP
+> FOP-SOAP
+> ML-FOP-SOAP
+> MUON
+> 0510 15 20 25 30 35 40
+> Wallclock Time (s) 1e3
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> Loss
+> Janus-400M SOAP
+> AdamW
+> SOAP
+> FOP-SOAP
+> ML-FOP-SOAP
+> MUON
+> 050 100 150 200 250 300 350
+> Wallclock Time (s) 1e3
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> Loss
+> Emu3-600M SOAP
+> AdamW
+> SOAP
+> FOP-SOAP
+> ML-FOP-SOAP
+> MUON
+
+Fig. 3: Training loss convergence across Janus-400M (left) and Emu3-600M (right) under a highly scaled batch size setting (Batch size = 8192). The top row tracks loss against processed Train Tokens, while the bottom row tracks it against Wallclock Time. 
+
+a stronger foundation by accelerating the dominant T2I task significantly faster than AdamW. However, while SOAP improves T2I generation, its corresponding I2T loss rapidly plateaus, indicating that standard second-order preconditioning still inadvertently sacrifices textual understanding to accommodate visual noise. In stark contrast, ML-FOP-SOAP successfully neutralizes this conflict; by lever-aging geometry-aware variance control, it shields the fragile I2T learning process and continuously drives both losses downward simultaneously. Furthermore, this optimization superiority is even more pronounced in the Emu3-600M architecture (right column), which operates under a pure unified next-token prediction paradigm. In this setting, the limitations of standard op-timizers are drastically exposed: AdamW struggles profoundly, particularly on the I2T task, converging to a remarkably higher loss plateau than all other meth-ods. While standard SOAP marginally improves upon AdamW, ML-FOP-SOAP achieves a strict Pareto improvement, yielding significantly deeper and faster convergence on both the I2T and T2I objectives simultaneously. These decoupled results directly substantiate the two central claims of this work: while second-order preconditioners effectively manage baseline multi-modal heterogeneity bet-ter than first-order methods, the addition of the FOP mechanism is absolutely critical for controlling variance and fully resolving modality competition across diverse architectures. To demonstrate scalability, training dynamics are evaluated at a global batch size of 8192 (Figure 3). In Janus-400M and Emu3-600M, AdamW suffers from se-14 Yishun Lu and Wes Armour 
+
+vere large-batch degradation, prematurely plateauing above baseline thresholds. While standard SOAP initially outperforms AdamW, it eventually stagnates. Only ML-FOP-SOAP maintains a continuous downward trajectory, achieving the lowest global loss. Wallclock evaluations confirm that our Multi-Level (ML) hierarchical folding strategy mitigates the computational overhead of micro-step projections, enabling robust, efficient scalability to ultra-large batches without catastrophic latency. Additional examples are provided in the supplementary materials. 
+
+6 Conclusion 
+
+In this work, we systematically addressed the optimization bottleneck of modal-ity competition in natively unified multi-modal autoregressive models. We demon-strated that while the second-order SOAP optimizer establishes a robust foun-dation against early-stage outliers and multi-modal heterogeneity, it still falls prey to the conventional trade-off between textual understanding and visual generation. To resolve this, we introduced ML-FOP-SOAP. By flexibly applying a Fisher-Orthogonal Projection, our method actively neutralizes cross-modality variance, yielding strict Pareto improvements that drive both task objectives downward simultaneously. Furthermore, our Multi-Level hierarchical folding strat-egy successfully amortizes projection latency during massive gradient accumula-tion. This enables flawless scaling to an ultra-large batch size of 8192, breaking the late-stage convergence plateaus that plague standard optimizers. Delivering a 1.4× improvement in sample efficiency and 1.5× faster wall-clock convergence over AdamW, our framework provides a robust and scalable foundation for ac-celerating large-scale multi-modal pretraining. 
+
+References     
+
+> 1. Abreu, N., Vyas, N., Kakade, S., Morwani, D.: The potential of second-order opti-mization for llms: A study with full gauss-newton. arXiv preprint arXiv:2510.09378 (2025) 2. Bai, J., Bai, S., Yang, S., Wang, S., Tan, S., Wang, P., Lin, J., Zhou, C., Zhou, J.: Qwen-vl: A versatile vision-language model for understanding, localization, text reading, and beyond (2023), https://arxiv.org/abs/2308.12966
+> 3. Chen, Z., Badrinarayanan, V., Lee, C.Y., Rabinovich, A.: Gradnorm: Gradient nor-malization for adaptive loss balancing in deep multitask networks. In: International conference on machine learning. pp. 794–803. PMLR (2018) 4. Dai, W., Li, J., Li, D., Tiong, A., Zhao, J., Wang, W., Li, B., Fung, P.N., Hoi, S.: Instructblip: Towards general-purpose vision-language models with instruction tuning. Advances in neural information processing systems 36 , 49250–49267 (2023) 5. Giles, M.B.: Multilevel monte carlo methods. Acta numerica 24 , 259–328 (2015) 6. Hoffmann, J., Borgeaud, S., Mensch, A., Buchatskaya, E., Cai, T., Rutherford, E., de Las Casas, D., Hendricks, L.A., Welbl, J., Clark, A., Hennigan, T., Noland, E., Millican, K., van den Driessche, G., Damoc, B., Guy, A., Osindero, S., Simonyan, K., Elsen, E., Rae, J.W., Vinyals, O., Sifre, L.: Training compute-optimal large language models (2022), https://arxiv.org/abs/2203.15556
+
+Abbreviated paper title 15 7. Kontras, K., Chatzichristos, C., Blaschko, M., De Vos, M.: Improving multimodal learning with multi-loss gradient modulation. arXiv preprint arXiv:2405.07930 (2024) 8. Liang, V.W., Zhang, Y., Kwon, Y., Yeung, S., Zou, J.Y.: Mind the gap: Under-standing the modality gap in multi-modal contrastive representation learning. Ad-vances in Neural Information Processing Systems 35 , 17612–17625 (2022) 9. Liu, H., Li, C., Wu, Q., Lee, Y.J.: Visual instruction tuning. Advances in neural information processing systems 36 , 34892–34916 (2023) 10. Liu, S., Cheng, H., Liu, H., Zhang, H., Li, F., Ren, T., Zou, X., Yang, J., Su, H., Zhu, J., Zhang, L., Gao, J., Li, C.: Llava-plus: Learning to use tools for creating multimodal agents (2023), https://arxiv.org/abs/2311.05437 
+
+11. lmms-lab: Llava-recap-cc12m (2024), https://huggingface.co/datasets/lmms-lab/LLaVA-ReCap-CC12M , hugging Face dataset, accessed 2026-03-05 12. lmms-lab: Llava-recap-cc3m (2024), https://huggingface.co/datasets/lmms-lab/LLaVA-ReCap-CC3M , hugging Face dataset, accessed 2026-03-05 13. Loshchilov, I., Hutter, F.: Decoupled weight decay regularization. arXiv preprint arXiv:1711.05101 (2017) 14. Lu, Y., Armour, W.: Beyond the mean: Fisher-orthogonal projection for natural gradient descent in large batch training. arXiv preprint arXiv:2508.13898 (2025) 15. Martens, J., Grosse, R.: Optimizing neural networks with kronecker-factored ap-proximate curvature. In: International conference on machine learning. pp. 2408– 2417. PMLR (2015) 16. van den Oord, A., Vinyals, O., Kavukcuoglu, K.: Neural discrete representation learning (2018), https://arxiv.org/abs/1711.00937 
+
+17. Pascanu, R., Bengio, Y.: Revisiting natural gradient for deep networks. arXiv preprint arXiv:1301.3584 (2013) 18. Peng, X., Wei, Y., Deng, A., Wang, D., Hu, D.: Balanced multimodal learning via on-the-fly gradient modulation. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 8238–8247 (2022) 19. Qian, C., Han, K., Liu, J., Yuan, Z., Zhu, Z., Wang, J., Lyu, C., Chen, J., Liu, Z.: Dyncim: Dynamic curriculum for imbalanced multimodal learning. arXiv preprint arXiv:2503.06456 (2025) 20. Shi, H.J.M., Lee, T.H., Iwasaki, S., Gallego-Posada, J., Li, Z., Rangadurai, K., Mudigere, D., Rabbat, M.: A distributed data-parallel pytorch implementation of the distributed shampoo optimizer for training neural networks at-scale. arXiv preprint arXiv:2309.06497 (2023) 21. Team, C.: Chameleon: Mixed-modal early-fusion foundation models. arXiv preprint arXiv:2405.09818 (2024) 22. Vyas, N., Morwani, D., Zhao, R., Kwun, M., Shapira, I., Brandfonbrener, D., Jan-son, L., Kakade, S.: Soap: Improving and stabilizing shampoo using adam. arXiv preprint arXiv:2409.11321 (2024) 23. Wang, X., Cui, Y., Wang, J., Zhang, F., Wang, Y., Zhang, X., Luo, Z., Sun, Q., Li, Z., Wang, Y., et al.: Multimodal learning with next-token prediction for large multimodal models. Nature pp. 1–7 (2026) 24. Wilson, A.C., Roelofs, R., Stern, M., Srebro, N., Recht, B.: The marginal value of adaptive gradient methods in machine learning. Advances in neural information processing systems 30 (2017) 25. Wu, C., Chen, X., Wu, Z., Ma, Y., Liu, X., Pan, Z., Liu, W., Xie, Z., Yu, X., Ruan, C., et al.: Janus: Decoupling visual encoding for unified multimodal understanding and generation. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 12966–12977 (2025) 16 Yishun Lu and Wes Armour 26. Yu, T., Kumar, S., Gupta, A., Levine, S., Hausman, K., Finn, C.: Gradient surgery for multi-task learning. Advances in neural information processing systems 33 ,5824–5836 (2020) 27. Zhai, X., Mustafa, B., Kolesnikov, A., Beyer, L.: Sigmoid loss for language image pre-training (2023), https://arxiv.org/abs/2303.15343 Abbreviated paper title 17 
+
+# Supplementary Material for 
+
+# Second-Order Multi-Level Variance Correction for Modality Competition in Multimodal Models 
+
+A Theoretical Analysis of Fisher Information for Modality Balancing 
+
+In this appendix, we provide a mathematical analysis of why first-order opti-mization can lead to modality starvation when jointly training visual and textual modalities with heterogeneous statistical structure, and how the Fisher informa-tion matrix introduced in natural gradient descent (NGD) helps mitigate this issue through a metric transformation on the underlying Riemannian manifold. 
+
+A.1 First-Order Dynamics of Modality Competition 
+
+Consider the parameters of a unified autoregressive multimodal model, denoted by θ ∈ Rd. In multimodal next-token prediction, the training objective is the mixed expectation of the negative log-likelihoods over image data ( I) and text data ( T ): 
+
+L(θ) = Ex∼D I
+
+− log p(x | θ) + Ey∼D T
+
+− log p(y | θ) ≜ E[LI (θ)] + E[LT (θ)] .
+
+(18) In practical training, we compute the stochastic gradient using minibatches: 
+
+g = ∇LI (θ) + ∇LT (θ). (19) Because visual tokens often carry substantially higher information density and more fine-grained local variation, whereas textual tokens lie on a more ab-stract semantic manifold, the corresponding empirical gradient covariance ma-trices are 
+
+ΣI = Cov( ∇LI (θ)) , ΣT = Cov( ∇LT (θ)) . (20) In many settings, one empirically observes 
+
+Tr( ΣI ) ≫ Tr( ΣT ). (21) When using first-order optimizers such as AdamW, the parameter update 
+
+∆θ 1st is driven by exponential moving averages of the stochastic gradients. In Euclidean space, the covariance of the total stochastic gradient is 
+
+Cov( g) = ΣI + ΣT + 2Cov( ∇LI (θ), ∇LT (θ)) . (22) The cross-covariance term 2Cov( ∇LI (θ), ∇LT (θ)) explicitly captures the cor-relation and potential interference between the modalities. If ΣI dominates the variance scale, and the cross-covariance indicates misalignment (i.e., gradient conflict), the parameter trajectory can become disproportionately influenced by 18 Yishun Lu and Wes Armour 
+
+the high-variance directions induced by the visual modality. Meanwhile, the ef-fective update signal from the text modality may be heavily suppressed or dis-torted by the cross-modality noise. This severe imbalance, exacerbated by stan-dard Euclidean optimization, leads to slower progress or even stagnation for one modality, which we refer to as modality starvation .
+
+A.2 KL Divergence and the Fisher Information Matrix 
+
+To mitigate this variance-dominated behavior under the Euclidean metric, one may instead define optimization steps on the Riemannian manifold induced by the model distribution. Let the change in model predictions induced by a pa-rameter perturbation ∆θ be measured by the Kullback–Leibler (KL) divergence 
+
+DKL (pθ ∥ pθ+∆θ ). (23) Applying a second-order Taylor expansion of the log-likelihood around θ, we obtain 
+
+log p(z | θ + ∆θ ) ≈ log p(z | θ) + ∇ log p(z | θ)⊤∆θ + 12 ∆θ ⊤∇2 log p(z | θ)∆θ. 
+
+(24) Substituting this expansion into the definition of the KL divergence yields 
+
+DKL (pθ ∥ pθ+∆θ ) = Epθ [log p(z | θ) − log p(z | θ + ∆θ )] , (25) and therefore 
+
+DKL (pθ ∥ pθ+∆θ ) ≈ − Epθ
+
+∇ log p(z | θ)⊤∆θ  − 12 Epθ
+
+∆θ ⊤∇2 log p(z | θ)∆θ  .
+
+(26) Since the score function has zero expectation, 
+
+Epθ
+
+∇ log p(z | θ) = 0 , (27) the first term vanishes. The remaining second-order term defines the Fisher information matrix: 
+
+F = −Epθ
+
+∇2 log p(z | θ) . (28) Hence, the KL divergence admits the following local quadratic approxima-tion: 
+
+DKL (pθ ∥ pθ+∆θ ) ≈ 12 ∆θ ⊤F ∆θ = 12 ∥F 1/2∆θ ∥22. (29) This shows that, locally, the Fisher information matrix defines the intrinsic metric of the statistical manifold. Abbreviated paper title 19 
+
+A.3 Why Can F −1 Mitigate Modality Competition? 
+
+The key observation follows from the information matrix equality (also known as Bartlett’s identity). For log-likelihood objectives, 
+
+F = −Epθ
+
+∇2 log p(z | θ) = Epθ
+
+∇ log p(z | θ)∇ log p(z | θ)⊤ . (30) Thus, the Fisher matrix simultaneously encodes both the local curvature of the loss landscape and the uncentered second moment of the score function. Under natural gradient descent, the update direction becomes 
+
+dNGD = F −1g = F −1(∇LI + ∇LT ). (31) To understand how this preconditioned update addresses modality imbal-ance, we analyze the magnitude of the update in Fisher geometry. Rather than relying on the centered covariance matrix (which strictly equals the Fisher ma-trix only when the expected gradient is zero at a local optimum), we examine the expected squared Fisher norm of the natural gradient directly: 
+
+E∥dNGD ∥2
+
+> F
+
+ = Ed⊤
+
+> NGD
+
+F d NGD 
+
+ = Eg⊤F −1F F −1g = Eg⊤F −1g. (32) Using the cyclic property of the trace, this can be rewritten in terms of the uncentered second moment matrix E[gg ⊤]:
+
+Eg⊤F −1g = Tr  F −1E[gg ⊤] . (33) In practice, the empirical Fisher information matrix is approximated precisely by this uncentered second moment of the mini-batch gradients, i.e., F ≈ E[gg ⊤].Under this standard approximation, we obtain: 
+
+E∥dNGD ∥2
+
+> F
+
+ ≈ Tr( F −1F ) = Tr( I) = d,  (34) where d is the dimension of the parameter space. The derivation above demonstrates a powerful property: after precondition-ing by F −1, the overall update magnitude is effectively whitened and bounded by the dimension d under the intrinsic geometry of the model. Regardless of how severe the variance imbalance ( ΣI ≫ ΣT ) or the cross-modality interference (2Cov( ∇LI , ∇LT )) may be in the raw Euclidean gradient g, the natural gradient normalizes these updates. Directions associated with different modalities are no longer dominated by pure gradient scale; instead, they are structurally scaled by a metric that inherently accounts for both uncertainty and curvature. This pro-vides a rigorous explanation for why Fisher-aware optimization fundamentally alleviates modality starvation. 
+
+B Formulation of Fisher-Orthogonal Projection 
+
+In this section, we provide the complete mathematical construction of the Fisher-Orthogonal Projection (FOP) briefly introduced in Section 3.4. 20 Yishun Lu and Wes Armour 
+
+B.1 Fisher-Orthogonal Projection (FOP) 
+
+Given two stochastic gradients g1 and g2 within a mini-batch or gradient accu-mulation window, we define their average and difference as: 
+
+gavg = 12 (g1 + g2), gdiff = g1 − g2 (35) To project gdiff onto the subspace orthogonal to gavg under the Fisher metric, we need to compute inner products of the form ⟨u, F v ⟩. To avoid the intractable 
+
+O(N 3) cost of explicitly forming F , we utilize the Kronecker factors maintained by the SOAP/Shampoo preconditioners to construct a forward metric proxy 
+
+M(·):
+
+M(v) ≈ F v  (36) Using this efficient proxy, the Fisher-space projection coefficient is calculated as: 
+
+sproj = ⟨gdiff , M(gavg )⟩⟨gavg , M(gavg )⟩ + ϵ (37) where ϵ is a small numerical stabilizer. We then construct the Fisher-orthogonal residual by subtracting the parallel component: 
+
+g⊥ 
+
+> diff
+
+= gdiff − sproj gavg  (38) By construction, this residual strictly satisfies the Fisher orthogonality condition 
+
+⟨g⊥ 
+
+> diff
+
+, F g avg ⟩ = 0 , ensuring that our variance correction captures pure hetero-geneity without interfering with the primary descent trajectory. Finally, the combined direction gcomb is formed and preconditioned to obtain the actual parameter update dFOP :
+
+gcomb = gavg + βg ⊥ 
+
+> diff
+
+(39) 
+
+dFOP = P(gcomb ) ≈ F −1gcomb  (40) 
+
+C Quadratic Surrogate Analysis of Fisher-Orthogonal Projection 
+
+In multimodal optimization, analyzing a single averaged surrogate objective of-ten masks the underlying modality competition. To rigorously demonstrate why Fisher-Orthogonal Projection (FOP) is necessary, we model the local loss re-duction using second-order Taylor approximations for the individual modalities (e.g., Vision and Text), denoted as J1(d) and J2(d).Let the stochastic gradients of the two modalities be g1 and g2. We define the batch average and difference as: 
+
+gavg = 12 (g1 + g2), gdiff = g1 − g2 (41) Abbreviated paper title 21 
+
+Consequently, individual gradients can be expressed as g1 = gavg + 12 gdiff and 
+
+g2 = gavg − 12 gdiff . The local quadratic surrogate for modality i under the true Fisher information matrix F is: 
+
+Ji(d) = −g⊤ 
+
+> i
+
+d + 12 d⊤F d  (42) 
+
+C.1 Objective Value for Pure SOAP 
+
+A standard preconditioned optimizer like SOAP targets the average gradient, applying the update dSOAP = F −1gavg . Substituting this into the surrogate for modality 2: 
+
+J2(dSOAP ) = −g⊤ 
+
+> 2
+
+(F −1gavg ) + 12 (F −1gavg )⊤F (F −1gavg )= −
+
+
+
+gavg − 12 gdiff 
+
+⊤
+
+F −1gavg + 12 g⊤
+
+> avg
+
+F −1gavg 
+
+= − 12 ∥gavg ∥2  
+
+> F−1
+
++ 12 g⊤ 
+
+> diff
+
+F −1gavg  (43) This equation perfectly illustrates modality starvation . The term 12 g⊤ 
+
+> diff
+
+F −1gavg 
+
+acts as a gradient conflict penalty. If this term is positive and large, modality 2 suffers from severe optimization degradation under the shared SOAP update. 
+
+C.2 Objective Value for FOP 
+
+The FOP update introduces an orthogonal variance correction to break this rigid average: dFOP = F −1(gavg + βg ⊥ 
+
+> diff
+
+). Substituting this into the surrogate for the starving modality 2: 
+
+J2(dFOP ) = −g⊤ 
+
+> 2
+
+F −1(gavg + βg ⊥ 
+
+> diff
+
+) + 12 (gavg + βg ⊥ 
+
+> diff
+
+)⊤F −1(gavg + βg ⊥ 
+
+> diff
+
+)= −
+
+
+
+gavg − 12 gdiff 
+
+⊤
+
+F −1(gavg + βg ⊥ 
+
+> diff
+
+)+ 12
+
+ ∥gavg ∥2  
+
+> F−1
+
++ 2 βg ⊤
+
+> avg
+
+F −1g⊥ 
+
+> diff
+
++ β2∥g⊥ 
+
+> diff
+
+∥2 
+
+> F−1
+
+ (44) Expanding the linear term yields: 
+
+−∥ gavg ∥2  
+
+> F−1
+
+− βg ⊤
+
+> avg
+
+F −1g⊥ 
+
+> diff
+
++ 12 g⊤ 
+
+> diff
+
+F −1gavg + 12 βg ⊤ 
+
+> diff
+
+F −1g⊥
+
+> diff
+
+Notice the crucial algebraic cancellation of the cross-terms: the −βg ⊤
+
+> avg
+
+F −1g⊥
+
+> diff
+
+from the linear part perfectly cancels the +βg ⊤
+
+> avg
+
+F −1g⊥ 
+
+> diff
+
+from the quadratic part. Recombining the remaining terms gives: 
+
+J2(dFOP ) = 
+
+
+
+− 12 ∥gavg ∥2  
+
+> F−1
+
++ 12 g⊤ 
+
+> diff
+
+F −1gavg 
+
+
+
++ 12 βg ⊤ 
+
+> diff
+
+F −1g⊥ 
+
+> diff
+
++ 12 β2∥g⊥ 
+
+> diff
+
+∥2 
+
+> F−1
+
+= J2(dSOAP ) + 12 βg ⊤ 
+
+> diff
+
+F −1g⊥ 
+
+> diff
+
++ 12 β2∥g⊥ 
+
+> diff
+
+∥2  
+
+> F−1
+
+(45) 22 Yishun Lu and Wes Armour 
+
+C.3 Strict Loss Reduction for the Starving Modality 
+
+To find the optimal adjustment that assists the starving modality, we minimize 
+
+J2(dFOP ) with respect to β. Taking the derivative and setting it to zero: 
+
+∂J 2(dFOP )
+
+∂β = 12 g⊤ 
+
+> diff
+
+F −1g⊥ 
+
+> diff
+
++ β∥g⊥ 
+
+> diff
+
+∥2  
+
+> F−1
+
+= 0  (46) Solving for the optimal coefficient β∗:
+
+β∗ = − 12
+
+g⊤ 
+
+> diff
+
+F −1g⊥
+
+> diff
+
+∥g⊥ 
+
+> diff
+
+∥2 
+
+> F−1
+
+(47) Substituting β∗ back into Equation (45) yields the final loss reduction: 
+
+J2(dFOP (β∗)) = J2(dSOAP ) − 18
+
+ g⊤ 
+
+> diff
+
+F −1g⊥
+
+> diff
+
+2
+
+∥g⊥ 
+
+> diff
+
+∥2 
+
+> F−1
+
+(48) Since the Fisher metric F −1 is positive definite, the norm ∥g⊥ 
+
+> diff
+
+∥2  
+
+> F−1
+
+is strictly positive. As long as the projected variance difference correlates with the true gradient conflict, the subtracted term is strictly positive, yielding: 
+
+J2(dFOP (β∗)) < J 2(dSOAP ) (49) 
+
+C.4 Physical Interpretation 
+
+This rigorous derivation completely reframes the utility of FOP. Mathemati-cally, a pure SOAP step based on gavg is the strict global minimum of the av-erage quadratic surrogate. However, optimizing only for the average inherently punishes individual modalities with conflicting curvatures. Equation (48) algebraically proves that by intelligently injecting Fisher-orthogonal variance, FOP escapes the rigid minimum of the average surrogate to secure a strictly guaranteed loss reduction for the disadvantaged (starving) modality. FOP achieves true modality balancing not by contradicting the Newton direc-tion, but by dynamically correcting the modality-specific penalty induced by gradient averaging. 
+
+D Detailed Model Configurations and Scaling 
+
+In Section 4, we introduced the scaled-down variants of the Janus and Emu3 architectures used in our experiments. Here, we provide the exact architectural hyperparameters and parameter counts to ensure full reproducibility. Abbreviated paper title 23 
+
+D.1 Janus Scaled Variants 
+
+For the Janus family, we base our architectural blueprint on the official Janus-Pro-1B 
+
+skeleton but apply structured scaling rules to the number of transformer layers, hidden dimensions, and attention heads. The multimodal projection layers scale proportionally with the language model’s hidden size. 
+
+– Janus-400M : Configured with 14 hidden layers, a hidden dimension of 1024, an intermediate FFN size of 2816, and 8 attention heads. This config-uration yields approximately 408 million trainable parameters (with a total of 799 million parameters when including frozen vision embeddings). 
+
+– Janus-1B: Configured with 20 hidden layers, a hidden dimension of 1536, an intermediate FFN size of 4096, and 12 attention heads. This configuration yields approximately 911 million trainable parameters (with a total of 1.30 billion parameters). 
+
+D.2 Emu3 Scaled Variants 
+
+For the Emu3 family, we utilize explicit configuration presets to shrink the model scale while strictly maintaining the core Emu3 architectural properties and vo-cabulary size (184,622). 
+
+– Emu3-600M: Configured with 32 hidden layers, a hidden dimension of 1024, an intermediate FFN size of 2816, and 16 attention heads (with 16 KV heads). This configuration yields an active parameter count of approximately 600 million. By utilizing these precise configurations, we maintain the fundamental mul-timodal optimization challenges of the original architectures while making large-batch gradient accumulation studies computationally feasible. 
+
+D.3 Hyperparameter Search and Reproducibility 
+
+To guarantee the exact reproducibility of our optimization trajectories, all ex-periments—including baselines and our proposed methods—are conducted using a fixed random seed of 0.Given the sensitivity of second-order and preconditioned optimizers to the learning rate, we refrain from using heuristic defaults. Instead, we perform a rig-orous half-decade logarithmic grid search to determine the optimal peak learning rate for each configuration. The search space is defined by the set: 
+
+η ∈ { 0.1, 0.0316 , 0.01 , 0.00316 , 0.001 , 0.000316 } (50) which perfectly corresponds to steps of 10 −0.5 in the logarithmic scale. For the tensor preconditioners (Shampoo and SOAP) imported from the 
+
+distributed_shampoo repository, we retain their official default structural hy-perparameters (e.g., block sizes and preconditioner update frequencies) to ensure that the baselines operate at their intended optimal algorithmic capacity.

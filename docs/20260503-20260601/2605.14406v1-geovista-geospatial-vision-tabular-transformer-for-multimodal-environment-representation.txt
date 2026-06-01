@@ -1,0 +1,595 @@
+Title: GeoViSTA: Geospatial Vision-Tabular Transformer for Multimodal Environment Representation
+
+URL Source: https://arxiv.org/pdf/2605.14406v1
+
+Published Time: Fri, 15 May 2026 00:46:27 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# GeoViSTA: Geospatial Vision-Tabular Transformer for Multimodal Environment Representation 
+
+Yuhao Liu 1 Sadeer Al-Kindi 2 Ashok Veeraraghavan 1 Guha Balakrishnan 11Department of Electrical and Computer Engineering, Rice University, Houston, TX 77005 
+
+> 2
+
+Center for Cardiovascular Computational and Precision Health, Department of Cardiology, DeBakey Heart and Vascular Center, Houston Methodist, Houston, TX 77030 
+
+{yuhao.liu, guha, vashok}@rice.edu, sal-kindi@houstonmethodist.org 
+
+## Abstract 
+
+Large-scale pretraining on Earth observation imagery has yielded powerful repre-sentations of the natural and built environment. However, most existing geospatial foundation models do not directly model the structured socioeconomic covariates typically stored in tabular form. This modality gap limits their ability to capture the complete total environment, which is critical for reasoning about complex environmental, social, and health-related outcomes. In this work, we propose GeoViSTA (Geospatial Vision-Tabular Transformer), a vision-tabular architecture that learns unified geospatial embeddings from co-registered gridded imagery and tabular data. GeoViSTA utilizes bilateral cross-attention to exchange spatial and semantic information across modalities, guided by a geography-aware attention mechanism that aligns continuous image patches with irregular census-tract tokens. We train GeoViSTA with a self-supervised joint masked-autoencoding objective, forcing it to recover missing image patches and tabular rows using local spatial context and cross-modal cues. Empirically, GeoViSTA’s unified embeddings im-prove linear probing performance on high-impact downstream tasks, outperforming baselines in predicting disease-specific mortality and fire hazard frequency across held-out regions. These results demonstrate that jointly modeling the physical environment alongside structured socioeconomic context yields highly transferable representations for holistic geospatial inference. 
+
+## 1 Introduction 
+
+Geospatial environmental data are increasingly used to model high-impact applications such as social vulnerability, environmental risk, disaster response, and public health outcomes [1–7]. The relevant signals for these tasks, however, are distributed across fundamentally different data structures. Natural and built environmental signals are commonly represented as continuous gridded imagery derived from remote sensing platforms [ 8 – 10 ], whereas socioeconomic, demographic, and vulnerability-related variables are typically represented as structured tabular attributes aggregated over irregular administrative geographies such as counties or census tracts, often derived from survey-based and administrative data collection methods. Multimodal geospatial reasoning therefore requires integrating fundamentally different data struc-tures (Fig. 1a-b). Vision-based geospatial data are organized as continuous gridded feature maps describing the natural and built environment, while tabular datasets encode social, economic, and institutional context through structured attributes linked to irregular geographic regions (Fig. 1c-d). These complementary modalities capture distinct but interconnected determinants of environmental exposure, vulnerability, and downstream health outcomes.       
+
+> arXiv:2605.14406v1 [cs.LG] 14 May 2026 Elevation
+> Satellite Imagery AlphaEarth Embedding Unemployment Minority
+> Traffic Proximity and Volume Lead Paint in Housing
+> Gridded Geospatial Datasets Tabular Geospatial Datasets
+> higher  →more  →
+> prevalent  → diverse  →
+> Tabular Row
+> FFeatures
+
+x tab ∈ℝ F         
+
+> f1 f2 f3 f4 ...
+> Land Use Land Cover
+> (b)
+> (c) (d) (e) Houston Houston Houston Houston
+> Census Tract
+> Self-attention Cross-attention
+> Joint embedding Inference Tasks
+> Health Resilience Insurance Energy ...
+> C
+> Vision Data Tabular Data Vision-Tabular Reasoning
+> Vision Patch
+
+x vis ∈ℝ P2C
+
+> (a)
+> PP
+
+Figure 1: Vision–tabular geospatial data and reasoning . (a-b) Vision and tabular datasets have fundamentally different structures: vision data are continuous, gridded feature images, while tabular data represent features over irregular geographical regions. (c-d) Examples of geospatial vision and tabular signals. Vision signals describe apparent facets of the natural and built environment, whereas tabular datasets provide human-related socioeconomic data. (e) This study proposes GeoViSTA, a transformer enabling visual-tabular reasoning, producing a joint embedding space intended to support a broad range of downstream geospatial inference tasks for multimodal environments. As geospatial analysis shifts from raw data repositories to reusable embeddings, this modality gap becomes a representation-learning problem. Whereas early large-scale analyses [ 11 , 12 ] relied on substantial bespoke modeling and feature engineering directly on raw data repositories, recent geospatial foundation models [ 13 , 14 ] treat the Earth’s surface as a continuous neural representation field, encoding location and time into compact embeddings that provide transferable semantics for downstream inference. However, this progress has largely centered on gridded Earth-observation data [ 13 –19 ]: these models capture natural and built environment signals, but do not directly model the structured tabular attributes that encode socioeconomics, vulnerability, and risk exposures. The central challenge for reasoning over the multimodal geospatial environments is therefore not merely to learn better visual embeddings, but to align gridded neural fields with complementary tabular attributes defined over irregular geographical boundaries ( e.g. , cities, counties, and census tracts 1). This introduces two technical requirements. First, cross-modal feature fusion must account for irregular geometries and spatial proximity between vision and tabular inputs. Second, the joint representation space must be learned in a scalable, task-agnostic, and self-supervised manner. To address these challenges, we propose GeoViSTA ( Geo spatial Vis ion-Ta bular Transformer), a vision-tabular architecture for joint geospatial representation learning (Fig. 1e). GeoViSTA utilizes bilateral cross-attention to exchange spatial and semantic information across modalities. Crucially, we implement a geography-aware attention mechanism that biases token interactions based on spatial distance, encouraging localized reasoning. We train GeoViSTA as a joint masked autoencoder (MAE) [ 20 ]. By randomly masking out vision patches and entire tabular rows, we force the model to reconstruct the missing elements using both spatial context and cross-modal cues. This formulation provides a simple, effective, and scalable self-supervised objective, and requires no labeled data. We demonstrate GeoViSTA by learning joint embeddings over the Contiguous United States (CONUS), fusing gridded AlphaEarth [ 13 ] visual representations with the tabular Climate Vul-
+
+> 1
+
+Census tracts are small statistical subdivisions used by the U.S. Census Bureau, roughly corresponding to neighborhood-scale geographic units with an average population of 4, 000 .
+
+2nerability Index (CVI) [ 21 ]. We experimentally show that jointly modeling the physical environment and structured socioeconomic context yields highly transferable geospatial representations. Specifi-cally, GeoViSTA embeddings improve linear-probe prediction of high-impact downstream variables on random held-out counties, such as disease-specific mortality rates and fire hazards, outperform-ing unimodal and feature-concatenation baselines. We further test regional extrapolation skill by withholding Washington state from training, where GeoViSTA achieves the strongest mortality-rate linear-probe performance. Furthermore, qualitative analysis reveals that GeoViSTA’s attention layers exhibit locally meaningful neighborhood focus, and its learned feature space captures semantically coherent spatial patterns across the continent. Ultimately, this work provides a principled and effective foundation for holistic geospatial reasoning. 
+
+## 2 Related Work 
+
+Masked pretraining. Masked autoencoders (MAEs) [ 20 ] provide a scalable objective for learning visual representations by reconstructing missing input from context. Multimodal MAE variants [ 22 ,23 ] extend this by encouraging models to recover missing information using cross-modal cues. We adapt the MAE principles to geospatial vision-tabular data by jointly masking image patches and tabular rows. Unlike generic multimodal masking, our objective is geographically grounded: the model must infer missing elements using nearby spatial and cross-modal evidence, forcing the learned representations to encode both the physical environment and structured socioeconomic context. 
+
+Geospatial representation learning. Recent geospatial foundation models have demonstrated that rasterized Earth observations (EO) yield broad geospatial semantics. SatMAE [ 19 ] adapts MAE to temporal and multispectral EO, while SatCLIP [ 14 ] aligns EO-derived features with geographic coordinates via contrastive learning. Subsequent models [ 13 , 16 , 18 ] further scale this pretraining across sensors, time, and geographies. Complementary to EO-centric models, PDFM [ 7] learns population-dynamics embeddings from aggregated geo-indexed signals such as maps, busyness, search trends, weather, and air quality over postal-code/county graphs. However, these approaches either focus on gridded EO or aggregate heterogeneous signals into location-level feature vectors, rather than directly aligning continuous image patches with structured tabular attributes defined over irregular administrative regions. GeoViSTA addresses this gap by jointly modeling gridded imagery alongside irregular tabular geographies through geography-aware cross-attention. 
+
+Vision-tabular transformers. In the tabular domain, transformer architectures have established that column-wise tokenization and attention yield highly competitive representations [ 24 , 25 ]. Recent multimodal extensions bridge vision and tabular data via contrastive alignment [ 26 ] or MAE [ 22 , 23 ]. However, these models are strictly designed for sample-level prediction, rigidly pairing a single image to a single tabular record. They are not designed to handle irregular geospatial boundaries, neighborhood structures, or the complex many-to-many relationships between continuous image patches and diverse tabular census tracts. GeoViSTA overcomes this limitation by explicitly modeling spatial proximity and geometry across modalities. 
+
+## 3 Background 
+
+Vision masked autoencoder. Masked autoencoders (MAEs) learn representations by removing parts of an input and training an encoder-decoder to reconstruct the missing content from the visible context [ 20 ]. For vision data, MAEs are typically implemented using a Vision Transformer (ViT) [ 27 ]. Given an image I ∈ RC×H×W (with channels C, height H, and width W ), we partition it into Nv = ( H/P )( W/P ) non-overlapping P × P patches and flatten them into a sequence 
+
+S ∈ RNv ×P 2C . A linear projection fp : RP 2C → RD maps each patch to a D-dimensional token, yielding the embedded sequence S′ ∈ RNv ×D . During training, we mask a large fraction of these tokens. The ViT encoder processes only the visible tokens (augmented with positional embeddings). The decoder then takes these encoded tokens, along with learned mask tokens at the dropped positions, to predict the raw pixel values of the full sequence. Finally, the predicted patches are unpatchified into a reconstructed image ˆI, and the model is optimized using the mean squared error (MSE) between I
+
+and ˆI over the masked patches only. 
+
+Tabular transformer. Transformers adapt to tabular data by treating individual feature values as tokens [ 25 ]. For a tabular sample x ∈ RF with F features (columns), a tokenizer maps each scalar 3Reconstruction 
+
+> Target Masked Input
+> Co-registered Vision-tabular data
+> One Census Tract
+> Masked 36.6 36.8 37.0 37.2 Latitude -83.8 -83.6 -83.4 -83.2 -83.0 Longitude
+> Vision-Tabular Transformer ViT Encoder TabT Encoder CrossAttn Blocks ViT Decoder TabT Decoder CrossAttn Blocks
+
+Figure 2: Paired data and high-level GeoViSTA design. Left: We sample co-registered vision and tabular data. Each tabular row corresponds to a census tract defined by a polygon. Right: We propose GeoViSTA, a masked autoencoder framework that jointly trains over paired vision and tabular data. Bilateral cross-attention exchanges spatial and semantic information across modalities. We provide a detailed architectural diagram in Fig. 3. value xj to a D-dimensional token via a feature-specific embedding function fj and bias bj , such that s′ 
+
+> j
+
+= fj (xj ) + bj . Stacking these tokens produces a sequence S′ ∈ RF ×D, directly analogous to the embedded patch sequence in a ViT. The tabular transformer then applies self-attention across this sequence to learn contextualized representations that capture inter-column dependencies within the single sample. Notably, traditional tabular transformers only attend across columns and lack a mechanism for row-wise attention to model interactions between different samples—a limitation we directly address in the following section. 
+
+## 4 Methods 
+
+Consider a pair of spatially co-registered geospatial vision and tabular datasets, where each data point is associated with a longitude λ and latitude ϕ. We extract a local region defined by an 
+
+r × r km bounding box centered at location p0 = ( λ0, ϕ 0) (Fig. 2). We denote the visual feature image spanning this region Xvis ∈ RH×W ×C , where H and W are the spatial dimensions and 
+
+C is the number of visual channels. Similarly, we denote the tabular matrix of the Ntab census tracts intersecting this region Xtab ∈ RNtab ×F , where F is the number of tabular features. For each census tract i, the corresponding row xtab ,i is associated with a representative location 2
+
+ptab ,i = ( λtab ,i , ϕ tab ,i ) and a polygon defining its administrative boundary. A co-registered vision-tabular sample for a given region is therefore the pair (Xvis , Xtab ).We introduce GeoViSTA, a vision-tabular transformer designed to learn a rich, joint feature space from this paired data via self-supervised masked autoencoding. We detail the architectural design of GeoViSTA in Sec. 4.1, and outline the self-supervised training procedure in Sec. 4.2. 
+
+4.1 GeoViSTA Architecture Design 
+
+GeoViSTA is a masked vision-tabular autoencoder that jointly reconstructs missing content from visible context (see Fig. 2 for an overview, and Fig. 3 for details). The architecture comprises Vision Transformer (ViT) and Tabular Transformer (TabT) encoder-decoders, bridged by bilateral cross-attention blocks prior to decoding. Each modality-specific encoder performs self-attention to facilitate token mixing within its own domain. While we employ a standard ViT for the visual pathway, our TabT incorporates a novel encoder that explicitly supports both column-wise (cross-feature) and row-wise (cross-sample) attention, unlike existing TabTs that restrict attention strictly to features (see Sec. 2). We denote the vision token dimension as Dv , the tabular column token dimension as Dcol ,and the tabular row token dimension as Dt.To ground these inputs, we inject novel geospatial positional encodings based on spatial proximity (for both modalities) and census tract geometry (for tabular data). Bilateral cross-attention blocks  
+
+> 2The representative locations for each census tract is defined by US Census; it is generally at or near the geographic center.
+
+4Tabular   
+
+> Inputs Input Embedding Row Reduction
+> Loc/Geom Loc
+> Vision
+> Inputs Patchify 3× Self-attention [column] 2× Self-attention [row] Vision Outputs Tabular Outputs 8× Self-attention [inter-row] 8× Self-attention
+> K/V K/V QQ
+> Cross-attention
+> [Tab←Vis]
+> Cross-attention
+> [Vis←Tab]
+> 4× Self-attention Projection Linear 2× Self-attention [row] ViT Loc/Geom Encoding Position Embedding TabT Cross-attn 2× 1×
+
+Figure 3: GeoViSTA architecture . We feed tabular inputs to the row encoder blocks (with column self-attention), followed by row attention blocks (with row self-attention). Vision data goes through standard ViT encoder blocks with positional embeddings. Both vision and tabular tokens receive geospatial positional encodings. This is followed by bilateral cross-attention blocks, which mix vision and tabular tokens. After cross-attention, vision and tabular data are decoded by their respective decoders. We omit residual connections here for clarity. subsequently exchange spatial and semantic information across modalities before modality-specific decoders reconstruct the original signals. Complete architectural details are provided in the Sup-plementary Material. The following subsections detail our geospatial positional encodings, tabular transformer, cross-attention mechanism, and training approach. 
+
+4.1.1 Geospatial Positional Encodings ∆λ ∆ϕ   
+
+> ∆λ ∆ϕ
+> (a) Location
+> Vision Tabular (b) Geometry
+> Tract Polygon Convex Hull Area Compactness Hull Ratio
+> Perimeter
+
+Figure 4: Location and geometry encodings . (a) Both vision and tabular tokens are encoded with longitude and latitude offsets from a reference point. (b) Tabular tokens receive additional en-coded geometry summaries. We devise geospatial positional encodings that capture the spatial proximity of tokens and the approximate polygon geometry of the underly-ing census tracts. For any coordinate p = ( λ, ϕ )
+
+within a region, we encode its location offset ∆p
+
+relative to the reference location p0 = ( λ0, ϕ 0):
+
+∆p = [ ϕ − ϕ0, (λ − λ0) cos( ϕ0)] ,
+
+where cos( ϕ0) scales the east-west displace-ment by latitude. For each vision patch token j,we compute this offset ∆pvis ,j using its patch-center location pvis ,j . For each tabular row to-ken i, we compute the offset ∆ptab ,i using its representative census tract location ptab ,i .For tabular tokens, we also compute a low-dimensional geometry summary based on their census tract polygons (Fig. 4b). We calculate the area Ai, perimeter Pi, and convex hull area Hi, deriving the log-area μi = log(1 + Ai), compactness κi = 4 πA i/P 2 
+
+> i
+
+, and convex-hull ratio ρi = Ai/H i.Together with the relative location offset, these form the comprehensive tract summary utab ,i =[∆ ptab ,i , μ i, κ i, ρ i]. Finally, learned multilayer perceptrons (MLPs) project the vision location offsets and tabular geometry summaries to match their respective token dimensions: 
+
+evis ,j = fvis (∆ pvis ,j ) ∈ RDv , etab ,i = ftab (utab ,i ) ∈ RDt .
+
+4.1.2 Tabular Transformer with Row Attention 
+
+Traditional tabular transformers use feature (column) self-attention. We extend this design to incorpo-rate row self-attention, enabling token mixing across census tracts within a local region. Given local tabular data Xtab ∈ RNtab ×F , we first independently apply FT-Transformer encoder blocks (with col-umn attention), producing tokens Zcol ∈ RNtab ×F ×Dcol , where Dcol is the embedding dimension per column. We concatenate column tokens within each row to obtain vectors in RNtab ×F D col and apply 5a learned row-reduction projection to dimension Dt. We then add the geospatial positional encoding 
+
+etab , and pass the resulting sequence through transformer encoder blocks (with row self-attention), producing the final tabular tokens Ztab ∈ RNtab ×Dt .
+
+4.1.3 Vision-Tabular Cross-Attention 1 234  
+
+> 1234
+
+Figure 5: Spatially localized cross-attention . For four example tabular tokens, we visualize their cross-attention weights over vision tokens. The learned attention concentrates on nearby visual patches, indicating that cross-modal interactions follow local spatial structure. With encoded ViT tokens Zvis ∈ RNvis ×Dv and TabT tokens Ztab ∈ RNtab ×Dt , we proceed with bidirectional ViT–TabT cross-attention blocks. Each modality updates its representation using the other as context: vision queries tab-ular (vis ←tab), and vice versa. Each direction uses separate cross-attention and feed-forward parameters. The two residual updates are ap-plied in parallel within each block, yielding vision-enriched tabular tokens Z′ 
+
+> tab
+
+and tabular-enriched vision tokens Z′
+
+> vis
+
+. This design pre-serves modality-specific token spaces while al-lowing row-level tabular context and patch-level visual context to exchange information. These learned attention weights exhibit strong spatial locality (Fig. 5), demonstrating that tabular to-kens primarily attend to spatially adjacent vision tokens. 
+
+Cross-attention bias. To further encourage localized cross-attention, we inject a spatial bias into the ViT–TabT cross-attention logits. Inspired by ALiBi [ 28 ], which biases attention by token distance in text, we bias attention by physical spatial distance in kilometers. We compute pairwise distances 
+
+d between tokens and transform them with a fixed distance function ϕ(d) = tanh(( d0 − d)/τ ),where d0 is the zero-crossing distance and τ is a fixed temperature to control degradation. For each head h, we scale this spatial bias by a learnable gain αh. The resulting bias is added directly to the pre-softmax attention scores: qk ⊤ + αhϕ(d). The vis ←tab and tab ←vis pathways use the same function ϕ(d) but learn independent αh parameters. 
+
+4.2 Self-Supervised Training Objective and Procedure 
+
+We apply the MAE [ 20 ] training objective to co-registered vision-tabular data (Xvis , Xtab ), as seen in Fig. 2. We mask out a fraction of vision patches, as well as a fraction of census tracts. For the tabular data, we randomly mask out entire rows rather than individual features, forcing the model to reconstruct the complete census tract profiles. Reconstruction loss is evaluated only on masked tokens. We use mean-squared error (MSE) for vision and mean absolute error for tabular. We show example validation results in Fig. 6. For visualization, we used Principal Component Analysis (PCA) to project census tract profiles onto three components, displayed as RGB colors. As in standard vision MAEs, reconstructed image patches tend to be spatially smooth but semantically plausible. Tabular reconstructions show a similar pattern: recovered census profiles appear more spatially smoothed than their targets while preserving broad structural trends, suggesting effective, spatially informed token mixing across modalities. 
+
+## 5 Experiments 
+
+Datasets. We used 64-dimensional annual embedding fields from AlphaEarth [ 13 ] as our gridded vision data. AlphaEarth provides globally consistent, semantically rich Earth observation (EO) fea-tures, making it preferable to low-level spectral inputs. We used all available AlphaEarth embeddings (2017–2024) globally, excluding ocean tiles. We used downsampled overviews (320 m and 640 m resolutions) to better align with the spatial scale of census tracts. For our tabular dataset, we used the 2018 U.S. Climate Vulnerability Index (CVI) [ 21 ]. The CVI offers a data-driven, neighborhood-scale assessment of cumulative environmental, infrastructural, and socioeconomic vulnerability at the census-tract level. This aligns well with our multimodal 6Input Reconstruction Target Input Reconstruction Target Input Reconstruction Target 
+
+> Co-registered
+
+Figure 6: Masked auto-reconstruction validation results. Under a mask ratio of 0.5, we jointly reconstruct missing vision patches and tabular census tracts by using self- and cross-attention to exchange spatial and semantic information across the two modalities. reasoning objectives. We selected 139 environment-related indicators for training and excluded 44 health-related indicators from the input. We excluded Alaska and Hawaii due to substantial missing features. Due to the vast difference in dataset scales ( 73 k census tracts vs. 1.1M AlphaEarth images), we independently pretrained the ViT backbone. 
+
+ViT Pretraining Implementation. To prevent data leakage into downstream tasks, we split the gridded data temporally, withholding 2024 for validation and 2018 for testing. We pretrained the ViT using the standard Masked Autoencoder (MAE) framework [ 20 ]. Our visual backbone is a ViT-L/8 with an encoder dimension of 1024. Because we input analysis-ready AlphaEarth embeddings rather than raw pixels, we reduced the encoder to 8 blocks and the decoder to 4 blocks (dimension 768). Following He et al. [20] , we used a mask ratio of 0.75 and a batch size of 4096. For ViT pretraining, we augment the standard MSE loss function with an additional cosine distance term, which is appropriate for AlphaEarth embeddings on a 64-dimensional unit sphere. 
+
+ViT-TabT Joint Training Implementation. For joint training, we used co-registered 2018 Al-phaEarth (640 m resolution) and CVI datasets with 73k census tracts across the Contiguous United States (CONUS). We withhold Washington state for zero-shot testing and split the remaining data into a 9:1 train-validation set using random 300 km bounding boxes. We train GeoViSTA as a joint MAE (Fig. 2), freezing the pre-trained ViT while training the TabT and cross-attention blocks. Each training sample comprises an 80 km 2 AlphaEarth crop and the ∼ 32 intersecting census tracts, under a joint mask ratio of 0.5. TabT has three column self-attention blocks followed by row reduction to a 384-dimensional space and two additional row self-attention blocks. The tab ←vis cross-attention module uses 8 heads and 1 layer, while the vis ←tab module uses 2 heads and 1 layer (see Supplementary). 
+
+5.1 Principal Component Analysis on Learned Geospatial Representation PC1 (8.0%) PC2 (5.2%) PC3 (3.7%) PC4 (3.3%) PC5 (3.1%) PC6 (2.7%) PC7 (2.2%) PC8 (2.1%) 
+
+Figure 7: Principal components of GeoViSTA embeddings . We show the first eight components of vision-enriched tabular embeddings from GeoViSTA; percentages indicate explained variance. PC1 shows urban-rural transition, and subsequent PCs show coherent regional clustering. We extracted the vision-enriched tabular embeddings Z′ 
+
+> tab
+
+for all census tracts across the CONUS and performed PCA, shown in Fig. 7. The top-1 principal component shows a clear urban-to-rural transition, followed by subsequent components with coherent regional clustering and localized spatial structures. Despite being trained entirely without labels and without global coordinate information, 7the feature space naturally captures geographically and socioeconomically meaningful variations, suggesting that GeoViSTA learns geospatial representations across multiple environmental domains (natural, built, and socioeconomics). In Supplementary, we show that GeoViSTA Z′ 
+
+> tab
+
+embedding appears visually cleaner than raw CVI embedding, and appears to be a hybrid between AlphaEarth and CVI, consistent with cross-modal mixing. 
+
+5.2 Linear Probing on Downstream Metrics 
+
+Following representation learning works [ 29 , 30 , 20 ], we evaluate GeoViSTA embeddings by their efficacy on downstream predictive tasks. In particular, we extracted GeoViSTA’s vision-enriched tabular embeddings Z′ 
+
+> tab
+
+for all CONUS census tracts and fit linear regression models (“linear probes”) using scikit-learn [ 31 ] to predict arbitrary downstream variables on a held-out test fraction. All evaluation variables correspond to the year 2018. We evaluated against four baseline feature embeddings: (1) CVI : 139-D tabular inputs with median imputation; (2) AlphaEarth : 64-D vision embeddings averaged per census tract; (3) Feature Concat :Direct concatenation of CVI and AlphaEarth features for each census tract; and (4) Late Fusion :Vision features concatenated with representations from a separately trained tabular MAE (lacking cross-attention), which assesses if the two modalities are complementary under a simple nonlinear fusion (MLP decoder), and with no mixing with adjacent tokens. Table 1: Linear-probe on health outcomes: age-adjusted mortality rate for different underlying causes of death. We report R2 on randomly held-out test counties. GeoViSTA outperforms baselines in all five major underlying causes of death, as well as the composite metric.                                     
+
+> Method All Cancer Cardiovascular Diabetes Digestive Respiratory CVI [tab] 0.726 0.529 0.394 0.273 0.521 0.500 AlphaEarth [vis] 0.419 0.319 0.171 0.161 0.334 0.313 Feature Concat [vis–tab] 0.770 0.616 0.478 0.315 0.598 0.573 Late Fusion [vis–tab] 0.743 0.542 0.436 0.313 0.573 0.612 GeoViSTA (Ours) [tab ←vis] 0.801 0.675 0.523 0.548 0.645 0.655
+
+Table 2: Linear probe R2 values on age-adjusted mortality rates on the en-tire held-out state of Washington. Re-sults demonstrate that GeoViSTA yields superior zero-shot downstream metric performance compared to baselines.      
+
+> Method All CVI [tab] 0.569 Feature Concat [vis–tab] 0.511 Late Fusion [vis–tab] 0.497 GeoViSTA (Ours) [tab ←vis] 0.611
+
+Prediction of mortality rates. We fit linear probes to predict age-adjusted mortality rates for various underlying causes of death using CDC WONDER data [ 32 ]. Table 1 reports the R2 on randomly held-out CONUS counties, testing the models’ ability to spatially interpolate. CVI provides a strong baseline, as socioeconomic factors heav-ily influence health outcomes. Conversely, AlphaEarth performs poorly alone. While Feature Concat and Late Fusion yield marginal improvements over CVI, GeoViSTA consistently outperforms all baselines across every mor-tality category. This suggests that modeling spatially co-herent, non-linear relationships between visual and tabular modalities enhances representation quality. Table 3: Linear probe R2 values on predicting downstream fire hazard measures on held-out counties. Ndays 
+
+reflects risk frequency, and Imax reflects peak intensity. GeoViSTA outperforms baselines on Ndays             
+
+> Method Ndays Imax
+> CVI [tab] 0.671 0.866 AlphaEarth [vis] 0.755 0.886 Feature Concat [vis–tab] 0.788 0.886 Late Fusion [vis–tab] 0.741 0.961
+> GeoViSTA (Ours) [tab ←vis] 0.792 0.911
+
+To test geographic extrapolation, we evaluated zero-shot transfer to Washington (WA) state, which we entirely held out during joint-training. As shown in Table 2, zero-shot prediction is substantially harder than interpolation. Al-phaEarth fails on mortality extrapolation ( R2 < 0, omit-ted), and simple fusion baselines perform worse than the tabular-only CVI model. In contrast, GeoViSTA maintains positive transfer, outperforming all baselines. 
+
+Prediction of fire hazards. We further evaluated Geo-ViSTA on the FireCCI51 dataset [ 33 ] (Table 3) to predict two fire-weather hazards signals: the number of extreme fire risk days ( Ndays ) and peak annual intensity ( Imax ). Because fire hazards are primarily driven by the physical environment, AlphaEarth naturally outperforms CVI. However, Feature Concat improves Ndays 
+
+8predictions over either unimodal input, indicating that tabular data contributes relevant anthropogenic correlates (e.g., infrastructure, land use). GeoViSTA achieves the best performance for extreme fire-weather days, while Late Fusion marginally wins on peak intensity. This suggests that cross-modal attention is highly effective for frequency-based hazards, whereas isolated modality features may better preserve extreme peak values. Table 4: Ablation experiments. We report linear probe R2 for mortality rates on randomly held-out test counties. We mark default settings in gray.                         
+
+> (a) Tab dim.
+> dim R2
+> 128 0.706 192 0.769 256 0.748 384 0.801
+> 512 0.787
+> (b) Location and geometry.
+> encoding R2
+> none 0.770 geom/loc 0.788 geom/loc +bias 0.801 (c) Tab ←vis cross-attn.
+> capacity R2
+> 4H1L 0.771 4H2L 0.775 8H1L 0.801
+> 8H2L 0.777
+> (d) Tab mask ratio.
+> ratio R2
+> 0.25 0.791 0.50 0.801
+> 0.75 0.703
+> (e) Tab self-attn.
+> row attn R2
+> no 0.767 yes 0.801
+
+Ablation studies. We ablated GeoViSTA’s components using the overall CDC WONDER mortality rate on held-out counties (column “All” in Table 1). As seen in Table 4(a), a TabT token dimension of 384 best balances information capacity (compressing 139 features and cross-modal vision cues) against overfitting. Table 4(b) demonstrates that both our geometry/location encodings (Sec. 4.1.1) and cross-attention spatial biases (Sec. 4.1.3) improve performance; without them, the spatially localized attention patterns observed in Fig. 5 vanish. Table 4(c) reveals that a wider, shallower cross-attention mechanism (8 heads, 1 layer) outperforms deeper networks, likely preventing the over-mixing of local heterogeneous cues. An intermediate tabular mask ratio of 0.50 proves optimal (Table 4(d)), balancing task difficulty with sufficient regional context. Finally, Table 4(e) confirms that row self-attention—enabling interaction across spatially adjacent census tracts—is a critical driver of GeoViSTA’s predictive success. 
+
+## 6 Discussion 
+
+We presented GeoViSTA, a vision-tabular transformer for joint geospatial representation learning from co-registered gridded and tabular datasets. Our results underscore that physical and socioeco-nomic signals contain highly complementary information. For instance, GeoViSTA’s embeddings explained up to 80% of the county-level variance in age-adjusted mortality rates, highlighting the strong predictive signal embedded within a holistic representation of the multimodal environment. We demonstrated that explicitly modeling interactions between visual environmental signals and structured socioeconomic context yields significantly more transferable representations than uni-modal or simple feature-concatenation approaches. Specifically, GeoViSTA improved linear-probe performance across downstream health and fire-hazard tasks, while also demonstrating stronger geo-graphic extrapolation to unseen regions. These findings suggest that multimodal geospatial reasoning greatly benefits from architectures that jointly account for spatial proximity and heterogeneous data structures. 
+
+Limitations. First, experiments were restricted to the CONUS using a single tabular dataset (CVI); performance may differ across regions with distinct geographic, demographic, or administrative structures. Second, aggregating tabular variables at the census-tract level may obscure fine-grained within-region heterogeneity and is inherently dependent on the quality of survey-based data collection. Third, while GeoViSTA learns geographically meaningful associations, the resulting representations remain correlational and should not be interpreted causally, and such misinterpretation might incur a negative societal impact. Finally, our current framework focuses on static environmental snapshots. Future work could extend GeoViSTA to explicitly model temporal dynamics, enabling longitudinal geospatial reasoning over evolving climate, infrastructure, and population conditions globally. 
+
+Broader Impact. This work provides a flexible, self-supervised foundation for broader multimodal geospatial modeling. By learning transferable latent representations without labeled data, it facili-tates adaptation to regions with sparse ground-truth annotations. The architecture can naturally be extended to incorporate diverse modalities—such as climate projections, mobility data, electronic 9health records, or real-time satellite streams—to support large-scale predictive modeling in disaster forecasting, urban planning, climate adaptation, and environmental justice. 
+
+Acknowledgments. The authors gratefully acknowledge support for this research from the National Science Foundation (NSF) under award IIS-2107313. Any opinions, findings, conclusions, or recommendations expressed in this paper are those of the authors and do not necessarily reflect the views of the sponsors. 
+
+## References 
+
+[1] S. Ravuri, K. Lenc, M. Willson, D. Kangin, R. Lam, P. Mirowski, M. Fitzsimons, M. Athanassiadou, S. Kashem, S. Madge, R. Prudden, A. Mandhane, A. Clark, A. Brock, K. Simonyan, R. Hadsell, N. Robin-son, E. Clancy, A. Arribas, and S. Mohamed, “Skilful precipitation nowcasting using deep generative models of radar,” Nature , vol. 597, no. 7878, pp. 672–677, Sep. 2021. [2] Y. Liu, J. Doss-Gollin, Q. Dai, A. Veeraraghavan, and G. Balakrishnan, “Downscaling Extreme Precipitation With Wasserstein Regularized Diffusion,” IEEE Transactions on Geoscience and Remote Sensing , vol. 63, pp. 1–11, 2025. [3] E. M. Rathje, C. Dawson, J. E. Padgett, J.-P. Pinelli, D. Stanzione, A. Adair, P. Arduino, S. J. Brandenberg, T. Cockerill, C. Dey et al. , “Designsafe: New cyberinfrastructure for natural hazards engineering,” Natural hazards review , vol. 18, no. 3, p. 06017001, 2017. [4] K. Amini, Y. Liu, J. E. Padgett, G. Balakrishnan, and A. Veeraraghavan, “Debris segmentation using post-hurricane aerial imagery,” Computer-Aided Civil and Infrastructure Engineering , vol. 40, no. 25, pp. 4116–4131. [5] S. Rajagopalan, S. G. Al-Kindi, and R. D. Brook, “Air pollution and cardiovascular disease: Jacc state-of-the-art review,” Journal of the American College of Cardiology , vol. 72, no. 17, pp. 2054–2070, 2018. [6] S. G. Al-Kindi, R. D. Brook, S. Biswal, and S. Rajagopalan, “Environmental determinants of cardiovascular disease: lessons learned from air pollution,” Nature Reviews Cardiology , vol. 17, no. 10, pp. 656–672, 2020. [7] M. Agarwal, M. Sun, C. Kamath, A. Muslim, P. Sarker, J. Paul, H. Yee, M. Sieniek, K. Jablonski, Y. Mayer, D. Fork, S. de Guia, J. McPike, A. Boulanger, T. Shekel, D. Schottlander, Y. Xiao, M. C. Manukonda, Y. Liu, N. Bulut, S. Abu-el-haija, B. Perozzi, M. Bharel, V. Nguyen, L. Barrington, N. Efron, Y. Matias, G. Corrado, K. Eswaran, S. Prabhakara, S. Shetty, and G. Prasad, “General Geospatial Inference with a Population Dynamics Foundation Model,” Jan. 2025. [8] N. Gorelick, M. Hancher, M. Dixon, S. Ilyushchenko, D. Thau, and R. Moore, “Google Earth Engine: Planetary-scale geospatial analysis for everyone,” Remote Sensing of Environment , vol. 202, pp. 18–27, Dec. 2017. [9] X. Chen, K. Feng, N. Liu, B. Ni, Y. Lu, Z. Tong, and Z. Liu, “RainNet: A Large-Scale Imagery Dataset and Benchmark for Spatial Precipitation Downscaling,” Advances in Neural Information Processing Systems ,vol. 35, pp. 9797–9812, Dec. 2022. [10] M. Veillette, S. Samsi, and C. Mattioli, “SEVIR : A Storm Event Imagery Dataset for Deep Learning Applications in Radar and Satellite Meteorology,” in Advances in Neural Information Processing Systems ,vol. 33. Curran Associates, Inc., 2020, pp. 22 009–22 019. [11] N. Naik, S. D. Kominers, R. Raskar, E. L. Glaeser, and C. A. Hidalgo, “Computer vision uncovers predictors of physical urban change,” Proceedings of the National Academy of Sciences , vol. 114, no. 29, pp. 7571–7576, Jul. 2017. [12] J. R. Anderson, E. E. Hardy, J. T. Roach, and R. E. Witmer, “A land use and land cover classification system for use with remote sensor data,” USGS Numbered Series 964, 1976. [13] C. F. Brown, M. R. Kazmierski, V. J. Pasquarella, W. J. Rucklidge, M. Samsikova, C. Zhang, E. Shelhamer, E. Lahera, O. Wiles, S. Ilyushchenko, N. Gorelick, L. L. Zhang, S. Alj, E. Schechter, S. Askay, O. Guinan, R. Moore, A. Boukouvalas, and P. Kohli, “AlphaEarth Foundations: An embedding field model for accurate and efficient global mapping from sparse label data,” Sep. 2025. [14] K. Klemmer, E. Rolf, C. Robinson, L. Mackey, and M. Rußwurm, “SatCLIP: Global, General-Purpose Location Embeddings with Satellite Imagery,” Apr. 2024. 
+
+10 [15] D. Szwarcman, S. Roy, P. Fraccaro, Þ. E. Gíslason, B. Blumenstiel, R. Ghosal, P. H. de Oliveira, J. L. d. S. Almeida, R. Sedona, Y. Kang, S. Chakraborty, S. Wang, C. Gomes, A. Kumar, M. Truong, D. Godwin, H. Lee, C.-Y. Hsu, A. A. Asanjan, B. Mujeci, D. Shidham, T. Keenan, P. Arevalo, W. Li, H. Alemohammad, P. Olofsson, C. Hain, R. Kennedy, B. Zadrozny, D. Bell, G. Cavallaro, C. Watson, M. Maskey, R. Ra-machandran, and J. B. Moreno, “Prithvi-EO-2.0: A Versatile Multi-Temporal Foundation Model for Earth Observation Applications,” Feb. 2025. [16] H. Herzog, F. Bastani, Y. Zhang, G. Tseng, J. Redmon, H. Sablon, R. Park, J. Morrison, A. Buraczynski, K. Farley, J. Hansen, A. Howe, P. A. Johnson, M. Otterlee, T. Schmitt, H. Pitelka, S. Daspit, R. Ratner, C. Wilhelm, S. Wood, M. Jacobi, H. Kerner, E. Shelhamer, A. Farhadi, R. Krishna, and P. Beukema, “OlmoEarth: Stable Latent Image Modeling for Multimodal Earth Observation,” Nov. 2025. [17] J. Jakubik, F. Yang, B. Blumenstiel, E. Scheurer, R. Sedona, S. Maurogiovanni, J. Bosmans, N. Dionelis, V. Marsocci, N. Kopp, R. Ramachandran, P. Fraccaro, T. Brunschwiler, G. Cavallaro, J. Bernabe-Moreno, and N. Longépé, “TerraMind: Large-Scale Generative Multimodality for Earth Observation,” Apr. 2025. [18] X. Guo, J. Lao, B. Dang, Y. Zhang, L. Yu, L. Ru, L. Zhong, Z. Huang, K. Wu, D. Hu, H. He, J. Wang, J. Chen, M. Yang, Y. Zhang, and Y. Li, “SkySense: A Multi-Modal Remote Sensing Foundation Model Towards Universal Interpretation for Earth Observation Imagery,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 27 672–27 683. [19] Y. Cong, S. Khanna, C. Meng, P. Liu, E. Rozi, Y. He, M. Burke, D. B. Lobell, and S. Ermon, “SatMAE: Pre-training Transformers for Temporal and Multi-Spectral Satellite Imagery,” in Advances in Neural Information Processing Systems , Oct. 2022. [20] K. He, X. Chen, S. Xie, Y. Li, P. Dollár, and R. Girshick, “Masked Autoencoders Are Scalable Vision Learners,” Dec. 2021. [21] Environmental Defense Fund and Texas A&M University, “About the u.s. climate vulnerability index,” https://climatevulnerabilityindex.org/about/, 2023, accessed: 2026-04-20. [22] S. Ebrahimi, S. O. Arik, Y. Dong, and T. Pfister, “LANISTR: Multimodal learning from structured and unstructured data,” arXiv:2305.16556 , 2023. [23] S. Du, S. Zheng, Y. Wang, W. Bai, D. P. O’Regan, and C. Qin, “TIP: Tabular-image pre-training for multimodal classification with incomplete data,” in Computer Vision – ECCV 2024 , 2024, pp. 478–496. [24] X. Huang, A. Khetan, M. Cvitkovic, and Z. Karnin, “TabTransformer: Tabular data modeling using contextual embeddings,” arXiv:2012.06678 , 2020. [25] Y. Gorishniy, I. Rubachev, V. Khrulkov, and A. Babenko, “Revisiting deep learning models for tabular data,” in Advances in Neural Information Processing Systems , vol. 34, 2021, pp. 18 932–18 943. [Online]. Available: https://proceedings.neurips.cc/paper/2021/hash/9d86d83f925f2149e9edb0ac3b49229c-Abstract. html [26] P. Hager, M. J. Menten, and D. Rueckert, “Best of both worlds: Multimodal contrastive learning with tabular and imaging data,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 23 924–23 935. [27] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Min-derer, G. Heigold, S. Gelly, J. Uszkoreit, and N. Houlsby, “An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale,” Jun. 2021. [28] O. Press, N. A. Smith, and M. Lewis, “Train short, test long: Attention with linear biases enables input length extrapolation,” in International Conference on Learning Representations , 2022. [Online]. Available: https://openreview.net/forum?id=R8sQPpGCv0 [29] T. Chen, S. Kornblith, M. Norouzi, and G. Hinton, “A Simple Framework for Contrastive Learning of Visual Representations,” Jul. 2020. [30] M. Caron, H. Touvron, I. Misra, H. Jégou, J. Mairal, P. Bojanowski, and A. Joulin, “Emerging Properties in Self-Supervised Vision Transformers,” May 2021. [31] F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg et al. , “Scikit-learn: Machine learning in python,” Journal of Machine Learning Research , vol. 12, pp. 2825–2830, 2011. 
+
+11 [32] Centers for Disease Control and Prevention, National Center for Health Statistics, “National Vital Statistics System, Mortality 1999–2020 on CDC WONDER Online Database,” http://wonder.cdc.gov/mcd-icd10. html, 2021, data are from the Multiple Cause of Death Files, 1999–2020, as compiled from data provided by the 57 vital statistics jurisdictions through the Vital Statistics Cooperative Program. Accessed: 2026-05-03 8:58:15 PM. [33] E. Chuvieco, M. L. Pettinari, J. Lizundia-Loiola, T. Storm, and M. Padilla Parellada, “ESA Fire Climate Change Initiative (Fire_cci): MODIS Fire_cci Burned Area Pixel product, version 5.1,” https://catalogue. ceda.ac.uk/uuid/58f00d8814064b79a0c49662ad3af537/, 2018, published: 2018-11-01. 
+
+12 Supplementary Material GeoViSTA: Geospatial Vision-Tabular Transformer for Multimodal Environment Representation 
+
+## A Geospatial Dataset Details 
+
+A.1 AlphaEarth Vision Data 
+
+We use AlphaEarth Foundations [ 13 ] as the gridded vision modality. AlphaEarth provides annual, analysis-ready embedding fields in which each grid cell is represented by a 64-dimensional vector summarizing Earth-observation context. Unlike raw optical, radar, or climate bands, these chan-nels are latent embedding dimensions and do not have individual physical units; visualizations of AlphaEarth fields therefore use PCA-RGB projections of the 64-dimensional vectors. We use all available annual fields from 2017–2024 for ViT pretraining, excluding ocean and no-data tiles. To match the spatial scale of census-tract-level CVI attributes, we use downsampled AlphaEarth overviews at 320 m and 640 m resolution. Joint training uses the 2018 CONUS AlphaEarth field co-registered with census-tract CVI rows. For the vision-only linear-probe baseline, we average the 64-dimensional AlphaEarth vectors within each census tract before fitting the downstream probe. 
+
+A.2 CVI Tabular Environmental Data 
+
+We use the U.S. Climate Vulnerability Index (CVI) [ 21 ] as the tabular environmental modality. CVI provides census-tract-level indicators covering socioeconomic vulnerability, infrastructure, healthcare access, environmental exposures, pollution sources, and extreme-event risks. We use the variables marked as Input in the CVI definition workbook as tabular covariates for self-supervised training, and withhold the variables marked as Outcome so that health indicators are not used as reconstruction targets. We exclude Alaska and Hawaii because many CVI columns are missing for those states, and use the remaining contiguous United States census tracts for joint training and evaluation. Table 5 lists the CVI input variables used as tabular environmental data.                        
+
+> Table 5: Tabular exposome inputs in the CVI definition workbook.
+> Subdomain Key Indicator
+> Domain: Socio-economic
+> Socioeconomic Stressors
+> BlwPv Below Poverty
+> Unmpl Unemployed
+> LwInc Low Income
+> NHgSD No High School Diploma
+> HmcdR Homicide Rate
+> GnVln Gun Violence
+> RlgsO Religious Organizations
+> CvcSO Civic and Social Organizations Housing Composition & Disability
+> Ag65O Aged 65 or Older
+> Ag17Y Aged 17 or Younger
+> CvlnD Civilian with a Disability
+> SngPH Single-Parent Households
+> FstrC Foster Children Minority Status & Language
+> Mnrty Minority
+> SpELW Speaks English Less than Well
+> UndcP Undocumented Population
+> HtCrm Hate Crimes
+> PrsnP Prison Population
+> Rdlnn Redlining
+> HmlsP Homeless Population
+> VtrnP Veterans Population Continued on next page
+
+13 Subdomain Key Indicator 
+
+Housing & Transportation 
+
+MltUS Multi-Unit Structures 
+
+MblHm Mobile Homes 
+
+Crwdn Crowding 
+
+NVhcl No Vehicle 
+
+GrpQr Group Quarters 
+
+HsnFR Housing Foreclosure Risk 
+
+PHUBB Percent of Housing Units Built Between 1940-1969 as of 2015-2019 Costs of Climate Disasters 
+
+FEMAH FEMA Hazard Mitigation Grants 
+
+Fldnrtp Flooding risk to properties 
+
+Wldfr Wildfire risk to properties 
+
+Pttb2 Property taxes expected to be lost by 2045 due to chronic inundation 
+
+Cstfc Cost of climate disasters Productivity Losses 
+
+HRJPC High-Risk Jobs Productivity (% Change) 
+
+Yldsc Yields (% change) 
+
+Owwdr Outdoor workers - work days at risk per year 
+
+EALAV Expected Annual Loss - Agriculture Value 
+
+EALBV Expected Annual Loss - Building Value 
+
+EALPE Expected Annual Loss - Population Equivalence Transition Risks 
+
+RsdEE Residential Energy Expenditures (% change) 
+
+ShrJA Share of Jobs in Agriculture 
+
+Scdby State energy-related carbon dioxide emissions by year 
+
+MthnE Methane Emissions Social Stressors PrprC Property Crimes (% change) 
+
+VlntC Violent Crimes (% change) 
+
+Domain: Infrastructure 
+
+Transportation 
+
+Dlycp Delay (congestion) per capita/census tract 
+
+Fldnrtr Flooding risk to roads 
+
+Lnmls Lane miles per capita 
+
+RdQlM Road Quality and Maintenance 
+
+PblTP Public Transit Performance 
+
+BrdQM Bridge Quality and Maintenance 
+
+Wlkbl Walkability 
+
+Bkblt Bikability Energy 
+
+RsECB Residential Energy Cost Burden 
+
+Shfff Share of energy from fossil fuels 
+
+EVChS EV Charging Stations Food, Water, and Waste Management 
+
+MRFEI Modified Retail Food Environment Index 
+
+FdIns Food Insecurity 
+
+AccHF Access to Healthy Foods 
+
+IndrP Indoor Plumbing Communications PoHwn Percent of Household with no internet access 
+
+Phwsb Percent of household with smartphone but no other device. Financial Services 
+
+PrcUH Percent of Unbanked Households 
+
+Pydyl Payday lending rank 
+
+HsngAfr Housing Affordability (renters) 
+
+HsngAfo Housing Affordability (owners) Governance 
+
+TBMRE Tax Base: Median Real Estate Taxes Paid 
+
+VT202 Voter Turnout 2020 
+
+PblLL Public Library Locations 
+
+HUDPH HUD Public Housing 
+
+AffHU Aggregate funding amount for HUD grants 
+
+Domain: Healthcare 
+
+Access to Care 
+
+PrxNH Proximity to Nursing Homes 
+
+NHBp1 Number of Hospital Beds per 10,000 people 
+
+MdcUA Medically Underserved Areas 
+
+CrLHI Current Lack of Health Insurance Continued on next page 
+
+14 Subdomain Key Indicator 
+
+Prxmt Proximity to hospitals 
+
+Domain: Environment 
+
+Transportation Sources 
+
+Ttvmt Total vehicle miles traveled per capita 
+
+Psvmt Passenger vehicle miles traveled per capita 
+
+Trvmt Truck vehicle miles traveled per capita 
+
+HDVvm Heavy Duty Vehicle vehicle miles traveled per capita 
+
+PrxmP Proximity to Ports 
+
+RlCrs Rail Crossings 
+
+TrfPV Traffic Proximity and Volume 
+
+NtTNM National Transportation Noise Map Exposures & Risks 
+
+RSEIR Risk-Screening Environmental Indicators (RSEI) 
+
+ArTxRs Air Tox Respiratory 
+
+ArTxN Air Tox Neurological 
+
+ArTxL Air Tox Liver 
+
+ArTxD Air Tox Developmental 
+
+ArTxRp Air Tox Reproductive 
+
+ArTxK Air Tox Kidney 
+
+ArTxI Air Tox Immunological 
+
+ArTxT Air Tox Thyroid 
+
+ATTCR Air Tox Total Cancer Risk 
+
+BlckC Black Carbon 
+
+Agrcl Agricultural pesticides 
+
+LPhb1 Lead Paint: % housing units built before 1960 
+
+Ldndw Lead in drinking water violations Pollution Sources 
+
+SprfS Superfund Sites 
+
+Brwnf Brownfields 
+
+STRSE Stream Toxicity Risk-Screening Environmental Indicators (RSEI) 
+
+Ptfpm Proximity to facilities participating in air markets 
+
+NPLst NPL sites 
+
+HWMFT Hazardous Waste Management Facilities (TSDFs) 
+
+HWGnI Hazardous Waste Generator/Incinerators 
+
+FclEV Facilities with Enforcement or Violation 
+
+Lndfl Landfills 
+
+TSCAF TSCA Facilities 
+
+RsMPF Risk Management Plan Facilities 
+
+ChmcM Chemical Manufacturers 
+
+MtlRc Metal Recyclers 
+
+AcOGW Active Oil and Gas Wells Criteria Air Pollutants 
+
+APM25 Annual average PM2.5 concentrations 
+
+NO2cn NO2 concentration 
+
+Ozncn Ozone concentration Land Use 
+
+PrksG Parks and Greenspace 
+
+ImprS Impermeable Surfaces 
+
+FrsLC Forest Land Cover 
+
+NtvAL Native American Lands 
+
+Domain: Extreme Events 
+
+Temperature 
+
+ClWAF Cold Wave - Annualized Frequency 
+
+Dwm3C Days with maximum temperature above 35C 
+
+Dwm40 Days with maximum temperature above 40C 
+
+FrstD Frost Days 
+
+Mxmmm Maximum of maximum temperatures 
+
+Mntmp Mean temperature 
+
+UHIEH Urban Heat Island Extreme Heat Days Droughts DrgAF Drought - Annualized Frequency 
+
+CnsDD Consecutive Dry Days Wildfires WldAF Wildfire - Annualized Frequency 
+
+SPM25 Surface PM2.5 Precipitation 
+
+Snwfl Snowfall Continued on next page 
+
+15 Subdomain Key Indicator         
+
+> StnPI Standardized Precip Index
+> TtlPr Total Precipitation Flooding
+> CsFAF Coastal Flooding - Annualized Frequency
+> RvFAF Riverine Flooding - Annualized Frequency
+> SLvlR Sea Level Rise Storms
+> HrrAF Hurricane - Annualized Frequency
+> TrnAF Tornado - Annualized Frequency
+> WnWAF Winter Weather - Annualized Frequency
+
+Dropped CVI input variable. We additionally drop the environmental input variable C19VR (Covid-19 vaccination rates) because we observed unreasonable outlier readings in some Texas counties, including percentile reading above 1000%. 
+
+Excluded health indicators. We exclude the following CVI outcome variables from self-supervised training: overall physical health : LfExp (life expectancy), SlRPH (self-reported physical health); 
+
+mental health and deaths of despair : SlRMH (self-reported mental health), DOD10 (drug overdose deaths), AlchA (alcohol abuse), ScdRt (suicide rates); chronic disease : CrrnD (current diabetes), CrrAA (current adult asthma), Strok (stroke), COPD, CHD, Cancr (cancer); chronic disease pre-vention : HghBP (high blood pressure), ChlsS (cholesterol screening), RtnDV (routine doctor visit), Clnsc (colonoscopy), Mmmgr (mammogram), OlMPS (older men preventive screening), OlWPS (older women preventive screening), DntlE (dental exams); infectious diseases : COVID (COVID-19 deaths), HpttA (hepatitis A), HpttB (hepatitis B), HIV, Chlmy (chlamydia), Gnrrh (gonorrhea), Syphl (syphilis), Adsld (Aedes albopictus dengue transmission increase), Adsgd (Aedes aegypti dengue transmission increase), Adszt (Aedes aegypti zika transmission increase); child and maternal health : InfnM (infant mortality), Lwbrt (low birthweight), Prtrm (pre-term birth), ChldA (childhood asthma), Tnbrt (teen births), ADHDP (ADHD prevalence), ADHDT (ADHD treatment), ChldM (child mortality), FRPSL (free or reduced price school lunch); climate- and pollution-related health outcomes : Tmprt (temperature-related mortality), Dthsf (deaths from climate disasters), IPMC6 (increased PM 2.5 mortality–CVD, ages 65+), IncOm (increased ozone mortality), and Incic (increase in childhood asthma incidence). 
+
+## B Training 
+
+Additional details on data splits Fig. 8 provides further details on data splits. Fig. 8a shows that Pretraining data for ViT contains 8 years of global AlphaEarth embedding. We withhold 2018 for test, and 2024 for validation. The map shown here is AlphaEarth embedding, whose color is PCA-RGB embedding, not representative of the data split. Fig. 8b shows Joint-training data for GeoViSTA comprises 2018 AlphaEarth and CVI tabular datapoints across the CONUS. Here we withhold WA for test, and split train/val via random 300 km 2 bounding boxes. Val Train Test      
+
+> (a) Pre-train (ViT) (b) Joint-train (ViT–TabT) 2017 2018 2019 – 2023 2024
+> Val Train Train Test
+
+Figure 8: Training data splits .16 Additional details on model. Table 6 summarizes the model components trained at each stage, the attention mechanism used by each component, the number of trainable parameters, and the hardware used for training. The ViT pretraining stage was run on an institutional SLURM cluster using 4 ×
+
+NVIDIA B200 GPUs; it completed in 35 hours, with GPU memory usage of approximately 80 GB per GPU, on a node with Intel Xeon Platinum 8570 CPUs and 2 TB DRAM. The joint-training stage was run on an internal research-lab cluster using 1 × NVIDIA A100 GPU; it completed in 8 hours, with approximately 70 GB GPU memory usage, on a node with an Intel Xeon Platinum 8362 CPU @ 2.80 GHz and 1 TB DRAM. The full research project did not require additional computing beyond the experiments reported in this paper. 
+
+ViT pretraining hyperparameters. We pretrain the ViT with AdamW ( β1 = 0 .9, β2 = 0 .95 ), weight decay 0.05 , base learning rate 1.5 × 10 −4, and a warmup-cosine schedule with 40 warmup epochs and a 1000-epoch horizon. Training uses per-GPU batch size 1024 on 4 GPUs (effective batch size 4096), mixed precision, gradient accumulation 1, mask ratio 0.75 , and random seed/split seed 42. The pretraining objective is Lpre = LMSE + βL cos with β = 1 .
+
+GeoViSTA joint-training hyperparameters. We train GeoViSTA with AdamW ( β1 = 0 .9, β2 =0.95 ), learning rate 3 × 10 −4, weight decay 0.04 , batch size 256, and a warmup-cosine schedule with 2 warmup epochs and a 100-epoch horizon. Each epoch samples 100,000 local regions; we use random seed 42, random-square train/validation split seed 1339, and vision and tabular mask ratios of 0.5. The joint MAE objective uses a 1:1 reconstruction weighting, Ljoint = Lvis + λL tab 
+
+with λ = 1 . For the spatial attention bias, we set d0 = 10 km and τ = 25 km, with learnable gains initialized to 1.0, using distances between vision patch centers and census-tract representative points. Table 6: Training-stage summary.                       
+
+> Stage Model Attention Type |θtrain |Hardware
+> Pretraining Vision Transformer (ViT) Self-attention 137 M 4×B200 Joint-training Tabular Row Encoder Blocks Self-attention [column] 416 K 1×A100 Tabular Transformer Blocks aSelf-attention [row] 11.6 M 1×A100 Cross Attention Blocks Cross-attention 27.1 M 1×A100
+> aExcluding row encoder blocks.
+
+Fig. 9 offers a more detailed view of GeoViSTA than the simplified schematic in Fig. 3, showing additional details, like residual connections and MLP blocks. For conciseness, only one cross-attention block is drawn; vit ←tabt and tabt ←vit have their own attention blocks and do not share attention weights 17 Tabular Inputs Input Embedding Row Reduction 
+
+> ∆λ, ∆ϕ
+
+Vision Inputs Patchify 3× Self-attention [column] MLP 2× Self-attention [row] Layer Norm Layer Norm Layer Norm MLP Vision Outputs Tabular Outputs 8× Self-attention [inter-row] Layer Norm Layer Norm MLP 8× Self-attention Layer Norm Layer Norm MLP 
+
+Q
+
+Layer Norm 
+
+Inference 
+
+K/V ∆λ, ∆ϕ Cross attention Layer Norm Layer Norm MLP 4× Self-attention Layer Norm Layer Norm MLP Projection Linear 2× Self-attention [row] Layer Norm ViT Geospatial Location Encoder ViT Position Embedding TabT Cross-attn Layer Norm MLP Figure 9: Detailed GeoViSTA architecture .
+
+## C Evaluation 
+
+Additional details on PCA. Following Fig. 7, we also show PCA maps of input CVI tabular features in Fig. 10, and AlphaEarth embeddings (aggregated to census tracts) in Fig. 11. CVI embedding appears to be noisier than GeoViSTA’s, with outlier counties in both PC1 (random rural splot in WA having the same trend as dense urban centers) and PC2. AlphaEarth’s embedding seems to have a larger emphasis on the natural environment, where PC1 is dominated by east-west separation, rather than urban-rural transition. PC1 (10.8%) PC2 (10.1%) PC3 (5.7%) PC4 (3.5%) PC5 (3.1%) PC6 (2.9%) PC7 (2.2%) PC8 (2.0%) 
+
+Figure 10: Principal components of CVI tabular inputs .18 PC1 (20.6%) PC2 (13.4%) PC3 (11.0%) PC4 (7.3%) PC5 (5.9%) PC6 (4.7%) PC7 (4.1%) PC8 (3.7%) Figure 11: Principal components of AlphaEarth embeddings .19
