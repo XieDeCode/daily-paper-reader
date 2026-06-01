@@ -1,0 +1,899 @@
+Title: From GPS Points to Travel Patterns: Flexible and Semantic Trajectory Generation with LLMs
+
+URL Source: https://arxiv.org/pdf/2605.30014v1
+
+Published Time: Fri, 29 May 2026 01:50:01 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# From GPS Points to Travel Patterns: Flexible and Semantic Trajectory Generation with LLMs 
+
+## Silin Zhou 
+
+University of Electronic Science and Technology of China Chengdu, China zhousilinxy@gmail.com 
+
+## Chenhao Wang 
+
+University of Electronic Science and Technology of China Chengdu, China chenhao.wang@std.uestc.edu.cn 
+
+## Yuntao Wen 
+
+University of Electronic Science and Technology of China Chengdu, China yuntaowenx@gmail.com 
+
+## Shuo Shang †
+
+University of Electronic Science and Technology of China Chengdu, China jedi.shang@gmail.com 
+
+## Lisi Chen 
+
+University of Electronic Science and Technology of China Chengdu, China lchen012@e.ntu.edu.sg 
+
+## Panos Kalnis 
+
+King Abdullah University of Science and Technology Thuwal, Saudi Arabia panos.kalnis@kaust.edu.sa 
+
+## Abstract 
+
+Urban trajectories play a crucial role in modeling urban dynamics and supporting various smart city applications. However, privacy concerns restrict access to large-scale and high-quality trajectory datasets. Trajectory generation provides a promising alternative by synthesizing realistic data to mitigate privacy risks. However, existing methods fail to explicitly capture travel patterns and can only generate fixed-length trajectories under a single condition. To address these limitations, we propose HTP , which Hierarchically generates Travel patterns first and then generates GPS Points by us-ing large language models (LLMs), rather than directly generating GPS points. We first design a trajectory-specific residual quantiza-tion variational autoencoder (RQ-VAE) that quantizes micro-level GPS trajectories into compact, macro-level travel pattern tokens in a coarse-to-fine manner. These tokens capture rich segment spatial irregularities, such as point density variations caused by traffic conditions. Then, we extend the LLM vocabulary with travel pat-tern tokens to align trajectory representations with the LLM input, and apply supervised fine-tuning (SFT) to align the LLM with the trajectory generation task, enabling generation of travel pattern sequences under various conditions. Extensive experiments on two real-world datasets show that HTP outperforms the strongest base-line by an average of 29.78% in terms of generation quality. Our code is available at https://github.com/slzhou-xy/HTP. 
+
+## CCS Concepts 
+
+• Information systems → Spatial-temporal systems ; • Com-puting methodologies → Artificial intelligence .
+
+## Keywords 
+
+Urban Trajectory Generation; Hierarchical Generation; Travel Pat-tern; Residual Quantization; Large Language Model   
+
+> †The corresponding author.
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> KDD 2026, Jeju Island, Republic of Korea.
+> ©2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2259-2/2026/08 https://doi.org/10.1145/3770855.3817701
+
+Single 
+
+condition Various 
+
+conditions 
+
+Variable-length 
+
+travel patterns 
+
+LLM 
+
+RQ-VAE 
+
+Variable-length traj. Fixed-length traj. 
+
+(b) Diffusion methods (c) Our method (a) VAE/GAN methods 
+
+Denoising 
+
+Denoising 
+
+Gaussian 
+
+Noise 
+
+Single 
+
+condition 
+
+VAE 
+
+or 
+
+GAN 
+
+Gaussian 
+
+Noise 
+
+Variable -length traj. 
+
+Align Align 
+
+Figure 1: Comparisons of the generation pipelines between existing methods and our proposed method. 
+
+ACM Reference Format: 
+
+Silin Zhou, Chenhao Wang, Yuntao Wen, Shuo Shang, Lisi Chen, and Panos Kalnis. 2026. From GPS Points to Travel Patterns: Flexible and Semantic Trajectory Generation with LLMs. In Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2 (KDD 2026), August 9–13, 2026, Jeju Island, Republic of Korea. ACM, New York, NY, USA, 12 pages. https://doi.org/10.1145/3770855.3817701 
+
+## 1 Introduction 
+
+The widespread utilization of GPS-enabled devices has supported many human mobility tasks, such as urban planning [ 22 ], location-based services [ 54 ], and intelligent transportation [ 46 ]. Mobility trajectory data, which record the spatiotemporal movement, serve as fundamental data for many downstream tasks such as trajectory similarity computation [ 50 ], travel time estimation [ 9], and anomaly detection [ 43 ]. However, access to large-scale real-world trajectory data remains difficult due to privacy concerns [ 17 ] and high data collection costs [ 51 ]. Consequently, researchers often lack datasets that capture the richness and complexity of human mobility. To address this issue, trajectory generation [ 5 ] has been proposed as a promising alternative to provide reliable and privacy-preserving data for research and practical applications. To generate realistic trajectories, trajectory generation methods should capture two inherent characteristics of real-world mobility  
+
+> arXiv:2605.30014v1 [cs.AI] 28 May 2026 KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Silin Zhou, Chenhao Wang, Yuntao Wen, Shuo Shang, Lisi Chen, and Panos Kalnis
+
+trajectories [ 4]: (1) Complex travel patterns. Due to variations in travel speed, traffic conditions, and road network structure, some trajectory segments contain dense clusters of GPS points, while others are sparsely sampled [ 15 ], resulting in diverse travel patterns. From a macro-level perspective, a trajectory can be decomposed into a sequence of patterns such as acceleration, deceleration, and turning. Even trajectories following the same route may exhibit sub-stantially different compositions of these patterns (due to different start-end times and traffic conditions), which further lead to micro-level variations in point granularity and the number of sampled points. (2) Various constraints. Mobility trajectories are influenced by multiple conditions, such as user preferences, travel time, and environmental factors [ 56 ], which jointly determine how a trajec-tory is generated. For the same origin–destination pair, travelers may select different routes based on traffic or personal preference, creating diverse mobility patterns. Therefore, trajectory generation should satisfy multiple conditional constraints. Existing trajectory generation methods are based on VAE [ 6 , 18 ], GAN [ 10 , 25 , 33 , 53 ], and diffusion [ 12 , 13 , 60 , 61 ] frameworks, as shown in Figure 1(a)(b). These methods generate trajectories from Gaussian noise. For example, TrajGAN [ 25 ] incorporates LSTMs into GANs [ 10 ] to model spatial dependencies, while DiffTraj [ 60 ]pioneers the use of diffusion models for progressively denoising and generating trajectories. Despite their effectiveness, these methods still suffer from several limitations. First, they generate trajectories directly at the micro-level (i.e., GPS point) in the implicit embed-ding space, while overlooking explicit macro-level travel patterns. Therefore, generated trajectories miss important movement char-acteristics caused by traffic conditions, which manifest as sampling density variations across segments (e.g., congestion leads to dense clusters, while acceleration produces sparse points), causing unre-alistic segment-level behaviors. Second, existing methods support only very limited generation conditions and also rely on additional alignment modules to inject conditions into the latent space. Most methods [ 6 , 25 , 60 ] only utilize start and end coordinates for the generation condition, ignoring other factors such as travel distance, travel time, and road information. This restricted conditioning limits the diversity and controllability of generation. Moreover, although diffusion-based methods [ 13 ] achieve higher quality generation than VAE-based [ 18 ] and GAN-based [ 10 ] methods, they are con-strained to fixed-length sequences due to architectural limitations. For example, ControlTraj [ 61 ] fixes the trajectory length of genera-tion to 200 points. Such fixed-length generation deviates from the true length distribution of real-world trajectory data. To address these issues, we propose a novel two-stage trajectory generation framework, named HTP , as shown in Figure 1(c). HTP performs hierarchical generation by first producing travel patterns at the macro-level using an LLM [ 47 ], and then generating GPS points at the micro-level using an RQ-VAE [ 23 ]. To implement HTP, we tackle two main technical challenges: 
+
+❶ How to transform GPS trajectories into travel patterns? We design a trajectory-specific RQ-VAE that converts GPS trajecto-ries from free space into shared travel patterns in limited space to capture common behaviors such as congestion and acceleration. The encoder integrates CNNs [ 20 ] and Transformers [ 42 ] to jointly learn local and global features, and progressively downsamples tra-jectories to shorten sequence length. This compression effectively learn spatial irregularities from micro-level points to macro-level segment embeddings. We then apply multi-resolution residual quan-tization to map these embeddings into shared travel patterns. The decoder reconstructs trajectories from the quantized travel patterns together with road contextual information and progressively up-samples the representations. To further capture GPS point density variations, we introduce a relative reconstruction loss. 
+
+❷ How to hierarchically generate variable-length trajectories with various conditions? We use an LLM to first generate macro-level travel patterns and then generate micro-level GPS trajectories. In-stead of alignment modules, we unify various conditions as natural language descriptions, enabling flexible and controllable generation. We extend the LLM vocabulary with travel pattern tokens from the RQ-VAE and perform supervised fine-tuning (SFT) to enable the LLM to generate travel pattern sequences under various conditions. These compressed tokens encode segment-level features, substan-tially reducing token cost and improving LLM efficiency compared with directly generating GPS points by LLMs. Moreover, the au-toregressive structure of LLMs naturally supports variable-length sequence generation. Finally, the generated macro-level travel pat-tern sequences are fed into the RQ-VAE decoder to generate new variable-length micro-level GPS trajectories. To evaluate HTP, we conduct experiments on two real-world datasets and compare with 6 SOTA trajectory generation meth-ods. The results show that HTP consistently outperforms the best baseline by an average of 29.78%. Visualizations confirm HTP can generate high-quality and variable-length trajectories that satisfy the distributions of the real trajectory datasets. An ablation study shows that all designs of HTP contribute to improving performance. To summarize, we make the following contributions: 
+
+• We observe that existing trajectory generation methods focus only on micro-level GPS point generation while ignoring macro-level segment travel patterns and support only a single condition, leading to unrealistic and limited diversity generation. 
+
+• We propose HTP, a novel two-stage framework for hierarchical variable-length trajectory generation. HTP first generates macro-level travel pattern sequences using an LLM, and then generates GPS trajectories from these patterns via an RQ-VAE. 
+
+• We unify various conditions into natural language descriptions and leverage the world knowledge of LLMs to guide trajectory generation. Combining with travel patterns, HTP enables high-quality and diverse trajectory generation. 
+
+## 2 Related Work 
+
+Trajectory Generation. Trajectory generation aims to synthe-size trajectories whose distributions match real-world data [ 5, 8 ], supporting various downstream applications [ 55 , 59 ] while mitigat-ing privacy risks [ 44 ]. Early methods rely on rule-based strategies, such as simulations [ 37 ] and random perturbations [ 30 ], but fail to model the complex spatial-temporal dependencies of real trajecto-ries. Recently, learning-based trajectory generation methods [ 5 ] are proposed to model complex distributions, including VAE-based [ 18 ], GAN-based [ 10 ], and diffusion-based [ 13 ] frameworks. For example, TrajVAE [ 6] introduces LSTM [ 14 ] into VAE to learn sequential in-formation. To enhance realism, GAN-based methods [ 25 , 28 , 33 , 53 ]further introduce discriminators. For example, TrajGAN-LSTM [ 33 ]From GPS Points to Travel Patterns: Flexible and Semantic Trajectory Generation with LLMs KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Next Token Prediction 
+
+Large Language Model + L oRA 
+
+LLM Vocabulary Residual 
+
+Quantization 
+
+> Trajectory
+> Reconstruction Loss
+
+Decoder 
+
+Encoder    
+
+> Road Trajectory
+> <road_33><road_21>
+> Length tuple (1, 1, 1)
+> Length Token <t_7>
+
+Cross Entropy Loss 
+
+> Travel
+> Pattern
+> Token
+
+Answer: <t_7> , <| t_begin |><| p_begin |><a_21><b_37><c_8><d_85><| p_end |>,    
+
+> ...... , <| p_begin |><a_4><b_52><c_19><d_165><| p_end |><| t_end |>.
+> 4
+> 3
+> 2
+> 1
+> 4
+> 3
+> 2
+> 1
+> 4
+> 3
+> 2
+> 1
+> codebook c
+> codebook b
+> codebook a
+> 4
+> = _
+> 4
+> 4=
+> +
+> +
+> <b_1>
+> codebook d
+> <a_4>
+> <c_4>
+> 3
+> <d_3>
+> +
+> 4
+> 1
+> = _
+> 1
+> 4_
+> =
+> 1Road Segment
+> Vocabulary
+> Length
+> Vocabulary
+> Travel Pattern Vocabulary
+> 4
+> 3
+> 2
+> 1
+> L = 2
+> L = 3
+> L = 4
+> Travel Pattern
+> Hidden Embedding Sequence
+> Travel Pattern
+> Quantized Embedding Sequence
+> Residual quantization embedding
+> Trajectory
+> L = 1
+
+Expanded Tokenizer 
+
+Stage1: Trajectory Quantization Stage2: LLM-driven Travel Pattern Generation  
+
+> Euclidean Distance Query
+
+System: You are a professional spatial-temporal expert who needs to generate the 
+
+> possible sampling type and travel pattern for users based on their trip information.
+
+Question: Here is a summary of the user's travel information: The road sequence       
+
+> is <road_105><road_226> ... <road_125>, mainly passing through 高升桥南街 ,
+> 肖家河街 , ...... , 紫荆北路 . The trip started at Sunday morning at 06:47......
+
+Figure 2: The training overview of HTP. The details of the encoder and decoder are shown in Figure 13 of the Appendix. 
+
+integrates LSTMs with GANs and a trajectory similarity loss to capture spatiotemporal patterns. However, GANs are notoriously difficult to train and prone to collapse [ 38 ]. Recent SOTA meth-ods [ 12 , 60 , 61 ] adopt diffusion models, which generate trajectories by progressively denoising Gaussian noise under given conditions. DiffTraj [ 60 ] pioneers diffusion-based trajectory generation using a UNet [ 35 ] for spatiotemporal denoising, while ControlTraj [ 61 ]incorporates road topology to improve realism. Cardiff [ 12 ] further proposes a two-stage diffusion pipeline that first generates road embeddings and then GPS trajectories. However, diffusion models require fixed-length inputs, limiting variable-length trajectory gen-eration in real-world settings. Unlike existing methods, our method generates travel patterns under various conditions, enabling diverse variable-length trajectory generation. 
+
+Large Language Models. Since the publication of ChatGPT [ 31 ], large language models (LLMs) have rapidly reshaped how humans interact with information [ 57 ]. Open-source models such as the LLaMA series [ 39 –41 ] have enabled strong foundational capabili-ties and accelerated community-driven research and downstream adaptation. Building on this progress, the Qwen series [ 1, 47 , 48 ]improves multilingual support and long-context modeling, making LLMs more practical and scalable for real-world applications. More recently, DeepSeek-R1 [ 7] represents a new generation of large rea-soning models (LRMs), significantly reducing training cost through the proposed GRPO [ 36 ] reinforcement learning algorithm while maintaining competitive performance. In this work, we unify vari-ous conditions into textual descriptions and leverage LLM world knowledge to generate diverse travel patterns. 
+
+## 3 Problem Definition 
+
+Definition1 (GPS Trajectory) . A GPS trajectory is defined as a variable-length sequence of continuously sampled GPS points, de-noted as 𝜏 = ⟨𝑝 𝑖 ⟩𝑛 𝑖 =1 with length 𝑛 , collected under a fixed sampling frequency. Each point 𝑝 𝑖 ∈ 𝜏 is represented as a tuple (𝑥 𝑖 , 𝑦 𝑖 ), where 
+
+𝑥 𝑖 and 𝑦 𝑖 denote the longitude and latitude. 
+
+Definition2 (Road Network) . A road network is represented as a directed graph 𝐺 = (𝑉 , 𝐴 ), where 𝑉 is the set of road segments and 
+
+𝐴 ∈ R|𝑉 | × | 𝑉 | is the adjacency matrix indicating their connectivity. Specifically, 𝐴 [𝑖, 𝑗 ] = 1 if road segments 𝑣 𝑖 and 𝑣 𝑗 are directly connected, and 𝐴 [𝑖, 𝑗 ] = 0 otherwise. Each road segment 𝑣 𝑖 is associated with a GPS point sequence 𝑆 𝑖 = ⟨𝑝 𝑖 ⟩|𝑆 𝑖 | 
+
+> 𝑖 =1
+
+representing its geometry linestring. 
+
+Definition3 (Road Trajectory) . A road trajectory 𝜏 𝑟 = ⟨𝑣 𝑖 ⟩𝑛 𝑟  
+
+> 𝑖 =1
+
+is a sequence of road segments with length 𝑛 𝑟 that is generated from a GPS trajectory 𝜏 using map-matching algorithms, where 𝑣 𝑖 denotes the ID of a road segment in the road network 𝐺 .
+
+Problem Definition (Mobility Trajectory Generation) . Given a real-world GPS trajectory dataset D = {𝜏 𝑖 }| D |  
+
+> 𝑖 =1
+
+, the mobility tra-jectory generation task aims to synthesize a new high-quality and diverse mobility GPS trajectory dataset eD = {e𝜏 𝑖 }| eD |  
+
+> 𝑖 =1
+
+under the pro-vided conditions. The generated trajectory dataset eD has a similar distribution and travel pattern to the original dataset D.
+
+## 4 The Proposed Method HTP 
+
+Figure 2 presents the training architecture of HTP, which consists of two stages: Stage 1: Trajectory Quantization. A trajectory-specific RQ-VAE compresses GPS trajectories into shared travel pattern to-kens from micro-level to macro-level, transforming point sequences into segment tokens. Stage 2: LLM-driven Travel Pattern Genera-tion. An LLM with expanded vocabulary is fine-tuned to generate quantized travel pattern tokens under various conditions. 
+
+## 4.1 Trajectory Quantization 
+
+Raw GPS points describe trajectories only at the micro-level and carry limited spatial information, making it difficult to capture the KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Silin Zhou, Chenhao Wang, Yuntao Wen, Shuo Shang, Lisi Chen, and Panos Kalnis 
+
+complex spatial irregularities of real-world movement. In contrast, important macro-level information, such as segment-level travel patterns, can reflect the local movement from point density varia-tions. To achieve this, we design a trajectory-specific RQ-VAE in the first stage to explicitly quantize GPS trajectories from free space into shared, multi-resolution travel pattern tokens in a limited space for modeling common macro-level movement. 
+
+Travel Pattern Encoder. The encoder learns trajectory segment embeddings of the macro-level from raw GPS trajectories. Formally, we learn trajectory segment embeddings for a normalized GPS trajectory 𝜏 = ⟨𝑝 𝑖 ⟩𝑛 𝑖 =1 as follows: 
+
+H = Linear (𝜏 ) ∈ R𝑛 ×𝑑 ,
+
+H𝑒 = Encoder (H) ∈ R 𝑛   
+
+> 8×𝑑 𝑒
+
+, (1) where the encoder progressively 2 ×downsamples the trajectory point embeddings H to compress the sequence while doubling the embedding dimensionality, enabling the extraction of rich macro-level segment information. The encoder alternates between CNN and Transformer layers to jointly capture local and global travel movement of GPS trajectories. After three downsampling steps, the sequence length is reduced to 𝑛  
+
+> 8
+
+. This compression substan-tially shortens the sequence while increasing feature dimensional-ity, thereby preserving essential information for modeling travel patterns at the segment-level. Here, sequence padding is used to handle variable-length inputs for both CNNs and Transformers. Since GPS trajectories have variable lengths, sequence lengths will change irregularly during progressive downsampling. When a trajectory length is a power of 2, e.g., 𝑛 = 32 , three 2× down-samplings 32 → 16 → 8 → 4 and 2×upsamplings of the decoder can perfectly restore the original sequence length. However, for non-power-of-2 lengths, e.g., 𝑛 = 26 , rounding introduces odd–even fluctuations 26 (even ) → 13 (odd ) → 7(odd ) → 4(even ). When 2×upsampling, the reconstructed sequence cannot match the origi-nal length, e.g., 4 → 8 → 16 → 32 .To address this issue, we explicitly record the odd–even trans-formation of sequence lengths during each downsampling step and provide it to the decoder for correction. Specifically, we use 1 to indicate an odd length that requires adjustment and 0 to indicate an even length that does not. For example, 26 (0) → 13 (1) → 7(1) → 4
+
+is recorded as (0, 1, 1). During upsampling, the decoder reverses this process using 4 → 7(4×2−1) → 13 (7×2−1) → 26 (13 ×2−0),ensuring accurate sequence length recovery. 
+
+Multi-resolution Quantization. Although trajectory segment embeddings capture macro-level information, they are learned in-dependently for each trajectory and therefore cannot represent common travel patterns shared across different trajectories, such as deceleration or acceleration segments caused by congestion. To address this issue, we introduce quantization to convert these in-dependent segment embeddings into shared travel pattern tokens. Specifically, we first apply a linear projection to reduce the embed-ding dimensionality and distill core travel pattern information: 
+
+H𝑞 = Linear (H𝑒 ) ∈ R 𝑛   
+
+> 8×𝑑 𝑞
+
+, (2) where 𝑑 𝑞 < 𝑑 𝑒 . Then, we convert h𝑞,𝑖 ∈ H𝑞 into a shared travel pattern token by vector quantization (VQ). The token is obtained by the Euclidean distance query between h𝑞,𝑖 and all embeddings in the shared quantization codebook E ∈ R𝐶 ×𝑑 𝑞 as follows: 
+
+𝑘 𝑖 = argmin   
+
+> 𝑘 ∈ { 1,...,𝐶 }
+
+∥h𝑞,𝑖 − e𝑘 ∥2,𝐾 = (𝑘 1, 𝑘 2, . . . , 𝑘 𝑛  
+
+> 8
+
+),
+
+E𝑞 = [e𝑘 1 , e𝑘 2 , . . . , e𝑘 𝑛 
+
+> 8
+
+] ∈ R 𝑛   
+
+> 8×𝑑 𝑞
+
+,
+
+(3) where e𝑘 ∈ E, 𝐾 is the index tuple recording the token IDs of the nearest embeddings in E, e.g., travel pattern ID sequence 𝐾 =
+
+(16 , 5, . . . , 24 ) for the GPS trajectory 𝜏 , and E𝑞 denotes the quantized embeddings obtained by indexing E with 𝐾 .Since single-layer quantization provides limited expressiveness, we adopt the 𝐿 -layer residual quantization (RQ). Specifically, we employ 𝐿 shared quantization codebooks with sizes (𝐶 1, 𝐶 2, . . . , 𝐶 𝐿 ).For each layer 𝑙 ∈ { 1, . . . , 𝐿 }, we first apply Equation 3 to obtain the quantized embeddings E(𝑙 ) 
+
+> 𝑞
+
+and then compute residuals as: 
+
+H(𝑙 +1) 
+
+> 𝑞
+
+= H(𝑙 ) 
+
+> 𝑞
+
+− E(𝑙 ) 
+
+> 𝑞
+
+, (4) where H(1) 
+
+> 𝑞
+
+= H𝑞 . After 𝐿 RQs, we obtain the multi-resolution travel pattern token K = [𝐾 (1) , 𝐾 (2) , . . . , 𝐾 (𝐿 ) ] ∈ R𝐿 × 𝑛  
+
+> 8
+
+and the quantized embeddings [E(1) 
+
+> 𝑞
+
+, E(2) 
+
+> 𝑞
+
+, . . . , E(𝐿 ) 
+
+> 𝑞
+
+] ∈ R𝐿 × 𝑛   
+
+> 8×𝑑 𝑞
+
+for the trajectory 𝜏 .The overall quantized embedding is computed as: 
+
+H′ 
+
+> 𝑞
+
+= Linear (
+
+> 𝐿
+
+∑︁ 
+
+> 𝑙 =1
+
+E(𝑙 ) 
+
+> 𝑞
+
+) ∈ R 𝑛   
+
+> 8×𝑑 𝑒
+
+, (5) Here, H𝑞 can be approximated by Í𝐿 𝑙 =1 E(𝑙 ) 
+
+> 𝑞
+
+, i.e, H𝑞 ≈ Í𝐿 𝑙 =1 E(𝑙 ) 
+
+> 𝑞
+
+.By employing RQ, the expressiveness of the token space is ex-panded to Î𝐿 𝑙 =1 𝐶 𝑙 , indicating that HTP can represent up to Î𝐿 𝑙 =1 𝐶 𝑙 
+
+distinct types of travel patterns. To learn the coarse-to-fine charac-teristics of spatial information, we set 𝐶 1 < 𝐶 2 < · · · < 𝐶 𝐿 in RQ, where the shallower layers capture coarse-grained travel semantics and the deeper layers refine them into fine-grained patterns. 
+
+Travel Pattern Decoder. The decoder reconstructs micro-level trajectory from the quantized embeddings H′ 
+
+> 𝑞
+
+of the macro-level by three 2×upsampling steps, each composed of CNN and Transformer layers. Formally, this process is defined as: 
+
+H′ = Decoder (H′ 
+
+> 𝑞
+
+) ∈ R𝑛 ×𝑑 , (6) where H′ is the reconstructed trajectory embedding. However, quantization compresses GPS trajectories into discrete travel pattern sequences, inevitably losing spatial information. To solve this, we incorporate the corresponding road trajectory 𝜏 𝑟 as external context and also learn point density along road segments. Specifically, we use Node2vec [ 11 ] to learn road segment embed-dings that capture relative spatial relationships on road network 
+
+𝐺 , and transform 𝜏 𝑟 into a road embedding sequence H𝑔 ∈ R𝑛 𝑟 ×𝑑 𝑟 .We further leverage the normalized GPS linestring geometry 𝑆 𝑖 of each road segment 𝑣 𝑖 to learn absolute spatial embedding H𝑠 :
+
+h𝑠,𝑖 = MeanPooling  Linear (𝑆 𝑖 ) ∈ R𝑑 𝑟 ,
+
+H𝑠 = [h𝑠, 1, h𝑠, 2, ..., h𝑠,𝑛 𝑟 ] ∈ R𝑛 𝑟 ×𝑑 𝑟 , (7) The final road sequence embedding is H𝑟 = H𝑔 + H𝑠 . We further refine road sequence embedding by a Transformer encoder: 
+
+H′ 
+
+> 𝑟
+
+= Transformer (H𝑟 + P) ∈ R𝑛 𝑟 ×𝑑 𝑟 , (8) where P is the positional encoding [ 42 ]. Finally, H′ 
+
+> 𝑟
+
+is fed into all Transformer layers of the decoder by adding cross-attention. From GPS Points to Travel Patterns: Flexible and Semantic Trajectory Generation with LLMs KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. GPS traj . Road traj .         
+
+> 0.04
+> 0.2 ( absolute percentage)
+> Relative percent label
+> [0.04, 0.2 - 0.04 = 0.16]
+> 0.16
+> GPS point Aligned point
+> [lon 1, lat 1]
+> [lon 2, lat 2]
+> Offest label
+> Δlon = 1e-5
+> Δlat = 1e-4
+> Δ
+
+Figure 3: Illustration of the process for obtaining training labels for our relative reconstruction loss. Loss Functions. In the RQ-VAE, the overall loss consists of two parts: quantization loss and trajectory reconstruction loss. The quantization loss is defined as: 
+
+L𝑞 = 1
+
+𝐿 
+
+> 𝐿
+
+∑︁ 
+
+> 𝑙 =1
+
+
+
+∥ sg (H(𝑙 ) 
+
+> 𝑞
+
+) − E(𝑙 ) 
+
+> 𝑞
+
+∥22 +𝛽 ∥ H(𝑙 ) 
+
+> 𝑞
+
+− sg (E(𝑙 ) 
+
+> 𝑞
+
+) ∥ 22
+
+
+
+, (9) where sg (·) denotes the stop-gradient operation because of argmin 
+
+operation in Equation 3, and 𝛽 is a balancing coefficient controlling the commitment cost between the encoder and the codebook. Previous studies [ 12 , 60 , 61 ] typically reconstruct trajectories on GPS points in free space. However, due to the extremely high precision of GPS coordinates, even small reconstruction errors can cause large spatial deviations, making optimization difficult. To ad-dress this issue, we propose relative reconstruction loss that guides trajectory reconstruction on road segments. Figure 3 shows the process of obtaining the training labels. Specifically, each red point of a real trajectory can be aligned to a blue point of the correspond-ing road segment of a road trajectory (black line). Therefore, we can reconstruct this real trajectory by locating its point on a road segment with coordinates offset caused by GPS-enabled devices. 
+
+(1) Relative Percent Loss. This loss computes the relative position of each GPS point along the road trajectory. As illustrated in the bottom-left of Figure 3, we first compute the absolute percentage, ranging from [0, 1], representing the position of each blue point relative to the start of the road trajectory. We then convert these values into relative percentages by measuring each blue point’s increment with respect to the previous one. These relative percent-ages capture the point density variations on road segments. Given the ground-truth percentage values 𝑌 percent , the loss is defined as: 
+
+Lpercent = MSE  𝑌 percent , MLP (H′), (10) where MLP predicts the position percent within a road segment. 
+
+(2) Offset Loss. In reality, GPS points may not lie on road segment and exhibit small deviations due to GPS-enabled device noise and environmental factors. To model this deviation, we introduce an offset loss. As shown in the bottom-right of Figure 3, the offset label is obtained by computing the displacement between each real GPS point and its aligned point on the road segment. Given the System: You are a professional spatial-temporal expert 
+
+who needs to generate the possible sampling type and 
+
+travel pattern for users based on their trip information. 
+
+Question: Here is a summary of the user's travel 
+
+information: The road sequence is <road_24054> 
+
+<road_479>......<road_375><road_20538>, mainly passing 
+
+through 瑞 联 路 , ......, 中 环 路 一 品 天 下 大 街 段 . The trip 
+
+started at Sunday afternoon at 16:43, with an estimated 
+
+travel time of 10 minutes and 20 seconds, and a total 
+
+travel distance of approximately 4.42 kilometers. The GPS 
+
+sampling interval is about one point every 10 seconds. 
+
+Please generate a sampling type and a travel pattern 
+
+sequence of this trip. 
+
+Answer: <t_2>, <|t_begin|><|p_begin|><a_26><b_34> 
+
+<c_107><d_110><|p_end|>, .......,<|p_begin|><a_7><b_10> 
+
+<c_90><d_31> <|p_end|><|t_end|> 
+
+Figure 4: The question-answer format on Chengdu dataset. 
+
+ground-truth offset values 𝑌 offset , the loss is defined as: 
+
+Loffset = MSE  𝑌 offset , MLP (H′), (11) where MLP predicts the offset. Here, the ground-truth offset labels are normalized, as their raw magnitudes are extremely small, e.g., 
+
+Δlon ≈ 10 −5, Δlat ≈ 10 −4.Unlike reconstruction over the entire map space, our relative loss reconstructs trajectories within a constrained local space, and their targets lie in narrow and fixed ranges, making the optimization both stable and spatially bounded. The reconstruction loss is L𝑟 = Lpercent + L offset . Therefore, the final training loss for the trajectory-specific RQ-VAE is: 
+
+L = L𝑞 + L 𝑟 . (12) 
+
+## 4.2 LLM-driven Trajectory Generation 
+
+Existing trajectory generation methods can only leverage limited conditions with additional alignment modules, such as start and end points [ 5]. However, real-world mobility trajectory is influenced by various factors [ 4 ]. In addition, diffusion-based methods [ 12 ] are limited to fixed-length inputs, while autoregressive methods [ 33 ]support variable lengths but directly generate GPS points, leading to cumulative spatial drift. To address these issues, we introduce an LLM-driven generation in the second stage, as illustrated in Figure 2. Various conditions, such as road segment IDs, travel time, and so on, are converted into textual descriptions, providing a unified, flexible, and interpretable conditioning interface. We then perform SFT on an LLM with ques-tion–answer pairs. The complete format of a question–answer pair is provided in the Figure 4. Instead of directly generating GPS points on the micro-level, HTP generates travel pattern tokens and length tokens derived from the RQ-VAE. By leveraging the LLM’s rich world knowledge, HTP can produce high-quality, variable-length trajectories under various conditions. To align road segments, travel patterns, and length records to the LLM, we expand the LLM’s vocabulary with specialized to-kens. Each road segment is represented as a road token ⟨road _ID ⟩,yielding a total of 𝑉 road tokens. Travel-pattern tokens, defined as KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Silin Zhou, Chenhao Wang, Yuntao Wen, Shuo Shang, Lisi Chen, and Panos Kalnis 
+
+⟨a_ID ⟩, ⟨b_ID ⟩, etc., correspond to the quantization layers in the RQ-VAE with total Í𝐿 𝑙 =1 𝐶 𝑙 tokens. Length tokens ⟨t_ID ⟩ encode the length records produced by the encoder. Because three downsam-pling layers introduce odd–even variations, we obtain 23 = 8 pos-sible length tokens. For instance, ⟨t_7⟩ corresponds to the length record (1, 1, 1). The full transformation rules for these records are provided in Figure 12 of the Appendix. Additionally, we introduce four special tokens, i.e., ⟨| t_begin |⟩ , ⟨| t_end |⟩ , ⟨| p_begin |⟩ , and 
+
+⟨| p_end |⟩ , to mark the boundaries of travel pattern sequences. In total, the expanded vocabulary includes 𝑉 + Í𝐿 𝑙 =1 𝐶 𝑙 + 8 + 4 tokens. We apply LoRA [ 16 ] to fine-tune the LLM and incorporate these additional tokens effectively. When generating new trajectories, the LLM first generates travel pattern tokens and a length token by condition descriptions on the macro-level. The generated tokens are mapped to quantized embed-dings using codebooks and aggregated according to Equation 5. The RQ-VAE decoder then generates relative positions and spatial off-sets conditioned on the road segments, which are finally combined to generate the final GPS trajectory on the micro-level. 
+
+Limitations and Complexity Analysis. Since HTP incorporates LLMs, it introduces additional computational overhead compared with VAE-based, GAN-based, and diffusion-based methods. To mit-igate this cost, LLM acceleration frameworks, such as vLLM [ 21 ]and SGLang [58], can be employed. Moreover, the compression of trajectory-specific RQ-VAE substantially reduces the generation cost of the LLM. Specifically, suppose a GPS trajectory contains 𝑛 
+
+points and each coordinate is represented with five decimal digits. After LLM tokenization, directly representing a GPS trajectory re-sults in about 15 𝑛 –20 𝑛 tokens. In contrast, our trajectory-specific RQ-VAE compresses a GPS trajectory into a travel pattern sequence of length approximately 𝑛  
+
+> 8
+
+. Consequently, compared with directly generating GPS point using an LLM, HTP reduces the number of generated tokens by nearly two orders of magnitude, significantly improving generation efficiency. Consequently, despite involving LLMs, HTP is not substantially slower than existing methods. De-tailed efficiency analysis is shown in Experiment 5.4. 
+
+## 5 Experimental Evaluation 
+
+We experiment extensively to answer the following questions: 
+
+• RQ1 : How well does HTP generate trajectory quality and realism compared to SOTA methods? 
+
+• RQ2 : How do the key design components of HTP contribute to the overall generation quality? 
+
+• RQ3 : How efficient is HTP on trajectory generation? 
+
+• RQ4 : How do different hyperparameter settings influence the quality of generated trajectories? 
+
+• RQ5 : What representations does the RQ-VAE learn, and how does the LLM control the generation results? 
+
+## 5.1 Experiment Settings 
+
+Datasets. We experiment on two real-world trajectory datasets, i.e., Chengdu and Porto, which are widely used by previous trajectory generation studies [ 12 , 60 , 61 ]. The road networks of the two cities are downloaded using OSMNX [ 3] from OpenStreetMap. For both datasets, we use a 90%/10% split for training and testing. More details about the datasets are provided in Appendix A.2. 
+
+Baselines. We compare HTP with 6 SOTA GPS trajectory gen-eration methods: TrajGAN [25 ], TrajVAE [ 6], DiffWave [ 19 ], Diff-Traj [ 60 ], ControlTraj [61 ], and Cardiff [ 12 ]. More details about the baselines are provided in Appendix A.3. 
+
+Evaluation Metrics. Following previous studies [ 12 , 60 , 61 ], we evaluate performance at three levels, i.e., point-level, grid-level, and road-level, using eight metrics to assess the quality of generated tra-jectories in terms of geometric consistency and movement pattern. The details of evaluation metrics are shown in Appendix A.4. 
+
+Implementation. HTP is implemented in PyTorch 2.7 and trained on four NVIDIA A100 GPUs. In the first stage, RQ-VAE is trained for 100 epochs using the AdamW [ 26 ] optimizer with a learning rate 1 × 10 −4 and a cosine scheduler. The per-GPU batch size is 256. The detailed configuration of RQ-VAE is in the Appendix A.5. In the second stage, we select Qwen3-1.7B [ 47 ]. Training is conducted with a per-GPU batch size of 16 and 2 epochs. We use the AdamW optimizer with a learning rate 5 × 10 −4 and a linear scheduler. The LoRA rank is set to 16. For evaluation, we generate the same number of trajectories as in the test dataset. Following ControlTraj [ 61 ], we assume that road trajectories are available in the test dataset for evaluation. In practice, road trajectories can be generated using traditional route-planning methods [ 2] or existing learning-based road trajectory generation methods [34, 45]. 
+
+## 5.2 Main Results (RQ1) 
+
+We evaluate the model’s performance by three aspects: metric per-formance, visualization, and length distribution. 
+
+Metric Performance. Table 1 shows the overall performance. We make the following observations. First, HTP achieves the best performance across all metrics on both datasets. Specifically, HTP achieves a maximum improvement of 80.51%, with an average gain of 29.78%. These results demon-strate that our method can not only capture fine-grained movement patterns at the GPS point level, but also preserve realistic macro-level geographical distributions on grids and roads. At the point level, HTP better matches the fine-grained spatial distributions, indicating more accurate micro-level geometric consistency. At the grid level, HTP more faithfully preserves urban spatial density and high-frequency activity regions, reflecting realistic regional move-ment patterns. At the road level, HTP generates trajectories that align more closely with road segment usage, follow frequent road patterns, and exhibit smaller point-to-road (PR) distances, demon-strating stronger road-network awareness and travel realism. Secondly, among existing baselines, diffusion methods, such as ControlTraj and Cardiff, consistently outperform GAN-based and VAE-based methods across both datasets, indicating that diffusion methods are more effective in modeling trajectory distributions. However, despite not using diffusion, HTP still surpasses these diffusion baselines in every metric. Specifically, HTP transforms various conditions into natural language and generates macro-level travel patterns instead of micro-level GPS points, avoiding cumu-lative coordinate errors while leveraging the world knowledge of LLMs. This demonstrates that the proposed LLM-driven paradigm is a more powerful direction for realistic trajectory generation. 
+
+Visualization. Beyond metrics improvements, the visualization comparisons further validate the superiority of HTP. As shown in From GPS Points to Travel Patterns: Flexible and Semantic Trajectory Generation with LLMs KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. 
+
+Table 1: Results of HTP and the baselines on Chengdu and Porto datasets. The best results are highlighted in bold, the second-best results are underlined, and the bottom row is the relative improvement of HTP over the best baseline.                                                                                                                                                      
+
+> Chengdu Porto Point-level Grid-level Road-level Point-level Grid-level Road-level
+> T-Dist ↓S-Dist ↓Radius ↓G-Den ↑G-Pat ↑R-Den ↑R-Pat ↑PR-Dist ↓T-Dist ↓S-Dist ↓Radius ↓G-Den ↑G-Pat ↑R-Den ↑R-Pat ↑PR-Dist ↓
+> TrajGAN 0.02008 0.00914 0.00248 0.57888 0.14286 0.56407 0.09059 0.42391 0.07001 0.02796 0.06960 0.70959 0.24719 0.65745 0.23881 0.36468 TrajVAE 0.01168 0.04222 0.00228 0.63091 0.14286 0.62535 0.04778 0.43777 0.03884 0.06019 0.00327 0.73015 0.25564 0.71300 0.38095 0.40190 DiffWave 0.00055 0.00237 0.00152 0.92800 0.54237 0.94388 0.44898 0.25695 0.00034 0.00622 0.00487 0.97020 0.62009 0.97422 0.77778 0.09579 DiffTraj 0.00052 0.00387 0.00028 0.95136 0.67857 0.94949 0.52101 0.24121 0.00093 0.00587 0.00100 0.96838 0.58621 0.97654 0.73973 0.13961 ControlTraj 0.00032 0.00920 0.00021 0.97274 0.75229 0.96457 0.55319 0.15164 0.00066 0.00529 0.00086 0.97733 0.62009 0.98003 0.83328 0.06777 Cardiff 0.00070 0.02399 0.00025 0.94349 0.54237 0.94140 0.39044 0.21681 0.00279 0.01365 0.00019 0.98196 0.69058 0.98641 0.87081 0.05993
+> HTP(ours) 0.00027 0.00069 0.00019 0.99567 0.84360 0.99731 0.94118 0.02955 0.00020 0.00232 0.00016 0.99519 0.83019 0.99418 0.92683 0.01799 Improve. 15.63% 70.89% 9.52% 2.36% 12.14% 3.39% 70.14% 80.51% 41.18% 56.14% 15.79% 1.35% 20.22% 0.79% 6.43% 69.98%
+
+(a) Real (b) Ours (c) Cardiff 
+
+(e) DiffTraj (f) DiffWave (g) TrajVAE (h) TrajGA N
+
+(d) ControlTraj 
+
+Figure 5: Visualization comparisons on Chengdu dataset. (a) Real (b) Ours (c) Cardiff (d) ControlTraj 
+
+(e) DiffTraj (f) DiffWave (g) TrajVAE (h) TrajGA N
+
+Figure 6: Visualization comparisons on Porto dataset. 
+
+Figure 5 and Figure 6, trajectories generated by HTP exhibit clearer adherence to real road structures, more realistic spatial distribu-tion, and smoother motion patterns, closely resembling real-world mobility behaviors. In contrast, baseline methods tend to produce distorted shapes, unrealistic detours, or scattered point distribu-tions. These visual observations clearly confirm that our model not only outperforms existing methods in metrics but also achieves substantially higher fidelity in generating realistic trajectories. 
+
+Length distribution. To further validate the ability of HTP to gen-erate realistic variable-length trajectories, we visualize the density distribution of trajectory lengths from generated and real trajec-tories. As shown in Figure 7, the two distributions closely match, KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Silin Zhou, Chenhao Wang, Yuntao Wen, Shuo Shang, Lisi Chen, and Panos Kalnis (a) Chengdu (b) Porto 
+
+Figure 7: Comparisons of trajectory length density distribu-tions between the real dataset and the generated dataset. Table 2: Results of HTP when disabling the key designs.                                     
+
+> Chengdu Porto T-Dist ↓G-Pat ↑R-Pat ↑T-Dist ↓G-Pat ↑R-Pat ↑
+> w/o RQ-VAE 0.00932 0.73220 0.66667 0.00923 0.79070 0.89630 w/o R-Loss 0.00244 0.09790 0.15054 0.00148 0.47934 0.65487 w/o OOV 0.00178 0.75229 0.69058 0.00542 0.64317 0.80374 w/o LLM 0.00051 0.73973 0.91262 0.00354 0.69058 0.81690
+> HTP(ours) 0.00027 0.84360 0.94118 0.00020 0.83019 0.92683
+
+demonstrating that HTP effectively supports variable-length gen-eration while preserving real-world length statistics. In contrast, diffusion-based baselines cannot generate variable-length trajecto-ries. TrajGAN and TrajVAE are also excluded, since although they can generate variable lengths, their generated trajectory quality is too poor to make the distribution meaningful. 
+
+## 5.3 Ablation Study (RQ2) 
+
+To validate the contribution of each component in HTP, we design four ablation variants: 
+
+• w/o RQ-VAE : Removes the RQ-VAE module and directly fine-tunes the LLM to generate raw GPS trajectories. 
+
+• w/o R-Loss : Removes the proposed relative reconstruction loss and replaces it with the MSE loss on GPS points. 
+
+• w/o OOV : Removes the out-of-vocabulary (OOV), including travel pattern, road segment, and length tokens, and relies solely on the base LLM vocabulary. 
+
+• w/o LLM : Removes the LLM and replaces it with a vanilla Trans-former. A sentence Transformer T5 [ 32 ] is used to encode textual descriptions into condition embeddings, which are injected at the first token position. Table 2 demonstrates the effectiveness of each key design in HTP. Removing the proposed relative reconstruction loss (w/o R-Loss) leads to a drastic degradation across all metrics, as the model falls back to unstable trajectory reconstruction in free space, causing severe optimization difficulties. Without the specialized OOV to-kens (w/o OOV), the LLM struggles to express numerical travel patterns, road segments, and length information, causing signifi-cant declines in both grid-based and road-level pattern accuracy. When RQ-VAE is removed (w/o RQ-VAE) and the LLM directly generates raw GPS points, the performance drops even further be-cause cumulative point errors cannot be controlled. Meanwhile, the 
+
+Table 3: Results of HTP when jointly generating road trajec-tories and travel patterns on the Porto dataset. Method T-Dist ↓ G-Den ↑ R-Den ↑ PR-Dist ↓
+
+ControlTraj 0.00066 0.97733 0.98003 0.06777 Cardiff 0.00279 0.98196 0.98641 0.05993 
+
+HTP 0.00020 0.99519 0.99418 0.01799 
+
+HTP+ 0.00019 0.99230 0.99106 0.01758 (a) Chengdu (b) Porto   
+
+> RQVAE RQVAE
+> LLM LLM
+
+Figure 8: Comparisons of generation speed for one trajectory. 
+
+lack of token-level compression leads to extremely long generation sequences, which greatly increases inference time. Finally, remov-ing the LLM backbone (w/o LLM) consistently degrades results across both datasets, as it lacks the semantic reasoning capability needed to effectively interpret various conditions, weakening the alignment between conditions and generated trajectories. 
+
+Effect of Road Trajectory. Considering that the input to the LLM includes road trajectories, which need to be generated by other methods, we further investigate whether the model can work without road-based conditions. To this end, we design a variant by removing all road conditions and letting the LLM first generate road trajectories, followed by travel patterns based on the remaining conditions, denoted as HTP+ . The results of the Porto dataset are shown in Table 3. We observe that even without road-based conditions, HTP+ can still generate high-quality trajectories. 
+
+## 5.4 Efficiency Study (RQ3) 
+
+Figure 8 compares one trajectory generation speed (in millisec-onds) between HTP and diffusion-based baselines on both datasets. Overall, diffusion-based methods are faster than our method. The primary computational cost of HTP comes from the LLM gener-ation stage, while the RQ-VAE decoding introduces only minor overhead. Nevertheless, despite involving an LLM, HTP is not sub-stantially slower than diffusion-based baselines. This is because the trajectory-specific RQ-VAE greatly compresses raw GPS point se-quences into short travel pattern tokens, significantly reducing the number of tokens that the LLM needs to generate. In contrast, the variant w/o RQ-VAE, which directly generates GPS points with the LLM, is nearly ten times slower than HTP. In addition, generation on the Chengdu dataset is slower than on Porto, since trajecto-ries in Chengdu have a longer average sequence length, leading to increased computational cost. From GPS Points to Travel Patterns: Flexible and Semantic Trajectory Generation with LLMs KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. (a) Codebook Size: [32, 64, 128, 256] (b) Codebook Size: [64, 64, 64, 64] (c) Codebook Size: [128, 128, 128, 128] (d) Codebook Size: [256, 256, 256, 256] 
+
+Figure 9: Proportion of token usage in each codebook layer of RQ-VAE during training on the Chengdu dataset. (b) Different quantization layers (a) Different size of codebook 
+
+Figure 10: Comparisons of reconstruction loss on codebook size and quantization layer. 
+
+## 5.5 Hyper-parameter Study (RQ4) 
+
+In HTP, the key hyper-parameters are in the RQ-VAE, including the number of quantization layers and the size of the codebook for each layer. To explore their impact, we further split the training set with a 9:1 ratio into sub-training set and validation set. 
+
+Codebook Size. The codebook should be sufficiently large to pre-serve diversity while its tokens must be well utilized to avoid code-book collapse [ 52 ]. To find an appropriate setting, we compare validation reconstruction loss. Figure 10(a) shows that our setting 
+
+{32 , 64 , 128 , 256 } achieves reconstruction performance comparable to the uniformly large setting {256 , 256 , 256 , 256 }, but with lower model complexity. We further analyze token utilization per-layer during training in Figure 9. The results reveal: (1) deeper layers converge to a high utilization rate faster, indicating that they cap-ture more fine-grained features; (2) as the codebook size increases, utilization saturates earlier in shallower layers. These suggest that shallow layers mainly encode coarse travel patterns and require smaller codebooks, whereas deeper layers model fine-grained pat-terns and benefit from larger sizes. 
+
+Quantization Layers. We also vary the number of quantization layers from 1 to 5 and report the validation reconstruction loss in Figure 10(b). The results show that increasing the number of layers consistently improves reconstruction quality, indicating that multi-resolution quantization effectively captures hierarchical travel pat-terns. However, the gain saturates after four layers. In particular, on the Chengdu dataset, the reconstruction loss no longer decreases beyond four layers, while a slight further improvement is observed at five layers on the Porto dataset. Nevertheless, considering the marginal gain and the increased computational cost, using four quantization layers offers a good balance between reconstruction accuracy and model efficiency for both datasets. Leafl et | © OpenStreetMap contributors © CARTO                           
+
+> 2025/12/511:44275_stage4_visualization_case_study.html
+> fi le:///Users/thring_zhou/Documents/我的论⽂/KDD2026/case_study/275_stage4_visualization_case_study.html1/1Leafl et|©OpenStreetMapcontributors©CARTO
+> 2025/12/511:44145702_stage4_visualization_case_study.html
+> fi le:///Users/thring_zhou/Documents/我的论⽂/KDD2026/case_study/145702_stage4_visualization_case_study.html1/1
+> Leafl et|©OpenStreetMap
+> 2025/12/511:45178570_stage4_visualization_case_study.html
+> fi le:///Users/thring_zhou/Documents/我的论⽂/KDD2026/case_study/178570_stage4_visualization_case_study.html
+> Monday
+> Evening
+> 16minutes
+> Friday
+> Midnight
+> 12minutes
+> Tuesday
+> Afternoon
+> 14minutes
+> Leafl et|©OpenStreetMapcontributors©CARTO
+> 2026/5/2313:09stage4_visualization_codebook.html
+> fi le:///Users/thring_zhou/Desktop/stage4_visualization_codebook.html1/1
+
+(b) Trajectories generated by the same 
+
+route at different times. 
+
+(a) Visualization of identical codes 
+
+at the first layer. 
+
+Figure 11: Visualization of case study. 
+
+## 5.6 Case Study (RQ5) 
+
+Codebook. To further investigate what the codebook has learned, we visualize the trajectories sharing the same codes at the first layer in Figure 11(a) on the Porto dataset. We observe that these trajectories tend to share similar routes or geometric patterns, such as long straight segments and multiple turns. The point density is further controlled by the deeper layers. 
+
+Conditional Generation. Figure 11(b) presents comparisons of three trajectories generated by HTP for the same route under dif-ferent time conditions. Although all three samples follow the same road sequence, their spatial point densities vary significantly, re-flecting changes in traffic conditions and movement behaviors at different times of day. These variations demonstrate that HTP can modify textual condition descriptions and leverage LLMs to gener-ate different travel patterns, and further produce GPS trajectories with diverse point-density variations by RQ-VAE. 
+
+## 6 Conclusion 
+
+We propose HTP, a novel framework that hierarchically generates travel patterns first and then generates GPS points. To achieve this, we first design a trajectory-specific RQ-VAE to convert independent micro-level GPS trajectories into shared macro-level travel pattern token sequences. Then we leverage an LLM that is enriched with domain-specific vocabularies and perform supervised fine-tuning to generate travel pattern tokens under various conditions. Extensive experiments demonstrate that HTP can efficiently generate high-quality and realistic variable-length trajectories. 
+
+## Acknowledgment 
+
+This paper was supported by the National Key R&D Program of China 2025YFF0730600, NSFC U25B2049, NSFC U22B2037 and NSFC U25A20443. KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Silin Zhou, Chenhao Wang, Yuntao Wen, Shuo Shang, Lisi Chen, and Panos Kalnis 
+
+## References 
+
+[1] Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge, Yu Han, Fei Huang, et al . 2023. Qwen technical report. arXiv preprint arXiv:2309.16609 (2023). [2] Hannah Bast, Daniel Delling, Andrew Goldberg, Matthias Müller-Hannemann, Thomas Pajor, Peter Sanders, Dorothea Wagner, and Renato F Werneck. 2016. Route planning in transportation networks. In Algorithm engineering: Selected results and surveys . 19–80. [3] Geoff Boeing. 2017. OSMnx: New methods for acquiring, constructing, analyzing, and visualizing complex street networks. Computers, environment and urban systems 65 (2017), 126–139. [4] Wei Chen, Yuxuan Liang, Yuanshao Zhu, Yanchuan Chang, Kang Luo, Haomin Wen, Lei Li, Yanwei Yu, Qingsong Wen, Chao Chen, Kai Zheng, Yunjun Gao, Xiao-fang Zhou, and Yu Zheng. 2024. Deep Learning for Trajectory Data Management and Mining: A Survey and Beyond. In arXiv . 2403.14151. [5] Xin Chen, Chengrui Huang, Chenhao Wang, and Lisi Chen. 2025. Trajectory generation: a survey on methods and techniques. GeoInformatica 29, 3 (2025), 351–376. [6] Xinyu Chen, Jiajie Xu, Rui Zhou, Wei Chen, Junhua Fang, and Chengfei Liu. 2021. TrajVAE: A Variational AutoEncoder model for trajectory generation. 
+
+Neurocomputing 428 (2021), 332–339. [7] DeepSeek-AI. 2025. DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning. In arXiv . 2501.12948. [8] Bangchao Deng, Xin Jing, Tianyue Yang, Bingqing Qu, Dingqi Yang, and Philippe Cudré-Mauroux. 2025. Revisiting Synthetic Human Trajectories: Imitative Gen-eration and Benchmarks Beyond Datasaurus. In KDD . 201–212. [9] Xiaomin Fang, Jizhou Huang, Fan Wang, Lihang Liu, Yibo Sun, and Haifeng Wang. 2021. SSML: Self-Supervised Meta-Learner for En Route Travel Time Estimation at Baidu Maps. In KDD . 2840–2848. [10] Ian J. Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron C. Courville, and Yoshua Bengio. 2020. Generative adversarial networks. Commun. ACM 63, 11 (2020), 139–144. [11] Aditya Grover and Jure Leskovec. 2016. node2vec: Scalable Feature Learning for Networks. In KDD . 855–864. [12] Baoshen Guo, Zhiqing Hong, Junyi Li, Shenhao Wang, and Jinhua Zhao. 2026. Leveraging the Spatial Hierarchy: Coarse-to-fine Trajectory Generation via Cas-caded Hybrid Diffusion. In KDD . 359–370. [13] Jonathan Ho, Ajay Jain, and Pieter Abbeel. 2020. Denoising Diffusion Probabilistic Models. In NeurIPS .[14] Sepp Hochreiter and Jürgen Schmidhuber. 1997. Long Short-Term Memory. 
+
+Neural Comput. 9, 8 (1997), 1735–1780. [15] Danlei Hu, Lu Chen, Hanxi Fang, Ziquan Fang, Tianyi Li, and Yunjun Gao. 2024. Spatio-Temporal Trajectory Similarity Measures: A Comprehensive Survey and Quantitative Study. TKDE 36, 5 (2024), 2191–2212. [16] Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. LoRA: Low-Rank Adaptation of Large Language Models. In ICLR .[17] Yujia Hu, Yuntao Du, Zhikun Zhang, Ziquan Fang, Lu Chen, Kai Zheng, and Yunjun Gao. 2024. Real-Time Trajectory Synthesis with Local Differential Privacy. In ICDE . 1685–1698. [18] Diederik P. Kingma and Max Welling. 2014. Auto-Encoding Variational Bayes. In 
+
+ICLR .[19] Zhifeng Kong, Wei Ping, Jiaji Huang, Kexin Zhao, and Bryan Catanzaro. 2021. DiffWave: A Versatile Diffusion Model for Audio Synthesis. In ICLR .[20] Alex Krizhevsky, Ilya Sutskever, and Geoffrey E. Hinton. 2012. ImageNet Classi-fication with Deep Convolutional Neural Networks. In NIPS . 1106–1114. [21] Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph Gonzalez, Hao Zhang, and Ion Stoica. 2023. Efficient Memory Management for Large Language Model Serving with PagedAttention. In SOSP . 611–626. [22] Siqi Lai, Zhao Xu, Weijia Zhang, Hao Liu, and Hui Xiong. 2025. LLMLight: Large Language Models as Traffic Signal Control Agents. In KDD . 2335–2346. [23] Doyup Lee, Chiheon Kim, Saehoon Kim, Minsu Cho, and Wook-Shin Han. 2022. Autoregressive Image Generation using Residual Quantization. In CVPR . 11513– 11522. [24] Jianhua Lin. 2002. Divergence measures based on the Shannon entropy. IEEE Transactions on Information theory 37, 1 (2002), 145–151. [25] Xia Liu, Hanzhou Chen, and Clio Andris. 2018. trajGANs: Using generative adversarial networks for geo-privacy protection of trajectory data (Vision paper). In Location privacy and security workshop . 1–7. [26] Ilya Loshchilov and Frank Hutter. 2019. Decoupled Weight Decay Regularization. In ICLR .[27] Yin Lou, Chengyang Zhang, Yu Zheng, Xing Xie, Wei Wang, and Yan Huang. 2009. Map-matching for low-sampling-rate GPS trajectories. In SIGSPATIAL .352–361. [28] Xuebin Ma, Zinan Ding, and Xiaoyan Zhang. 2024. ST-TrajGAN: A synthetic trajectory generation algorithm for privacy preservation. Future Generation Computer Systems 161 (2024), 226–238. [29] Xiaowei Mao, Yan Lin, Shengnan Guo, Yubin Chen, Xingyu Xian, Haomin Wen, Qisen Xu, Youfang Lin, and Huaiyu Wan. 2025. DutyTTE: Deciphering Uncer-tainty in Origin-Destination Travel Time Estimation. In AAAI . 12390–12398. [30] Mehmet Ercan Nergiz, Maurizio Atzori, Yücel Saygin, and Baris Güç. 2009. To-wards Trajectory Anonymization: a Generalization-Based Approach. Transactions on Data Privacy 2, 1 (2009), 47–75. [31] OpenAI. 2023. GPT-4 Technical Report. In arXiv . 2303.08774. [32] Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, and Peter J. Liu. 2020. Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer. Journal of machine learning research 21 (2020), 140:1–140:67. [33] Jinmeng Rao, Song Gao, Yuhao Kang, and Qunying Huang. 2020. LSTM-TrajGAN: A deep learning approach to trajectory privacy protection. In arXiv . 2006.10521. [34] Xuan Rao, Shuo Shang, Renhe Jiang, Peng Han, and Lisi Chen. 2025. Seed: Bridging Sequence and Diffusion Models for Road Trajectory Generation. In 
+
+WWW . 2007–2017. [35] Olaf Ronneberger, Philipp Fischer, and Thomas Brox. 2015. U-Net: Convolutional Networks for Biomedical Image Segmentation. In MICCAI , Vol. 9351. 234–241. [36] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Mingchuan Zhang, Y. K. Li, Y. Wu, and Daya Guo. 2024. DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models. In arXiv . 2402.03300. [37] Filippo Simini, Gianni Barlacchi, Massimilano Luca, and Luca Pappalardo. 2021. A deep gravity model for mobility flows generation. Nature communications 12, 1 (2021), 6576. [38] Song Tao and Jia Wang. 2020. Alleviation of Gradient Exploding in GANs: Fake Can Be Real. In CVPR . 1188–1197. [39] Llama Team. 2024. The Llama 3 Herd of Models. In arXiv . 2407.21783. [40] Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier Martinet, Marie-Anne Lachaux, Timothée Lacroix, Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal Azhar, et al . 2023. Llama: Open and efficient foundation language models. arXiv preprint arXiv:2302.13971 (2023). [41] Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yas-mine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhos-ale, et al . 2023. Llama 2: Open foundation and fine-tuned chat models. arXiv preprint arXiv:2307.09288 (2023). [42] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. 2017. Attention is All you Need. In NIPS . 5998–6008. [43] Chenhao Wang, Lisi Chen, Shuo Shang, Christian S Jensen, and Panos Kalnis. 2024. Multi-scale detection of anomalous spatio-temporal trajectories in evolving trajectory datasets. In KDD . 2980–2990. [44] Huandong Wang, Changzheng Gao, Yuchen Wu, Depeng Jin, Lina Yao, and Yong Li. 2023. PateGail: A Privacy-Preserving Mobility Trajectory Generator with Imitation Learning. In AAAI . 14539–14547. [45] Jingyuan Wang, Yujing Lin, and Yudong Li. 2025. GTG: Generalizable Trajectory Generation Model for Urban Mobility. In AAAI . AAAI Press, 834–842. [46] Jian Xie, Kai Zhang, Jiangjie Chen, Tinghui Zhu, Renze Lou, Yuandong Tian, Yanghua Xiao, and Yu Su. 2024. TravelPlanner: A Benchmark for Real-World Planning with Language Agents. In ICML .[47] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al . 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 (2025). [48] An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, et al . 2024. Qwen2.5 Technical Report. arXiv preprint arXiv:2412.15115 (2024). [49] Can Yang and Gyözö Gidófalvi. 2018. Fast map matching, an algorithm integrating hidden Markov model with precomputation. International Journal of Geographical Information Science 32, 3 (2018), 547–570. [50] Chuang Yang, Renhe Jiang, Xiaohang Xu, Chuan Xiao, and Kaoru Sezaki. 2024. SIMformer: Single-Layer Vanilla Transformer Can Learn Free-Space Trajectory Similarity. Proc. VLDB Endow. 18, 2 (2024), 390–398. [51] Hao Yang, Xiaobai Angela Yao, Christopher C. Whalen, and Gengchen Mai. 2025. BERT4Traj: Transformer-Based Trajectory Reconstruction for Sparse Mobility Data. In GIScience , Vol. 346. 8:1–8:9. [52] Jiahui Yu, Xin Li, Jing Yu Koh, Han Zhang, Ruoming Pang, James Qin, Alexander Ku, Yuanzhong Xu, Jason Baldridge, and Yonghui Wu. 2022. Vector-quantized Image Modeling with Improved VQGAN. In ICLR .[53] Jing Zhang, Qihan Huang, Yirui Huang, Qian Ding, and Pei-Wei Tsai. 2023. DP-TrajGAN: A privacy-aware trajectory generation model with differential privacy. 
+
+Future Generation Computer Systems 142 (2023), 25–40. [54] Qianru Zhang, Peng Yang, Junliang Yu, Haixin Wang, Xingwei He, Siu-Ming Yiu, and Hongzhi Yin. 2025. A Survey on Point-of-Interest Recommendation: Models, Architectures, and Security. TKDE 37, 6 (2025), 3153–3172. [55] Ruixing Zhang, Yunqi Liu, Liangzhe Han, Leilei Sun, Chuanren Liu, Jibin Wang, and Weifeng Lv. 2025. Large-scale Human Mobility Data Regeneration for Open Urban Research. In KDD . 2827–2836. From GPS Points to Travel Patterns: Flexible and Semantic Trajectory Generation with LLMs KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea.            
+
+> [56] Weijia Zhang, Jindong Han, Zhao Xu, Hang Ni, Hao Liu, and Hui Xiong. 2024. Urban Foundation Models: A Survey. In KDD . 6633–6643. [57] Wayne Xin Zhao, Kun Zhou, Junyi Li, Tianyi Tang, Xiaolei Wang, Yupeng Hou, Yingqian Min, Beichen Zhang, Junjie Zhang, Zican Dong, Yifan Du, Chen Yang, Yushuo Chen, Zhipeng Chen, Jinhao Jiang, Ruiyang Ren, Yifan Li, Xinyu Tang, Zikang Liu, Peiyu Liu, Jian-Yun Nie, and Ji-Rong Wen. 2023. A Survey of Large Language Models. In arXiv . 2303.18223. [58] Lianmin Zheng, Liangsheng Yin, Zhiqiang Xie, Chuyue Sun, Jeff Huang, Cody Hao Yu, Shiyi Cao, Christos Kozyrakis, Ion Stoica, Joseph E. Gonzalez, Clark W. Barrett, and Ying Sheng. 2024. SGLang: Efficient Execution of Struc-tured Language Model Programs. In NeurIPS .[59] Silin Zhou, Yao Chen, Shuo Shang, Lisi Chen, Bingsheng He, and Ryosuke Shibasaki. 2025. Blurred Encoding for Trajectory Representation Learning. In
+> KDD . 4132–4143. [60] Yuanshao Zhu, Yongchao Ye, Shiyao Zhang, Xiangyu Zhao, and James Yu. 2023. DiffTraj: Generating GPS Trajectory with Diffusion Probabilistic Model. In
+> NeurIPS .[61] Yuanshao Zhu, James Jian Qiao Yu, Xiangyu Zhao, Qidong Liu, Yongchao Ye, Wei Chen, Zijian Zhang, Xuetao Wei, and Yuxuan Liang. 2024. ControlTraj: Controllable Trajectory Generation with Topology-Constrained Diffusion Model. In KDD . 4676–4687.
+
+## A Appendix A.1 Details of Conditions 
+
+The input information of the LLM includes road segment tokens describing the road segment IDs, main road segment names, start time, travel time, travel distance, and the GPS sampling interval. The output includes a sampling type (i.e., length token) and a travel pattern sequence. The transformation of odd–even length variation in downsampling into length tokens is shown in Figure 12. In practice, during trajectory generation, the road trajectory can be obtained from traditional route-planning algorithms [ 2] or existing learning-based road trajectory generation methods [ 34 , 45 ]. The start time can be freely specified. Travel time can be estimated using average travel durations of road segments, predicted by travel time estimation methods [ 9, 29 ], or manually assigned. The travel distance can be computed from the planned road sequence using road segment length information from the road network. 
+
+## A.2 Dataset 
+
+The detailed statistics of the Chengdu 1 and Porto 2 datasets are summarized in Table 4. The geographic area of Chengdu is approx-imately ten times larger than that of Porto. During preprocessing, we remove trajectories that fall outside the city boundary or contain fewer than 20 points or more than 200 points. The corresponding road trajectories are obtained via fast map-matching [49]. 
+
+## A.3 Baselines 
+
+• TrajGAN [25 ]: TrajGAN is an encoder–decoder architecture to transform trajectories into dense representations and recon-struct them. A generator learns to produce synthetic trajectory representations from random noise, while a discriminator distin-guishes real from generated samples. 
+
+• TrajVAE [ 6]: TrajVAE utilizes an LSTM combined with a varia-tional autoencoder (VAE) to learn trajectory representations and generate new GPS trajectories. 
+
+• DiffWave [ 19 ]: DiffWave is built upon the Wavenet architecture, and is designed for synthesizing sequences like timeseries, and speech voice. Here we tailor it to generate GPS trajectories. 
+
+> 1https://www.pkbigdata.com/common/zhzgbCmptDetails.html
+> 2https://www.kaggle.com/c/pkdd-15-predict-taxi-service-trajectory-i
+
+Even Even Even 
+
+Even Even Odd 
+
+Even Odd Even 
+
+Even Odd Odd 
+
+Odd Even Even 
+
+Odd Even Odd 
+
+Odd Odd Even 
+
+Odd Odd Odd 
+
+(0, 0, 0) <t_0> 
+
+(0, 0, 1) <t_1> 
+
+(0, 1, 0) <t_2> 
+
+(0, 1, 1) <t_3> 
+
+(1, 0, 0) <t_4> 
+
+(1, 0, 1) <t_5> 
+
+(1, 1, 0) <t_6> 
+
+(1, 1, 1) <t_7> 
+
+Odd–even length variation 
+
+in downsampling 
+
+Length 
+
+token 
+
+Figure 12: The length token transformation of odd-even vari-ation in downsampling. Table 4: Statistics of the experiment datasets.               
+
+> Dataset #Traj. Average length Average distance Sampling interval #Road segment Area size
+> Chengdu 602,880 58 points 4.75km 10 seconds 39,503 708.6km 2
+> Porto 597,771 43 points 4.83km 15 seconds 10,537 78.3km 2
+
+• DiffTraj [60 ]: DiffTraj is a diffusion-based trajectory synthesiz-ing framework, which utilizes UNet as the denoising network to generate GPS trajectories. 
+
+• ControlTraj [ 61 ]: ControlTraj incorporates road trajectories as conditional supervisory signals with the road network topology, which provides road information during the generation of GPS trajectories. 
+
+• Cardiff [ 12 ]: Cardiff decomposes the generation process into discrete road segment-level and continuous fine-grained GPS-level by the hierarchical diffusion framework. 
+
+## A.4 Evaluation Metrics 
+
+Following prior work [ 12 , 60 , 61 ], we adopt three categories of evaluation metrics: Jensen–Shannon Divergence (JSD) [ 24 ], cosine similarity, and F1-score. A lower JSD indicates closer alignment between the generated and real statistical distributions. Cosine sim-ilarity measures the alignment between two vectors, with higher values indicating greater similarity. The F1-score evaluates the agreement between predicted and ground-truth sets, with higher values indicating better consistency. Using these metrics, we evalu-ate the similarity between generated and real trajectories at three levels: point-level, grid-level, and road-level. 
+
+1. Point-level. Point-level metrics evaluate the statistical properties of trajectories at the raw GPS point, focusing on micro-level and fine-grained geometric consistency between generated and real trajectories. 
+
+• Travel Distance (T-Dist): Measures the JSD on distributions in total travel distances between real trajectories and generated trajectories. The travel distance of each trajectory is computed as the sum of geodesic distances from the first point to the last point. KDD 2026, August 9–13, 2026, Jeju Island, Republic of Korea. Silin Zhou, Chenhao Wang, Yuntao Wen, Shuo Shang, Lisi Chen, and Panos Kalnis Mid Block 
+
+DownBlock 
+
+DownBlock 
+
+DownBlock 
+
+Mid Block 
+
+UpBlock 
+
+UpBlock 
+
+UpBlock 
+
+Transformer 
+
+DownBlock 
+
+ResNet 
+
+Transformer 
+
+Mid Block 
+
+Residual 
+
+Quantification 
+
+Encoder 
+
+Decoder 
+
+Road trajectory 
+
+GPS Trajectory 
+
+ResNet 
+
+Transformer 
+
+ResNet 
+
+1D-CNN ResNet 
+
+ResNet 
+
+UpBlock 
+
+Interpolation 
+
+ResNet 
+
+Transformer 
+
+Transformer 
+
+Transformer 
+
+Node2vec Geometry 
+
+Linear +
+
+Loss 
+
+Road 
+
+Encoder 
+
+Road 
+
+Trajectory 
+
+Map 
+
+Matching 
+
+Length 
+
+Record 
+
+Road 
+
+Embedding 
+
+Road 
+
+Embedding 
+
+Road Embedding 
+
+Road Encoder 
+
+Transformer Transformer has a self-attention and a FFN has a self-attention, a cross-attention, and a FFN 
+
+ResNet is a basic two-layer ResNet block Interpolation has a 2 × upsampling interpolation and a 1D-CNN 
+
+Figure 13: The details of the encoder and decoder of trajectory-specific RQ-VAE. 
+
+• Step Distance (S-Dist): Measures the JSD on distributions in step-wise distances between real trajectories and generated tra-jectories. The step distance is computed as the geodesic distance between two consecutive GPS points. 
+
+• Radius: Measures the JSD on the spatial range distribution be-tween real trajectories and generated trajectories. Radius is com-puted by the root mean square distance of all points of a trajectory from their centroid. 
+
+2. Grid-level. Grid-level metrics evaluate the spatial aggregation and regional movement patterns of trajectories, capturing how generated trajectories distribute over urban space and whether they preserve high-frequency activity regions. In this paper, each city is partitioned into grids of size 100 m × 100 m to transform GPS trajectories into grid trajectories. 
+
+• Density (G-Den): Measures the cosine similarity between the density distribution of the grid aligned by the GPS points of the real trajectory and the generated trajectory. 
+
+• Pattern (G-Pat): Measures spatial pattern similarity using the F1-score over the top-𝑘 most frequently visited grid cells. The top-𝑘 grids from real trajectories are treated as ground truth. Here, we set 𝑘 = 100 .
+
+3. Road-level. Road-level metrics evaluate trajectory realism from a road network perspective, measuring whether generated trajec-tories follow realistic road usage patterns and align with the un-derlying road topology. Aligned road segments are obtained via map-matching [27, 49]. 
+
+• Density (R-Den): Measures the cosine similarity between the density distribution of the road segment aligned by the GPS points of the real trajectory and the generated trajectory. 
+
+• Pattern (R-Pat): Measures road-level pattern similarity using the F1-score over the top-𝑘 most frequently visited road segments. The top-𝑘 road segments from real trajectories are treated as ground truth. Here, we set 𝑘 = 100 .
+
+• Point-to-Road Distance (PR-Dist): Measures the JSD between the distributions of point-to-road distances, reflecting how well generated trajectories align with the road network. 
+
+## A.5 Implementation 
+
+In the RQ-VAE, we set the latent dimension to 𝑑 = 64 , the en-coder output dimension to 𝑑 𝑒 = 256 , the quantization dimension to 𝑑 𝑞 = 64 , and the commitment cost coefficient to 𝛽 = 0.25 . The encoder consists of three downsampling blocks and one mid block, while the decoder includes three corresponding upsampling blocks and one mid block. The dimensionality evolves through the en-coder as 64 → 128 → 128 → 256 , with the decoder applying the reverse transformation. Each attention head in both the encoder and decoder has a dimensionality of 64. The Node2vec embedding dimension is 128, and the Transformer for road sequence encod-ing comprises 4 layers. The quantization module contains 4 layers, with codebook sizes of [32 , 64 , 128 , 256 ]. For the LLM, training on each dataset takes about 15 hours. During trajectory generation, we use the Shapely library 3 to reconstruct GPS trajectories from the predicted relative values.
