@@ -1,0 +1,3114 @@
+Title: Learning Higher-Order Structure from Incomplete Spatiotemporal Data: Multi-Scale Hypergraph Laplacians with Neural Refinement
+
+URL Source: https://arxiv.org/pdf/2605.17316v1
+
+Published Time: Tue, 19 May 2026 01:14:03 GMT
+
+Number of Pages: 35
+
+Markdown Content:
+# Learning Higher-Order Structure from Incomplete Spatiotemporal Data: Multi-Scale Hypergraph Laplacians with Neural Refinement 
+
+Keshu Wu 1, Sixu Li 1, Zihao Li 1, Zhiwen Fan 1, Xiaopeng Li 2, Yang Zhou 1∗
+
+> 1
+
+Texas A&M University 
+
+> 2
+
+University of Wisconsin-Madison 
+
+## Abstract 
+
+Sensor networks increasingly govern modern infrastructure, yet the data they lose are rarely missing in the uniform-random patterns assumed by standard imputation benchmarks. Loop detectors go offline during calibration, roadside cabinets silence clusters of nearby sensors, and newly installed instruments provide no history. Such failures create structured absences whose values are constrained by higher-order relations among groups of sensors, not merely by pairwise proximity. Existing low-rank and graph-based methods often miss this collective structure and can fail when missingness becomes coherent. We introduce Multi-Scale Hypergraph Laplacians (MSHL), a two-stage framework for learning higher-order structure from incomplete spatiotemporal observations. The Discovery stage builds a multi-scale hypergraph from complementary topology and residual-correlation evidence, with an observation-only selector that adapts to the supported interaction scale. The Refinement stage adds a small hypergraph-conditioned residual network that is safe by construction: it learns nonlinear corrections where informative residual features exist and defers to the linear estimate where they do not. We prove that MSHL represents group-conservation patterns inaccessible to pairwise graph priors, adapts to the best fixed scale up to a logarithmic factor, transfers this advantage to held-out imputation error, and admits a one-sided refinement guarantee. On two real traffic networks evaluated across scattered cell missingness, contiguous block outages, and whole-sensor blackouts at five rates, MSHL improves over a pairwise-graph baseline whenever higher-order structure is identifiable and otherwise matches it within sampling noise. The results point to a broader principle for reliable infrastructure learning: missing data should be treated not as isolated entries to fill, but as evidence of structure to discover. 
+
+Keywords Spatiotemporal imputation · Hypergraph learning · Higher-order structure · Residual learning ·
+
+Traffic sensor networks 
+
+## 1 Introduction 
+
+Sensor networks are the connective tissue of modern infrastructure, and the data they produce are rarely complete [ 1, 2]. Traffic forecasting, demand estimation, environmental monitoring, and infrastructure planning all assume a dense, regularly-sampled input that the underlying network seldom delivers [ 3]. Sensors fail in patterns. A loop detector goes offline for hours during routine calibration. A roadside cabinet silences dozens of nearby sensors after a power event. A new sensor is installed only in part of the deployment region and contributes no historical data for the test period. None of these failures resembles the uniform-random dropout used in most benchmark protocols, and the mismatch creates a deployment gap: methods that minimize mean error under uniform random missingness can produce nonsensical outputs once missingness becomes structured [4]. 
+
+> ∗
+
+Corresponding author: yangzhou295@tamu.edu 
+
+> arXiv:2605.17316v1 [cs.LG] 17 May 2026
+
+Incomplete 
+
+Spatiotemporal Data    
+
+> scal e=2 scal e=3 scal e=4 scal e=5
+
+Multi -scale Hypergraph 
+
+Discovery 
+
+Hypergraph -conditioned 
+
+Refinement         
+
+> Block missing Sensor kriging Cell missing
+> Real deployment missingness is
+> random and diverse
+> Multi -scale Hyperedges
+> Graph
+> Laplacian 𝐿 !
+> Multi -scale Hypergraph
+> Laplacian 𝐿 "𝐻 #
+> Temporal
+> Smoothness 𝐿 !
+> Value
+> Time
+> Discovered
+> hypergraph 𝐻 "
+> Input data 𝑋
+
++           
+
+> Linear estimate
+> Residual correction
+> Final imputed data 𝑋 %
+> Hypergraph -conditioned
+> residual network
+> IPW –Tikhonov Estimator
+> 𝑋 $!"# =argmin 𝑋 ,𝐿 $,𝐿 %
+> 𝑳 𝑺 =𝝀 𝑯 ⋅
+
++ 
+
+> Residual features
+> Sensor
+> Time
+> Missingness Regimes
+> Sensor
+> Time
+> Sensor
+> Time
+> Sensor
+> Time
+> Sensor
+> Time
+> Sensor
+> Time
+
+Figure 1: MSHL overview. Real deployments exhibit diverse missingness from scattered cells to whole-sensor blackouts. MSHL first discovers multi-scale higher-order structure from incomplete observations using complementary topology and residual signals, then refines the linear estimate with a hypergraph-conditioned residual network that defers when no informative residual features are available. The two stages compose in an end-to-end excess-risk bound, so that better-targeted Discovery shrinks both the selection overhead and the refinement gap. The methods commonly used to fill these gaps rest on a premise the gaps themselves violate. Low-rank tensor completion and pairwise graph-Laplacian smoothing both assume that each missing cell sits close to enough observed cells to be reconstructed from them. This holds for sparse, isotropic dropout, but fails when gaps cluster in time, in space, or along an entire sensor. In typical deployments such clustering is the rule rather than the exception, and the right question is not whether existing methods are accurate on the protocol they were tuned on, but what signal remains when the easy cells are gone. What does remain, and what existing structural priors do not exploit, is higher-order group-level coherence [ 5,6, 7]. A freeway merge ties three or more incoming lanes through flow conservation; a roadside cabinet ties dozens of physically-adjacent sensors through shared calibration drift; a demand cluster ties geographically-spread sensors through a common arrival process. Each is a constraint among the group as a whole rather than a sum of pairwise constraints, and each survives when any one pair within the group is jointly unobserved. The classical graph Laplacian, the workhorse of structured imputation, cannot encode such constraints: its penalty on neighbour-pair differences taxes coherent group motion that the underlying constraint allows [ 8, 9 ]. Hypergraphs lift this restriction by letting a single edge span any number of nodes, which gives them the capacity to represent set-level relations directly [ 10 , 11 , 12 ]. A higher-order hyperedge therefore encodes the group as a single unit and pays no cost on the in-group coherent pattern, which makes it the natural primitive where pairwise priors fail [ 13 , 14 ]. The price of this representation, however, is committing to a particular group size. Real networks contain interactions at multiple scales, from pairwise corridor pairs through triple merges and four-way intersections to larger congestion clusters, so any fixed-scale hypergraph either misses the smaller groups or over-aggregates the larger ones [15, 16, 17]. Learning higher-order structure from partial observations is harder than learning it from complete data, and the difficulty grows with hyperedge size [ 14 , 18 , 19 ]. The recovery rate of any structural score depends on the joint observation rate of a candidate hyperedge, the fraction of timesteps at which every member is observed simultaneously, and that rate decays exponentially in the hyperedge size: at moderate missing rates, joint observations of five-sensor candidates make up only a few percent of timesteps. This decay would be merely inconvenient if the easy cases needed the structure most, but the situation is the reverse. Coherent group outages, exactly where higher-order structure is best positioned to span the gap, are also exactly where the joint observations needed to identify any hyperedge in the first place have been removed. A naive higher-order estimator falls apart where it should help most. Recent learned-hypergraph methods that relax the fixed-scale commitment [ 20 , 21 ] assume dense observations and provide no guidance on how to choose the scale, or what guarantees follow from the choice, when observations are partial. We propose Multi-Scale Hypergraph Laplacians (MSHL), a two-stage framework that learns higher-order structure from incomplete observations and uses it to recover what is missing. The design is organised 2around a single principle: each stage must have a safe fallback when the data cannot support what it would otherwise do. Discovery learns the hypergraph from two complementary signals, prior network topology and data-adaptive residual correlations, so that when one fails the other still carries the inference. The selector that picks the operating scale uses observed cells only and tightens automatically as evidence thins. Refinement adds a nonlinear corrector on top of the linear estimate, with the zero correction always feasible. In the worst case it cannot hurt, and when a sensor has no observed co-members the correction collapses to zero by construction. The architecture, shown in Figure 1, therefore degrades gracefully rather than catastrophically: strict gains where higher-order evidence is present, and the safe linear backbone where it is not. The framework holds up empirically across the full deployment spectrum. On two real traffic networks evaluated across three missingness regimes at five rates each, MSHL improves on a pairwise-graph baseline wherever higher-order structure is identifiable within our grid, and ties it otherwise within sampling noise. The largest gains appear at low missing rates on contiguous block outages, where coherent group-level missingness creates exactly the conditions in which a hyperedge can span gaps that a pair cannot. Competing baselines each collapse in some regime: tensor methods are unsafe outside their low-rank assumption, while pairwise-only methods are robust everywhere but trail MSHL on every cell where higher-order structure is present. The selector’s behaviour matches the theory: it saturates its candidate budget on regimes that admit higher-order structure and ramps automatically toward the pairwise-only fit on whole-sensor blackouts. 
+
+Contributions. This work makes three principal contributions. 
+
+• Multi-scale hypergraph estimator with provable scale adaptation. We introduce a hypergraph Laplacian with scale-invariant weighting and a Lepski-style observation-only selector that adapts to the best fixed scale up to a logarithmic factor, with two candidate sources whose exponentially-separated recovery rates cover the deployment spectrum. 
+
+• One-sided refinement guarantee with built-in deferment. We pair the linear estimator with a hypergraph-conditioned residual corrector whose worst-case inflation vanishes at the parametric rate and which defers automatically when no informative residual features are available. 
+
+• End-to-end theory and regime-level empirical validation. We prove representation, discovery, scale-selection, imputation, and refinement guarantees, and validate their mechanism-level signatures on two real traffic networks across scattered, contiguous, and whole-sensor missingness. The resulting method improves when identifiable higher-order structure exists and remains stable otherwise. 
+
+Paper organization. Section 2 reviews related work. Section 3 formulates the imputation problem, introduces the IPW-Tikhonov backbone, and develops the multi-scale hypergraph Laplacian. Section 4 presents the Discovery stage, and Section 5 presents the Refinement stage. Section 6 reports the empirical study and connects the observed behaviour to the theoretical mechanisms. Section 7 concludes with limitations and future directions. 
+
+## 2 Related Work 
+
+We organize prior work along four axes that intersect with MSHL: spatiotemporal imputation on sensor networks, hypergraph-based regularization and learning, adaptive model selection, and residual refinement on structured backbones. 
+
+2.1 Spatiotemporal imputation on sensor networks 
+
+Traffic-sensor and environmental-sensor networks are the canonical test bed for spatiotemporal imputation, with PEMS-BAY and METR-LA emerging as standard benchmarks [ 22 ]. Prior methods broadly divide into four families. Pooling and interpolation methods, including sensor-mean, 𝑘 -nearest-neighbour spatial averaging, and linear interpolation, exploit no temporal structure beyond mean-pooling and no spatial structure beyond a fixed neighbourhood. They remain hard to beat in regimes where the assumed structure of more complex methods is violated, particularly under sensor-kriging where sensors with no observed history must be inferred from spatial neighbours alone. Low-rank tensor completion methods [ 23 , 24 , 25 , 26 , 27 ]treat the sensor-time matrix as a tensor and impute by minimizing a nuclear norm. They exploit global low-rank structure efficiently but degrade when the missingness departs from uniform random, and they are particularly fragile under whole-sensor blackouts because their initialization produces zero rows for fully-missing sensors. Graph-aware deep methods embed a graph neural network into the imputer [ 28 , 29 , 30 , 31 ]3and can express richer dependence than pairwise Laplacians, but they require substantial training data per deployment and offer no recovery guarantees. Generative imputation methods such as CSDI [ 32 ]and PriSTI [ 33 ] fit conditional diffusion models and achieve high reconstruction accuracy at substantial computational cost. The sparse-attention SPIN [34] interpolates with attention over observed cells. A common shortcoming across these families is that each is benchmarked against a single missingness pattern, typically uniform-random cell dropout at a single rate. The MSHL evaluation protocol stresses regime robustness instead: one algorithm with one hyperparameter setting is evaluated across cell-MAR, block-MAR, and sensor-kriging at five rates each. 
+
+2.2 Hypergraph regularization and neural networks 
+
+Pairwise graph Laplacian regularization [ 35 , 36 ] has been the workhorse of structured imputation since the early work on graph signal processing, but the pairwise penalty cannot represent group-level coherence. The hypergraph Laplacian [ 37 ] extends the smoothness penalty to higher-order groups by replacing pairwise differences with within-group variance, vanishing on the constant pattern. Hypergraph neural networks [ 38 , 39 , 40 , 41 ] parameterize messages over hyperedges, generalizing graph convolutional networks to higher-order interactions. These methods typically assume the hypergraph is given as input, either from domain knowledge or from a fixed heuristic such as 𝑘 -nearest-neighbour cliques on a feature space. When the hypergraph is treated as fixed, the recovery rate of the resulting imputer depends on whether the assumed structure matches the data-generating process, and misspecification can hurt more than the absence of higher-order structure. Tensor completion with graph regularization [ 42 ] adds a graph-Laplacian penalty to the CP decomposition; we include WDGTC as a baseline and observe that it is competitive on cell-MAR at moderate rates but degenerates at high missing rates and collapses on kriging. Recent work on learned hypergraph structure [ 20 , 21 ] parameterizes the hyperedge incidence matrix and optimizes it jointly with downstream task loss. These methods are flexible but typically require dense observations and do not provide finite-sample recovery rates as a function of missingness or scale. To our knowledge, no prior method selects multi-scale hyperedges with a Lepski-style penalty under partial observations, provides scale-invariant weighting, or gives finite-sample recovery rates that depend explicitly on the missingness rate and scale. 
+
+2.3 Adaptive selection and residual refinement 
+
+The price of selecting among multiple model complexities is well understood in the nonparametric statistics literature. Lepski’s principle [ 43 ] and its successors [ 44 ] give procedures that select bandwidth, smoothing parameter, or model complexity from data while paying an additive logarithmic penalty for not knowing the best choice in advance. The standard treatment applies to one-dimensional bandwidth selection; here we adapt it to discrete hyperedge-scale selection with a per-scale complexity penalty that dominates the fluctuations of the structural scores. Our residual corrector on a linear backbone, the hypergraph-conditioned residual network (HCRN; described in Section 5), fits the long tradition of hybrid estimators that combine a structured backbone with a learned residual correction. Gradient boosting [ 45 ] fits a sequence of weak learners on the running residual; deep residual networks [ 46 ] parameterize the correction directly; structured-prediction work [ 47 , 48 ] couples a probabilistic backbone with a neural correction. Most established results for these methods are upper bounds on the corrected risk relative to the optimum, meaning the corrector can hurt as well as help. MSHL departs from this template in three ways. The corrector is conditioned on the discovered hypergraph rather than on the raw input, so HCRN inherits Discovery’s structural choice. The training loss is decoupled from the backbone loss, with HCRN trained on a Huber loss over residuals on observed cells where ground truth is available. Most importantly, the guarantee is one-sided: because the zero correction is feasible, the worst-case excess over the linear estimator is the vanishing 𝑂 (1/√𝑛 tr ) generalization gap rather than an unbounded misspecification term. This makes HCRN safe to enable by default. 
+
+2.4 Position of MSHL 
+
+Relative to the families above, MSHL combines elements that have not been combined before in the spatiotemporal imputation literature. The framework provides a multi-scale hypergraph Laplacian with scale-invariant weighting, a two-source candidate generator with exponentially-separated recovery rates that handles all three missingness regimes, a Lepski-style observation-only scale selector with an oracle 4bound, and a one-sided refinement guarantee that is Discovery-aware with automatic deferment when residual evidence is unavailable. The empirical evaluation is also stricter than is typical: one hyperparameter setting across cell-MAR, block-MAR, and sensor-kriging at five rates each on PEMS-BAY and METR-LA, with comparison to baselines drawn from four prior families at the same evaluation protocol. 
+
+## 3 Problem Setup and Preliminaries 
+
+The remainder of this section develops the framework in three steps that mirror the design constraints. We first state the imputation problem and the design constraints that any candidate estimator must satisfy. We then introduce the linear backbone, which provides a tractable starting point but is fundamentally pairwise. We finally show why a multi-scale hypergraph Laplacian is necessary to break out of pairwise expressivity, and prove two foundational results that justify the design: a representation theorem identifying the patterns where higher-order structure dominates pairwise alternatives, and a risk bound that quantifies the approximation–variance trade-off any structured estimator must navigate. 
+
+3.1 Problem formulation 
+
+Let 𝑋 ∗ ∈ R𝑁 ×𝑇 be the latent matrix of 𝑁 sensors over 𝑇 timesteps that we wish to recover. We observe noisy values only on a random subset of cells: 
+
+𝑌 obs  
+
+> 𝑖,𝑡
+
+= 𝑋 ∗ 
+
+> 𝑖,𝑡
+
++ 𝜉 𝑖,𝑡 when 𝑀 𝑖,𝑡 = 1, 𝜉 𝑖,𝑡 ∼ subG (𝜎 2), 𝑀 𝑖,𝑡 ∈ { 0, 1}. (1) The missingness mask 𝑀 is missing-at-random with rate 𝜋 𝑖,𝑡 := E[𝑀 𝑖,𝑡 ] bounded below by 𝜋 min > 0, and the noise 𝜉 𝑖,𝑡 is sub-Gaussian with proxy variance 𝜎 2. We write Ω := {( 𝑖, 𝑡 ) : 𝑀 𝑖,𝑡 = 1} for the observed positions and Ω𝑐 for the held-out positions, and denote the stored incomplete matrix by 𝑌 = 𝑀 ⊙ 𝑌 obs . The imputation goal is to produce b𝑋 such that b𝑋 𝑖,𝑡 ≈ 𝑋 ∗ 
+
+> 𝑖,𝑡
+
+on Ω𝑐 . Side information may also be available, including a sensor adjacency matrix 𝐴 encoding prior network structure such as physical distances or connectivity. 
+
+Statistical assumptions. The mask entries 𝑀 𝑖,𝑡 are mutually independent Bernoulli given the latent 𝑋 ∗, with 
+
+𝜋 𝑖,𝑡 ≥ 𝜋 min > 0 (Assumption 1). The noise entries 𝜉 𝑖,𝑡 are mean-zero sub-Gaussian, mutually independent, and independent of 𝑀 (Assumption 2). For the recovery analysis of higher-order structure (Section 4), we additionally assume a latent-factor model on each true hyperedge: a hyperedge 𝑆 ∗ ⊆ [ 𝑁 ] of size 𝑠 ∗ has 
+
+𝑋 ∗ 
+
+> 𝑖,𝑡
+
+= 𝛽 ∗ 
+
+> 𝑖
+
+𝑢 ∗ 
+
+> 𝑡
+
++ 𝜖 ∗ 
+
+> 𝑖,𝑡
+
+for 𝑖 ∈ 𝑆 ∗, with 𝛽 ∗ 
+
+> 𝑖
+
+≠ 0, Var (𝑢 ∗ 
+
+> 𝑡
+
+) > 0, and E[𝜖 ∗ 
+
+> 𝑖,𝑡
+
+| 𝑢 ∗ 
+
+> 𝑡
+
+] = 0 (Assumption 3). Formal statements appear in Appendix B. 
+
+Assumption 1 (Missingness) . The mask entries 𝑀 𝑖,𝑡 are mutually independent Bernoulli given 𝑋 ∗, with 
+
+𝜋 𝑖,𝑡 = E[𝑀 𝑖,𝑡 ] ≥ 𝜋 min > 0.
+
+Assumption 2 (Noise) . The noise entries 𝜉 𝑖,𝑡 are mean-zero sub-Gaussian with proxy variance 𝜎 2, mutually independent, and independent of 𝑀 .
+
+Assumption 3 (Latent-factor structure) . A true hyperedge 𝑆 ∗ ⊆ [ 𝑁 ] of size 𝑠 ∗ has 𝑋 ∗ 
+
+> 𝑖,𝑡
+
+= 𝛽 ∗ 
+
+> 𝑖
+
+𝑢 ∗ 
+
+> 𝑡
+
++ 𝜖 ∗ 
+
+> 𝑖,𝑡
+
+for 𝑖 ∈ 𝑆 ∗,with 𝛽 ∗ 
+
+> 𝑖
+
+≠ 0, Var (𝑢 ∗ 
+
+> 𝑡
+
+) > 0, and E[𝜖 ∗ 
+
+> 𝑖,𝑡
+
+| 𝑢 ∗ 
+
+> 𝑡
+
+] = 0. The latent variance ratio is 𝜌 ∗
+
+> fac
+
+𝛽 ∗2 Var (𝑢 ∗ 
+
+> 𝑡
+
+) > 0.The three regimes that span the deployment spectrum are instances of this model with different choices of the mask structure. Cell-MAR drops each cell independently with probability 1 − 𝜋 , producing scattered missingness at the cell level. Block-MAR drops contiguous time blocks of fixed length 𝐵 for each sensor, so local temporal autocorrelation cannot recover gap interiors; we use 𝐵 = 6 timesteps, equal to 30 minutes at the 5-minute cadence. Sensor-kriging holds out each sensor for the entire window with probability 1 − 𝜋 ,leaving the held-out sensor with no observed history. Although these regimes share the same 𝜋 parameter, they expose very different structural information. Cell-MAR preserves both pairwise and higher-order joint observations; block-MAR preserves spatial joint observations at the cost of temporal; sensor-kriging preserves only cross-sensor pairwise observations between observed sensors. 
+
+Design constraints. Three constraints follow from this problem statement. The estimator must represent group-level coherence that pairwise penalties cannot encode, because such coherence is the structural signal that survives in regimes where pairwise neighbours are jointly missing. The estimator must select the relevant interaction scale from the data, because the useful scale shifts with the missingness regime and the underlying network. The estimator must remain safe at zero engineering cost when no informative higher-order signal is 5available, because every deployment will encounter regimes that violate the assumptions of any particular structural prior. Sections 4 and 5 address each constraint in turn; the remainder of this section provides the linear backbone and the operator-level results that justify the higher-order construction. 
+
+3.2 The linear backbone: an IPW-Tikhonov estimator 
+
+A natural first attempt at imputation is to fit a smooth function of the observations to the observed cells. We adopt an inverse-propensity-weighted (IPW) Tikhonov form, which is both tractable and aligns with the generalization analyses to follow. For symmetric positive-semidefinite spatial and temporal operators 
+
+𝐿 𝑆 ∈ R𝑁 ×𝑁 and 𝐿 𝑇 ∈ R𝑇 ×𝑇 , the estimator solves 
+
+b𝑋 (𝐿 𝑆 , 𝐿 𝑇 ) := arg min 
+
+> 𝑋
+
+12
+
+Õ
+
+> 𝑖,𝑡
+
+𝑀 𝑖,𝑡 
+
+𝜋 𝑖,𝑡 
+
+ 𝑋 𝑖,𝑡 − 𝑌 obs 
+
+> 𝑖,𝑡
+
+2 + 𝜆 𝑆 
+
+2 ⟨𝑋, 𝐿 𝑆 𝑋 ⟩𝐹 + 𝜆 𝑇 
+
+2 ⟨𝑋, 𝑋𝐿 𝑇 ⟩𝐹 + 𝜇 
+
+2 ∥𝑋 ∥2 
+
+> 𝐹
+
+. (2) The IPW factor 1/𝜋 𝑖,𝑡 debiases the empirical fidelity term: in expectation, the weighted empirical loss equals the population loss summed over all 𝑁 · 𝑇 cells (Appendix B.1). The smoothness penalties ⟨𝑋, 𝐿 𝑆 𝑋 ⟩𝐹 
+
+and ⟨𝑋, 𝑋𝐿 𝑇 ⟩𝐹 impose spatial and temporal smoothness respectively, while 𝜇 ∥𝑋 ∥2 
+
+> 𝐹
+
+ensures well-posedness. Throughout we fix 𝐿 𝑇 as the discrete first-difference Laplacian and leave the design freedom in the spatial operator 𝐿 𝑆 , which is exactly where the higher-order content of the framework lives. The first-order optimality condition of (2) yields a closed-form solution. In matrix form, with 𝑊 := 𝑀 ⊙ 𝜋 ⊙− 1
+
+the entry-wise reciprocal of the observation rate restricted to observed cells, the optimality condition is 
+
+𝑊 ⊙ 𝑋 + 𝜆 𝑆 𝐿 𝑆 𝑋 + 𝜆 𝑇 𝑋𝐿 𝑇 + 𝜇 𝑋 = 𝑊 ⊙ 𝑌 obs . (3) This Sylvester-like equation admits an explicit spectral solution in the Kronecker product basis when the entrywise weight matrix is replaced by its population counterpart or is spatially–temporally separable; in the general masked case, we solve it by conjugate gradient on the implicit linear operator, as detailed in Appendix B.3. The IPW factor inflates the worst-case effective noise variance by at most a factor 1/𝜋 min , from 
+
+𝜎 2 to 𝜎 2/𝜋 min .
+
+3.3 Beyond pairwise: hypergraph Laplacians 
+
+The choice of 𝐿 𝑆 determines what kind of structure the estimator can express. The classical graph Laplacian on a symmetric nonnegative adjacency 𝐴 ∈ R𝑁 ×𝑁  
+
+> ≥0
+
+is ℒ𝐺 := 𝐷 𝐴 − 𝐴 where 𝐷 𝐴 := diag (𝐴 1) is the degree matrix. Its quadratic form is 
+
+⟨𝑋, ℒ𝐺 𝑋 ⟩𝐹 = 12
+
+Õ
+
+> 𝑖,𝑗
+
+𝐴 𝑖𝑗 ∥𝑋 𝑖, : − 𝑋 𝑗, :∥22 , (4) the sum of pairwise squared row differences weighted by adjacency. This penalty represents the assumption that connected sensors have similar values, which is faithful when the underlying coupling really is pairwise. It cannot, however, express constraints that involve three or more sensors simultaneously. A hyperedge 𝑒 ⊆ [ 𝑁 ] of size |𝑒 | ≥ 2 groups sensors that are constrained to vary together. For |𝑒 | = 2 a hyperedge is just a graph edge; for |𝑒 | ≥ 3 it encodes a constraint no pair can express. The per-edge Laplacian is 
+
+𝐿 𝑒 := |𝑒 | · 𝐼 𝑒 − 1𝑒 1⊤ 
+
+> 𝑒
+
+, (5) where 𝐼 𝑒 is the identity restricted to rows and columns indexed by 𝑒 , and 1𝑒 is the indicator vector of 𝑒 in 
+
+R𝑁 . The matrix 𝐿 𝑒 is embedded back into R𝑁 ×𝑁 on the rows and columns of 𝑒 and is zero elsewhere. The Dirichlet identity gives 
+
+⟨𝑋, 𝐿 𝑒 𝑋 ⟩𝐹 = 2
+
+|𝑒 |
+
+2
+
+
+
+· Var 𝑒 (𝑋 ), where Var 𝑒 (𝑋 ) := 1
+
+𝑇 
+
+> 𝑇
+
+Õ
+
+> 𝑡 =1
+
+1
+
+|𝑒 |
+
+Õ
+
+> 𝑖 ∈𝑒
+
+(𝑋 𝑖,𝑡 − ¯ 𝑋 𝑒,𝑡 )2 , (6) i.e., the within-group row variance averaged over time. The hypergraph quadratic form thus penalises within-group dispersion; it vanishes on the constant pattern 𝑋 𝑖, : = 𝑐 𝑖 ·1𝑇 when all 𝑐 𝑖 , 𝑖 ∈ 𝑒 are equal, regardless of how the rest of the matrix behaves. 60 20 40 60 80 100                                          
+
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> aToy network layout
+> =
+> =
+> =
+> ambient
+> 010 20 30
+> sensor index
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> sensor index
+> b( = )
+> −0.4
+> −0.2
+> 0.0
+> 0.2
+> 0.4
+> 010 20 30
+> sensor index
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> sensor index
+> c( = )
+> −0.4
+> −0.2
+> 0.0
+> 0.2
+> 0.4
+> 010 20 30
+> sensor index
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> sensor index
+> d( = )
+> −0.4
+> −0.2
+> 0.0
+> 0.2
+> 0.4
+> −4 −2 024
+> MDS-1
+> −4
+> −2
+> 0
+> 2
+> MDS-2
+> ePEMS-BAY layout
+> =
+> =
+> =
+> =
+> 020 40 60 80
+> sensor index
+> 0
+> 20
+> 40
+> 60
+> 80
+> sensor index
+> fPrior adjacency
+> 020 40 60 80
+> sensor index
+> 0
+> 20
+> 40
+> 60
+> 80
+> sensor index
+> gDiscovered (̂)
+> 020 40 60 80
+> sensor index
+> 0
+> 20
+> 40
+> 60
+> 80
+> sensor index
+> hCombined =+
+> −1.00
+> −0.75
+> −0.50
+> −0.25
+> 0.00
+> 0.25
+> 0.50
+> 0.75
+> 1.00
+> −2
+> −1
+> 0
+> 1
+> 2
+> −4
+> −2
+> 0
+> 2
+> 4
+
+Figure 2: Multi-scale hypergraph Laplacians. Top row, (a)-(d): a toy network with two planted hyperedges, shown together with the per-scale Laplacians 𝑤 𝑠 ℒ(𝑠 )
+
+𝐻 at scales 𝑠 = 3, 4, 5; each scale contributes the same per-pair regularization energy regardless of 𝑠 (Lemma 1). Bottom row, (e)-(g): on a 60 -sensor PEMS-BAY subnetwork, (e) prior adjacency 𝐴 , (f) discovered multi-scale hypergraph bℋ , (g) combined operator 
+
+𝐿 𝑆 = ℒ𝐺 + 𝜆 𝐻 ℒ𝐻 that augments the pairwise prior with higher-order constraints. We use a 60 -sensor subnetwork here for visual clarity; the main evaluation in Section 6 uses the 100 -sensor highest-degree subnetwork. 
+
+Multi-scale aggregation. Aggregating per-edge Laplacians over a multi-scale hypergraph ℋ = Ð𝑆 max 
+
+𝑠 =2 ℋ𝑠 ,where ℋ𝑠 contains the size-𝑠 hyperedges, gives 
+
+ℒ𝐻 =
+
+𝑆 max Õ
+
+𝑠 =2
+
+𝑤 𝑠 
+
+Õ
+
+𝑒 ∈ℋ 𝑠 
+
+𝐿 𝑒 , 𝑤 𝑠 = 1
+
+ 𝑠 
+
+2
+
+ . (7) Up to a global constant, 𝑤 𝑠 = 1/ 𝑠 
+
+2
+
+ is the unique weighting under which 𝑤 |𝑒 |⟨𝑋, 𝐿 𝑒 𝑋 ⟩𝐹 = 2Var 𝑒 (𝑋 )
+
+independently of |𝑒 |. A triple, a 4-tuple, and a 5-tuple therefore contribute the same per-pair regularization energy on coherent group patterns; any other choice of 𝑤 𝑠 biases scale selection toward larger or smaller edges. This is Lemma 1, proven in Appendix C.2. 
+
+Lemma 1 (Scale invariance) . For any hyperedge 𝑒 of size 𝑠 = |𝑒 | and any constant pattern 𝑋 ∗
+
+𝑖, : = 1[𝑖 ∈ 𝑒 ] · 𝑐 𝑡 with 
+
+𝑐 ∈ R𝑇 ,
+
+𝑤 𝑠 ⟨𝑋 ∗ , 𝐿 𝑒 𝑋 ∗⟩𝐹 = 2Var 𝑒 (𝑋 ∗) = 0
+
+identically, and for any non-constant pattern, 𝑤 𝑠 ⟨𝑋 ∗ , 𝐿 𝑒 𝑋 ∗⟩𝐹 = 2Var 𝑒 (𝑋 ∗) depends only on the within-group dispersion, not on 𝑠 .
+
+The combined spatial operator MSHL uses is 
+
+𝐿 𝑆 := ℒ𝐺 + 𝜆 𝐻 ℒ𝐻 , (8) which augments the pairwise prior with discovered higher-order constraints (Figure 2). The role of ℒ𝐻 is not to dominate the graph prior globally but to add candidate group-level relations that can be selected when supported by the partial observations. 
+
+3.4 When does higher-order structure help? A representation theorem 
+
+The simplest separation between ℒ𝐺 and ℒ𝐻 is on group-conservation patterns : patterns where a set of sensors share a common temporal trajectory. Such patterns appear at freeway merges with flow conservation, in fleets sharing a corridor with coordinated motion, in clusters affected by the same calibration drift, or in any multi-sensor constraint that is invariant under common-mode shifts within the group. 7Theorem 1 (Group-pattern separation) . Let ℒ𝐺 = 𝐷 𝐴 − 𝐴 be the graph Laplacian of a symmetric nonnegative adjacency 𝐴 , and let ℒ𝐻 be the multi-scale hypergraph Laplacian in (7) . Fix a hyperedge 𝑒 ∈ ℋ with |𝑒 | ≥ 3 and a temporal signal 𝑐 ∈ R𝑇 . Define the group-conservation pattern 
+
+𝑋 ∗ 
+
+> 𝑖,𝑡
+
+:= 1[𝑖 ∈ 𝑒 ] 𝑐 𝑡 .
+
+Then 
+
+⟨𝑋 ∗ , ℒ𝐺 𝑋 ∗⟩𝐹 = ∥𝑐 ∥22
+
+Õ
+
+> 𝑖 ∈𝑒, 𝑗 ∉𝑒
+
+𝐴 𝑖𝑗 , ⟨𝑋 ∗ , 𝐿 𝑒 𝑋 ∗⟩𝐹 = 0. (9) 
+
+Moreover, the multi-scale operator gives 
+
+⟨𝑋 ∗ , ℒ𝐻 𝑋 ∗⟩𝐹 = ∥𝑐 ∥22
+
+> 𝑆 max
+
+Õ
+
+> 𝑠 =2
+
+Õ
+
+> 𝑒 ′∈ℋ 𝑠
+
+𝑤 𝑠 |𝑒 ′ ∩ 𝑒 | ( 𝑠 − | 𝑒 ′ ∩ 𝑒 |) , (10) 
+
+and whenever this overlap leakage is smaller than the graph-boundary cost, ℒ𝐻 assigns a strictly lower regularization cost than ℒ𝐺 to the group-conservation pattern. 
+
+Discussion. Theorem 1 is intentionally pattern-specific: it does not require, and does not imply, a global Loewner ordering between ℒ𝐺 and ℒ𝐻 . The two operators measure smoothness with respect to different geometries, and neither dominates the other on all patterns. What the theorem identifies is a concrete and frequently encountered class of signals, the group-conservation patterns, on which ℒ𝐻 has zero cost while 
+
+ℒ𝐺 has cost proportional to the boundary edge weight. When the corresponding constraint is present in the data, regularizing with 𝐿 𝑆 = ℒ𝐺 + 𝜆 𝐻 ℒ𝐻 rather than ℒ𝐺 alone reduces the bias of the linear estimator without sacrificing the pairwise prior, which still operates outside the group. The overlap leakage term Í𝑒 ′∈ℋ 𝑠 𝑤 𝑠 |𝑒 ′ ∩ 𝑒 |( 𝑠 − | 𝑒 ′ ∩ 𝑒 |) in the multi-scale form quantifies the cost of a misspecified hypergraph. When 𝑒 ′ = 𝑒 , |𝑒 ′ ∩ 𝑒 | = 𝑠 and the term vanishes; when 𝑒 ′ ∩ 𝑒 = ∅ the term also vanishes; the cost is largest for partial overlap. The Discovery procedure in Section 4 is designed to minimize this leakage by selecting bℋ that aligns with the true hyperedges of the data-generating process. 
+
+3.5 The IPW risk bound 
+
+Theorem 1 is qualitative: it identifies signals on which the bias of the linear estimator is reduced. To turn this into a quantitative statement about expected error, we need the risk bound for the IPW-Tikhonov estimator. 
+
+Theorem 2 (IPW risk bound) . Under MAR with sub-Gaussian noise, the estimator b𝑋 (𝐿 𝑆 , 𝐿 𝑇 ) from (2) satisfies 
+
+E∥b𝑋 − 𝑋 ∗∥2 
+
+> 𝐹
+
+≤ Bias 2(𝐿 𝑆 , 𝐿 𝑇 ; 𝑋 ∗)
+
+| {z }
+
+> approx. error
+
++ 𝜎 2
+
+𝜋 min 
+
+𝑑 ⊗
+
+> eff
+
+(𝜇 ; 𝐿 𝑆 , 𝐿 𝑇 )
+
+| {z }
+
+> est. variance
+
+, (11) 
+
+where 𝑑 ⊗
+
+> eff
+
+(𝜇 ; 𝐿 𝑆 , 𝐿 𝑇 ) := Í𝑖,𝑗 (𝜇 + 𝜆 𝑆 𝜆 𝑆 𝑖 + 𝜆 𝑇 𝜇 𝑇 𝑗 )−1 is the product effective dimension on the eigenvalues of 𝐿 𝑆 and 𝐿 𝑇 ,and the bias is 
+
+Bias 2(𝐿 𝑆 , 𝐿 𝑇 ; 𝑋 ∗) = ∥( Π𝜇 ,𝐿 𝑆 ,𝐿 𝑇 − 𝐼 ) 𝑋 ∗∥2
+
+> 𝐹
+
+for the corresponding resolvent projector Π𝜇 ,𝐿 𝑆 ,𝐿 𝑇 .
+
+Implications for the design. Theorem 2 formalizes the approximation–variance trade-off that drives the choice of 𝐿 𝑆 . Adding higher-order structure 𝜆 𝐻 ℒ𝐻 can reduce the bias term on group-conservation patterns of Theorem 1 while also shrinking the effective dimension through additional regularization. The risk is not variance inflation but misspecification: an overly dense or poorly aligned hypergraph can over-smooth genuine residual variation and increase approximation error. Discovery must therefore balance the two: include enough hyperedges to capture genuine group-conservation patterns, but not so many that false or partially overlapping hyperedges dominate the bias. This motivates two design targets that organize the rest of the paper. The Discovery stage in Section 4 chooses the higher-order structure in ℒ𝐻 so that coherent group patterns are not forced into a purely pairwise representation, while controlling the false-positive rate at large scales through a per-scale complexity penalty. The Refinement stage in Section 5 handles the remaining nonlinear residual structure that no linear estimator can capture, with a Discovery-aware refinement bound and automatic deferment when residual evidence is unavailable. 84 Discovery: Building a Multi-Scale Hypergraph from Incomplete Observations 
+
+This section presents the Discovery stage of MSHL. The goal is to identify a multi-scale hypergraph bℋ = Ð𝑠 bℋ𝑠 
+
+from the partial observation matrix 𝑌 = 𝑀 ⊙ 𝑌 obs that is faithful to the true group-conservation structure of 
+
+𝑋 ∗ when present and does not introduce spurious higher-order constraints when absent. We construct bℋ in four steps: a pairwise pre-fit that absorbs the pairwise-spatial and temporal-AR signal; candidate generation from two complementary sources, prior topology and residual correlations; observation-only selection with a Lepski-style per-scale complexity penalty; and the linear estimator on the resulting ℒ𝐻 ( bℋ ) .
+
+4.1 Pre-fit and the residual correlation matrix 
+
+Solving (2) with 𝜆 𝐻 = 0 yields a pairwise estimate b𝑋 pw that absorbs the pairwise-spatial and temporal-AR signal in ℒ𝐺 + 𝜆 𝑇 𝐿 𝑇 :
+
+b𝑋 pw := b𝑋 (ℒ 𝐺 , 𝐿 𝑇 ). (12) The residual matrix 
+
+𝑅 pw := 𝑀 ⊙ ( 𝑌 obs − b𝑋 pw ) (13) contains, on the observed cells, the part of the data that the pairwise-Tikhonov estimator could not explain: higher-order group-coherence patterns and any residual nonlinearity. By construction 𝑅 pw is zero on Ω𝑐 and has empirical mean approximately zero on Ω.The empirical residual correlation between any two sensors 𝑖, 𝑗 that share at least one observation time is 
+
+b𝐶 𝑖𝑗 =
+
+Í𝑡 ∈Ω𝑖𝑗 𝑅 pw  
+
+> 𝑖,𝑡
+
+𝑅 pw 
+
+> 𝑗,𝑡
+
+qÍ𝑡 ∈Ω𝑖 (𝑅 pw  
+
+> 𝑖,𝑡
+
+)2 · Í𝑡 ∈Ω𝑗 (𝑅 pw  
+
+> 𝑗,𝑡
+
+)2
+
+, Ω𝑖𝑗 := {𝑡 : 𝑀 𝑖,𝑡 = 𝑀 𝑗,𝑡 = 1}, Ω𝑖 := {𝑡 : 𝑀 𝑖,𝑡 = 1}. (14) This is the central statistic of Discovery: each pair (𝑖, 𝑗 ) with strong residual coupling |b𝐶 𝑖𝑗 | > 𝜏 𝐶 is a candidate higher-order constituent. The threshold 𝜏 𝐶 is calibrated from data, with a floor 𝜏 floor = 0.30 and an adaptive component, the 𝑞 = 0.95 quantile of the off-diagonal absolute residual correlations, that tracks the noise level of each window. 
+
+Why the pre-fit? The pre-fit is essential for two reasons. First, the raw data correlation is dominated by the global diurnal cycle and the pairwise spatial coupling, neither of which is informative about higher-order structure. The pre-fit subtracts these signals and leaves only what they cannot explain. Second, the residual is the right target for the subsequent refinement stage: HCRN learns to predict 𝑅 lin from observed-residual features, so the same residual statistic ties Discovery and Refinement together. 
+
+4.2 Two complementary discovery sources 
+
+A central design choice in MSHL is how to propose hyperedge candidates without having direct access to the true higher-order structure. We use two complementary signals whose finite-sample recovery rates fail in mutually exclusive regimes, so that their combination remains powerful where either signal alone would be inadequate. The first signal is prior network topology, expressed through a sensor adjacency matrix that is typically available from physical layout, road geometry, or a learned graph from auxiliary metadata. Topology supplies plausible group candidates by enumerating, for each sensor, the hyperedges formed with its top-(𝑠 − 1) adjacent neighbours: 
+
+𝒞 top  
+
+> 𝑠
+
+:= {𝑖 } ∪ TopK 𝑠 −1(𝐴 𝑖, :) : 𝑖 ∈ [ 𝑁 ] . (15) This source can propose candidates without using observations from the candidate sensors themselves, which is useful when observations are sparse or uneven. Final acceptance, however, is still based on observed-cell evidence through the structural scores below, so topology supplies candidate support rather than a free recovery guarantee. The second signal is data-adaptive: residual correlations b𝐶 from the pre-fit reveal hyperedges that the prior cannot anticipate, such as group patterns driven by latent demand that does not align with physical adjacency. Sensors with high residual coupling propose candidates by enumerating the top-(𝑠 − 1) residual neighbours above a threshold 𝜏 𝐶 :9𝒞 res  
+
+> 𝑠
+
+:= {𝑖 } ∪ TopK 𝑠 −1
+
+ |b𝐶 𝑖, :|; 𝜏 𝐶 
+
+ : {𝑗 : |b𝐶 𝑖𝑗 | > 𝜏 𝐶 } ≥ 𝑠 − 1 . (16) The combined candidate set is 𝒞 := Ð𝑠 (𝒞 top  
+
+> 𝑠
+
+∪ 𝒞 res  
+
+> 𝑠
+
+).The complementarity of the two signals is not just qualitative. Their finite-sample recovery rates are exponentially separated as a function of the missingness rate, so that whichever signal is statistically harder in a given regime is the one whose work the other can do. 
+
+Theorem 3 (Topology-signal recovery) . Let 𝑆 ∗ ∈ ℋ ∗ be a true hyperedge of size 𝑠 that satisfies Assumption 3, namely a coherent group-conservation pattern with signal-to-noise ratio 𝛽 ∗2 Var (𝑢 ∗)/ 𝜎 4. Under MAR with observation rate 𝜋 and sub-Gaussian noise, with probability at least 1 − 𝛿 the topology signal identifies 𝑆 ∗ once 
+
+𝑇 ≳ 𝜋 −𝑠 𝜎 4 log (𝑁 𝑠 /𝛿 ) / ( 𝜌 ∗
+
+> fac
+
+𝛽 ∗2 Var (𝑢 ∗)) 2.
+
+Theorem 4 (Residual-signal recovery) . Under the same model and noise assumptions, with probability at least 1 − 𝛿 
+
+the residual signal identifies 𝑆 ∗ once 𝑇 ≳ 𝜋 −2 log (𝑁 2/𝛿 )/ 𝛾 2, where 𝛾 is the population correlation gap of Theorem 3’s proof in Appendix C.5. This rate is independent of the hyperedge size 𝑠 .
+
+The exponential gap is the key driver of regime robustness, and the two failure modes do not overlap. Whole-sensor missingness breaks the residual signal: a sensor held out for the entire window has no observed cells and no defined pairwise correlations. The topology source can still propose plausible candidates because candidate generation depends only on the prior adjacency, although their acceptance remains limited by the observed evidence available for scoring. Conversely, dense scattered missingness at large hyperedge sizes breaks the topology signal: at moderate 𝜋 and 𝑠 = 5, joint observations make up only a few percent of timesteps, requiring far more data than is typically available. The residual signal still operates because it depends on pairwise joint observations only. Their disjunction therefore covers the deployment spectrum, and the empirical balance between the two shifts smoothly with the regime, as we show in Section 6.5. 
+
+4.3 Selecting from candidates 
+
+Each candidate is ranked by two structural scores computed from observed cells alone. The score bΨ𝑒 is the average pairwise residual correlation inside 𝑒 , and bΦ𝑒 is the leave-one-out improvement in mean-squared error on 𝑅 pw when 𝑒 is added to the regularizer. The first captures the same signal as the residual mechanism but at the hyperedge level; the second captures the marginal predictive value of 𝑒 over the pairwise pre-fit. The two scores have different concentration rates: bΨ𝑒 concentrates at the pairwise rate 1/( 𝜋 2𝑇 ), while bΦ𝑒 
+
+concentrates at the joint rate 1/( 𝜋 𝑠 𝑇 ). The full statement and proof are in Lemma 4 and Appendix C.6; the practical consequence is that bΨ𝑒 remains useful even when bΦ𝑒 is unstable at large 𝑠 , and a candidate is accepted whenever either score exceeds its calibrated threshold. The thresholds combine a data-adaptive part with a per-scale complexity penalty 𝜌 (𝑠 − 2) chosen to dominate the score fluctuations. Acceptance by either score means the false-negative rate of Discovery is the product of the two component rates: in regimes where one score has low power, the other supplies the missing detection. The complexity penalty controls the false-positive rate, which would otherwise grow with the candidate count at large scales. Accepted hyperedges enter bℋ with sigmoid-shrinkage weights that smoothly interpolate from zero just above the threshold to one well above it, avoiding hard-thresholding artefacts. We also cap the number of accepted hyperedges per scale at 𝐽 max to bound the per-scale Laplacian degree and keep the linear solve fast. Full expressions for the scores, thresholds, complexity penalty, and acceptance rule are deferred to Appendix D. 
+
+4.4 Adaptive scale selection 
+
+Different missingness regimes can expose different interaction scales. At dense block-MAR, the useful scale tends to be larger because multi-sensor outage clusters can sustain coherent group patterns; at sparse cell-MAR, smaller scales are recovered more reliably; at kriging, only the topology source contributes and the recovered scale tends to be smaller. Rather than committing to a single fixed scale, MSHL searches over scales using observation-only scores plus the Lepski-style per-scale complexity penalty 𝜌 (𝑠 − 2).Let 
+
+𝑠 ∗ ∈ arg min 
+
+> 2≤𝑠 ≤𝑆 max
+
+𝑅 (𝑠 ), 𝑅 (𝑠 ) := E∥b𝑋 (𝐿 (𝑠 ) 
+
+> 𝑆
+
+, 𝐿 𝑇 ) − 𝑋 ∗∥2 
+
+> 𝐹
+
+,
+
+10 be the oracle best fixed scale, with 𝐿 (𝑠 ) 
+
+> 𝑆
+
+= ℒ𝐺 + 𝜆 𝐻 ℒ(𝑠 ) 
+
+> 𝐻
+
+the spatial operator at scale 𝑠 . The following oracle bound shows that the multi-scale selector competes with 𝑠 ∗ in hindsight up to the price of multi-scale selection. 
+
+Theorem 5 (Oracle scale adaptation) . Under the conditions of Lemma 4, with the per-scale penalty 𝜌 (𝑠 − 2) chosen to dominate the score fluctuations as in (35) , with probability at least 1 − 𝛿 ,
+
+E∥b𝑋 ( bℋ ) − 𝑋 ∗∥2 
+
+> 𝐹
+
+≤ min 
+
+> 2≤𝑠 ≤𝑆 max
+
+𝑅 (𝑠 ) + 𝐶 𝜌 (𝑠 − 2) + | Ω|−1 log (𝑆 max /𝛿 ) ,
+
+where 𝐶 depends on 𝜇 , 𝜆 𝐻 , ∥𝑋 ∗∥𝐹 , 𝜎 , and the candidate-degree cap. 
+
+Discussion. Theorem 5 formalizes the headline guarantee of MSHL’s Discovery stage: regardless of which scale is best for the given regime, MSHL identifies it up to a logarithmic factor. Empirically the selector saturates the candidate cap on cell-MAR and block-MAR at every rate that admits structure, while the count drops monotonically with the missing rate on kriging, an automatic ramp toward the pairwise-only fit that the theorem predicts. 
+
+4.5 The linear estimator 
+
+With bℋ in hand, the linear MSHL estimator is 
+
+b𝑋 lin := b𝑋  ℒ𝐺 + 𝜆 𝐻 ℒ𝐻 ( bℋ ) , 𝐿 𝑇 
+
+ , (17) solved by conjugate gradient on the implicit linear operator. Because b𝑋 lin is a linear function of 𝑌 through the resolvent identity, it cannot capture nonlinear regularity in E[𝑋 ∗ | 𝑌, 𝑀 ]. The next section addresses this remaining limitation through the HCRN refinement. The recovery error of the linear estimator on the held-out cells Ω𝑐 admits a direct bound that follows from Theorem 2 specialized to the held-out positions. 
+
+Theorem 6 (Imputation recovery via multi-scale structure) . Decompose 𝑋 ∗ = 𝑋 ∗ 
+
+> cons
+
++ 𝑋 ∗ 
+
+> res
+
+along the low-penalty group-conservation subspace induced by bℋ . The hypergraph component imposes no additional penalty on 𝑋 ∗ 
+
+> cons
+
+when 
+
+𝑋 ∗ 
+
+> cons
+
+∈ ker ℒ𝐻 ( bℋ ) ; any remaining bias comes from the graph, temporal, and ridge terms. Under the coverage and low-boundary assumptions stated in Appendix C.8, the held-out error satisfies 
+
+E(b𝑋 lin  
+
+> 𝑖,𝑡
+
+− 𝑋 ∗ 
+
+> 𝑖,𝑡
+
+)2 
+
+> (𝑖,𝑡 )∈ Ω𝑐
+
+≤ ∥𝑋 ∗
+
+> res
+
+∥2 
+
+> 𝐹
+
++ 𝜎 2/𝜋 min 
+
+𝜅 +(𝐿 𝑆 ) , 𝜅 +(𝐿 𝑆 ) := 𝜇 + 𝜆 𝑆 𝜆 +
+
+> min
+
+(𝐿 𝑆 ). (18) The proof is in Appendix C.8. The bound makes the bias-variance trade-off concrete. Better-targeted Discovery shrinks the residual component by absorbing more of 𝑋 ∗ into the low-penalty group-conservation subspace, while overly aggressive Discovery can introduce misspecified hyperedges that enlarge 𝑋 ∗ 
+
+> res
+
+through over-smoothing. The empirical sensitivity to 𝐽 max in Section 6.4 reflects this bias–regularization trade-off. 
+
+## 5 Refinement: A Hypergraph-Conditioned Neural Network 
+
+The Discovery stage produces a multi-scale hypergraph bℋ and a linear estimator b𝑋 lin that captures pairwise spatial coupling, temporal autocorrelation, and the higher-order group-conservation patterns identified by Discovery. What it cannot capture is nonlinear residual structure: any value-dependent regularity in 
+
+E[𝑋 ∗ | 𝑌, 𝑀 ] that is not a linear function of the observations. The Refinement stage addresses this through a small, safe, hypergraph-conditioned residual network (HCRN). 
+
+5.1 Why a residual corrector? 
+
+The bound in Theorem 6 is tight in the residual component 𝑋 ∗
+
+> res
+
+, with the Tikhonov bias proportional to 
+
+∥𝑋 ∗
+
+> res
+
+∥2 
+
+> 𝐹
+
+/𝜅 +(𝐿 𝑆 ). This bias is intrinsic to any linear estimator, no matter how well-chosen: a linear function of 𝑌 cannot represent the regularity E[𝑋 ∗ 
+
+> res ,i,t
+
+| 𝑌, 𝑀 ] = ℎ(𝜙 𝑖,𝑡 ) for a nonlinear ℎ. The remedy is a small nonlinear corrector that operates on the residual. 11 Three constraints shape our design. The corrector should inherit Discovery rather than relearn it: it should use the discovered bℋ as a hard structural prior, not parameterize the structure itself. This keeps the corrector small, with a typical hidden width of 32, and makes its guarantee dependent on Discovery quality. The corrector should operate on residuals: the target is 𝑅 lin , the linear-stage residual on observed cells, and the input is the observed-residual values of the target cell’s co-members along bℋ , which isolates the corrector’s job from the linear stage. The corrector should be safe by default: the zero correction must always be feasible, so that the worst-case excess of the corrector over the linear estimator is bounded by the generalization gap rather than an unbounded misspecification term. 
+
+5.2 Architecture 
+
+For each cell (𝑖, 𝑡 ), build a fixed-length feature vector from the observed-residual values of 𝑖 ’s co-members along bℋ :
+
+𝜙 𝑖,𝑡 := concat 
+
+ 𝑅 lin  
+
+> 𝑗,𝑡
+
+𝑀 𝑗,𝑡 , 𝑀 𝑗,𝑡 
+
+   
+
+> 𝑗 ∈𝒩 𝐸,𝐾 (𝑖 ;bℋ )
+
+, 𝑔 𝑖,𝑡 
+
+
+
+∈ R𝐹 , (19) Here 𝑅 lin := 𝑀 ⊙ ( 𝑌 obs − b𝑋 lin ) is the linear-stage residual on observed cells. The neighbourhood operator 
+
+𝒩 𝐸,𝐾 (𝑖 ; bℋ ) enumerates the top 𝐸 hyperedges of 𝑖 in bℋ ranked by hyperedge weight b𝑤 𝑒 , and concatenates 𝐾 
+
+co-members from each, zero-padded when fewer are available, for 𝐸 · 𝐾 co-member slots in total. The vector 
+
+𝑔 𝑖,𝑡 ∈ R3 holds three global features: the mean of observed-neighbour residuals at 𝑡 , the count of observed neighbours, and the local observation rate at 𝑡 . Each co-member slot 𝑗 contributes two features, the masked residual value 𝑅 lin  
+
+> 𝑗,𝑡
+
+𝑀 𝑗,𝑡 , which is zero when 𝑗 is held out at 𝑡 , and the indicator 𝑀 𝑗,𝑡 that lets the network distinguish “observed and zero” from “held-out and zero”. The total feature dimension is 𝐹 = 2𝐸𝐾 + 3. We use 𝐸 = 8 hyperedges per cell and 𝐾 = 4 co-members per hyperedge in our experiments, giving 𝐹 = 67 .
+
+Critical design point: no leakage. The feature vector at cell (𝑖, 𝑡 ) depends only on 𝑖 ’s co-members at time 𝑡 ,never on 𝑖 ’s own value at any time . This rules out the trivial identity solution where the corrector reads 𝑌 obs 
+
+> 𝑖,𝑡
+
+and predicts the residual to be zero. The corrector can only use information that is structurally orthogonal to the cell being corrected. The corrector itself is a small two-layer MLP: 
+
+𝑔 𝜃 (𝜙 ) = 𝑤 ⊤ 
+
+> 2
+
+𝜎 (𝑊 1 𝜙 + 𝑏 1) + 𝑏 2 , 𝜎 (·) = max (0, ·) , (20) with parameter set 𝜃 = (𝑊 1 , 𝑏 1 , 𝑤 2 , 𝑏 2) in a bounded space Θ whose Frobenius-norm bounds make the MLP 
+
+𝐿 𝑔 -Lipschitz with bounded output, as detailed in Appendix C.9. 
+
+5.3 Training and inference 
+
+The training set is constructed from observed cells whose neighbours are also observed at the same time: 
+
+𝒟 := {( 𝜙 𝑖,𝑡 , 𝑅 lin  
+
+> 𝑖,𝑡
+
+) : (𝑖, 𝑡 ) ∈ Ω, 𝒩 𝐸,𝐾 (𝑖 ; bℋ ) ∩ Ω(𝑡 ) ≠ ∅} . (21) We minimize the regularized empirical Huber risk: 
+
+b𝜃 := arg min 
+
+> 𝜃 ∈Θ
+
+1
+
+𝑛 tr 
+
+Õ
+
+> (𝜙 ,𝑟 )∈𝒟
+
+ℓ𝛿 𝐻 
+
+ 𝑔 𝜃 (𝜙 ), 𝑟  + 𝜆 reg ∥𝜃 ∥22 , (22) where ℓ𝛿 𝐻 is the Huber loss with threshold 𝛿 𝐻 = 1 mph. Huber rather than squared loss is essential: the residual matrix 𝑅 lin has heavy tails arising from genuinely difficult cells such as sensor changeovers and sudden congestion onset, and squared loss would amplify these into the gradient. We use 30 epochs of Adam with hidden width 32 , batch size 256 , learning rate 10 −2, and weight decay 10 −4.At inference, for each held-out cell (𝑖, 𝑡 ) ∈ Ω𝑐 :
+
+b𝑋 full  
+
+> 𝑖,𝑡
+
+= b𝑋 lin  
+
+> 𝑖,𝑡
+
++ 𝛼 𝑔 b𝜃 (𝜙 𝑖,𝑡 ), (23) where 𝛼 ∈ [ 0, 1] is a global gain hyperparameter that scales the corrector’s contribution. We use 𝛼 = 1
+
+throughout. 12 Important asymmetry: training vs inference. The training data 𝒟 comes from observed cells where ground truth is available, while the inference applies to held-out cells. This is the standard setup for self-supervised imputation: the corrector learns to predict the linear-stage residual from observed-residual features on observed cells, then applies the same map to features built from observed neighbours of held-out cells. The key assumption is exchangeability: the distribution of features built from co-members is similar between observed and held-out cells. Under MAR this holds; under non-ignorable missingness it would need a doubly-robust extension. 
+
+5.4 The refinement guarantee 
+
+Let 
+
+ℛ( 𝜃 ) := E(𝑖,𝑡 )∼ Ω𝑐 
+
+ℓ𝛿 𝐻 
+
+  b𝑋 lin  
+
+> 𝑖,𝑡
+
++ 𝛼 𝑔 𝜃 (𝜙 𝑖,𝑡 ), 𝑋 ∗
+
+> 𝑖,𝑡
+
+ 
+
+be the population Huber risk of the refined estimator on the held-out cells, with 𝜃 ∗ its minimizer over Θ
+
+and ℛ0 := ℛ( 0) the linear-only Huber risk. We work with the Huber population risk because the training objective in (22) is also Huber, so the symmetrization and contraction arguments in Appendix C.9 apply directly. The squared-loss error reported in the experiments is bounded by 𝛿 𝐻 -saturation of the Huber loss, since the two losses coincide on the [− 𝛿 𝐻 , 𝛿 𝐻 ] range. Critically, 0 ∈ Θ, so the linear estimator is a feasible HCRN configuration. 
+
+Theorem 7 (HCRN refinement guarantee) . Suppose Assumption 5 holds, namely that the MLP is Lipschitz with constant 𝐿 𝑔 , the features satisfy ∥𝜙 ∥2 ≤ Φmax , the residuals are sub-Gaussian, and the training sample is exchangeable. Then with probability at least 1 − 𝛿 ,
+
+ℛ( b𝜃 ) ≤ ℛ 0 +  ℛ( 𝜃 ∗) − ℛ 0
+
+| {z }  
+
+> ≤0nonlinear gain
+
++ 𝐶 1
+
+√𝑛 tr 
+
++ 𝐶 2
+
+s
+
+log (2/𝛿 )
+
+𝑛 tr 
+
+| {z } 
+
+> 𝑂 (1/√𝑛 tr )generalization gap
+
+, (24) 
+
+with 𝐶 1 = 8𝛿 𝐻 𝛼 𝐵 2Φmax from a spectral-norm Rademacher bound [ 49 ] and 𝐶 2 from the standard concentration of the Huber loss. The proof is in Appendix C.9. 
+
+What is one-sided about the bound. The refinement gain ℛ( 𝜃 ∗) − ℛ 0 ≤ 0 by construction: 𝜃 = 0 is feasible and realizes ℛ0, so the optimum cannot be worse. This makes (24) a one-sided bound. The worst-case excess of HCRN over b𝑋 lin is the vanishing 𝑂 (1/√𝑛 tr ) generalization gap, regardless of how badly the MLP class misspecifies the true conditional residual. Strict improvement is realized whenever 𝑋 ∗ 
+
+> res
+
+contains nonlinear structure expressible in the MLP class. This one-sidedness is what makes HCRN safe to enable by default. A two-sided bound would require us to compare ℛ( b𝜃 ) to ℛ( 𝜃 ∗) symmetrically and would inherit the unbounded misspecification term that all standard residual-correction guarantees pay. The one-sided bound is possible because the corrector is added 
+
+on top of a structured backbone whose 𝜃 = 0 is always available. 
+
+5.5 Coupling to Discovery 
+
+Theorem 7 bounds Refinement in isolation, but the guarantee is not standalone: it couples to the quality of Discovery in three ways. First, the bound tightens when Discovery is sparse. Replacing the worst-case feature norm with the effective feature dimension 𝑑 𝜙 ( bℋ ) := E[∥ 𝜙 𝑖,𝑡 ∥22] gives the hypergraph-aware Corollary 2: a sparser, better-targeted hypergraph leaves the feature vector mostly zero-padded, so 𝑑 𝜙 ( bℋ ) is small and the generalization gap shrinks. Empirically 𝑑 𝜙 sits between 5 and 20 on the real-world setup, far below the worst-case dimension of 67. Second, the same mechanism yields automatic deferment in the limit. When a sensor is held out for an entire window, residual correlations involving that sensor are undefined, and any topology-proposed hyperedges involving it lack observed residual features at inference time. After the gating rule is applied, the feature vector contains no informative co-member residuals, so HCRN sets the correction to zero and leaves the linear estimate untouched. This is Lemma 11, and its empirical signature is the indistinguishable-from-zero 
+
+ΔMAE on whole-sensor missingness reported in Section 6.4. 13 Algorithm 1 MSHL (Multi-Scale Hypergraph Laplacian) 
+
+Require: Observations 𝑌 , mask 𝑀 , prior adjacency 𝐴 ; hyperparameters 𝜆 𝑆 , 𝜆 𝑇 , 𝜇 , 𝜆 𝐻 , 𝑆 max , 𝑞, 𝛼 (defaults in App. D). 
+
+Ensure: Imputed values b𝑋 full  
+
+> 𝑖,𝑡
+
+for (𝑖, 𝑡 ) ∈ Ω𝑐 .
+
+Stage 1: Discovery (linear backbone with structure learning)  
+
+> 1:
+
+Fit pairwise-only Tikhonov b𝑋 pw from (2) with 𝜆 𝐻 = 0; compute 𝑅 pw and b𝐶 via (14).  
+
+> 2:
+
+For each scale 𝑠 = 2, . . . , 𝑆 max , build 𝒞 𝑠 = 𝒞 top  
+
+> 𝑠
+
+∪ 𝒞 res  
+
+> 𝑠
+
+via (15)–(16).  
+
+> 3:
+
+Score each 𝑒 ∈ 𝒞 𝑠 via (33) ; calibrate 𝜏 (𝑠 ) 
+
+> Ψ
+
+, 𝜏 (𝑠 ) 
+
+> Φ
+
+via (34) ; accept 𝑒 if bΨ𝑒 > 𝜏 (𝑠 ) 
+
+> Ψ
+
+or bΦ𝑒 > 𝜏 (𝑠 ) 
+
+> Φ
+
+, with sigmoid weight b𝑤 𝑒 and per-scale cap 𝐽 max . Output bℋ . 
+
+> 4:
+
+Build ℒ𝐻 ( bℋ ) via (7); compute the linear estimator b𝑋 lin via (17). 
+
+Stage 2: Refinement (hypergraph-conditioned residual network)  
+
+> 5:
+
+Compute 𝑅 lin := 𝑀 ⊙ ( 𝑌 obs − b𝑋 lin ); build features 𝜙 𝑖,𝑡 via (19) ; train 𝑔 b𝜃 on observed cells via the Huber ERM in (22).  
+
+> 6:
+
+return b𝑋 full  
+
+> 𝑖,𝑡
+
+= b𝑋 lin  
+
+> 𝑖,𝑡
+
++ 𝛼 𝑔 b𝜃 (𝜙 𝑖,𝑡 ) for (𝑖, 𝑡 ) ∈ Ω𝑐 via (23) ; the correction is zero whenever 𝒩 𝐸,𝐾 (𝑖 ; bℋ )∩ Ω(𝑡 ) = ∅
+
+(Lem. 11). Third, the two stages compose. Combining the Discovery oracle bound of Theorem 5 with Corollary 2 yields the end-to-end excess-risk decomposition of Corollary 3, with three terms: an oracle Discovery cost, a Discovery-aware refinement gap, and a non-positive nonlinear-gain term. Better Discovery shrinks the first two terms at once, the precise sense in which Discovery and Refinement are coupled rather than additive. Algorithm 1 summarizes the full MSHL pipeline, combining the Discovery stage of Section 4 with the Refinement stage of this section. 
+
+## 6 Experiments 
+
+This section evaluates MSHL on PEMS-BAY and METR-LA across three missingness regimes and five missing rates, with comparison to five baselines drawn from four prior families. The evaluation protocol is identical for every method, so the comparison is apples-to-apples. Section 6.1 describes the setup, Section 6.2 reports the main comparison and per-regime analysis, Section 6.3 shows qualitative imputation, Section 6.4 reports sensitivity to MSHL hyperparameters, Section 6.5 ablates the design choices, and Section 6.6 verifies the numerical signatures of each theoretical claim. 
+
+6.1 Setup Datasets. PEMS-BAY (San Francisco Bay Area, 325 loop sensors at 5-minute resolution) and METR-LA (Los Angeles County, 207 loop sensors at 5-minute resolution) are the standard traffic-imputation benchmarks. Both datasets provide a sensor-distance matrix, which we convert to an adjacency 𝐴 via a Gaussian kernel with bandwidth set to the median pairwise distance. We use the 100 -sensor highest-degree subnetwork on each dataset to keep the sensor count comparable across datasets and to focus the evaluation on the most-connected core where structural methods have a chance to differentiate themselves. 
+
+Evaluation protocol. The full series ( 𝑇 max = 52 ,128 on PEMS-BAY, 𝑇 max = 34 ,272 on METR-LA) is partitioned into non-overlapping windows of length 𝑇 = 2016 (∼ 7 days at 5-min cadence), giving 25 evaluation windows on PEMS-BAY and 17 on METR-LA. Each (𝑝, window ) index draws a fresh missingness mask using a window-specific seed, and the same mask is shared across methods. Per-method MAE is averaged over windows. With one mask draw per window, the per-window seed std reported in the JSON is structurally 
+
+0; variability across the year is captured by the window dimension rather than by repeated seeds at one window. 
+
+Missingness regimes. Throughout the experimental sections we report results as a function of the per-cell, per-block, or per-sensor missing rate 𝑝 := 1 − 𝜋 ∈ [ 0, 1], where 𝜋 = E[𝑀 𝑖,𝑡 ] is the observation rate of the formal model in Section 3.1. We sweep 𝑝 ∈ { 0.1, 0.3, 0.5, 0.7, 0.9} and three regimes: cell-MAR (independent cell dropout), block-MAR ( 30 -min contiguous outages), and sensor-kriging (whole-sensor blackouts). Concretely, 14 cell-MAR drops each (𝑖, 𝑡 ) independently with probability 𝑝 ; block-MAR drops 6-step contiguous blocks at calibrated rate so that the total fraction of missing cells equals 𝑝 ; sensor-kriging drops each sensor row entirely with probability 𝑝 . The total number of evaluation conditions is 30 = 2 (datasets ) × 3 (regimes ) × 5 (rates ).The figures and tables report values of 𝑝 on the horizontal axis. 
+
+Hyperparameters. 𝜆 𝑆 = 1.0, 𝜆 𝑇 = 20 , 𝜇 = 0.02 , 𝜆 𝐻 = 2, scales {2, 3, 4, 5} (𝑆 max = 5), 𝜏 C,floor = 0.30 , 𝑞 = 0.95 ,
+
+𝐽 max = 20 . HCRN: hidden width 32, 𝑛 epochs = 30 , 𝛼 = 1, Huber 𝛿 𝐻 = 1. Selection is observation-only (Algorithm 1) and the corrector trains on observed cells only. The real-world sweeps in Table 1 use the 100-sensor highest-degree subnetwork with 𝑇 = 2016 windows and one mask draw per window, at these defaults. The hyperparameter sensitivity study (Section 6.4) sweeps each parameter around the same defaults on an auxiliary 𝑁 = 60 , 𝑇 = 576 setup with three random seeds. The component-ablation study (Section 6.5) uses the same 𝑁 = 60 , 𝑇 = 576 setup but with a smaller candidate budget ( 𝑆 max = 4, scales {2, 3, 4}, 𝐽 max = 5), which keeps the candidate pool small enough to isolate each component’s marginal contribution. 
+
+Baselines. We compare against five baselines drawn from four prior families. Sensor-mean imputes the time-mean of the corresponding sensor, or the global mean for sensor-kriging where the sensor has no observed history. kNN-spatial averages, for each held-out cell, the observed values of the 𝑘 = 5 nearest spatial neighbours at the same time, weighted by inverse distance. LETC [ 27 ] is a low-rank circulant tensor completion method, one of the strongest non-deep baselines. WDGTC [ 42 ] is the closest baseline in spirit to MSHL, combining a CP decomposition with a graph-Laplacian penalty. Tikh-graph is the pairwise-only ablation of MSHL, with 𝜆 𝐻 = 0 and HCRN disabled in (2) ; this is the apples-to-apples baseline that isolates the multi-scale hypergraph layer and HCRN. All baselines run at the same 25/17-window protocol with one mask per (𝑝, window ) shared across methods. Linear interpolation is excluded as it is degenerate on kriging. 
+
+6.2 Main comparison 
+
+Table 1 reports MAE across all 30 evaluation conditions. Per condition, bold marks the best method and underlining the second-best. Table 1: Performance Comparison Experiment Results. Bold marks the best method and underlined the second-best per condition. The shaded row is MSHL (our method).                                                                                                                                                                                                 
+
+> PEMS-BAY METR-LA Regime Method 𝑝 =0.1𝑝 =0.3𝑝 =0.5𝑝 =0.7𝑝 =0.9𝑝 =0.1𝑝 =0.3𝑝 =0.5𝑝 =0.7𝑝 =0.9
+> Cell-MAR
+> Sensor-mean 5.651 5.658 5.663 5.669 5.680 7.028 7.042 7.048 7.046 7.056 kNN-spatial 5.095 5.171 5.342 5.656 5.903 6.932 7.053 7.267 7.614 7.686 LETC 2.199 2.307 2.547 2.977 4.024 3.213 3.464 3.818 4.403 5.876 WDGTC 2.269 2.298 2.480 2.863 14.121 3.922 3.969 4.061 4.420 14.490 Tikh-graph 2.259 2.480 2.762 3.142 3.815 3.253 3.494 3.793 4.210 4.985 MSHL 1.840 2.124 2.454 2.845 3.815 2.775 3.061 3.408 3.921 4.985 Block-MAR
+> Sensor-mean 5.703 5.691 5.677 5.683 5.682 7.067 7.060 7.068 7.070 7.060 kNN-spatial 5.119 5.186 5.259 5.384 5.529 6.961 7.056 7.172 7.348 7.473 LETC 2.498 2.735 2.942 3.154 3.355 3.882 4.188 4.456 4.730 4.946 WDGTC 2.462 2.674 2.941 3.153 3.448 4.030 4.067 4.139 4.250 4.445 Tikh-graph 3.177 3.264 3.357 3.459 3.565 4.165 4.298 4.418 4.542 4.637
+> MSHL 2.451 2.659 2.826 2.995 3.142 3.376 3.583 3.788 3.983 4.208 Sensor-kriging
+> Sensor-mean 6.179 6.195 6.171 6.163 6.164 9.146 8.553 8.737 8.748 8.832 kNN-spatial 5.139 5.088 5.348 5.641 6.072 7.508 6.946 7.195 7.808 8.452 LETC 5.135 5.119 5.364 5.550 6.201 7.707 7.186 7.467 7.981 8.669 WDGTC 57.962 60.953 61.829 62.460 62.457 51.351 57.042 58.944 59.340 59.275 Tikh-graph 5.239 5.095 5.142 5.176 5.401 7.732 7.360 7.492 7.658 8.090 MSHL 5.230 5.090 5.136 5.162 5.397 7.725 7.355 7.488 7.655 8.090
+
+The three contributions of the paper each leave a distinct empirical signature on the grid. 
+
+Higher-order structure is identifiable, and it matters where the theory predicts. MSHL improves on Tikh-graph in 22 of 30 conditions, ties on the remaining 8 within 0.005 mph, and loses on none. The cleanest test is the apples-to-apples comparison: MSHL and Tikh-graph share the spatial-Tikhonov backbone and 15 the IPW correction, so only the multi-scale hypergraph layer and the corrector distinguish them. The improvement is largest exactly where Theorem 1 predicts, namely on contiguous block missingness at low 𝑝 :
+
+−19% MAE on METR-LA and −23% on PEMS-BAY at 𝑝 = 0.1. The mechanism is concrete. When group-level outages remove pairwise neighbours simultaneously, the pairwise penalty has nothing to smooth toward, but the hypergraph penalty aggregates the held-out cells of the same group into a coherent unit that can be inferred from surviving group members at other times. As 𝑝 grows, the per-pair joint observation rate shrinks, the residual signal becomes less informative, and the gap narrows monotonically without ever reversing, a quantitative match to the 𝜋 −2 rate of Theorem 4. 
+
+Deferment is the difference between graceful and catastrophic. Sensor-kriging is the regime where the second contribution shows up most cleanly. Every held-out sensor has no observed cells, so by Lemma 11 the corrector reduces to the identity and MSHL collapses to its linear backbone. The empirical signature is that MSHL ties Tikh-graph within 0.005 mph on six of ten kriging conditions and retains at most a 0.02 mph advantage on the others, all attributable to candidate hyperedges with partially-observed neighbours. The closest baseline in spirit, WDGTC, collapses on the same regime to a 51 to 62 mph global-mean estimate because its CP decomposition produces zero rows for fully-missing sensors and alternating optimization never escapes that fixed point. LETC recovers further but still trails kNN-spatial at the highest missing rates, because the missing spatial signal dominates the temporal smoothing pathway it provides. The difference is structural: tensor backbones cannot defer; MSHL is built to. 
+
+One configuration, no catastrophic regime. The third contribution claims regime robustness across a single hyperparameter setting, and the grid is structured to expose this with no per-condition tuning. WDGTC degrades sharply at 𝑝 = 0.9 on cell-MAR, exceeding 14 mph MAE on both datasets, where the alternating optimization no longer converges from random initialization; MSHL avoids this failure mode entirely by using a closed-form resolvent solve. LETC, the strongest non-graph baseline, trails MSHL on every cell-MAR and block-MAR condition, and the simple spatial baselines trail by margins of several mph. Tikh-graph is robust everywhere but trails MSHL on every condition where higher-order structure is genuinely present. The selector itself produces the empirical signature of Theorem 5: it saturates the per-scale candidate cap whenever the data admit structure, and the accepted-edge count drops monotonically with 𝑝 on kriging, an automatic ramp toward the pairwise-only fit. We do not claim universality beyond the evaluated grid; we claim that within it, every gain over Tikh-graph arises precisely where the theory says it should, and MSHL is the only method we tested without a catastrophic regime. 
+
+6.3 Qualitative behavior: imputation visualization 
+
+Figure 3 compares MSHL output to ground truth as 𝑁 × 𝑇 heatmaps for all 60 sensors over a 7-day window at 𝑝 = 0.5. On cell-MAR and block-MAR, the imputed heatmaps are visually indistinguishable from ground truth: the diurnal cycle, weekend slowdown, and rush-hour drops are preserved, with no horizontal stripes that would indicate per-sensor bias, no checkerboard texture that would indicate spatial over-smoothing, and no time-step artefacts. On sensor-kriging the held-out rows are visibly smoother and the sharp rush-hour drop is attenuated. This is the qualitative footprint of the deferment clause of Theorem 7: with no temporal observations of the held-out sensor, only the linear estimator’s Tikhonov projection onto the low-frequency modes of 𝐿 𝑆 is available, and high-frequency events are irreducibly attenuated. The smoothing is information loss, not method failure. 0d 1d 2d 3d 4d 5d 6d 7d                      
+
+> 1
+> 30
+> 60
+> Sensor
+> Ground Truth
+> 0d 1d 2d 3d 4d 5d 6d 7d
+> Cell-MAR
+> 0d 1d 2d 3d 4d 5d 6d 7d
+> Block-MAR
+> 0d 1d 2d 3d 4d 5d 6d 7d
+> Sensor-kriging
+> 40
+> 60
+> Speed
+
+Figure 3: MSHL output across regimes on PEMS-BAY, 𝑝 = 0.5, 7-day window, 𝑁 = 60 . Leftmost: ground-truth 𝑁 × 𝑇 heatmap. Right three: MSHL imputation under cell-MAR, block-MAR, and sensor-kriging on the same color scale (mph). Cell-MAR and block-MAR are visually indistinguishable from ground truth; sensor-kriging shows the smoother attenuation expected from the deferment clause of Theorem 7. 16 6.4 Sensitivity analysis 
+
+Figure 4 reports ΔMAE relative to the default for four MSHL hyperparameters on both datasets at 𝑝 = 0.5;Table 2 reports the corresponding absolute MAE. 0.1 
+
+> 0.5
+> 1
+> 2
+> 5
+> 10
+> 20
+
+
+
+> −0.1
+> 0.0
+> 0.1
+> MAE vs default
+
+a   
+
+> 0.85 0.9 0.95 0.99
+
+b
+
+> 5
+> 10
+> 20
+> 30
+> 50
+> 75
+> 100
+
+c    
+
+> 23456
+
+d   
+
+> Cell-MAR Block-MAR Sensor-kriging default value
+> (a) PEMS-BAY. 0.1
+> 0.5
+> 1
+> 2
+> 5
+> 10
+> 20
+
+
+
+> 0.0
+> 0.2
+> MAE vs default
+
+a   
+
+> 0.85 0.9 0.95 0.99
+
+b
+
+> 5
+> 10
+> 20
+> 30
+> 50
+> 75
+> 100
+
+c    
+
+> 23456
+
+d   
+
+> Cell-MAR Block-MAR Sensor-kriging default value
+> (b) METR-LA.
+
+Figure 4: Hyperparameter sensitivity at 𝑝 = 0.5. ΔMAE versus default; error bars are seed std and the gold band marks the default. Panels (a)-(d) sweep 𝜆 𝐻 , 𝑞 , 𝐽 max , and 𝑆 max around their defaults ( 2, 0.95 , 20 , 5). The quantile 𝑞 and 𝑆 max are essentially flat; 𝜆 𝐻 trends on cell-MAR and is flat on block-MAR, while 𝐽 max 
+
+trends on both cell-MAR and block-MAR; sensor-kriging is flat throughout, the empirical signature of HCRN deferment. Two of the four hyperparameters are essentially flat. The quantile threshold 𝑞 is flat across [0.85 , 0.95 ] and degrades mildly at 𝑞 = 0.99 on block-MAR, where Discovery becomes too conservative. The maximum scale 
+
+𝑆 max is flat for 𝑆 max ≥ 3: at 𝑆 max = 2 MSHL reduces to Tikh-graph and the small degradation reflects the loss of higher-order structure, and at 𝑆 max ≥ 5 the additional scales contribute nothing because the relevant interaction structure tops out at 𝑠 = 4 to 5 on these networks. The other two hyperparameters show smooth, mechanistically interpretable trends. The hypergraph weight 
+
+𝜆 𝐻 is flat on block-MAR and on sensor-kriging but increases monotonically on cell-MAR on both datasets, with a 0.17 mph spread on PEMS-BAY and 0.29 on METR-LA across 𝜆 𝐻 ∈ [ 0.1, 20 ]. The interpretation is straightforward: scattered cell-MAR missingness already has the pairwise structure it needs, and over-weighting the hypergraph term mildly over-smooths. The design regime where MSHL is most valuable is block-MAR, and there 𝜆 𝐻 = 2 sits in the middle of a flat region on both datasets. The candidate budget 𝐽 max 
+
+shows the opposite pattern. MAE decreases with 𝐽 max up to a regime- and dataset-dependent plateau: on PEMS-BAY the gain extends to 𝐽 max ≈ 50 (1.49 → 1.42 mph on block-MAR as the budget grows from 20 to 
+
+50 ), while on METR-LA the curve plateaus very close to 𝐽 max = 20 on both cell-MAR and block-MAR. The default 20 is therefore a practical compromise: relaxing further yields at most a small additional reduction on PEMS-BAY and essentially none on METR-LA, at the cost of a denser per-scale Laplacian and a higher effective feature dimension 𝑑 𝜙 ( bℋ ) ; tightening to 5 trades a comparable MAE increase on both datasets for a small compute saving. The trend itself is the empirical manifestation of the Discovery-Refinement coupling 17 Table 2: Sensitivity sweep at 𝑝 = 0.5. Bold marks the best value in each column for each parameter; the default value of each parameter is shaded .                                                                                                                                           
+
+> (a) PEMS-BAY
+> Parameter Value Cell-MAR Block-MAR Sensor-kriging
+> 𝜆 𝐻
+> 0.1 1.163 1.513 3.115 0.5 1.189 1.489 3.114 11.215 1.486 3.112 21.246 1.490 3.110 51.287 1.501 3.105 10 1.313 1.511 3.102 20 1.331 1.519 3.099
+> 𝑞
+> 0.85 1.292 1.507 3.081
+> 0.9 1.282 1.487 3.086 0.95 1.246 1.490 3.110 0.99 1.253 1.577 3.119
+> 𝐽 max
+> 51.303 1.589 3.114 10 1.263 1.550 3.114 20 1.246 1.490 3.110 30 1.233 1.451 3.103
+> 50 1.199 1.423 3.103
+> 75 1.198 1.421 3.103
+> 100 1.198 1.421 3.103
+> 𝑆 max
+> 21.260 1.579 3.116 31.235 1.510 3.115 41.230 1.494 3.111 51.246 1.490 3.110 61.247 1.491 3.108 (b) METR-LA
+> Parameter Value Cell-MAR Block-MAR Sensor-kriging
+> 𝜆 𝐻
+> 0.1 3.046 3.670 6.441 0.5 3.075 3.609 6.440 13.107 3.587 6.440 23.152 3.577 6.439
+> 53.227 3.584 6.441 10 3.287 3.602 6.444 20 3.344 3.623 6.449
+> 𝑞
+> 0.85 3.171 3.579 6.440 0.9 3.166 3.579 6.440 0.95 3.152 3.577 6.439
+> 0.99 3.144 3.684 6.440
+> 𝐽 max
+> 53.298 3.862 6.439
+> 10 3.213 3.721 6.439
+> 20 3.152 3.577 6.439
+> 30 3.167 3.555 6.439
+> 50 3.193 3.541 6.439
+> 75 3.193 3.541 6.439
+> 100 3.193 3.541 6.439
+> 𝑆 max
+> 23.191 3.666 6.441 33.121 3.597 6.440 43.140 3.548 6.439
+> 53.152 3.577 6.439
+> 63.191 3.584 6.440
+
+formalized by Corollary 3: more candidates expand the representational capacity of bℋ but enlarge 𝑑 𝜙 ( bℋ ) ,and the cost-benefit balance tilts in favour of more candidates up to roughly 20 to 50 on these networks. On all four panels for both datasets, the sensor-kriging bars sit at zero. This is the empirical signature of deferment proved in Lemma 11: when held-out sensors have no co-member residual features, the corrector reduces to the identity regardless of hyperparameter setting. The cell-MAR and block-MAR variation across the swept range is small enough that a single hyperparameter setting transfers across datasets and regimes without per-deployment retuning. The real-world evaluation accordingly uses 𝜆 𝐻 = 2, 𝑞 = 0.95 , 𝐽 max = 20 ,
+
+𝑆 max = 5, and 𝛼 = 1 across all 30 conditions. 
+
+6.5 Component ablation 
+
+Sensitivity establishes that no single hyperparameter is fragile. The ablation asks the complementary question: which architectural components are load-bearing? We remove the two-source candidate generator, the multi-scale construction, the threshold calibration, and the shrinkage scheme one at a time, on both datasets at 𝑝 = 0.5.The two-source candidate generator is the load-bearing choice. Removing the residual mechanism raises MAE by 5 to 10% on cell-MAR and block-MAR, because residual correlations carry higher-order content that prior topology cannot anticipate. Removing the topology mechanism is near-zero at this short window, since the residual side already covers the adjacency-derived candidates, but the two sources are not redundant in general: at the real-world budget they split the accepted hyperedges roughly evenly. Their disjunction, backed by the exponentially-separated recovery rates of Theorems 3 and 4, is what keeps Discovery robust across the deployment spectrum. The remaining components are confirmed sound but secondary. The multi-scale selector comes within a small margin of the best single fixed scale without oracle knowledge of which scale that is, the empirical counterpart of the Lepski guarantee of Theorem 5. Auto-calibration of the residual-correlation threshold matches hand-tuned fixed thresholds, and is precisely what lets one configuration transfer across datasets 18 both 
+
+> topo only
+> resid only
+
+Candidate sources 
+
+> 0.0
+> 0.1
+> MAE vs default
+
+a   
+
+> {2} {3} {4} {2,3}
+> {2,3,4}
+
+Scales 
+
+b
+
+> auto
+> 0.20
+> 0.50
+
+Threshold 
+
+c
+
+> on
+> off
+
+Sigmoid shrinkage 
+
+d   
+
+> Cell-MAR Block-MAR Sensor-kriging default variant
+
+(a) PEMS-BAY. both 
+
+> topo only
+> resid only
+
+Candidate sources 
+
+> 0.0
+> 0.2
+> MAE vs default
+
+a   
+
+> {2} {3} {4} {2,3}
+> {2,3,4}
+
+Scales 
+
+b
+
+> auto
+> 0.20
+> 0.50
+
+Threshold 
+
+c
+
+> on
+> off
+
+Sigmoid shrinkage 
+
+d   
+
+> Cell-MAR Block-MAR Sensor-kriging default variant
+
+(b) METR-LA. 
+
+Figure 5: Component ablation at 𝑝 = 0.5, 𝑁 = 60 , 𝑇 = 576 . Bars show ΔMAE relative to the default variant: (a) candidate-mechanism ablation, (b) multi-scale vs best single fixed scale, (c) threshold-calibration ablation, (d) shrinkage ablation. Kriging bars near zero throughout reflect deferment. Table 3: Component ablation MAE (mph) at 𝑝 = 0.5. Bold marks the best value in each column for each ablation; the full MSHL setting in each category is shaded . 
+
+PEMS-BAY METR-LA Ablation Variant Cell Block Krig Cell Block Krig Discovery source both 1.288 1.598 3.116 3.284 3.864 6.438 
+
+topology-only 1.363 1.750 3.115 3.505 4.170 6.441 residual-only-proxy 1.295 1.602 3.116 3.286 3.861 6.438 
+
+Scale set s=2 1.331 1.676 3.117 3.404 4.003 6.440 s=3 1.269 1.637 3.115 3.292 3.902 6.439 s=4 1.252 1.589 3.113 3.238 3.872 6.440 s=2,3 1.289 1.623 3.117 3.315 3.884 6.439 s=2,3,4 1.288 1.598 3.116 3.284 3.864 6.438 
+
+𝜏 𝐶 calibration auto 1.288 1.598 3.116 3.284 3.864 6.438 
+
+fixed-0.20 1.297 1.602 3.116 3.286 3.862 6.438 
+
+fixed-0.50 1.294 1.602 3.116 3.284 3.865 6.439 Shrinkage shrinkage-on 1.288 1.598 3.116 3.284 3.864 6.438 
+
+shrinkage-off 1.298 1.598 3.115 3.287 3.861 6.438 
+
+19 whose residual noise levels differ. Sigmoid shrinkage on hyperedge weights is marginal at this setup. Across every ablation panel the kriging bars sit near zero, the deferment signature once again. 
+
+6.6 Numerical signatures of the theorems 
+
+A final check moves from real data to a synthetic generator with planted hyperedges, where the ground-truth structure is known and each theoretical claim becomes a falsifiable prediction. 0.0 0.5 1.0             
+
+> 
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Empirical MSE
+> aT1: risk bound is affine in 
+> linear fit
+> empirical MSE
+> 23456
+> Hyperedge size
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Per-pair Dirichlet energy
+> b
+> Lemma 2: per-pair Dirichlet energy
+> constant pattern
+> random pattern
+> s=2 s=3 s=4 multi-scale
+> Scale
+> 0
+> 1
+> 2
+> 3
+> MAE (km/h)
+> cT4: per-scale risk vs multi-scale
+> PEMS-BAY
+> METR-LA
+> PEMS-BAY METR-LA
+> 0
+> 1
+> 2
+> 3
+> MAE (km/h)
+> gap = 0.028
+> gap = 0.048
+> dT5: adaptive vs best-fixed
+> best fixed scale
+> MSHL
+
+Figure 6: Numerical signatures of the MSHL theorems. (a) Theorem 2: empirical MSE is affine in 𝜎 2 with 
+
+𝑅 2 = 1.0000 . (b) Lemma 1: per-pair Dirichlet energy on a constant pattern equals 2/𝑠 to floating-point precision. (c) Theorem 5: per-scale risk versus multi-scale; the selector closely matches the best fixed scale on both datasets. (d) The adaptive-versus-best-fixed gap is well within the Lepski log 𝑆 max overhead. All four predictions hold. Empirical MSE is affine in the noise variance with 𝑅 2 = 1.0000 and the predicted slope, confirming the risk bound of Theorem 2. The per-pair Dirichlet energy of a constant pattern matches 
+
+2/𝑠 to floating-point precision, confirming that the scale-invariant weighting is unique (Lemma 1). The topology and residual signals recover planted hyperedges at exponentially-separated rates, with an empirical threshold separation of the same order as the predicted 𝜋 −( 𝑠 −2) ratio (Theorems 3, 4). The adaptive selector trails the best fixed scale by a margin well inside the Lepski overhead and an order of magnitude below the MSHL-versus-Tikh-graph gap on conditions where scale matters (Theorem 5). The end-to-end decomposition of Corollary 3 attributes almost all realized error to the estimation term, with the structural term vanishing and the approximation term small. This last result is also a diagnostic: in our regime the binding constraint is estimation, not structure discovery or nonlinear approximation, which tells us where further gains would have to come from. 
+
+## 7 Conclusion 
+
+We introduced MSHL, an adaptive structure-learning framework for spatiotemporal imputation built on a simple premise: what is missing from a sensor network is not structureless, but constrained by higher-order relations among what remains observed. MSHL makes this premise operational in two stages. Discovery learns a multi-scale hypergraph from incomplete data, combining prior network topology with data-adaptive residual correlations and choosing the operating scale by a criterion that uses observed cells alone. Refinement then adds a hypergraph-conditioned residual network that is safe by construction, improving the estimate where nonlinear structure is present and reducing to the linear estimate where it is not. The two stages are coupled rather than independent, so that better-targeted Discovery directly tightens the Refinement guarantee. The empirical study, spanning scattered, contiguous, and whole-sensor missingness across two real traffic networks, supports the central claim. MSHL improves on a pairwise-graph baseline wherever higher-order structure is identifiable and ties it otherwise, never underperforming, under a single hyperparameter configuration held fixed across every regime and rate. Where competing methods each have a regime in which they collapse, MSHL degrades gracefully: when no higher-order evidence survives the missingness, it defers to its linear backbone rather than fabricating structure the data cannot support. Graceful deferment, not peak accuracy on a favourable benchmark, is what makes an imputation method trustworthy in deployment. Several limitations point beyond the specific construction. The framework assumes missingness is ignorable, yet sensors often fail for reasons correlated with the signal itself: detectors saturate under the congestion 20 they are meant to measure, and instruments fail in the extreme conditions that matter most. Treating the missingness mechanism as itself informative, rather than as nuisance to be debiased away, is an open and consequential direction. A second limitation is by design rather than by oversight. MSHL keeps both the hypergraph selector and the per-scale weights non-learned, the selector so that its oracle guarantee holds and the weights so that scale-invariance is exact; the price is that no fixed criterion can discover structure it was not built to anticipate. Making the hypergraph and its scale weights end-to-end learnable would lift that ceiling, at the cost of the closed-form guarantees that make the current method safe to deploy untuned. The tension between a learnable structure module and a provable one is, we think, the central design question this work leaves open. More broadly, the deployment gap that motivates this work is not specific to traffic. Most imputation benchmarks still test uniform random dropout, and methods tuned to that protocol inherit a fragility that surfaces only in the field. Evaluation protocols shape the methods that get built, and benchmarks reflecting structured, regime-varying missingness would change what the field optimizes for. Finally, the two principles behind MSHL, that imputation should be structure discovery rather than blind matrix completion, and that a learned component should be admitted only when it cannot make things worse, are not tied to hypergraphs or to sensor networks. They form a template for combining structured priors with learned corrections wherever the cost of a confident wrong answer is high. The larger goal is imputation whose behavior stays predictable in exactly the conditions where today’s benchmarks are silent. 
+
+## References 
+
+[1] Berihun Fekade, Taras Maksymyuk, Maryan Kyryk, and Minho Jo. Probabilistic recovery of incomplete sensed data in iot. IEEE Internet of Things Journal , 5(4):2282–2292, 2017. [2] Xinyu Chen, Zhaocheng He, and Jiawei Wang. Spatial-temporal traffic speed patterns discovery and incomplete data recovery via svd-combined tensor decomposition. Transportation research part C: emerging technologies , 86:59–77, 2018. [3] Xiaopeng Li and Yanfeng Ouyang. Reliable sensor deployment for network traffic surveillance. 
+
+Transportation research part B: methodological , 45(1):218–231, 2011. [4] Mostafa Salari, Lina Kattan, William HK Lam, HP Lo, and Mohammad Ansari Esfeh. Optimization of traffic sensor location for complete link flow observability in traffic network considering sensor failure. 
+
+Transportation Research Part B: Methodological , 121:216–251, 2019. [5] Federico Battiston, Valerio Capraro, Fariba Karimi, Sune Lehmann, Andrea Bamberg Migliano, Onkar Sadekar, Angel Sánchez, and Matjaž Perc. Higher-order interactions shape collective human behaviour. 
+
+Nature Human Behaviour , pages 1–17, 2025. [6] Austin R Benson, David F Gleich, and Jure Leskovec. Higher-order organization of complex networks. 
+
+Science , 353(6295):163–166, 2016. [7] Jian Xu, Thanuka L Wickramarathne, and Nitesh V Chawla. Representing higher-order dependencies in networks. Science advances , 2(5):e1600028, 2016. [8] Xiao Jiang, Zean Tian, and Kenli Li. A graph-based approach for missing sensor data imputation. IEEE Sensors Journal , 21(20):23133–23144, 2021. [9] Xinyu Chen, Zhanhong Cheng, HanQin Cai, Nicolas Saunier, and Lĳun Sun. Laplacian convolutional representation for traffic time series imputation. IEEE Transactions on Knowledge and Data Engineering ,36(11):6490–6502, 2024. [10] Federico Battiston, Enrico Amico, Alain Barrat, Ginestra Bianconi, Guilherme Ferraz de Arruda, Benedetta Franceschiello, Iacopo Iacopini, Sonia Kéfi, Vito Latora, Yamir Moreno, et al. The physics of higher-order interactions in complex systems. Nature physics , 17(10):1093–1098, 2021. [11] Iacopo Iacopini, Márton Karsai, and Alain Barrat. The temporal dynamics of group interactions in higher-order social networks. Nature Communications , 15(1):7391, 2024. [12] Keshu Wu, Chenchen Kuai, Zihao Li, Jiwan Jiang, Shiyu Shen, Shian Wang, Chan-Wei Hu, Zhengzhong Tu, and Yang Zhou. Knowledge is not static: Order-aware hypergraph rag for language models. arXiv preprint arXiv:2604.12185 , 2026. [13] A Arun Prakash and Karthik K Srinivasan. Finding the most reliable strategy on stochastic and time-dependent transportation networks: A hypergraph based formulation. Networks and Spatial Economics ,17(3):809–840, 2017. 21 [14] Se-eun Yoon, Hyungseok Song, Kĳung Shin, and Yung Yi. How much and when do we need higher-order information in hypergraphs? a case study on hyperedge prediction. In Proceedings of the web conference 2020 , pages 2627–2633, 2020. [15] Peihao Wang, Shenghao Yang, Yunyu Liu, Zhangyang Wang, and Pan Li. Equivariant hypergraph diffusion neural operators. In The Eleventh International Conference on Learning Representations , 2023. [16] Keshu Wu, Yang Zhou, Haotian Shi, Dominique Lord, Bin Ran, and Xinyue Ye. Hypergraph-based motion generation with multi-modal interaction relational reasoning. Transportation Research Part C: Emerging Technologies , 180:105349, 2025. [17] Keshu Wu, Zihao Li, Sixu Li, Xinyue Ye, Dominique Lord, and Yang Zhou. Ai2-active safety: Ai-enabled interaction-aware active safety analysis with vehicle dynamics. arXiv preprint arXiv:2505.00322 , 2025. [18] Pulak Purkait, Tat-Jun Chin, Alireza Sadri, and David Suter. Clustering with hypergraphs: the case for large hyperedges. IEEE transactions on pattern analysis and machine intelligence , 39(9):1697–1711, 2016. [19] Mingxia Liu, Yue Gao, Pew-Thian Yap, and Dinggang Shen. Multi-hypergraph learning for incomplete multimodality data. IEEE journal of biomedical and health informatics , 22(4):1197–1208, 2017. [20] Karelia Pena-Pena, Lucas Taipe, Fuli Wang, Daniel L. Lau, and Gonzalo R. Arce. Learning hypergraphs tensor representations from data via t-hgsp. IEEE Transactions on Signal and Information Processing over Networks , 10:17–31, 2024. [21] Alessia Antelmi, Gennaro Cordasco, Mirko Polato, Vittorio Scarano, Carmine Spagnuolo, and Dingqi Yang. A survey on hypergraph representation learning. ACM Comput. Surv. , 56(1), August 2023. [22] Yaguang Li, Rose Yu, Cyrus Shahabi, and Yan Liu. Diffusion convolutional recurrent neural network: Data-driven traffic forecasting. In International Conference on Learning Representations (ICLR ’18) , 2018. [23] Ji Liu, Przemyslaw Musialski, Peter Wonka, and Jieping Ye. Tensor completion for estimating missing values in visual data. IEEE Transactions on Pattern Analysis and Machine Intelligence , 35(1):208–220, 2013. [24] Xinyu Chen and Lĳun Sun. Bayesian temporal factorization for multidimensional time series prediction. 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence , 44(9):4659–4673, 2022. [25] Xinyu Chen, Mengying Lei, Nicolas Saunier, and Lĳun Sun. Low-rank autoregressive tensor completion for spatiotemporal traffic data imputation. IEEE Transactions on Intelligent Transportation Systems ,23(8):12301–12310, 2022. [26] Xinyu Chen, Jinming Yang, and Lĳun Sun. A nonconvex low-rank tensor completion model for spatiotemporal traffic data imputation. Transportation Research Part C: Emerging Technologies , 117:102673, 2020. [27] Tong Nie, Guoyang Qin, Yunpeng Wang, and Jian Sun. Correlating sparse sensing for large-scale traffic speed estimation: A laplacian-enhanced low-rank tensor kriging approach. Transportation Research Part C: Emerging Technologies , 152:104190, 2023. [28] Andrea Cini, Ivan Marisca, and Cesare Alippi. Filling the g_ap_s: Multivariate time series imputation by graph neural networks. arXiv preprint arXiv:2108.00298 , 2021. [29] Yuankai Wu, Dingyi Zhuang, Aurelie Labbe, and Lĳun Sun. Inductive graph neural networks for spatiotemporal kriging. Proceedings of the AAAI Conference on Artificial Intelligence , 35(5):4478–4485, May 2021. [30] Wei Cao, Dong Wang, Jian Li, Hao Zhou, Lei Li, and Yitan Li. Brits: Bidirectional recurrent imputation for time series. In S. Bengio, H. Wallach, H. Larochelle, K. Grauman, N. Cesa-Bianchi, and R. Garnett, editors, Advances in Neural Information Processing Systems , volume 31. Curran Associates, Inc., 2018. [31] Wenjie Du, David Côté, and Yan Liu. Saits: Self-attention-based imputation for time series. Expert Systems with Applications , 219:119619, 2023. [32] Yusuke Tashiro, Jiaming Song, Yang Song, and Stefano Ermon. Csdi: Conditional score-based diffusion models for probabilistic time series imputation. In M. Ranzato, A. Beygelzimer, Y. Dauphin, P.S. Liang, and J. Wortman Vaughan, editors, Advances in Neural Information Processing Systems , volume 34, pages 24804–24816. Curran Associates, Inc., 2021. [33] Mingzhe Liu, Han Huang, Hao Feng, Leilei Sun, Bowen Du, and Yanjie Fu. Pristi: A conditional diffusion framework for spatiotemporal imputation. In 2023 IEEE 39th International Conference on Data Engineering (ICDE) , pages 1927–1939, 2023. 22 [34] Ivan Marisca, Andrea Cini, and Cesare Alippi. Learning to reconstruct missing data from spatiotemporal graphs with sparse observations. In S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh, editors, Advances in Neural Information Processing Systems , volume 35, pages 32069–32082. Curran Associates, Inc., 2022. [35] Rie Ando and Tong Zhang. Learning on graph with laplacian regularization. Advances in neural information processing systems , 19, 2006. [36] Ming Yin, Junbin Gao, and Zhouchen Lin. Laplacian regularized low-rank representation and its applications. IEEE transactions on pattern analysis and machine intelligence , 38(3):504–517, 2015. [37] Dengyong Zhou, Jiayuan Huang, and Bernhard Schölkopf. Learning with hypergraphs: Clustering, classification, and embedding. In B. Schölkopf, J. Platt, and T. Hoffman, editors, Advances in Neural Information Processing Systems , volume 19. MIT Press, 2006. [38] Yifan Feng, Haoxuan You, Zizhao Zhang, Rongrong Ji, and Yue Gao. Hypergraph neural networks. 
+
+Proceedings of the AAAI Conference on Artificial Intelligence , 33(01):3558–3565, Jul. 2019. [39] Naganand Yadati, Madhav Nimishakavi, Prateek Yadav, Vikram Nitin, Anand Louis, and Partha Talukdar. Hypergcn: A new method for training graph convolutional networks on hypergraphs. In H. Wallach, H. Larochelle, A. Beygelzimer, F. d 'Alché-Buc, E. Fox, and R. Garnett, editors, Advances in Neural Information Processing Systems , volume 32. Curran Associates, Inc., 2019. [40] Song Bai, Feihu Zhang, and Philip H.S. Torr. Hypergraph convolution and hypergraph attention. Pattern Recognition , 110:107637, 2021. [41] Eli Chien, Chao Pan, Jianhao Peng, and Olgica Milenkovic. You are allset: A multiset function framework for hypergraph neural networks. In International Conference on Learning Representations , 2022. [42] Ziyue Li, Nurettin Dorukhan Sergin, Hao Yan, Chen Zhang, and Fugee Tsung. Tensor completion for weakly-dependent data on graph for metro passenger flow prediction. Proceedings of the AAAI Conference on Artificial Intelligence , 34(04):4804–4810, Apr. 2020. [43] OV Lepskii. On a problem of adaptive estimation in gaussian white noise. Theory of Probability & Its Applications , 35(3):454–466, 1991. [44] A. B. Tsybakov. Introduction to Nonparametric Estimation . Springer, 2009. [45] Jerome H Friedman. Greedy function approximation: a gradient boosting machine. Annals of statistics ,pages 1189–1232, 2001. [46] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , June 2016. [47] Liqiao Xia, Yongshi Liang, Pai Zheng, and Xiao Huang. Residual-hypergraph convolution network: A model-based and data-driven integrated approach for fault diagnosis in complex equipment. IEEE Transactions on Instrumentation and Measurement , 72:1–11, 2023. [48] Jing Huang, Xiaolin Huang, and Jie Yang. Residual enhanced multi-hypergraph neural network. In 
+
+2021 IEEE International Conference on Image Processing (ICIP) , pages 3657–3661, 2021. [49] Peter Bartlett, Dylan J Foster, and Matus J Telgarsky. Spectrally-normalized margin bounds for neural networks. In I. Guyon, U. Von Luxburg, S. Bengio, H. Wallach, R. Fergus, S. Vishwanathan, and R. Garnett, editors, Advances in Neural Information Processing Systems , volume 30. Curran Associates, Inc., 2017. [50] Roman Vershynin. High-dimensional probability: An introduction with applications in data science , volume 47. Cambridge university press, 2018. 23 Appendix 
+
+The appendix is organized as follows. Appendix A provides a notations table for quick reference. Appendix B contains the IPW lemma and the hypergraph Dirichlet identity. Appendix C gives proofs of all theorems and lemmas in the main text, including the HCRN proofs (Appendix C.9). Appendix D records the algorithm, hyperparameters, and runtime. 
+
+## A Notation 
+
+Table 4 collects the symbols used throughout the paper and the appendix. 
+
+## B Foundations 
+
+B.1 The IPW lemma and its variance Lemma 2 (IPW debiasing under MAR) . Assume 𝑀 𝑖,𝑡 is independent of 𝜉 𝑖,𝑡 conditional on 𝑋 ∗ and E[𝑀 𝑖,𝑡 ] = 𝜋 𝑖,𝑡 > 0.For any fixed candidate value 𝑥 ∈ R,
+
+E
+
+ 𝑀 𝑖,𝑡 
+
+𝜋 𝑖,𝑡 
+
+ 𝑥 − 𝑌 obs 
+
+> 𝑖,𝑡
+
+2 𝑋 ∗
+
+
+
+= E
+
+h 𝑥 − 𝑋 ∗ 
+
+> 𝑖,𝑡
+
+− 𝜉 𝑖,𝑡 
+
+2 𝑋 ∗
+
+i
+
+.
+
+Consequently, the IPW empirical fidelity term is an unbiased estimate of the full-data squared-error fidelity. Proof. Since 𝑀 𝑖,𝑡 is independent of the observation noise conditional on 𝑋 ∗, and E[𝑀 𝑖,𝑡 | 𝑋 ∗] = 𝜋 𝑖,𝑡 ,
+
+E
+
+ 𝑀 𝑖,𝑡 
+
+𝜋 𝑖,𝑡 
+
+ 𝑥 − 𝑌 obs 
+
+> 𝑖,𝑡
+
+2 𝑋 ∗
+
+
+
+= 1
+
+𝜋 𝑖,𝑡 
+
+E[𝑀 𝑖,𝑡 | 𝑋 ∗] E
+
+h 𝑥 − 𝑋 ∗ 
+
+> 𝑖,𝑡
+
+− 𝜉 𝑖,𝑡 
+
+2 𝑋 ∗
+
+i
+
+.
+
+The prefactor equals one, giving the result. □
+
+Corollary 1 (IPW variance inflation) . If 𝜋 𝑖,𝑡 ≥ 𝜋 min > 0, then the variance contribution of the IPW weighted noise term is inflated by at most 1/𝜋 min relative to full observation. In particular, 
+
+Var 
+
+ 𝑀 𝑖,𝑡 
+
+𝜋 𝑖,𝑡 
+
+𝜉 𝑖,𝑡 
+
+
+
+≤ 𝜎 2
+
+𝜋 min 
+
+.
+
+Proof. Using E[𝜉 𝑖,𝑡 ] = 0, independence, and 𝑀 2 
+
+> 𝑖,𝑡
+
+= 𝑀 𝑖,𝑡 ,
+
+Var 
+
+ 𝑀 𝑖,𝑡 
+
+𝜋 𝑖,𝑡 
+
+𝜉 𝑖,𝑡 
+
+
+
+= E
+
+"
+
+𝑀 𝑖,𝑡 
+
+𝜋 2
+
+> 𝑖,𝑡
+
+𝜉 2
+
+> 𝑖,𝑡
+
+#
+
+≤ 1
+
+𝜋 𝑖,𝑡 
+
+𝜎 2 ≤ 𝜎 2
+
+𝜋 min 
+
+.
+
+□
+
+B.2 The hypergraph Dirichlet identity Lemma 3 (Per-edge Dirichlet identity) . For any 𝑋 ∈ R𝑁 ×𝑇 and any 𝑒 ⊆ [ 𝑁 ], ⟨𝑋, 𝐿 𝑒 𝑋 ⟩𝐹 = 2 |𝑒 |
+
+> 2
+
+ Var 𝑒 (𝑋 ) where 
+
+Var 𝑒 (𝑋 ) := 1
+
+> |𝑒 |
+
+Í𝑖 ∈𝑒 ∥𝑋 𝑖, : − ¯ 𝑋 𝑒, :∥22 is the within-𝑒 row variance averaged across timesteps. Proof. ⟨𝑋, 𝐿 𝑒 𝑋 ⟩𝐹 = |𝑒 | Í𝑖 ∈𝑒 ∥𝑋 𝑖, :∥2 − ∥ Í𝑖 ∈𝑒 𝑋 𝑖, :∥2 = |𝑒 | · | 𝑒 |Var 𝑒 (𝑋 ) = 2 |𝑒 |
+
+> 2
+
+Var 𝑒 (𝑋 ), using |𝑒 |2 = 2 |𝑒 |
+
+> 2
+
+ + | 𝑒 | and the algebraic identity |𝑒 | Í𝑖 ∥𝑋 𝑖, :∥2 − ∥ Í𝑖 𝑋 𝑖, :∥2 = Í𝑖 <𝑗 ∥𝑋 𝑖, : − 𝑋 𝑗, :∥2 =  |𝑒 |
+
+> 2
+
+· (mean pairwise sq-distance) 
+
+= 2 |𝑒 |
+
+> 2
+
+Var 𝑒 . □
+
+B.3 Resolvent solution of the IPW-Tikhonov estimator 
+
+The IPW-Tikhonov estimator b𝑋 (𝐿 𝑆 , 𝐿 𝑇 ) in (2) , and in particular the linear MSHL estimator b𝑋 lin in (17) , is the solution of a strictly convex quadratic program in 𝑋 and admits a closed-form resolvent expression. We record it once here; subsequent proofs in App. C.1 and App. C.8 refer back to this derivation. 24 Table 4: Notation used throughout the paper. 
+
+Symbol Meaning 
+
+Data and observations 
+
+𝑁 , 𝑇 number of sensors and timesteps 
+
+𝑋 ∗ ∈ R𝑁 ×𝑇 latent matrix to be recovered 
+
+𝑌 obs , 𝑌 ∈ R𝑁 ×𝑇 noisy observations and stored matrix 𝑌 = 𝑀 ⊙ 𝑌 obs 
+
+𝑀 ∈ { 0, 1}𝑁 ×𝑇 observation mask 
+
+𝜉 𝑖,𝑡 ∼ subG (𝜎 2) sub-Gaussian observation noise 
+
+Ω, Ω𝑐 observed and held-out positions 
+
+𝜋 𝑖,𝑡 , 𝜋 min per-cell observation rate and lower bound 
+
+𝜋 global observation rate 
+
+𝑝 regime-specific missing rate; 𝑝 = 1 − 𝜋 
+
+Spatial and temporal operators 
+
+𝐴 ∈ R𝑁 ×𝑁  
+
+> ≥0
+
+prior sensor adjacency 
+
+ℒ𝐺 = 𝐷 𝐴 − 𝐴 graph Laplacian of the prior 
+
+ℋ = Ð𝑠 ℋ𝑠 multi-scale hypergraph (size-𝑠 slice ℋ𝑠 )
+
+𝐿 𝑒 = |𝑒 |𝐼 𝑒 − 1𝑒 1⊤ 
+
+> 𝑒
+
+per-hyperedge Laplacian on 𝑒 ⊆ [ 𝑁 ]
+
+𝑤 𝑠 = 1/ 𝑠 
+
+> 2
+
+ scale-invariant weighting 
+
+ℒ𝐻 = Í𝑠 𝑤 𝑠 
+
+Í𝑒 ∈ℋ 𝑠 𝐿 𝑒 multi-scale hypergraph Laplacian 
+
+𝐿 𝑆 = ℒ𝐺 + 𝜆 𝐻 ℒ𝐻 combined spatial operator 
+
+𝐿 𝑇 ∈ R𝑇 ×𝑇 temporal (first-difference) Laplacian 
+
+Discovery quantities 
+
+b𝑋 pw , 𝑅 pw pairwise pre-fit and its observed-cell residual 
+
+b𝐶 ∈ R𝑁 ×𝑁 residual correlation matrix 
+
+𝒞 top  
+
+> 𝑠
+
+, 𝒞 res  
+
+> 𝑠
+
+, 𝒞 𝑠 topology, residual, and combined candidates at scale 𝑠 
+
+bΨ𝑒 , bΦ𝑒 structural scores (residual-correlation, leave-one-out MSE) 
+
+𝜏 (𝑠 ) 
+
+> Ψ
+
+, 𝜏 (𝑠 ) 
+
+> Φ
+
+per-scale acceptance thresholds 
+
+𝜌 (𝑠 − 2) per-scale complexity penalty 
+
+b𝑤 𝑒 ∈ ( 0, 1] sigmoid-shrinkage weight on accepted hyperedge 𝑒 𝐽 max per-scale cap on the number of accepted hyperedges 
+
+bℋ accepted multi-scale hypergraph 
+
+b𝑋 lin linear MSHL estimator using 𝐿 𝑆 ( bℋ ) 
+
+Refinement quantities 
+
+𝑅 lin = 𝑀 ⊙ ( 𝑌 obs − b𝑋 lin ) linear-stage residual on observed cells 
+
+𝒩 𝐸,𝐾 (𝑖 ; bℋ ) top 𝐸 hyperedges of 𝑖 , with 𝐾 co-members each ( 𝐸𝐾 slots total) 
+
+𝜙 𝑖,𝑡 ∈ R𝐹 corrector feature vector ( 𝐹 = 2𝐸𝐾 + 3)
+
+𝐸, 𝐾 max edges per sensor; max co-members per edge 
+
+𝑔 𝜃 : R𝐹 → R MLP corrector with parameter set 𝜃 ∈ Θ
+
+𝛿 𝐻 Huber threshold (mph) 
+
+𝛼 ∈ [ 0, 1] corrector gain 
+
+b𝜃 , 𝜃 ∗ ERM and population-optimal parameters 
+
+b𝑋 full full estimate b𝑋 lin + 𝛼 𝑔 b𝜃 (𝜙 ) on Ω𝑐 
+
+𝑑 𝜙 ( bℋ ) = E∥𝜙 𝑖,𝑡 ∥22 effective feature dimension 
+
+𝑛 tr number of training cells for the corrector 
+
+Risk and complexity quantities 
+
+ℛ( 𝜃 ), ℛ0 population risk; linear-only risk ( 𝜃 = 0)
+
+𝑑 ⊗ 
+
+> eff
+
+product effective dimension 
+
+𝔓 𝑠 (𝛿 ), 𝔊 𝜙 (𝛿 ) Discovery and Refinement overhead terms 
+
+25 First-order condition. Differentiating (2) with respect to 𝑋 and setting the gradient to zero gives, entrywise, 
+
+𝑀 𝑖,𝑡 
+
+𝜋 𝑖,𝑡 
+
+  b𝑋 𝑖,𝑡 − 𝑌 obs 
+
+> 𝑖,𝑡
+
+ + 𝜆 𝑆 (𝐿 𝑆 b𝑋 )𝑖,𝑡 + 𝜆 𝑇 (b𝑋𝐿 𝑇 )𝑖,𝑡 + 𝜇 b𝑋 𝑖,𝑡 = 0.
+
+The factor of 1/2 in (2) cancels the factor of 2 from the squared-loss derivative, so all terms appear with their natural coefficients. Rearranging and collecting the terms that depend on b𝑋 gives the matrix equation 
+
+𝜇 b𝑋 + 𝜆 𝑆 𝐿 𝑆 b𝑋 + 𝜆 𝑇 b𝑋𝐿 𝑇 + ( 𝑀 /𝜋 ) ⊙ b𝑋 = (𝑀 /𝜋 ) ⊙ 𝑌 obs . (25) 
+
+Vectorised resolvent. Let vec (·) stack columns (column-major). Using the standard identities vec (𝐿 𝑆 𝑋 ) =
+
+(𝐼 𝑇 ⊗ 𝐿 𝑆 )vec (𝑋 ) and vec (𝑋𝐿 𝑇 ) = (𝐿 ⊤ 
+
+> 𝑇
+
+⊗ 𝐼 𝑁 )vec (𝑋 ) = (𝐿 𝑇 ⊗ 𝐼 𝑁 )vec (𝑋 ) (since 𝐿 𝑇 = 𝐿 ⊤ 
+
+> 𝑇
+
+), and writing 𝐷 :=
+
+diag  vec (𝑀 /𝜋 ) ∈ R𝑁𝑇 ×𝑁𝑇 , the system (25) becomes 
+
+𝑅 vec (b𝑋 ) = vec  (𝑀 /𝜋 ) ⊙ 𝑌 obs  , 𝑅 := 𝜇 𝐼 𝑁𝑇 + 𝜆 𝑆 (𝐼 𝑇 ⊗ 𝐿 𝑆 ) + 𝜆 𝑇 (𝐿 𝑇 ⊗ 𝐼 𝑁 ) + 𝐷. (26) Since 𝐿 𝑆 , 𝐿 𝑇 ⪰ 0 and 𝐷 ⪰ 0, the operator 𝑅 satisfies 𝑅 ⪰ 𝜇 𝐼 𝑁𝑇 and is invertible whenever 𝜇 > 0. The closed-form solution is 
+
+vec (b𝑋 ) = 𝑅 −1 vec  (𝑀 /𝜋 ) ⊙ 𝑌 obs . (27) For the multi-scale linear estimator b𝑋 lin defined in (17) , 𝐿 𝑆 = ℒ𝐺 + 𝜆 𝐻 ℒ𝐻 ( bℋ ) , and b𝑋 lin is the corresponding instance of (27). 
+
+Joint eigenbasis. Both 𝐿 𝑆 and 𝐿 𝑇 are real symmetric, so they admit spectral decompositions 𝐿 𝑆 = Í𝑖 𝜆 𝑆 𝑖 𝑣 𝑖 𝑣 ⊤
+
+> 𝑖
+
+and 𝐿 𝑇 = Í𝑗 𝜇 𝑇 𝑗 𝑢 𝑗 𝑢 ⊤ 
+
+> 𝑗
+
+with orthonormal eigenvectors. The Kronecker-sum part of 𝑅 has joint eigenvectors 
+
+𝑢 𝑗 ⊗ 𝑣 𝑖 with eigenvalues 
+
+𝜔 𝑖𝑗 := 𝜇 + 𝜆 𝑆 𝜆 𝑆 𝑖 + 𝜆 𝑇 𝜇 𝑇 𝑗 , (28) that is, 𝜇 𝐼 + 𝜆 𝑆 (𝐼 𝑇 ⊗ 𝐿 𝑆 ) + 𝜆 𝑇 (𝐿 𝑇 ⊗ 𝐼 𝑁 )(𝑢 𝑗 ⊗ 𝑣 𝑖 ) = 𝜔 𝑖𝑗 (𝑢 𝑗 ⊗ 𝑣 𝑖 ). Under MAR, E[𝐷 ] = 𝐼 𝑁𝑇 , so the population resolvent becomes 𝑅 pop = (𝜇 + 1)𝐼 + 𝜆 𝑆 (𝐼 𝑇 ⊗ 𝐿 𝑆 ) + 𝜆 𝑇 (𝐿 𝑇 ⊗ 𝐼 𝑁 ). Throughout the rest of the appendix, we absorb the data offset +1 into 𝜇 (a constant rescaling of the ridge), so the population joint eigenvalue is also written as 𝜔 𝑖𝑗 .
+
+Bias-variance decomposition. Let 𝛼 𝑖𝑗 := ⟨𝑋 ∗ , 𝑣 𝑖 𝑢 ⊤ 
+
+> 𝑗
+
+⟩𝐹 and e𝜂 𝑖𝑗 := ⟨( 𝑀 /𝜋 ) ⊙ 𝜉 , 𝑣 𝑖 𝑢 ⊤ 
+
+> 𝑗
+
+⟩𝐹 be the projections of the latent matrix and the IPW-weighted noise onto the joint eigenbasis. Replacing 𝐷 by its expectation 𝐼 𝑁𝑇 in (26) and using E[( 𝑀 /𝜋 ) ⊙ 𝑌 obs ] = 𝑋 ∗ entrywise, the modewise solution is 
+
+b𝛼 𝑖𝑗 = 𝛼 𝑖𝑗 + e𝜂 𝑖𝑗 
+
+𝜔 𝑖𝑗 
+
+, Var (e𝜂 𝑖𝑗 ) ≤ 𝜎 2
+
+𝜋 min 
+
+(29) by Corollary 1. The error decomposes as 
+
+b𝛼 𝑖𝑗 − 𝛼 𝑖𝑗 = −
+
+
+
+1 − 1
+
+> 𝜔 𝑖𝑗
+
+
+
+𝛼 𝑖𝑗 + e𝜂 𝑖𝑗 
+
+𝜔 𝑖𝑗 
+
+,
+
+giving per-mode bias bounded by |𝛼 𝑖𝑗 | and per-mode variance bounded by 𝜎 2/( 𝜋 min 𝜔 2 
+
+> 𝑖𝑗
+
+). Summing over modes gives the risk bound used in Theorem 2. 
+
+## C Proofs 
+
+C.1 Risk bound (Theorem 2) 
+
+Proof of Theorem 2. The estimator (2) has the resolvent solution (27) (App. B.3). In the joint eigenbasis {𝑢 𝑗 ⊗ 𝑣 𝑖 },the bias-variance decomposition (29) gives E[( b𝛼 𝑖𝑗 − 𝛼 𝑖𝑗 )2] ≤ Bias 2 
+
+> 𝑖𝑗
+
++ 𝜎 2/( 𝜋 min 𝜔 2 
+
+> 𝑖𝑗
+
+) on each mode. Summing, 
+
+E∥b𝑋 − 𝑋 ∗∥2 
+
+> 𝐹
+
+≤ Bias 2(𝐿 𝑆 , 𝐿 𝑇 ; 𝑋 ∗) + 𝜎 2
+
+𝜋 min 
+
+Õ
+
+> 𝑖𝑗
+
+𝜔 −2 
+
+> 𝑖𝑗
+
+.
+
+Since 𝜔 𝑖𝑗 ≥ 𝜔 min := 𝜇 , Í𝑖𝑗 𝜔 −2 
+
+> 𝑖𝑗
+
+≤ 𝜔 −1min 
+
+Í𝑖𝑗 𝜔 −1 
+
+> 𝑖𝑗
+
+= 𝜇 −1 𝑑 ⊗
+
+> eff
+
+. Rescaling 𝜇 so that 𝜔 min ≥ 1 (a standard normalization that does not affect the rate) yields the displayed bound. □
+
+26 C.2 Scale-invariance lemma (Lemma 1) 
+
+We restate the lemma in slightly more general form: for any 𝑋 and any hyperedge 𝑒 of size 𝑠 = |𝑒 |, the per-pair-normalized quadratic form is 𝑤 𝑠 ⟨𝑋, 𝐿 𝑒 𝑋 ⟩𝐹 = 2 Var 𝑒 (𝑋 ), and the choice 𝑤 𝑠 = 1/ 𝑠 
+
+> 2
+
+ is the unique normalization (up to a global constant) that makes the per-pair Dirichlet energy independent of 𝑠 . The proof follows. 
+
+Proof of Lemma 1. By Lemma 3, 𝑤 𝑠 ⟨𝑋, 𝐿 𝑒 𝑋 ⟩ = 𝑤 𝑠 · 2 𝑠 
+
+> 2
+
+Var 𝑒 (𝑋 ) = 2Var 𝑒 (𝑋 ) when 𝑤 𝑠 = 1/ 𝑠 
+
+> 2
+
+, independent of 
+
+𝑠 . Therefore the per-pair Dirichlet contribution is constant across scales. Any other choice 𝑤 𝑠 = 𝑐 / 𝑠 
+
+> 2
+
+𝛼 with 
+
+𝛼 ≠ 1 produces 𝑤 𝑠 ⟨𝑋, 𝐿 𝑒 𝑋 ⟩ ∝  𝑠 
+
+> 2
+
+1−𝛼 , biasing selection toward larger ( 𝛼 < 1) or smaller ( 𝛼 > 1) scales. The choice 𝛼 = 1 (i.e. 𝑤 𝑠 = 1/ 𝑠 
+
+> 2
+
+) is the unique normalization. □
+
+C.3 Group-pattern separation (Theorem 1) 
+
+Proof. Let 𝑧 𝑒 ∈ R𝑁 denote the indicator vector of 𝑒 , i.e., (𝑧 𝑒 )𝑖 = 1[𝑖 ∈ 𝑒 ]. The group-conservation pattern can be written as 
+
+𝑋 ∗ = 𝑧 𝑒 𝑐 ⊤.
+
+For any symmetric spatial operator 𝐿 ∈ R𝑁 ×𝑁 ,
+
+⟨𝑋 ∗ , 𝐿𝑋 ∗⟩𝐹 = tr  (𝑋 ∗)⊤𝐿𝑋 ∗ = tr  𝑐𝑧 ⊤ 
+
+> 𝑒
+
+𝐿𝑧 𝑒 𝑐 ⊤ = (𝑧 ⊤ 
+
+> 𝑒
+
+𝐿𝑧 𝑒 ) tr (𝑐𝑐 ⊤) = ∥𝑐 ∥22 𝑧 ⊤ 
+
+> 𝑒
+
+𝐿𝑧 𝑒 .
+
+Thus it suffices to compute the scalar quadratic form of 𝑧 𝑒 under each spatial operator. First consider the graph Laplacian ℒ𝐺 = 𝐷 𝐴 − 𝐴 . Because 𝐴 is symmetric and nonnegative, 
+
+𝑧 ⊤ 
+
+> 𝑒
+
+ℒ𝐺 𝑧 𝑒 = 12
+
+> 𝑁
+
+Õ
+
+> 𝑖 =1
+> 𝑁
+
+Õ
+
+> 𝑗 =1
+
+𝐴 𝑖𝑗 
+
+ (𝑧 𝑒 )𝑖 − ( 𝑧 𝑒 )𝑗 
+
+2.
+
+The squared difference is zero when 𝑖 and 𝑗 are both inside 𝑒 or both outside 𝑒 , and it is one when exactly one of 𝑖, 𝑗 belongs to 𝑒 . Therefore only graph edges crossing the boundary of 𝑒 contribute: 
+
+𝑧 ⊤ 
+
+> 𝑒
+
+ℒ𝐺 𝑧 𝑒 = 12
+
+©«Õ
+
+> 𝑖 ∈𝑒, 𝑗 ∉𝑒
+
+𝐴 𝑖𝑗 +
+
+Õ
+
+> 𝑖 ∉𝑒, 𝑗 ∈𝑒
+
+𝐴 𝑖𝑗 
+
+ª®¬
+
+.
+
+By symmetry of 𝐴 , the two sums are equal. Hence 
+
+𝑧 ⊤ 
+
+> 𝑒
+
+ℒ𝐺 𝑧 𝑒 =
+
+Õ
+
+> 𝑖 ∈𝑒, 𝑗 ∉𝑒
+
+𝐴 𝑖𝑗 ,
+
+and consequently 
+
+⟨𝑋 ∗ , ℒ𝐺 𝑋 ∗⟩𝐹 = ∥𝑐 ∥22
+
+Õ
+
+> 𝑖 ∈𝑒, 𝑗 ∉𝑒
+
+𝐴 𝑖𝑗 .
+
+Next consider the per-edge Laplacian 𝐿 𝑒 = |𝑒 |𝐼 𝑒 − 11 ⊤. Restricted to the coordinates in 𝑒 , the vector 𝑧 𝑒 is the all-ones vector. Therefore 
+
+𝐿 𝑒 𝑧 𝑒 =  |𝑒 |𝐼 𝑒 − 11 ⊤ 1 = |𝑒 |1 − | 𝑒 |1 = 0.
+
+Since 𝐿 𝑒 is zero outside the coordinates of 𝑒 , this identity holds for the embedded operator as well. Thus 
+
+𝑧 ⊤ 
+
+> 𝑒
+
+𝐿 𝑒 𝑧 𝑒 = 0, ⟨𝑋 ∗ , 𝐿 𝑒 𝑋 ∗⟩𝐹 = 0.
+
+This proves that the hyperedge 𝑒 itself assigns no within-group penalty to the group-constant pattern. It remains to compute the contribution of the full multi-scale hypergraph. Fix any hyperedge 𝑒 ′ ∈ ℋ 𝑠 and let 
+
+𝑚 𝑒 ′ := |𝑒 ′ ∩ 𝑒 |.
+
+Restricted to the coordinates in 𝑒 ′, the vector 𝑧 𝑒 contains 𝑚 𝑒 ′ ones and 𝑠 − 𝑚 𝑒 ′ zeros. Using 𝐿 𝑒 ′ = 𝑠𝐼 𝑒 ′ − 11 ⊤,we have 
+
+𝑧 ⊤ 
+
+> 𝑒
+
+𝐿 𝑒 ′ 𝑧 𝑒 = 𝑠 
+
+Õ
+
+> 𝑖 ∈𝑒 ′
+
+(𝑧 𝑒 )2 
+
+> 𝑖
+
+−
+
+Õ
+
+> 𝑖 ∈𝑒 ′
+
+(𝑧 𝑒 )𝑖 
+
+!2
+
+.
+
+27 Because (𝑧 𝑒 )𝑖 ∈ { 0, 1}, Õ
+
+> 𝑖 ∈𝑒 ′
+
+(𝑧 𝑒 )2 
+
+> 𝑖
+
+= 𝑚 𝑒 ′ ,
+
+Õ
+
+> 𝑖 ∈𝑒 ′
+
+(𝑧 𝑒 )𝑖 = 𝑚 𝑒 ′ .
+
+Therefore 
+
+𝑧 ⊤ 
+
+> 𝑒
+
+𝐿 𝑒 ′ 𝑧 𝑒 = 𝑠 𝑚 𝑒 ′ − 𝑚 2 
+
+> 𝑒 ′
+
+= 𝑚 𝑒 ′ (𝑠 − 𝑚 𝑒 ′ ).
+
+Multiplying by the scale normalization 𝑤 𝑠 and summing over all scales gives 
+
+𝑧 ⊤ 
+
+> 𝑒
+
+ℒ𝐻 𝑧 𝑒 =
+
+> 𝑆 max
+
+Õ
+
+> 𝑠 =2
+
+Õ
+
+> 𝑒 ′∈ℋ 𝑠
+
+𝑤 𝑠 𝑚 𝑒 ′ (𝑠 − 𝑚 𝑒 ′ ).
+
+Using the first identity in the proof, 
+
+⟨𝑋 ∗ , ℒ𝐻 𝑋 ∗⟩𝐹 = ∥𝑐 ∥22
+
+> 𝑆 max
+
+Õ
+
+> 𝑠 =2
+
+Õ
+
+> 𝑒 ′∈ℋ 𝑠
+
+𝑤 𝑠 |𝑒 ′ ∩ 𝑒 |  𝑠 − | 𝑒 ′ ∩ 𝑒 |.
+
+This expression has a simple interpretation. If 𝑒 ′ is disjoint from 𝑒 , then |𝑒 ′ ∩ 𝑒 | = 0 and the term is zero. If 
+
+𝑒 ′ ⊆ 𝑒 , then |𝑒 ′ ∩ 𝑒 | = 𝑠 and the term is also zero. Thus only hyperedges that partially overlap 𝑒 contribute to the hypergraph energy. Consequently, whenever 
+
+> 𝑆 max
+
+Õ
+
+> 𝑠 =2
+
+Õ
+
+> 𝑒 ′∈ℋ 𝑠
+
+𝑤 𝑠 |𝑒 ′ ∩ 𝑒 |  𝑠 − | 𝑒 ′ ∩ 𝑒 | <
+
+Õ
+
+> 𝑖 ∈𝑒, 𝑗 ∉𝑒
+
+𝐴 𝑖𝑗 ,
+
+we obtain 
+
+⟨𝑋 ∗ , ℒ𝐻 𝑋 ∗⟩𝐹 < ⟨𝑋 ∗ , ℒ𝐺 𝑋 ∗⟩𝐹 .
+
+Hence the multi-scale hypergraph Laplacian assigns strictly smaller regularization cost than the graph Laplacian to this group-conservation pattern under the stated overlap condition. This proves the theorem. □
+
+C.4 Topology recovery (Theorem 3) 
+
+Proof of Theorem 3 (topology source). We give the full argument in three steps. 
+
+Step 1: Population score gap. Fix a candidate 𝑒 ∈ 𝒞 top  
+
+> 𝑠
+
+. The leave-one-out (LOO) score bΦ𝑒 in (33) measures, for each 𝑖 ∈ 𝑒 , the MSE-improvement on 𝑅 pw  
+
+> 𝑖,𝑡
+
+when the partial regularizer 𝐿 𝑒 is added at 𝑖 versus omitted. Under the latent-factor model (Assumption 3), the population residual at 𝑖 ∈ 𝑆 ∗ is 
+
+E[𝑟 𝑖,𝑡 | 𝑢 ∗ 
+
+> 𝑡
+
+] = (1 − 𝜅 𝑖 )𝛽 ∗ 
+
+> 𝑖
+
+𝑢 ∗ 
+
+> 𝑡
+
+,
+
+where 𝜅 𝑖 ∈ ( 0, 1) is the pairwise-Tikhonov shrinkage factor at 𝑖 . For 𝑒 = 𝑆 ∗, the LOO improvement at any 
+
+𝑖 ∈ 𝑆 ∗ has population value 
+
+EΦ(𝑖 ) 
+
+> 𝑒
+
+= Var  (1 − 𝜅 𝑖 )𝛽 ∗ 
+
+> 𝑖
+
+𝑢 ∗
+
+> 𝑡
+
+ − Var  (1 − 𝜅 𝑖 )𝛽 ∗ 
+
+> 𝑖
+
+𝑢 ∗ 
+
+> 𝑡
+
+− b𝑢 (𝑒 \{ 𝑖 }) 
+
+> 𝑡
+
+ ,
+
+where b𝑢 (𝑒 \{ 𝑖 })  
+
+> 𝑡
+
+is the LOO predictor of the latent factor from 𝑒 \ { 𝑖 }. Provided the regression of 𝑢 ∗ on {𝑟 𝑗 }𝑗 ∈𝑒 \{ 𝑖 }
+
+has variance reduction at least 𝜌 ∗ 
+
+> fac
+
+∈ ( 0, 1] (Assumption 3, the LOO factor-recovery rate), we have 
+
+EΦ𝑒 = 1
+
+> |𝑒 |
+
+Õ
+
+> 𝑖 ∈𝑒
+
+EΦ(𝑖 ) 
+
+> 𝑒
+
+≥ 𝜌 ∗
+
+> fac
+
+𝛽 ∗2 Var (𝑢 ∗ 
+
+> 𝑡
+
+) =: Δ∗
+
+> Φ
+
+.
+
+For 𝑒 ∉ ℋ ∗, b𝑢 (𝑒 \{ 𝑖 })  
+
+> 𝑡
+
+is a regression on noise (no latent-factor signal), giving EΦ𝑒 = 𝑂 (𝜎 2/𝑇 ) = 𝑜 (1).
+
+Step 2: Sample-complexity bound. The LOO score requires joint observation of all 𝑠 members of 𝑒 at each used time. Under MAR with rate 𝜋 ,
+
+E[| Ω(𝑒 )|] = 𝜋 |𝑒 |𝑇, |Ω(𝑒 )| ≥ 𝜋 |𝑒 |𝑇 /2 w.p. ≥ 1 − 2 exp (− 𝜋 |𝑒 |𝑇 /8),
+
+by Chernoff. On the high-probability event {| Ω(𝑒 )| ≥ 𝜋 𝑠 𝑇 /2}, the LOO MSE-improvement bΦ𝑒 is a bounded function of independent sub-Gaussian residuals; by a Hoeffding-type concentration, 
+
+Pr |bΦ𝑒 − EΦ𝑒 | > 𝑡  ≤ 2 exp  −𝑐 𝑡 2 𝜋 𝑠 𝑇 /𝜎 4 ,
+
+28 with 𝑐 an absolute constant depending on the Lipschitz constant of the LOO operator. Setting 𝑡 = Δ ∗
+
+> Φ
+
+/2 and union-bounding over |𝒞 top  
+
+> 𝑠
+
+| ≤ 𝑁  𝑁 −1
+
+> 𝑠 −1
+
+ ≤ 𝑁 𝑠 candidates, 
+
+Pr ∃𝑒 ∈ 𝒞 top  
+
+> 𝑠
+
+: |bΦ𝑒 − EΦ𝑒 | > Δ∗
+
+> Φ
+
+/2 ≤ 2𝑁 𝑠 exp (− 𝑐 (Δ∗
+
+> Φ
+
+)2𝜋 𝑠 𝑇 /4𝜎 4).
+
+This is ≤ 𝛿 as long as 𝑇 ≥ 4𝜎 4 log (2𝑁 𝑠 /𝛿 )/( 𝑐 (Δ∗
+
+> Φ
+
+)2𝜋 𝑠 ).
+
+Step 3: Identification. On the resulting 1 − 𝛿 event, bΦ𝑆 ∗ ≥ Δ∗ 
+
+> Φ
+
+− Δ∗
+
+> Φ
+
+/2 = Δ ∗
+
+> Φ
+
+/2, while bΦ𝑒 ≤ Δ∗
+
+> Φ
+
+/2 for every 
+
+𝑒 ∉ ℋ ∗. The acceptance rule in (34) with threshold 𝜏 (𝑠 ) 
+
+> Φ
+
+≍ Δ∗
+
+> Φ
+
+/2 therefore identifies 𝑆 ∗ if and only if it is in ℋ ∗,completing the proof. □
+
+C.5 Residual recovery (Theorem 4) 
+
+Proof of Theorem 4 (residual source). We give the full argument in three steps. 
+
+Step 1: Population correlation gap. The pairwise-only Tikhonov estimator b𝑋 pw is the linear smoother given by (27) with 𝜆 𝐻 = 0 (App. B.3). The smoother contracts the latent 𝑋 ∗ along the eigenmodes of ℒ𝐺 and 𝐿 𝑇 . A common-mode latent factor 𝑢 ∗ shared across 𝑆 ∗ projects onto the high-frequency spatial modes of ℒ𝐺 , since members of 𝑆 ∗ are not necessarily pairwise-adjacent in 𝐴 , so the smoother’s contraction at those modes is at most 𝜅 ∗ < 1. Hence the population residual at 𝑖 ∈ 𝑆 ∗ satisfies 
+
+E[𝑟 pw  
+
+> 𝑖,𝑡
+
+| 𝑢 ∗ 
+
+> 𝑡
+
+] = (1 − 𝜅 𝑖 )𝛽 ∗ 
+
+> 𝑖
+
+𝑢 ∗ 
+
+> 𝑡
+
+, 𝜅 𝑖 ∈ ( 0, 𝜅 ∗).
+
+For 𝑖, 𝑗 ∈ 𝑆 ∗ with 𝛽 ∗ 
+
+> 𝑖
+
+, 𝛽 ∗ 
+
+> 𝑗
+
+≠ 0,
+
+E[𝑟 pw  
+
+> 𝑖
+
+𝑟 pw  
+
+> 𝑗
+
+] = (1 − 𝜅 𝑖 )( 1 − 𝜅 𝑗 )𝛽 ∗ 
+
+> 𝑖
+
+𝛽 ∗ 
+
+> 𝑗
+
+Var (𝑢 ∗ 
+
+> 𝑡
+
+) > 0,
+
+while for 𝑖 ∈ 𝑆 ∗, 𝑗 ∉ 𝑆 ∗ (and not jointly correlated through any other latent factor), E[𝑟 pw  
+
+> 𝑖
+
+𝑟 pw  
+
+> 𝑗
+
+] = 0. Define the correlation gap 
+
+𝛾 := min  
+
+> 𝑖,𝑗 ∈𝑆 ∗
+
+|E𝐶 𝑖𝑗 | − max   
+
+> 𝑖 ∈𝑆 ∗,𝑗 ∉𝑆 ∗
+
+|E𝐶 𝑖𝑗 | > 0,
+
+where the population correlation E𝐶 𝑖𝑗 := E[𝑟 pw  
+
+> 𝑖
+
+𝑟 pw  
+
+> 𝑗
+
+]/ 
+
+q
+
+E[𝑟 pw ,2 
+
+> 𝑖
+
+]E[𝑟 pw ,2 
+
+> 𝑗
+
+].
+
+Step 2: Per-pair concentration. The empirical correlation b𝐶 𝑖𝑗 in (14) averages over jointly-observed cells Ω𝑖𝑗 .Under MAR, |Ω𝑖𝑗 | ≥ 𝜋 2𝑇 /2 with probability ≥ 1 − 2 exp (− 𝜋 2𝑇 /8) by Chernoff. On this event, by the standard sub-Gaussian concentration of normalized inner products of independent sub-Gaussian variables (e.g., [ 50 ], Theorem 4.4.5), 
+
+Pr |b𝐶 𝑖𝑗 − E𝐶 𝑖𝑗 | > 𝑡 | | Ω𝑖𝑗 | ≥ 𝜋 2𝑇 /2 ≤ 2 exp (− 𝑐 𝜋 2𝑇𝑡 2),
+
+with 𝑐 an absolute constant depending on the sub-Gaussian proxy of 𝑟 pw . Union-bounding over  𝑁 
+
+> 2
+
+ ≤ 𝑁 2/2
+
+pairs and combining with the Chernoff event: 
+
+Pr ∃𝑖, 𝑗 : |b𝐶 𝑖𝑗 − E𝐶 𝑖𝑗 | > 𝑡  ≤ 𝑁 2 exp (− 𝑐 𝜋 2𝑇𝑡 2) + 𝑁 2 · 2𝑒 −𝜋 2𝑇 /8.
+
+Step 3: Identification. Setting 𝑡 = 𝛾 /2 and requiring both terms ≤ 𝛿 /2 gives 
+
+𝑇 ≥ 4 log (2𝑁 2/𝛿 )
+
+𝑐 𝜋 2 𝛾 2 ∨ 8 log (4𝑁 2/𝛿 )
+
+𝜋 2 .
+
+On this event, min 𝑖,𝑗 ∈𝑆 ∗ |b𝐶 𝑖𝑗 | ≥ min 𝑖,𝑗 ∈𝑆 ∗ |E𝐶 𝑖𝑗 | − 𝛾 /2, while max 𝑖 ∈𝑆 ∗ ,𝑗 ∉𝑆 ∗ |b𝐶 𝑖𝑗 | ≤ max 𝑖 ∈𝑆 ∗ ,𝑗 ∉𝑆 ∗ |E𝐶 𝑖𝑗 | + 𝛾 /2. The two are separated by at least 𝛾 /2, and the residual-source candidate generation in (16) with threshold 
+
+𝜏 𝐶 ∈ [ max 𝑖 ∉𝑆 ∗ ,𝑗 |E𝐶 𝑖𝑗 | + 𝛾 /4, min 𝑖,𝑗 ∈𝑆 ∗ |E𝐶 𝑖𝑗 | − 𝛾 /4] identifies 𝑆 ∗ exactly. □
+
+C.6 Per-scale concentration of structural scores (Lemma 4) Lemma 4 (Per-scale concentration) . Under MAR with sub-Gaussian noise, with probability ≥ 1 − 𝛿 , uniformly over 
+
+𝑒 ∈ 𝒞 𝑠 ,
+
+bΨ𝑒 − EΨ𝑒 = 𝑂 ©«s𝑠 
+
+2
+
+ log (𝑁 2|𝒞 |/ 𝛿 )
+
+> 𝜋 2𝑇
+
+ª®¬
+
+, bΦ𝑒 − EΦ𝑒 = 𝑂 
+
+
+
+𝜎 2
+
+q log (|𝒞 |/ 𝛿 ) 
+
+> 𝜋 𝑠 𝑇
+
+
+
+.
+
+29 Proof of Lemma 4. bΨ𝑒 rate. By definition, bΨ𝑒 =  𝑠 
+
+> 2
+
+−1 Í{𝑖,𝑗 }⊆ 𝑒 |b𝐶 𝑖𝑗 |. Each summand is the absolute empirical correlation of a pair, with concentration rate |b𝐶 𝑖𝑗 − E𝐶 𝑖𝑗 | ≤ 𝑐 0
+
+plog (𝑁 2/𝛿 )/( 𝜋 2𝑇 ) uniformly over 𝑖, 𝑗 with probability ≥ 1 − 𝛿 /2 (proven in App. C.5, Step 2). The map 𝐶 ↦ → | 𝐶 | is 1-Lipschitz, so the per-pair fluctuation transfers to |b𝐶 𝑖𝑗 |. By the triangle inequality, 
+
+|bΨ𝑒 − EΨ𝑒 | ≤ 
+
+𝑠 
+
+2
+
+−1 Õ
+
+> {𝑖,𝑗 }⊆ 𝑒
+
+|b𝐶 𝑖𝑗 | − | E𝐶 𝑖𝑗 | ≤ 𝑐 0
+
+r log (𝑁 2/𝛿 )
+
+𝜋 2𝑇 .
+
+Union-bounding over |𝒞 𝑠 | ≤ 𝑁  𝑁 −1
+
+> 𝑠 −1
+
+ ≤ 𝑁 𝑠 candidates per scale, and over 𝑆 max − 1 ≤ 𝑆 max scales, 
+
+Pr ∃𝑠, 𝑒 ∈ 𝒞 𝑠 : |bΨ𝑒 − EΨ𝑒 | > 𝑡  ≤ 𝑁 𝑆 max 𝑆 max · 2 exp (− 𝑐 −20 𝑡 2𝜋 2𝑇 ).
+
+Setting RHS ≤ 𝛿 /2 and solving for 𝑡 gives, after grouping all log terms, 
+
+|bΨ𝑒 − EΨ𝑒 | = 𝑂 
+
+r log (𝑁 2|𝒞 |/ 𝛿 )
+
+𝜋 2𝑇 
+
+!
+
+= 𝑂 ©«s𝑠 
+
+2
+
+ log (𝑁 2|𝒞 |/ 𝛿 )
+
+𝜋 2𝑇 
+
+ª®¬
+
+,
+
+where the last step inserts a 
+
+q 𝑠 
+
+> 2
+
+ slack factor that allows the bound to be stated uniformly across scales with the per-scale complexity penalty 𝜌 (𝑠 − 2) in (34). 
+
+bΦ𝑒 rate. bΦ𝑒 is the LOO MSE-improvement on |Ω(𝑒 )| ≍ 𝜋 𝑠 𝑇 jointly-observed cells. By the Hoeffding-type concentration in App. C.4, Step 2, with probability ≥ 1 − 𝛿 /2 uniformly over 𝑒 ∈ 𝒞 ,
+
+|bΦ𝑒 − EΦ𝑒 | ≤ 𝑐 1 𝜎 2
+
+r log (|𝒞 |/ 𝛿 )
+
+𝜋 𝑠 𝑇 .
+
+The two rates bΨ𝑒 at 𝜋 −2 and bΦ𝑒 at 𝜋 −𝑠 are precisely the rates inherited from the recovery theorems: each source’s score concentrates at the rate at which the source identifies 𝑆 ∗. □
+
+C.7 Best-scale adaptation (Theorem 5) 
+
+The proof avoids assuming that the risk is monotone in scale. Instead, it uses three ingredients: uniform concentration of the structural scores, a complexity penalty over scales, and stability of the Tikhonov estimator with respect to perturbations of the spatial operator. 
+
+Lemma 5 (Tikhonov stability under spatial-operator perturbations) . Let 
+
+𝐿 𝑆 = ℒ𝐺 + 𝜆 𝐻 ℒ𝐻 , 𝐿 ′ 
+
+> 𝑆
+
+= ℒ𝐺 + 𝜆 𝐻 ℒ′ 
+
+> 𝐻
+
+,
+
+and let b𝑋 (𝐿 𝑆 , 𝐿 𝑇 ) and b𝑋 (𝐿 ′ 
+
+> 𝑆
+
+, 𝐿 𝑇 ) be the corresponding IPW-Tikhonov estimators. If 𝜇 > 0, then 
+
+∥b𝑋 (𝐿 𝑆 , 𝐿 𝑇 ) − b𝑋 (𝐿 ′ 
+
+> 𝑆
+
+, 𝐿 𝑇 )∥ 𝐹 ≤ 𝜆 𝐻 
+
+𝜇 ∥ℒ 𝐻 − ℒ ′ 
+
+> 𝐻
+
+∥op ∥b𝑋 (𝐿 ′ 
+
+> 𝑆
+
+, 𝐿 𝑇 )∥ 𝐹 .
+
+Consequently, the squared-error risk changes by at most a constant multiple of ∥ℒ 𝐻 − ℒ ′ 
+
+> 𝐻
+
+∥op , with the constant depending on 𝜇 , 𝜆 𝐻 , ∥𝑋 ∗∥𝐹 , and the noise level. Proof. Let 𝑅 and 𝑅 ′ be the normal-equation operators corresponding to 𝐿 𝑆 and 𝐿 ′
+
+> 𝑆
+
+. Both satisfy 
+
+𝜆 min (𝑅 ), 𝜆 min (𝑅 ′) ≥ 𝜇 because of the ridge term. The resolvent identity gives 
+
+𝑅 −1 − 𝑅 ′− 1 = 𝑅 −1(𝑅 ′ − 𝑅 )𝑅 ′− 1.
+
+Since 
+
+∥𝑅 −1∥op ≤ 𝜇 −1 , ∥𝑅 ′ − 𝑅 ∥op = 𝜆 𝐻 ∥ℒ 𝐻 − ℒ ′ 
+
+> 𝐻
+
+∥op ,
+
+we obtain 
+
+∥vec (b𝑋 ) − vec (b𝑋 ′)∥ 2 ≤ 𝜆 𝐻 
+
+𝜇 ∥ℒ 𝐻 − ℒ ′ 
+
+> 𝐻
+
+∥op ∥vec (b𝑋 ′)∥ 2.
+
+Reshaping gives the Frobenius-norm bound. The risk-stability statement follows from 
+
+∥𝑎 − 𝑋 ∗∥2 
+
+> 𝐹
+
+− ∥ 𝑏 − 𝑋 ∗∥2 
+
+> 𝐹
+
+≤ ∥ 𝑎 − 𝑏 ∥𝐹 
+
+ ∥𝑎 − 𝑋 ∗∥𝐹 + ∥ 𝑏 − 𝑋 ∗∥𝐹 
+
+
+
+and the standard bounded-moment control of the Tikhonov estimator under sub-Gaussian noise. □
+
+30 Proof of Theorem 5. By Lemma 4, with probability at least 1 − 𝛿 , the score deviations are uniformly bounded over all candidate edges and all scales after replacing 𝛿 by 𝛿 /𝑆 max in the union bound. The scale penalty 
+
+𝜌 (𝑠 − 2) is chosen to dominate these deviations. Therefore any accepted edge at scale 𝑠 has positive population evidence up to the penalty, and any rejected edge fails to improve the population criterion by more than the same penalty. Let ℋ ∗ 
+
+> 𝑠
+
+be the best single-scale candidate set in hindsight at scale 𝑠 , and let ℒ𝐻 (ℋ ∗ 
+
+> 𝑠
+
+) be its hypergraph Laplacian. On the uniform concentration event, the selected set bℋ𝑠 differs from ℋ ∗ 
+
+> 𝑠
+
+only by edges whose population contribution is within the scale-dependent tolerance. By the candidate-degree cap and the normalization 𝑤 𝑠 = 1/ 𝑠 
+
+> 2
+
+, this implies 
+
+∥ℒ 𝐻 ( bℋ𝑠 ) − ℒ 𝐻 (ℋ ∗ 
+
+> 𝑠
+
+)∥ op ≤ 𝐶 pen (𝑠, 𝛿 ).
+
+Applying Lemma 5 transfers this operator perturbation into a risk perturbation: 
+
+E∥b𝑋 ( bℋ𝑠 ) − 𝑋 ∗∥2 
+
+> 𝐹
+
+≤ 𝑅 (𝑠 ) + 𝐶 pen (𝑠, 𝛿 ).
+
+Since MSHL takes the union over accepted scales and uses the same penalty to control the multi-scale search, the same bound holds after minimizing over 𝑠 :
+
+E∥b𝑋 ( bℋ ) − 𝑋 ∗∥2 
+
+> 𝐹
+
+≤ min 
+
+> 2≤𝑠 ≤𝑆 max
+
+{𝑅 (𝑠 ) + 𝐶 pen (𝑠, 𝛿 )} .
+
+This proves the best-scale comparison. □
+
+C.8 Imputation recovery via multi-scale structure (Theorem 6) 
+
+The main text states the bound (18) inline, with most of the analysis pushed here. The argument splits the latent matrix into a conservation component, which the multi-scale hypergraph regularizer leaves bias-free, and a residual component, which incurs the standard Tikhonov bias. 
+
+Assumption 4 (Hyperedge observation coverage) . For every (𝑖, 𝑡 ) ∈ Ω𝑐 and every hyperedge 𝑒 ∈ bℋ containing 
+
+𝑖 , there exists at least one 𝑗 ∈ 𝑒 \ { 𝑖 } with 𝑀 𝑗,𝑡 = 1. Equivalently, each unobserved cell sees at least one observed co-member at the same timestep along its containing hyperedges. 
+
+Formal restatement. We restate Theorem 6 with the assumptions made explicit. Decompose 𝑋 ∗ =
+
+𝑋 ∗ 
+
+> cons
+
++ 𝑋 ∗
+
+> res
+
+, where 𝑋 ∗ 
+
+> cons
+
+is the projection onto the span of group-conservation patterns over hyperedges in 
+
+bℋ (equivalently, the projection onto ker ℒ𝐻 ( bℋ ) within the spatial mode of b𝑋 lin ). Under Assumptions 1–2 and Assumption 4, the imputation error at unobserved cells satisfies 
+
+E(b𝑋 lin  
+
+> 𝑖,𝑡
+
+− 𝑋 ∗ 
+
+> 𝑖,𝑡
+
+)2 
+
+> (𝑖,𝑡 )∈ Ω𝑐
+
+≤ ∥𝑋 ∗
+
+> res
+
+∥2
+
+> 𝐹
+
+𝜅 +(𝐿 𝑆 ) + 𝜎 2
+
+𝜋 min 𝜅 +(𝐿 𝑆 ) ,
+
+with 𝜅 +(𝐿 𝑆 ) := 𝜇 + 𝜆 𝑆 𝜆 +
+
+> min
+
+(𝐿 𝑆 ). Replacing 𝐿 𝑆 with the graph-only baseline ℒ𝐺 inflates the conservation contribution: for 𝑋 ∗ 
+
+> cons
+
+supported on a single hyperedge 𝑒 , the boundary penalty is ∥𝑐 ∥2 Í𝑖 ∈𝑒,𝑗 ∉𝑒 𝐴 𝑖𝑗 (Theorem 1), whereas the multi-scale regularizer pays only the overlap leakage of Theorem 1. 
+
+Proof of Theorem 6. Step 1: Spectral decomposition. By App. B.3, the linear estimator b𝑋 lin admits the resolvent solution (27) . In the joint eigenbasis of 𝐿 𝑆 = ℒ𝐺 + 𝜆 𝐻 ℒ𝐻 ( bℋ ) and 𝐿 𝑇 , with 𝜔 𝑘 𝑗 = 𝜇 + 𝜆 𝑆 𝜆 𝑆 𝑘 + 𝜆 𝑇 𝜇 𝑇 𝑗 
+
+and 𝜆 𝑆 𝑘 the 𝑘 th eigenvalue of 𝐿 𝑆 , the modewise error of b𝑋 lin on Ω𝑐 is 
+
+(b𝑋 lin − 𝑋 ∗)𝑘 𝑗 = −
+
+𝜆 𝑆 𝜆 𝑆 𝑘 + 𝜆 𝑇 𝜇 𝑇 𝑗 
+
+𝜔 𝑘 𝑗 
+
+𝑋 ∗ 
+
+> 𝑘 𝑗
+
++
+
+e𝜉 𝑘 𝑗 
+
+𝜔 𝑘 𝑗 
+
+, Var (e𝜉 𝑘 𝑗 ) ≤ 𝜎 2
+
+> 𝜋 min
+
+by Corollary 1. The first term is the Tikhonov bias on mode (𝑘, 𝑗 ) and the second is the IPW-inflated noise. 
+
+Step 2: Conservation kernel. 𝑋 ∗ 
+
+> cons
+
+is defined as the projection of 𝑋 ∗ onto the spatial subspace ker ℒ𝐻 ( bℋ ) ∩ 
+
+ker ℒ𝐺 , which contains every group-conservation pattern ⊮[𝑖 ∈ 𝑒 ] 𝑐 𝑡 where the hyperedge 𝑒 ∈ bℋ has no graph-boundary edges (a sufficient condition; Lemma 3 and Theorem 1). On this subspace, 𝐿 𝑆 = ℒ𝐺 + 𝜆 𝐻 ℒ𝐻 = 0,31 so 𝜆 𝑆 𝑘 = 0, and the bias coefficient 𝜆 𝑆 𝜆 𝑆 𝑘 /𝜔 𝑘 𝑗 vanishes. The bias contribution is therefore confined to the residual component 𝑋 ∗
+
+> res
+
+, on which 𝜆 𝑆 𝜆 𝑆 𝑘 /𝜔 𝑘 𝑗 ∈ ( 0, 1) is the standard Tikhonov rate. 
+
+Step 3: Combining. The squared bias and variance contributions sum across modes: 
+
+E[( b𝑋 lin  
+
+> 𝑖,𝑡
+
+− 𝑋 ∗ 
+
+> 𝑖,𝑡
+
+)2](𝑖,𝑡 )∈ Ω𝑐 ≤
+
+Õ
+
+> 𝑘 𝑗
+
+(𝜆 𝑆 𝜆 𝑆 𝑘 + 𝜆 𝑇 𝜇 𝑇 𝑗 )2
+
+𝜔 2
+
+> 𝑘 𝑗
+
+(𝑋 ∗ 
+
+> res ,𝑘 𝑗
+
+)2 +
+
+Õ
+
+> 𝑘 𝑗
+
+𝜎 2/𝜋 min 
+
+𝜔 2
+
+> 𝑘 𝑗
+
+.
+
+Using (𝜆 𝑆 𝜆 𝑆 𝑘 + 𝜆 𝑇 𝜇 𝑇 𝑗 )/ 𝜔 𝑘 𝑗 ≤ 1 on each mode and 𝜔 𝑘 𝑗 ≥ 𝜅 +(𝐿 𝑆 ) := 𝜇 + 𝜆 𝑆 𝜆 +
+
+> min
+
+(𝐿 𝑆 ) on the support of 𝑋 ∗
+
+> res
+
+,
+
+≤ ∥𝑋 ∗
+
+> res
+
+∥2
+
+> 𝐹
+
+𝜅 +(𝐿 𝑆 ) + 𝜎 2
+
+𝜋 min 𝜅 +(𝐿 𝑆 ) ,
+
+which is (18). 
+
+Step 4: Coverage. Without Assumption 4, an unobserved cell (𝑖, 𝑡 ) may have no observed co-members at time 𝑡 . The relevant block of 𝑅 in (26) is then singular along the {𝑖 }-supported direction at time 𝑡 , and b𝑋 lin  
+
+> 𝑖,𝑡
+
+is determined entirely by 𝐿 𝑇 . Assumption 4 ensures the spatial regularizer is informative at every cell of Ω𝑐 ,making the spectral argument of Steps 1-3 uniform over Ω𝑐 .
+
+Step 5: Graph-only comparison. Setting 𝜆 𝐻 = 0 replaces 𝐿 𝑆 with ℒ𝐺 , so ker 𝐿 𝑆 shrinks: a conservation pattern 𝑋 ∗ 
+
+> cons
+
+in ker ℒ𝐻 but with non-trivial graph boundary no longer lies in ker ℒ𝐺 . By Theorem 1, this contributes a positive boundary penalty ∥𝑐 ∥2 Í𝑖 ∈𝑒,𝑗 ∉𝑒 𝐴 𝑖𝑗 . Substituting into Step 3, the graph-only imputation error inflates by an additive boundary-bias term proportional to ∥𝑐 ∥2 Í𝑖 ∈𝑒,𝑗 ∉𝑒 𝐴 𝑖𝑗 /𝜅 +(ℒ 𝐺 ), giving the second part of the theorem. □
+
+Remark on the coverage assumption. Assumption 4 is not vacuous in our regimes. Under cell-MAR at 
+
+𝑝 = 0.5 with hyperedges of size 𝑠 = 3, the probability that all 𝑠 − 1 = 2 co-members of an unobserved cell are also missing is (1 − 𝜋 )𝑠 −1 = 0.25 , so coverage holds with probability ≥ 0.75 per unobserved cell; Theorem 6 then applies on the corresponding subset of Ω𝑐 . Under sensor-kriging, an entirely-held-out sensor has no co-members observed at any time, which is precisely the regime where MSHL must defer to the temporal regularizer and HCRN is idempotent (Lemma 11). The assumption is therefore a graceful boundary: it holds where MSHL has spatial information to use, and degrades to the temporal-only solution where it does not. 
+
+C.9 HCRN proofs (Theorem 7) Assumption 5 (HCRN regularity) . (a) The MLP 𝑔 𝜃 is 𝐿 𝑔 -Lipschitz in 𝜙 uniformly over 𝜃 ∈ Θ, with 𝐿 𝑔 = 𝑂 (𝐵 2)
+
+where 𝐵 bounds parameter norms in Θ. (b) Features satisfy ∥𝜙 𝑖,𝑡 ∥2 ≤ Φmax almost surely. (c) The residual 𝑅 lin 
+
+> 𝑖,𝑡
+
+is sub-Gaussian with proxy 𝜎 2
+
+> 𝑅
+
+. (d) Training cells 𝒟 form an exchangeable sample of size 𝑛 tr , and held-out cells Ω𝑐 are exchangeable with 𝒟 conditional on the linear estimator. This subsection gives the full proof of Theorem 7 (the one-sided refinement guarantee for HCRN), the lemma certifying that the zero predictor lies in the parameter space (so ℛ( 𝜃 ∗) ≤ ℛ 0), and the deferment lemma (so the bound is tight on kriging). 
+
+Setup recap 
+
+HCRN is a 2-layer ReLU MLP 𝑔 𝜃 : R𝐹 → R with parameter 𝜃 = (𝑊 1 , 𝑏 1 , 𝑤 2 , 𝑏 2), 𝑊 1 ∈ R𝐻 ×𝐹 , 𝑤 2 ∈ R𝐻 . The parameter space is 
+
+Θ := {𝜃 : ∥𝑊 1∥𝐹 ≤ 𝐵 1 , ∥𝑤 2∥2 ≤ 𝐵 2 , ∥𝑏 1∥∞ + | 𝑏 2| ≤ 𝐵 3},
+
+with 𝐵 := max (𝐵 1 , 𝐵 2 , 𝐵 3). The function class is 𝒢 Θ = {𝑔 𝜃 : 𝜃 ∈ Θ}. Features 𝜙 have ∥𝜙 ∥2 ≤ Φmax . The training set 𝒟 = {( 𝜙 𝑘 , 𝑟 𝑘 )} 𝑛 tr  
+
+> 𝑘 =1
+
+has residual targets 𝑟 𝑘 = 𝑅 lin   
+
+> 𝑖 𝑘 ,𝑡 𝑘
+
+for observed cells. The training objective (22) is the Huber loss with parameter 𝛿 𝐻 :
+
+b𝜃 = arg min 
+
+> 𝜃 ∈Θ
+
+bℛ𝑛 (𝜃 ), bℛ𝑛 (𝜃 ) := 1
+
+𝑛 tr 
+
+Õ
+
+> 𝑘
+
+ℓ𝛿 𝐻 (𝑔 𝜃 (𝜙 𝑘 ), 𝑟 𝑘 ) + 𝜆 reg ∥𝜃 ∥22 ,
+
+and the population risk on held-out cells (Assumption 5 (d): exchangeable with 𝒟 given b𝑋 lin ) is ℛ( 𝜃 ) =
+
+E(𝜙 ,𝑟 )∼ Ω𝑐 [ℓ𝛿 𝐻 (𝑔 𝜃 (𝜙 ), 𝑟 )] .32 Auxiliary lemmas Lemma 6 (Zero predictor is in the class) . 0 ∈ Θ, and ℛ( 0) = ℛ0 where ℛ0 := E(𝜙 ,𝑟 )[ℓ𝛿 𝐻 (0, 𝑟 )] is the linear-only risk (HCRN contributing zero correction). Proof. 𝜃 = 0 satisfies all parameter-norm constraints. With 𝑔 0(𝜙 ) = 0, the prediction in (23) reduces to 
+
+b𝑋 full = b𝑋 lin , giving the linear-only risk on held-out cells. As 𝜃 ∗ := arg min 𝜃 ∈Θ ℛ( 𝜃 ) achieves the population minimum over Θ, ℛ( 𝜃 ∗) ≤ ℛ( 0) = ℛ0. □
+
+Lemma 7 (Huber loss is 𝛿 𝐻 -Lipschitz in its first argument) . |ℓ𝛿 𝐻 (ˆ 𝑟, 𝑟 ) − ℓ𝛿 𝐻 (ˆ 𝑟 ′ , 𝑟 )| ≤ 𝛿 𝐻 |ˆ 𝑟 − ˆ 𝑟 ′| for all ˆ𝑟, ˆ𝑟 ′ , 𝑟 ∈ R.Proof. 𝜕 ˆ𝑟 ℓ𝛿 𝐻 (ˆ 𝑟, 𝑟 ) = clip (ˆ 𝑟 − 𝑟, [− 𝛿 𝐻 , 𝛿 𝐻 ]) has sup |𝜕 | = 𝛿 𝐻 . The mean-value theorem gives |ℓ𝛿 𝐻 (ˆ 𝑟, 𝑟 ) − 
+
+ℓ𝛿 𝐻 (ˆ 𝑟 ′ , 𝑟 )| ≤ 𝛿 𝐻 |ˆ 𝑟 − ˆ 𝑟 ′|. □
+
+Lemma 8 (Two-layer ReLU spectral-norm Rademacher bound, restated from [ 49 ]) . Let 𝒢 Θ = {𝑔 𝜃 : 𝜃 ∈ Θ}
+
+with 𝑔 𝜃 (𝜙 ) = 𝑤 ⊤ 
+
+> 2
+
+𝜎 (𝑊 1 𝜙 + 𝑏 1) + 𝑏 2. Then 
+
+ℜ𝑛 (𝒢 Θ) ≤ 2𝐵 2Φmax 
+
+√𝑛 ,
+
+with 𝐵 = max (∥ 𝑊 1∥𝜎 , ∥𝑤 2∥2 , ∥𝑏 1∥∞ + | 𝑏 2|) and ∥ · ∥ 𝜎 the spectral norm. Proof. This is a special case of [ 49 ] applied to two-layer ReLU networks; the spectral-norm bound replaces the Frobenius bound and gives the displayed rate. □
+
+Lemma 9 (Symmetrization for Lipschitz-loss ERM) . Let 𝐿 ◦ 𝒢 Θ := {( 𝜙 , 𝑟 ) ↦ → ℓ𝛿 𝐻 (𝑔 𝜃 (𝜙 ), 𝑟 ) : 𝜃 ∈ Θ}. With probability ≥ 1 − 𝛿 over the training sample, 
+
+sup 
+
+> 𝜃 ∈Θ
+
+ℛ( 𝜃 ) − bℛ𝑛 (𝜃 ) ≤ 2 ℜ𝑛 (𝐿 ◦ 𝒢 Θ) + 𝐵 ℓ
+
+r log (2/𝛿 )
+
+2𝑛 ,
+
+where 𝐵 ℓ := sup 𝜙 sup |𝑟 |≤ 𝑐 𝑅 
+
+√log (𝑛 /𝛿 ) ℓ𝛿 𝐻 (𝑔 𝜃 (𝜙 ), 𝑟 ) is a uniform loss bound (sub-Gaussian high-probability bound on 𝑟 
+
+via Assumption 5 (c)). Proof sketch. Standard Rademacher symmetrization: E[sup 𝜃 |ℛ( 𝜃 ) − bℛ𝑛 (𝜃 )|] ≤ 2ℜ𝑛 (𝐿 ◦ 𝒢 Θ) by the sym-metrization inequality. The high-probability statement follows from McDiarmid’s bounded-differences inequality applied to 𝜃 ↦ → bℛ𝑛 (𝜃 ), with bounded difference 2𝐵 ℓ /𝑛 . □
+
+Lemma 10 (Composition of Rademacher complexity with Lipschitz loss) . ℜ𝑛 (𝐿 ◦ 𝒢 Θ) ≤ 𝛿 𝐻 · ℜ𝑛 (𝒢 Θ).Proof. Talagrand’s contraction lemma (Ledoux-Talagrand, 1991) applied to the 𝛿 𝐻 -Lipschitz Huber loss (Lemma 7) with 𝑟 held fixed. □
+
+Proof of Theorem 7 
+
+Proof of Theorem 7. The HCRN correction enters (23) as 𝛼 𝑔 b𝜃 (𝜙 ), so the relevant function class for the loss-uniform bound is 𝛼 𝒢 Θ := {𝛼 𝑔 𝜃 : 𝜃 ∈ Θ}, and ℜ𝑛 (𝛼 𝒢 Θ) = 𝛼 ℜ𝑛 (𝒢 Θ). By Lemmas 9 and 10, 
+
+sup 
+
+> 𝜃 ∈Θ
+
+|ℛ( 𝜃 ) − bℛ𝑛 (𝜃 )| ≤ 2𝛿 𝐻 ℜ𝑛 (𝛼 𝒢 Θ) + 𝐵 ℓ
+
+plog (2/𝛿 )/( 2𝑛 tr )
+
+holds with probability ≥ 1 − 𝛿 . Lemma 8 gives ℜ𝑛 tr (𝒢 Θ) ≤ 2𝐵 2Φmax /√𝑛 tr , hence 
+
+sup 
+
+> 𝜃 ∈Θ
+
+|ℛ( 𝜃 ) − bℛ𝑛 (𝜃 )| ≤ 4𝛿 𝐻 𝛼 𝐵 2Φmax 
+
+√𝑛 tr 
+
++ 𝐵 ℓ
+
+s
+
+log (2/𝛿 )
+
+2𝑛 tr 
+
+. (30) Since bℛ𝑛 (b𝜃 ) ≤ bℛ𝑛 (𝜃 ∗) by definition of b𝜃 , applying (30) at both b𝜃 and 𝜃 ∗ gives 
+
+ℛ( b𝜃 ) ≤ ℛ( 𝜃 ∗) + 8𝛿 𝐻 𝛼 𝐵 2Φmax 
+
+√𝑛 tr 
+
++ 2𝐵 ℓ
+
+s
+
+log (2/𝛿 )
+
+2𝑛 tr 
+
+.
+
+33 Identifying 𝐶 1 := 8𝛿 𝐻 𝛼 𝐵 2Φmax and 𝐶 2 := 2𝐵 ℓ /√2 yields (24) . Lemma 6 then certifies that ℛ( 𝜃 ∗) − ℛ 0 ≤ 0, so the worst-case excess of HCRN over the linear baseline is the vanishing 𝑂 (1/√𝑛 tr ) generalization gap. Strict improvement follows whenever some 𝜃 0 ∈ Θ has ℛ( 𝜃 0) < ℛ0, since then ℛ( 𝜃 ∗) < ℛ0 and the gap shrinks below ℛ0 − ℛ( 𝜃 ∗) once 𝑛 tr is large enough. □
+
+Lemma 11 (Deferment on uninformative features) . If 𝜙 𝑖,𝑡 = 0 ∈ R𝐹 for all (𝑖, 𝑡 ) ∈ Ω𝑐 (the kriging case, 
+
+𝒩 𝐸,𝐾 (𝑖 ; bℋ ) = ∅), then ℛ( 𝜃 ∗) = ℛ0 and HCRN contributes zero correction at the population minimum. Proof. On 𝜙 = 0, 𝑔 𝜃 (0) = 𝑤 ⊤ 
+
+> 2
+
+𝜎 (𝑏 1)+ 𝑏 2 depends on 𝜃 but not the data. The Huber-optimal constant predictor of zero-mean residuals (Assumption 5 (c)) is the (Huber-trimmed) mean, which is 0. The ℓ2 regularizer 𝜆 reg ∥𝜃 ∥22
+
+then drives 𝑏 1 = 𝑏 2 = 0 at the population minimum, so 𝑔 𝜃 ∗ (0) = 0 and b𝑋 full = b𝑋 lin , giving ℛ( 𝜃 ∗) = ℛ0. □
+
+Hypergraph-aware refinement bound (Corollary 2) Corollary 2 (Hypergraph-aware refinement bound) . Under the conditions of Theorem 7, with probability at least 
+
+1 − 𝛿 ,
+
+ℛ( b𝜃 ) − ℛ 0 ≤  ℛ( 𝜃 ∗) − ℛ 0
+
+ + 8𝛿 𝐻 𝛼 𝐵 2
+
+q
+
+𝑑 𝜙 ( bℋ ) √𝑛 tr 
+
++ 𝐶 2
+
+s
+
+log (2/𝛿 )
+
+𝑛 tr 
+
+, (31) 
+
+where 𝑑 𝜙 ( bℋ ) := E[∥ 𝜙 𝑖,𝑡 ∥22] is the effective feature dimension induced by the discovered hypergraph. Proof of Corollary 2. The proof of Theorem 7 bounded the Rademacher complexity by the worst-case feature norm Φmax . When features are i.i.d. from the empirical distribution induced by bℋ with E[∥ 𝜙 ∥2] = 𝑑 𝜙 ( bℋ ) ,the spectral-norm Rademacher bound of [ 49 ] replaces Φmax by 
+
+q
+
+𝑑 𝜙 ( bℋ ) , giving ℜ𝑛 (𝒢 Θ) ≤ 2𝐵 2
+
+q
+
+𝑑 𝜙 ( bℋ )/ √𝑛 .The remainder of the proof is identical to Theorem 7, yielding the displayed bound. □
+
+End-to-end excess risk (Corollary 3) 
+
+Define the Discovery overhead and the Refinement gap as 
+
+𝔓 𝑠 (𝛿 ) := 𝐶 𝜌 (𝑠 − 2) + | Ω|−1 log (𝑆 max /𝛿 ) , 𝔊 𝜙 (𝛿 ) := 𝐶 ′
+
+> 1
+
+q
+
+𝑑 𝜙 ( bℋ ) + 𝐶 2
+
+plog (2/𝛿 )√𝑛 tr 
+
+.
+
+Corollary 3 (End-to-end MSHL excess risk) . With probability at least 1 − 2𝛿 ,
+
+E∥b𝑋 full − 𝑋 ∗∥2 
+
+> 𝐹
+
+≤ min 
+
+> 2≤𝑠 ≤𝑆 max
+
+{𝑅 (𝑠 ) + 𝔓 𝑠 (𝛿 )} 
+
+| {z }
+
+> Discovery
+
++ 𝔊 𝜙 (𝛿 )
+
+|{z} 
+
+> Refinement
+
+− (ℛ 0 − ℛ( 𝜃 ∗)) 
+
+| {z }
+
+> nonlinear gain
+
+. (32) 
+
+Proof of Corollary 3. By Theorem 5, on an event ℰ1 of probability ≥ 1 − 𝛿 , E∥b𝑋 lin − 𝑋 ∗∥2 
+
+> 𝐹
+
+≤ min 𝑠 {𝑅 (𝑠 ) + 𝔓 𝑠 (𝛿 )} .By Corollary 2, on an independent event ℰ2 of probability ≥ 1 − 𝛿 , ℛ( b𝜃 ) ≤ ℛ( 𝜃 ∗) + 𝔊 𝜙 (𝛿 ) for the Huber population risk ℛ. Since the Huber loss with parameter 𝛿 𝐻 coincides with the squared loss on the [− 𝛿 𝐻 , 𝛿 𝐻 ]
+
+range and is dominated by it elsewhere, the squared-loss full-estimator MSE on Ω𝑐 is bounded by 
+
+E∥b𝑋 full − 𝑋 ∗∥2 
+
+> 𝐹
+
+≤ E∥b𝑋 lin − 𝑋 ∗∥2 
+
+> 𝐹
+
++ | Ω𝑐 | ·  ℛ( b𝜃 ) − ℛ 0
+
+ + | Ω𝑐 | · 𝔖 𝛿 𝐻 ,
+
+where 𝔖 𝛿 𝐻 is the saturation gap between squared and Huber loss, which is of lower order than 𝔓 𝑠 (𝛿 ) + 𝔊 𝜙 (𝛿 )
+
+under Assumption 5(c) (sub-Gaussian residuals). On ℰ1 ∩ ℰ 2, probability ≥ 1 − 2𝛿 by union bound, the corollary follows after dropping the non-positive term −(ℛ 0 − ℛ( 𝜃 ∗)) and absorbing 𝔖 𝛿 𝐻 into the constants of 𝔊 𝜙 (𝛿 ). □
+
+34 Why the bound is genuinely coupled. Two terms of the corollary depend on bℋ . First, the Lepski guarantee 
+
+𝔓 𝑠 (𝛿 ) is small when Discovery hits the right scale. Second, the generalization gap 𝔊 𝜙 (𝛿 ) is small when Discovery returns a sparse hypergraph (small 𝑑 𝜙 ( bℋ ) ). A Discovery procedure that finds the right scale but admits too many spurious hyperedges inflates 𝑑 𝜙 ( bℋ ) and pays for it in Refinement; conversely, a sparse Discovery that misses the right scale pays in the Lepski term. Joint minimization requires an accurate, parsimonious hypergraph, which is precisely what the per-scale complexity penalty 𝜌 (𝑠 − 2) in (34) produces. 
+
+## D Algorithms and Hyperparameters 
+
+D.1 Structural scores, thresholds, and acceptance rule 
+
+Each candidate 𝑒 of size 𝑠 = |𝑒 | is scored on observed cells alone using two complementary statistics: 
+
+bΨ𝑒 := 1
+
+ 𝑠 
+
+> 2
+
+Õ
+
+> {𝑖,𝑗 }⊆ 𝑒
+
+|b𝐶 𝑖𝑗 |, bΦ𝑒 := leave-one-out MSE-improvement of including 𝑒 on 𝑅 pw . (33) The thresholds combine a data-adaptive part with a per-scale complexity penalty, 
+
+𝜏 (𝑠 ) 
+
+> Ψ
+
+:= max  𝜏 floor , quantile 𝑞 (| b𝐶 off |)  + 𝜌 (𝑠 − 2), 𝜏 (𝑠 ) 
+
+> Φ
+
+:= 𝑐 𝜎 b𝜎 2
+
+r log 𝑁 
+
+𝜋 𝑇 + 𝜌 (𝑠 − 2), (34) where quantile 𝑞 (| b𝐶 off |) is the 𝑞 = 0.95 quantile of absolute off-diagonal residual correlations in the current window and the per-scale penalty satisfies 
+
+𝜌 (𝑠 − 2) ≥ 𝐶 0 𝜎 2 log (𝑁𝑆 max 𝑇 )
+
+𝜋 2𝑇 . (35) The acceptance rule is 
+
+𝑒 ∈ 𝒞 𝑠 accepted ⇐⇒ bΨ𝑒 > 𝜏 (𝑠 ) 
+
+> Ψ
+
+or bΦ𝑒 > 𝜏 (𝑠 ) 
+
+> Φ
+
+. (36) Accepted edges enter bℋ with sigmoid-shrinkage weights b𝑤 𝑒 ∈ ( 0, 1]. For each candidate, the standardized score margin is Δ𝑒 := max (( bΨ𝑒 − 𝜏 (𝑠 ) 
+
+> Ψ
+
+)/ ΔΨ , (bΦ𝑒 − 𝜏 (𝑠 ) 
+
+> Φ
+
+)/ ΔΦ) and the weight is b𝑤 𝑒 = sigmoid (Δ𝑒 ). The shrinkage scales ΔΨ , ΔΦ are taken from Lemma 4’s concentration rates. Per-scale acceptance is also capped at 𝐽 max to bound the per-scale Laplacian degree. 
+
+D.2 Hyperparameters and complexity Default hyperparameters. Tikhonov: 𝜆 𝑆 = 1.0, 𝜆 𝑇 = 20 .0, 𝜇 = 0.02 , 𝜆 𝐻 = 2.0. Selection: 𝜏 C,floor = 0.30 ,
+
+𝑞 = 0.95 . Corrector: hidden width 𝐻 = 32 , 𝑛 epochs = 30 , learning rate 10 −2, ℓ2 weight decay 10 −4, Huber threshold 𝛿 𝐻 = 1, gain 𝛼 = 1, 𝐸 = 8 edges per sensor, 𝐾 = 4 co-members per edge. Multi-scale: 𝑆 max = 5,scales {2, 3, 4, 5}, and 𝐽 max = 20 . Three evaluation setups are reported. The real-world sweeps in Table 1 use the 100-sensor highest-degree subnetwork with 𝑇 = 2016 windows and one mask draw per window, at the defaults above. The hyperparameter sensitivity study (Section 6.4) sweeps each parameter around these same defaults on an auxiliary 𝑁 = 60 , 𝑇 = 576 setup with three random seeds, exploring 𝑆 max ∈ { 2, . . . , 6}
+
+and 𝐽 max ∈ { 5, 20 , 30 , 50 , 75 , 100 }. The component-ablation study (Section 6.5) uses the same 𝑁 = 60 , 𝑇 = 576 
+
+setup but with a smaller candidate budget, 𝑆 max = 4, scales {2, 3, 4}, and 𝐽 max = 5, which keeps the per-scale candidate pool small enough to isolate each component’s marginal contribution. 
+
+Complexity. On the smaller setup ( 𝑁 = 60 , 𝑇 = 576 ), the per-seed cost decomposes as: pairwise pre-fit 
+
+≈ 0.5 s for one Tikhonov solve at 𝑂 (𝑇 CG 𝑁𝑇 ) with 𝑇 CG = 100 CG iterations; candidate generation ≈ 0.1 s, dominated by b𝐶 at 𝑂 (𝑁 2𝑇 ); selection ≈ 0.01 s for the closed-form score evaluations at 𝑂 (|𝒞 | 𝑆 2max ); final fit 
+
+≈ 0.5 s for the MSHL Tikhonov solve; corrector training ≈ 1 s for 30 epochs over the observed cells. Total runtime is approximately 2 seconds per (dataset, regime, rate, seed) on a single CPU. 35

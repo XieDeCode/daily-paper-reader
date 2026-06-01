@@ -1,0 +1,298 @@
+Title: LC-Flow: Learning Local Continuous Optical Flow and Confidence from events
+
+URL Source: https://arxiv.org/pdf/2605.24604v1
+
+Published Time: Tue, 26 May 2026 00:56:13 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# LC-Flow: Learning Local Continuous Optical Flow and Confidence from events 
+
+Gunwoo Jeon , Chaesong Park , and Jongwoo Lim 
+
+IPAI, Seoul National University 
+
+{gunw0, chase121, jongwoo.lim}@snu.ac.kr 
+
+Abstract. Event cameras capture brightness changes asynchronously with microsecond resolution, yet existing optical flow methods fail to fully exploit this temporal continuity. Frame-based approaches impose artificial accumulation latency and suffer from domain overfitting, while model-based local methods operate statelessly, discarding temporal his-tory between predictions and yielding inaccurate flows. We propose LC-Flow , the first temporally continuous, learning-based optical flow estimator that operates purely from local events. At its core, a Continuous Local Recurrent Network maintains persistent hidden states per spatial grid, incrementally accumulating temporal context as events arrive. Unlike frame-based methods constrained to fixed accumu-lation windows, and unlike stateless model-based methods that recom-pute motion from scratch at each step, LC-Flow produces sparse local flow estimates at arbitrary timestamps with full motion history. To address the inherent ambiguity of local observations, we jointly learn a confidence score that quantifies the reliability of each prediction, explic-itly handling event sparsity and the aperture problem. This confidence serves a dual role: filtering unreliable estimates for downstream tasks such as visual odometry, and providing principled weights for a multi-scale confidence-guided aggregation that reconstructs globally consistent flow from the sparse local outputs. LC-Flow achieves state-of-the-art per-formance among local methods on both MVSEC and DSEC, while the confidence-guided aggregation establishes a new overall state-of-the-art on the MVSEC benchmark, surpassing heavy frame-based networks that rely on global spatial priors. 
+
+Keywords: Event Camera · Optical Flow · Continuous Estimation ·
+
+Confidence Estimation 
+
+# 1 Introduction 
+
+Event cameras are bio-inspired sensors that asynchronously capture per-pixel brightness changes. With microsecond temporal resolution and high dynamic range, they are inherently suited for high-speed motion estimation in challenging environments. To fully exploit these advantages in real-world applications such as visual odometry (VO) and target tracking, motion estimation systems ideally process events incrementally and locally, preserving the sensor’s continuous-time  
+
+> arXiv:2605.24604v1 [cs.CV] 23 May 2026 2G. Jeon et al.
+
+nature instead of imposing fixed, dense frames that quantize time. However, accurate optical flow estimation from purely asynchronous, local observations remains challenging. Existing methods largely fall into two polarized paradigms: dense learning-based approaches and sparse local approaches. Dense methods [11, 15] achieve remarkable accuracy by accumulating sparse events into synchronous representations (e.g., voxel grids) to leverage powerful deep neural networks. However, this paradigm introduces inevitable accumu-lation latency and is highly prone to domain overfitting due to its reliance on global spatial priors. Conversely, local and incremental methods [1,19,33] respect the asynchronous nature of events by estimating motion directly from localized patches. Yet, because they operate statelessly without retaining temporal his-tory, they remain limited by simplified geometric assumptions or handcrafted priors, inherently suffering from the aperture problem and sensitivity to noise in complex real-world scenes. To bridge this gap, we propose LC-Flow , the first temporally continuous, learning-based optical flow framework that extracts full 2D motion and confi-dence purely from local event dynamics. Unlike frame-based networks, we avoid global context aggregation to prevent domain overfitting. Instead, we introduce a Continuous Local Recurrent Network that assigns an independent, persistent hidden state to each local grid. Rather than slicing time into discrete, mem-oryless windows, the hidden states are updated incrementally as every event arrives. This enables truly continuous inference: flow can be queried at any arbi-trary timestamp with full motion history, a capability that neither frame-based recurrent methods nor stateless model-based approaches can provide. The core output of LC-Flow is a sparse local flow field, which is the pri-mary contribution of this work. This sparse representation is directly usable for downstream tasks such as VO and tracking, where reliable motion cues at active pixel locations are sufficient. However, relying solely on highly localized patches inevitably encounters the aperture problem, where motion along uniform edges remains ambiguous. To explicitly handle this, we jointly learn a confidence score that quantifies the reliability of each grid’s flow prediction based on its local spatiotemporal evidence. We demonstrate that our localized estimations are not limited to sparse out-puts. By applying a multi-scale confidence-guided aggregation, we propagate highly reliable motion cues to uncertain regions, seamlessly reconstructing a globally consistent flow field without global feature aggregation. Evaluated on the standard MVSEC benchmark, this extension achieves state-of-the-art perfor-mance, surpassing heavy frame-based dense networks that rely on global spatial priors. This demonstrates that high-quality local dynamics, coupled with explicit uncertainty estimation, are sufficient to overcome the domain overfitting issues of global architectures. Our main contributions are summarized as follows: 1. Temporally Continuous Local Architecture: We propose the first tem-porally continuous, learning-based local recurrent network for event-based optical flow estimation. By maintaining persistent hidden states that are LC-Flow 3
+
+updated with every incoming event, our method enables temporally coher-ent flow estimation at arbitrary timestamps. Unlike stateless model-based methods that recompute motion without retaining temporal history, and frame-based methods that are constrained to fixed accumulation boundaries, our architecture continuously accumulates motion history while remaining asynchronous. 2. Uncertainty-Aware Confidence Learning: We introduce a joint flow and confidence learning mechanism that quantifies the reliability of local predictions, explicitly addressing event sparsity and the aperture problem. The learned confidence serves a dual role: filtering unreliable estimates for downstream applications and providing principled weights for global flow reconstruction. 3. State-of-the-Art Results: Our method establishes state-of-the-art for lo-cal event-based optical flow on both MVSEC and DSEC. Furthermore, we demonstrate that multi-scale confidence-guided aggregation of these local outputs achieves overall state-of-the-art on the MVSEC benchmark, outper-forming dense frame-based baselines. 
+
+# 2 Related Works 
+
+2.1 Dense Optical Flow Estimation from Event Cameras 
+
+Dense optical flow estimation from event cameras has attracted increasing atten-tion, yet remains challenging because event streams are sparse, asynchronous, and noisy. Model-based approaches estimate motion by explicitly modeling event gen-eration and optimizing geometric consistency. Multi-CM [27] reconstructs sharp edge structures through contrast maximization, while other methods exploit handcrafted spatio-temporal surfaces such as time-surfaces or distance-surfaces for matching-based motion inference [2, 20]. These approaches are often compu-tationally efficient, but brittle in complex scenes. Learning-based dense methods typically bridge asynchrony by accumulat-ing events into synchronous, frame-like representations to leverage high-capacity CNNs. EV-FlowNet [38] uses event-count representations with photometric con-sistency losses, while E-RAFT [11], TMA [16], and EDCFlow [15] adapt modern image-flow architectures to voxel grid inputs. While these methods achieve ex-cellent benchmark accuracy, fixed-window voxelization introduces unavoidable accumulation latency and makes performance sensitive to inference frequency. Moreover, reliance on globally aggregated features can increase sensitivity to scene domain shifts. A parallel line explores SNN-based models for low-latency dense inference [8, 13, 36], although stabilizing training and achieving competitive accuracy remain challenging. 4 G. Jeon et al. 
+
+2.2 Local and Incremental Flow Estimation 
+
+Beyond dense flow, several works estimate local sparse motion directly from event streams to exploit microsecond temporal resolution and achieve low-latency in-ference. Classical techniques, such as Lucas–Kanade (LK)-based methods [4], compute motion from localized spatio-temporal neighborhoods but inevitably suffer from the aperture problem. A number of methods aim to improve robustness and mitigate the aperture problem within this sparse local paradigm. ARMSflow [1] employs robust kine-matic plane fitting, VecKMFlow [34] predicts normal flow from compact event patches, and Shiba et al . [28] propose event-by-event triplet matching to align events across space and time. To share information across spatial neighborhoods, TEGBP [19] propagates tangentially elongated Gaussians via belief propagation; however, such approaches typically rely on explicit smoothness assumptions and handcrafted noise models, which can become brittle in complex real-world scenes. More broadly, these local methods do not maintain a learned persistent mem-ory that is updated continuously with incoming events, limiting their ability to accumulate temporal context over time. To our knowledge, LC-Flow is the first local learning-based method to maintain persistent hidden states per local grid, enabling continuous inference with accumulated temporal context. Beyond benchmarking, local sparse flow is also valuable for downstream tasks such as visual odometry and target tracking, where reliable motion cues at ac-tive locations facilitate data association [17, 26, 30, 35]. This further motivates estimating prediction confidence for reliable deployment. 
+
+2.3 Continuous-Time and Streaming Representations for Event Data 
+
+A growing body of work argues that the dominant windowed-to-dense paradigm introduces inherent latency and obscures fine-grained temporal structure, par-tially negating the advantages of event cameras. Several studies show that tem-poral binning and interpolation discard informative event ordering cues, motivat-ing alternative representations that preserve temporal continuity [3, 14]. Recent analyses further report that models trained under a fixed accumulation rate may generalize poorly when deployed at different inference frequencies [18, 41]. These concerns have also driven interest in streaming and continuous-time processing across event-based vision. One line of work performs sparse, event-by-event computation via recurrent updates or sparse message passing [23, 25]. Another develops state-space formulations that maintain persistent latent states and update them incrementally over time [24, 41]. Complementary ideas ap-pear in continuous-time motion modeling, where the output is represented as a continuous-time field to reduce aliasing from discrete-time predictions [31]. Together, these trends motivate our design choice: rather than repeatedly ag-gregating events into dense windows, we maintain persistent local hidden states and update them online. This enables computation that adapts to local scene activity, preserves temporal continuity, and avoids the latency and brittleness introduced by fixed-window accumulation. LC-Flow 5
+
+Fig. 1: Overall architecture of LC-Flow. The Continuous Local Recurrent Network processes a localized event stream at grid g, where each event is embedded as 
+
+elocal = (2( xi − xc)/K, 2( yi − yc)/K, (ti − ti−1) · α, pi), with K and α denoting the spatial and temporal scaling factors, respectively. The GRU maintains a persis-tent hidden state hi per grid to continuously predict local flow and confidence. For global estimation, the sparse local predictions are integrated by the Confidence-guided Aggregator, which performs multi-scale confidence-weighted fusion across strided grid locations to reconstruct a globally consistent flow field. 
+
+# 3 Method 
+
+As illustrated in Fig. 1, LC-Flow consists of two components: (i) a Continu-ous Local Recurrent Network that estimates flow and confidence purely from local events while maintaining a persistent hidden state for each local grid g,enabling event-driven flow querying at arbitrary timestamps from the per-grid event stream Eg , and (ii) a Confidence-guided Aggregator that reconstructs a global flow field from these sparse local predictions. 
+
+3.1 Continuous Local Recurrent Network Problem Formulation. Given a continuous stream of asynchronous events E =
+
+{ek}Nk=1 , our goal is to estimate, at any timestamp t, the optical flow f (x, y, t ) = (u, v ) and a confidence score c(x, y, t ) at pixel (x, y ). We define f (x, y, t ) as the displacement over a short interval ∆t , where ∆t is set to match the dataset’s ground-truth annotation interval for convenience. Instead of waiting for a fixed accumulation window, LC-Flow updates the estimates incrementally as events arrive by continuously integrating motion history into the network’s hidden state. 
+
+Event Embedding. Each event is represented by its spatial location, times-tamp, and polarity, ei = ( xi, y i, t i, p i). We process events locally within a K × K6 G. Jeon et al. 
+
+neighborhood centered at grid location (xc, y c), where K is an odd integer. Spa-tial coordinates are normalized relative to the grid center, and temporal infor-mation is encoded using the inter-event interval. The local event embedding is defined as 
+
+elocal ,i =
+
+ 2( xi − xc)
+
+K , 2( yi − yc)
+
+K , (ti − ti−1) · α, p i
+
+
+
+, (1) where α scales the temporal component (we set α = 100 in practice so that typical inter-event intervals have a magnitude comparable to the normalized spatial terms). We initialize t0 to the timestamp of the first event in each grid. This embedding maps local spatial coordinates to [−1, 1] and captures relative temporal dynamics rather than absolute time. 
+
+Continuous GRU Update. We utilize a Gated Recurrent Unit (GRU) [7] to aggregate temporal information by maintaining a persistent hidden state per grid: 
+
+hi = GRU( elocal ,i , h i−1). (2) The hidden state is updated for every incoming event, accumulating motion context over arbitrary durations without imposing fixed temporal boundaries. We adopt GRU for its simplicity and training stability, which we find well suited to lightweight per-event updates. 
+
+Prediction Heads. The hidden state hi is fed into two separate MLP heads. The flow head outputs a 2D flow vector at the grid center (xc, y c), denoted 
+
+flocal ∈ R2. The confidence head outputs a scalar c ∈ (0 , 1) via a sigmoid activa-tion, representing the estimated reliability of flocal given the local spatiotemporal evidence. 
+
+Loss. We jointly optimize the flow and confidence heads using a confidence-weighted regression objective inspired by uncertainty-based weighting [12]: 
+
+L = c ∥fpred − fgt ∥2 − λ log c,  (3) where fpred and fgt denote the predicted and ground-truth flow at the supervised location, c is the predicted confidence, and λ is a balancing coefficient. The first term penalizes the flow error weighted by confidence, while the second term regularizes c to prevent the trivial solution of driving confidence toward zero. 
+
+3.2 Confidence-guided Aggregator 
+
+While our local estimator outputs accurate sparse flow and confidence at se-lected grid centers, some applications require a global flow field. We therefore reconstruct a global flow map via a lightweight, patch-based aggregation module that propagates reliable local motion to nearby uncertain or inactive regions. LC-Flow 7
+
+Grid-wise Recurrent Processing with Spatial Striding. We deploy the local estimator only at grid centers sampled with stride s. Each deployed grid maintains an independent recurrent hidden state updated solely by events within its K ×K spatial neighborhood, and there is no interaction across grids. Striding provides a direct trade-off between spatial coverage and computation, and empty grids (with insufficient events) are skipped. 
+
+Multi-scale Confidence-guided Aggregation. At each deployed grid center, LC-Flow predicts a local flow vector and confidence. For a given scale r ∈ { 1, 2, 4}
+
+(corresponding to a specific stride), we first bilinearly interpolate the sparse predictions to obtain an intermediate flow map ˜fr and confidence map ˜cr at full resolution. We then compute a confidence-weighted local average over a k × k
+
+neighborhood Nk(x) for each target pixel x:
+
+ˆfr (x) = 
+
+P  
+
+> q∈N k(x)
+
+˜cr (q) ˜fr (q)
+
+P  
+
+> q∈N k(x)
+
+˜cr (q) + ϵ , (4) where ϵ is a small constant for numerical stability. To fuse information across scales without uniformly averaging, we adaptively predict per-scale fusion weights from the local multi-scale evidence. Specifically, we stack the flow (2 channels) and confidence (1 channel) from each scale within the k × k neighborhood into a local tensor P(x) ∈ Rk×k×9. A lightweight patch-based CNN then predicts soft fusion weights: 
+
+[w1(x), w 2(x), w 4(x)] = Softmax(CNN( P(x))) . (5) The final aggregated flow is 
+
+fagg (x) = w1(x) ˆf1(x) + w2(x) ˆf2(x) + w4(x) ˆf4(x). (6) 
+
+3.3 Training Strategy Training Data Construction. We construct training samples from temporally sliced event streams provided by standard event-based optical flow benchmarks. Each slice is partitioned into local grids of size K × K. A grid is considered valid if it contains at least 10 events, ensuring sufficient local motion evidence. For each valid grid, we extract the corresponding per-grid event sequence Eg
+
+and supervise the flow at the grid center using the slice-level ground-truth. This grid-wise construction yields a large set of local event streams paired with flow supervision and mirrors our inference-time processing. 
+
+Continuous Training Strategy. Training on a single slice provides short-term supervision but does not expose the recurrent state to the long temporal evolution required for streaming inference. To simulate continuous deployment, we form a training sample by concatenating M consecutive slices, where M is 8 G. Jeon et al. 
+
+uniformly sampled from a fixed range. The model processes all slices sequentially to update the hidden state, while flow supervision is applied only at the final slice. This forces the network to maintain stable temporal representations over varying durations and aligns training with event-driven inference at test time. 
+
+Data Augmentation. To improve generalization and robustness to local mo-tion variations, we apply augmentation directly to the extracted local event streams. Geometric transforms are applied consistently to both event coordi-nates and ground-truth flow vectors: 
+
+– Reflection. Reflect events horizontally or vertically about the grid center, and transform flow accordingly. 
+
+– Rotation. Rotate events around the grid center. We use both right-angle rotations ( 90 ◦, 180 ◦, 270 ◦) and random rotations sampled uniformly from 
+
+[0 ◦, 360 ◦]. For arbitrary angles, rotated coordinates are rounded to the near-est pixel to preserve the discrete grid structure. 
+
+– Polarity Reversal. Invert event polarities to simulate contrast changes, leaving spatial and temporal coordinates unchanged. 
+
+# 4 Experiments 
+
+4.1 Experimental Setup Datasets. We evaluate our method on MVSEC [37] and DSEC [10]. For MVSEC, the local flow model is trained exclusively on the outdoor_day2 sequence and evaluated on outdoor_day1 and indoor_flying1,2,3 , following the standard eval-uation protocol. For DSEC, all official training sequences excluding zurich_city_02a 
+
+are used for training, and zurich_city_02a is held out for evaluation. 
+
+Local Flow Model Configuration. For MVSEC, the image space is parti-tioned into local grids of size 15 × 15 pixels, and each grid maintains an inde-pendent GRU with a hidden dimension of 256. The network is trained using the Adam optimizer with a batch size of 512 and a learning rate of 5 × 10 −4.For DSEC, to accommodate the higher spatial resolution, we use a grid size of 
+
+21 × 21 pixels, a hidden dimension of 256, a batch size of 256, and a learning rate of 10 −4.
+
+Training Schedule. The GRU, flow, and confidence heads are jointly trained for 450K iterations on MVSEC and 388K iterations on DSEC, with the confidence balancing coefficient set to λ = 0 .2 and λ = 0 .8, respectively. Each training sample is constructed by concatenating M consecutive temporal slices, where 
+
+M is uniformly sampled from [1 , 10] for both datasets. 
+
+Data Augmentation. We apply the grid-level augmentations described in Sec. 3.3 with the following probabilities. Discrete right-angle rotations of 90 ◦
+
+and 270 ◦ are independently applied with a 25% probability each. Additionally, one of three supplementary augmentations is randomly applied with a ratio of 
+
+2:3:3 : event polarity reversal, spatial reflection (randomly chosen along the x- or 
+
+y-axis), and random rotation with angles uniformly sampled from [0 ◦, 360 ◦].LC-Flow 9
+
+Table 1: Comparison with local flow methods on MVSEC and DSEC. The first block uses the native MVSEC image frequency; the second uses ∆t = 0 .05 s to match TEGBP’s reported interval. For DSEC, evaluation follows the protocol of TEGBP [19] on zurich_city_02a . Bold indicates the best performance. Method Type                                                                                    
+
+> MVSEC DSEC
+> Outdoor1 Indoor1 Indoor2 Indoor3 Zurich 02a PEE EPE %out PEE EPE %out PEE EPE %out PEE EPE %out EPE %out Inference on MVSEC image frequency Triplet [28] MB -0.90 3.1 -1.10 2.9 -1.70 13.4 -----VecKM [34] SL 0.88 --0.97 --1.09 --1.04 ----ARMS [1] MB -2.75 --1.52 --1.59 --1.89 -8.98 78.7
+> Ours SL 0.19 0.24 0.05 0.32 0.48 0.20 0.40 0.62 0.58 0.37 0.58 0.49 --Inference on ∆t = 0 .05 sTEGBP [19] MB -1.46 11.1 -1.14 6.25 -1.87 16.4 -1.54 11.8 8.70 72.6
+> Ours SL -0.93 1.76 -0.98 1.46 -1.56 8.03 -1.43 7.30 2.10 17.3
+
+Confidence-guided Aggregator. We deploy the local model with stride s = 3 
+
+and perform multi-scale aggregation with patch size k = 7 and scales {1, 2, 4}
+
+on MVSEC. The local model weights are frozen during aggregator training. The aggregator is trained on the same sequences as the local model for 50 epochs with a learning rate of 10 −4.
+
+4.2 Evaluation Metrics 
+
+We report three metrics. Endpoint Error (EPE) is the mean Euclidean dis-tance between predicted and ground-truth flow over all valid pixels. Outlier Ratio (%Out) is the percentage of valid pixels with EPE larger than 3 pix-els. Projected Endpoint Error (PEE) follows the normal-flow evaluation of VecKMFlow [34], computing EPE after projecting the ground-truth flow onto the direction of the predicted flow. 
+
+4.3 Results Local flow estimation. We first evaluate the Continuous Local Recurrent Net-work against recent local and incremental methods (Tab. 1). To measure intrinsic accuracy, we deploy the local estimator densely at all pixel locations, independent of the striding and aggregation used in the full pipeline. LC-Flow outperforms existing baselines across all MVSEC sequences, achieving an EPE of 0.24 on Outdoor Day 1 and 0.58 on Indoor Flying 3. Although our model is trained to predict full 2D flow (not normal flow), it attains lower PEE than VecKMFlow, which is designed specifically for normal-flow estimation. This suggests that ac-curate full-flow predictions capture normal-flow components as well. For a fair comparison with TEGBP at its reported evaluation interval, we additionally evaluate at ∆t = 0 .05 , where LC-Flow also outperforms TEGBP across all se-quences. On DSEC, LC-Flow substantially outperforms ARMSflow and TEGBP, achieving an EPE of 2.10 compared to 8.98 and 8.70 , respectively. 10 G. Jeon et al. 
+
+Table 2: Quantitative comparison on the MVSEC dataset. Avg. EPE and Avg. Out denote averages over all four sequences. Bold and underline indicate the best and second-best results, respectively.                                                                                                                                                  
+
+> Method Outdoor1 Indoor1 Indoor2 Indoor3 Avg. Avg. EPE Out
+> (dt = 1 )EPE % Out EPE % Out EPE % Out EPE % Out MB Brebion et al. [5] 0.53 0.20 0.52 0.10 0.98 5.50 0.71 2.10 0.69 1.98 Nagata et al. [20] 0.77 -0.62 -0.93 -0.84 -0.79 -MultiCM [27] 0.30 0.10 0.42 0.10 0.60 0.59 0.50 0.28 0.46 0.27 USL FireFlowNet [21] 1.06 6.60 0.97 2.60 1.67 15.30 1.43 11.00 1.28 8.88 EV-MGRFlow [40] 0.28 0.02 0.41 0.17 0.70 2.35 0.59 1.29 0.50 0.96 Zhu et al. [39] 0.32 0.00 0.58 0.00 1.02 4.00 0.87 3.00 0.70 1.75 SSL EV-FlowNet [38] 0.49 0.20 1.03 2.20 1.72 15.10 1.53 11.90 1.19 7.35 STE-FlowNet [9] 0.42 0.00 0.57 0.10 0.79 1.60 0.72 1.30 0.63 0.75 SL Matrix-LSTM [6] --0.82 0.53 1.19 5.59 1.08 4.81 1.03 3.64 E-RAFT [11] 0.24 0.00 1.10 5.72 1.94 30.79 1.66 25.20 1.24 15.43 DCEIFlow [29] 0.22 0.00 0.75 1.55 0.90 2.10 0.80 1.77 0.67 1.36 EDCFlow [15] 0.23 0.00 0.97 2.19 1.49 10.79 1.38 8.98 1.02 5.49 TMA [16] 0.25 0.07 1.06 3.63 1.81 27.29 1.58 23.26 1.18 13.56 Ours 0.21 0.04 0.40 0.00 0.55 0.30 0.50 0.14 0.42 0.14
+
+Table 3: Ablation on training strategy and inference reset interval on MVSEC in-door_flying3 . “Reset every k” means the GRU hidden state is cleared every k temporal slices during inference. EPE ( ↓) is reported.                 
+
+> Training Inference reset interval
+> Every 1 Every 2 Every 4 Every 8 No reset Single slice ( N=1 )1.17 1.33 1.98 2.82 4.19 Random Nslices ( N∈[1 ,10] )1.24 1.06 0.88 0.73 0.58
+
+Flow reconstruction via Confidence-guided Aggregation. Next, we com-pare our full pipeline against other optical flow networks (Tab. 2). Our method establishes a new state-of-the-art, achieving the lowest average EPE of 0.42 and an outlier ratio of 0.14% . Notably, while heavy supervised methods such as E-RAFT and EDCFlow degrade significantly on indoor sequences (e.g., E-RAFT yields an EPE of 1.94 on Indoor 2), our method achieves 0.55 on the same sequence. Furthermore, even on Outdoor Day 1 where global methods hold a natural advantage, our confidence-guided aggregation achieves an EPE of 0.21 ,surpassing DCEIFlow ( 0.22 ) and EDCFlow ( 0.23 ). Fig. 2 presents qualitative comparisons on the MVSEC Indoor Flying 3 scene against EVFlowNet [38] (SSL), Multi-CM [27] (MB), and DCEIFlow [29] (SL). LC-Flow produces ac-curate flow predictions closely aligned with the ground truth, while competing methods exhibit noisy or incorrect estimates. Results on DSEC are included in the supplementary material. LC-Flow 11  
+
+> Fig. 2: Qualitative results on the MVSEC Indoor Flying 3 scene. From left to right: ground truth, ours, DCEIFlow [29], Multi-CM [27], and EVFlowNet [38]. Visualization is shown only at event-active pixels (i.e., pixels that received events within the evalu-ation interval).
+
+4.4 Effect of Confidence 
+
+To validate the learned confidence measure, we analyze the correlation between predicted confidence scores and actual estimation errors across MVSEC se-quences. As shown in Fig. 3, all error metrics decrease monotonically as the confidence threshold increases, consistently across both indoor and outdoor se-quences. This confirms that the learned confidence reliably reflects local predic-tion quality, despite varying event density and scene complexity. Fig. 4 qualita-tively shows how the sparse local flow and confidence estimates are integrated by the Confidence-guided Aggregator into a globally consistent flow field, with improved spatial coverage and coherence over the local outputs alone. 
+
+4.5 Ablation Studies Temporal Persistence and Continuous Training. We compare a model trained on single slices ( M = 1 ) with our continuous training strategy using randomly concatenated sequences ( M ∼ U [1 , 10] ), under different inference reset intervals. During inference, we reset the GRU hidden state every R temporal slices and also report the continuous no-reset setting. 12 G. Jeon et al. 
+
+Fig. 3: EPE and Outlier Ratio as a function of the confidence threshold on MVSEC sequences. Gray bars indicate pixel coverage. Errors decrease monotonically as the threshold increases, indicating that the learned confidence correlates with prediction quality. 
+
+Table 4: Effect of stride and aggregation variant on speed and accuracy, evaluated on MVSEC outdoor_day1 (45Hz). Inference time is measured on a RTX 5080 GPU. Method Inference Time EPE (ms/frame) (↓)Multi-CM [27] >8000 0.30 E-RAFT [11] 13.66 0.24 VecKM-Flow [33] 82.42 0.88 †           
+
+> LC-Flow (Ours) #0 Bilinear (s=3) 13.00 0.23 #4 Conf-guided Agg (s=3) 31.81 0.21 #3 Conf Avg (s=3) 13.16 0.21 #3 Conf Avg (s=4) 8.71 0.21 #3 Conf Avg (s=5) 6.63 0.21
+> †PEE; a lower bound of EPE.
+
+As shown in Tab. 3, the single-slice model ( M = 1 ) degrades sharply as R
+
+increases (EPE 1.17 → 4.19 ), indicating instability when the recurrent state is carried over long durations without appropriate training. In contrast, the multi-slice model improves with longer context and achieves its best performance in the no-reset setting (EPE 0.58 ). While M = 1 is slightly better at the shortest reset interval ( 1.17 vs. 1.24 ), it fails to generalize to continuous streaming, highlighting the need for persistent states trained with multi-slice sequences. 
+
+Confidence-guided Aggregator. We ablate the aggregation pipeline in Tab. 5. Starting from bilinear interpolation of sparse predictions (#0), spatial neighbor-hood averaging (#1) improves robustness, and multi-scale fusion with uniform averaging (#2) further helps by combining fine and coarse contexts. Confidence-weighted aggregation (#3) yields additional gains by suppressing unreliable es-LC-Flow 13                                  
+
+> Fig. 4: From left to right: Local flow, local confidence, confidence-guided aggregated flow, and ground truth on MVSEC sequences.
+> Table 5: Ablation of the Confidence based Aggregator components on MVSEC. Exp. Spatial Multi-Scale Conf. guided Learnable MVSEC Agg. ( Nk) ( s∈ { 1,2,4})Average Fusion (CNN) EPE ( ↓) %Outlier ( ↓)#0 0.563 0.38 #1 ✓0.536 0.26 #2 ✓✓0.527 0.28 #3 ✓✓✓0.510 0.18 #4 ✓✓✓✓0.502 0.14
+
+timates, and a lightweight CNN for per-scale weights (#4) provides the best reconstruction by adaptively selecting informative scales. 
+
+Stride and Aggregation. We analyze the accuracy–latency trade-off and com-pare to representative baselines in Tab. 4. The full pipeline (#4, s = 3 ) is most accurate but slower due to the patch-based CNN. A simpler variant (#3) matches the same EPE ( 0.21 ) with a 2.4× speedup ( 31 .81 ms → 13 .16 ms). Increasing the stride to s = 4 or s = 5 further reduces runtime to 8.71 ms and 6.63 ms without loss on the evaluated MVSEC sequence, remaining well below the 22 ms frame interval at 45 Hz. 
+
+# 5 Limitations and Future Work 
+
+LC-Flow performs strongly on MVSEC and achieves state-of-the-art among local methods on both MVSEC and DSEC, but it still lags behind heavy frame-based 14 G. Jeon et al. 
+
+supervised networks on DSEC. We suspect this is largely due to DSEC’s long evaluation interval (100 ms), which induces substantial motion non-linearity and large displacements that are difficult to handle with purely local, incremental updates. As noted by Shiba et al . [27], this interval is unusually large for opti-cal flow, with a significant fraction of ground-truth displacements exceeding 22 pixels, violating the linear trajectory assumptions commonly used in flow estima-tion. Reducing this gap on DSEC-e.g., by incorporating mechanisms that better capture non-linear motion over long intervals while preserving low latency-is a key direction for future work. On the systems side, LC-Flow already runs in real time (6.63 ms at stride s=5 ;Tab. 4). An optimized implementation with sparse computation and hardware-aware scheduling could further reduce latency for edge deployment. Finally, we plan to integrate LC-Flow’s sparse local flow and confidence into an event-based visual odometry pipeline, where confidence-filtered motion cues can directly sup-port tracking and pose estimation. 
+
+# 6 Conclusion 
+
+We presented LC-Flow, a learning-based framework for continuous event-based optical flow estimation from local event dynamics. LC-Flow maintains persis-tent hidden states per local grid to support event-driven, continuous-time flow querying without fixed-window accumulation. By jointly predicting flow and confidence, it mitigates ambiguity from sparse local observations and supports confidence-guided reconstruction of a full-resolution flow field. LC-Flow achieves state-of-the-art performance among local methods on MVSEC and DSEC, and strong overall results on MVSEC via lightweight confidence-guided aggregation. These results suggest that accurate local dynamics with explicit reliability esti-mation can provide a practical low-latency alternative to global, windowed dense architectures. 
+
+# References     
+
+> 1. Akolkar, H., Ieng, S.H., Benosman, R.: Real-time high speed motion prediction using fast aperture-robust event-driven visual flow. IEEE Transactions on Pattern Analysis and Machine Intelligence 44 (1), 361–372 (2020) 2. Almatrafi, M., Baldwin, R., Aizawa, K., Hirakawa, K.: Distance surface for event-based optical flow. IEEE transactions on pattern analysis and machine intelligence
+> 42 (7), 1547–1556 (2020) 3. Baldwin, R.W., Liu, R., Almatrafi, M., Asari, V., Hirakawa, K.: Time-ordered re-cent event (tore) volumes for event cameras. IEEE Transactions on Pattern Analy-sis and Machine Intelligence 45 (2), 2519–2532 (2023). https://doi.org/10.1109/ TPAMI.2022.3172212
+> 4. Barranco, F., Fermüller, C., Aloimonos, Y.: Contour motion estimation for asyn-chronous event-driven cameras. Proceedings of the IEEE 102 (10), 1537–1556 (2014)
+
+LC-Flow 15 5. Brebion, V., Moreau, J., Davoine, F.: Real-time optical flow for vehicular percep-tion with low-and high-resolution event cameras. IEEE Transactions on Intelligent Transportation Systems 23 (9), 15066–15078 (2021) 6. Cannici, M., Ciccone, M., Romanoni, A., Matteucci, M.: A differentiable recurrent surface for asynchronous event-based data. In: European Conference on Computer Vision. pp. 136–152. Springer (2020) 7. Chung, J., Gulcehre, C., Cho, K., Bengio, Y.: Empirical evaluation of gated recur-rent neural networks on sequence modeling. arXiv preprint arXiv:1412.3555 (2014) 8. Cuadrado, J., Rançon, U., Cottereau, B.R., Barranco, F., Masquelier, T.: Optical flow estimation from event-based cameras and spiking neural networks. Frontiers in Neuroscience 17 , 1160034 (2023) 9. Ding, Z., Zhao, R., Zhang, J., Gao, T., Xiong, R., Yu, Z., Huang, T.: Spatio-temporal recurrent networks for event-based optical flow estimation. In: Proceed-ings of the AAAI conference on artificial intelligence. vol. 36, pp. 525–533 (2022) 10. Gehrig, M., Aarents, W., Gehrig, D., Scaramuzza, D.: Dsec: A stereo event camera dataset for driving scenarios. IEEE Robotics and Automation Letters 6(3), 4947– 4954 (2021) 11. Gehrig, M., Millhäusler, M., Gehrig, D., Scaramuzza, D.: E-raft: Dense optical flow from event cameras. In: 2021 International Conference on 3D Vision (3DV). pp. 197–206. IEEE (2021) 12. Kendall, A., Gal, Y.: What uncertainties do we need in bayesian deep learning for computer vision? Advances in neural information processing systems 30 (2017) 13. Lee, C., Kosta, A.K., Zhu, A.Z., Chaney, K., Daniilidis, K., Roy, K.: Spike-flownet: event-based optical flow estimation with energy-efficient hybrid neural networks. In: European conference on computer vision. pp. 366–382. Springer (2020) 14. Lin, S., Ma, Y., Chen, J., Wen, B.: Compressed event sensing (ces) volumes for event cameras 133 (1) (2024) 15. Liu, D., Cheng, L., Wang, T., Sun, C.: Edcflow: Exploring temporally dense differ-ence maps for event-based optical flow estimation. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 1984–1993 (2025) 16. Liu, H., Chen, G., Qu, S., Zhang, Y., Li, Z., Knoll, A., Jiang, C.: Tma: Temporal motion aggregation for event-based optical flow. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 9685–9694 (2023) 17. Liu, Q., Chen, B.: Robust visual odometry using sparse optical flow network. En-gineering Applications of Artificial Intelligence 116 , 105471 (2022) 18. Lu, D., Kong, L., Lee, G.H., Chane, C.S., Ooi, W.T.: Flexevent: Towards flexible event-frame object detection at varying operational frequencies (2025), https: //arxiv.org/abs/2412.06708 
+
+19. Nagata, J., Sekikawa, Y.: Tangentially elongated gaussian belief propagation for event-based incremental optical flow estimation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 21940–21949 (2023) 20. Nagata, J., Sekikawa, Y., Aoki, Y.: Optical flow estimation by matching time sur-face with event-based cameras. Sensors 21 (4), 1150 (2021) 21. Paredes-Vallés, F., De Croon, G.C.: Back to event basics: Self-supervised learning of image reconstruction for event cameras via photometric constancy. In: Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 3446–3455 (2021) 22. Paredes-Vallés, F., Scheper, K.Y., De Wagter, C., De Croon, G.C.: Taming con-trast maximization for learning sequential, low-latency, event-based optical flow. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 9695–9705 (2023) 16 G. Jeon et al. 23. Schaefer, S., Gehrig, D., Scaramuzza, D.: Aegnn: Asynchronous event-based graph neural networks (2022), https://arxiv.org/abs/2203.17149 
+
+24. Schöne, M., Sushma, N.M., Zhuge, J., Mayr, C., Subramoney, A., Kappel, D.: Scalable event-by-event processing of neuromorphic sensory signals with deep state-space models (2024), https://arxiv.org/abs/2404.18508 
+
+25. Sekikawa, Y., Hara, K., Saito, H.: Eventnet: Asynchronous recursive event pro-cessing. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (June 2019) 26. Senst, T., Eiselein, V., Sikora, T.: Robust local optical flow for feature tracking. IEEE Transactions on Circuits and Systems for Video Technology 22 (9), 1377– 1387 (2012) 27. Shiba, S., Aoki, Y., Gallego, G.: Secrets of event-based optical flow. In: European Conference on Computer Vision. pp. 628–645. Springer (2022) 28. Shiba, S., Aoki, Y., Gallego, G.: Fast event-based optical flow estimation by triplet matching. IEEE Signal Processing Letters 29 , 2712–2716 (2023) 29. Wan, Z., Dai, Y., Mao, Y.: Learning dense and continuous optical flow from an event camera. IEEE Transactions on Image Processing 31 , 7237–7251 (2022) 30. Wang, X., Zhou, Y., Yu, G., Cui, Y.: A lightweight visual odometry based on lk optical flow tracking. Applied Sciences 13 (20), 11322 (2023) 31. Wang, Z., Zhang, R., Liu, Z.Y., Wang, Y., Daniilidis, K.: Continuous-time human motion field from events (2024), https://arxiv.org/abs/2412.01747 
+
+32. Yang, S., Yoon, Y., Jung, H.M., Lim, J.: Smf-vo: Direct ego-motion estimation via sparse motion fields. arXiv preprint arXiv:2511.09072 (2025) 33. Yuan, D., Burner, L., Wu, J., Liu, M., Chen, J., Aloimonos, Y., Fermüller, C.: Learning normal flow directly from event neighborhoods. arXiv preprint arXiv:2412.11284 (2024) 34. Yuan, D., Burner, L., Wu, J., Liu, M., Chen, J., Aloimonos, Y., Fermüller, C.: Learning normal flow directly from events. In: Proceedings of the IEEE/CVF In-ternational Conference on Computer Vision (ICCV). pp. 7969–7979 (October 2025) 35. Zeng, Q., Gao, C., Chen, Z., Jin, Y., Kan, Y.: Robust mono visual-inertial odometry using sparse optical flow with edge detection. IEEE Sensors Journal 22 (6), 5260– 5269 (2021) 36. Zhang, Y., Lv, H., Zhao, Y., Feng, Y., Liu, H., Bi, G.: Event-based optical flow estimation with spatio-temporal backpropagation trained spiking neural network. Micromachines 14 (1), 203 (2023) 37. Zhu, A.Z., Thakur, D., Özaslan, T., Pfrommer, B., Kumar, V., Daniilidis, K.: The multivehicle stereo event camera dataset: An event camera dataset for 3d perception. IEEE Robotics and Automation Letters 3(3), 2032–2039 (2018) 38. Zhu, A.Z., Yuan, L., Chaney, K., Daniilidis, K.: Ev-flownet: Self-supervised optical flow estimation for event-based cameras. arXiv preprint arXiv:1802.06898 (2018) 39. Zhu, A.Z., Yuan, L., Chaney, K., Daniilidis, K.: Unsupervised event-based learning of optical flow, depth, and egomotion. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 989–997 (2019) 40. Zhuang, H., Fang, Z., Huang, X., Hou, K., Kong, D., Hu, C.: Ev-mgrflownet: Motion-guided recurrent network for unsupervised event-based optical flow with hybrid motion-compensation loss. IEEE Transactions on Instrumentation and Mea-surement 73 , 1–15 (2024) 41. Zubić, N., Gehrig, M., Scaramuzza, D.: State space models for event cameras (2024), https://arxiv.org/abs/2402.15584 Supplementary materials for LC-Flow: Learning Local Continuous Optical Flow and Confidence from events 
+
+# 1 Quantitative Results on DSEC 
+
+Tab. 1 presents quantitative results on the DSEC benchmark. Our local estima-tor already outperforms the model-based MultiCM [27] baseline on EPE. With confidence-guided aggregation, our method achieves comparable EPE to EV-FlowNet [38] while improving on AE and 3PE, and surpasses TamingCM [22] on 3PE. The remaining gap to frame-based networks such as E-RAFT [11] and EDCFlow [15] is discussed in Sec. 5 of the main paper. 
+
+# 2 Qualitative Result Video on MVSEC 
+
+We provide a supplementary video demonstrating qualitative results on MVSEC 
+
+outdoor_day1 sequence. Each frame shows, from left to right, local flow, confi-dence map, confidence-guided aggregated global flow, and ground-truth flow. In the confidence map, red indicates high confidence and blue indicates low confi-dence. Regions with sparse event activity produce blocky local flow estimates, which are correctly assigned low confidence (blue); these regions are then sup-pressed during aggregation, resulting in a globally consistent flow field. The video illustrates that this behavior is temporally stable across the full sequence. 
+
+# 3 Confidence Balancing Coefficient λ
+
+The confidence balancing coefficient λ controls the degree of confidence regular-ization in the loss (Eq. 3 of the main paper). A large λ encourages the network to assign uniformly high confidence across all regions, resulting in near-uniform confidence maps that lose discriminative information (visible for λ = 0 .4 and 
+
+λ = 0 .8, where the maps become saturated with high values). Conversely, a small λ drives confidence towards lower values. We sweep λ ∈ { 0.1, 0.2, 0.4, 0.8} on MVSEC and select λ = 0 .2 as the op-erating point, which produces confidence maps that are spatially discriminative while remaining well-calibrated. The higher value used for DSEC ( λ = 0 .8) re-flects the larger flow magnitudes induced by its 100 ms evaluation interval: under such large displacements, a higher λ is necessary to prevent the confidence from collapsing due to elevated prediction errors. 18 
+
+Table 1: Quantitative comparison on the DSEC benchmark. † Result reported by E-RAFT [11]. 
+
+Method EPE AE 1PE 2PE 3PE 
+
+MB MultiCM [27] 3.47 13.98 76.6 48.4 30.9 USL TamingCM [22] 2.33 10.56 68.3 33.5 17.8 SL EV-FlowNet † [38] 2.32 7.90 55.4 29.8 18.6 Ours (local only) 3.05 14.4 72.1 43.1 26.2 Ours (+ Conf Agg) 2.45 7.87 61.6 31.1 18.1 E-RAFT [11] 0.79 2.85 12.7 4.7 2.7 EDCFlow [15] 0.72 2.65 10.0 3.6 2.1 Table 2: Architecture of the flow and confidence prediction heads in the Local Esti-mator, and configuration of the Confidence-guided Aggregator for MVSEC and DSEC. 
+
+Module Component Architecture 
+
+Local Estimator Flow head FC(256 →64) → ReLU → FC(64 →2) Conf head 6-layer FC (256 →1) → Sigmoid Conf-guided Aggregator Scales s MVSEC: {1, 2, 4}, DSEC: {1, 2, 4, 8}
+
+Patch size k MVSEC: 7, DSEC: 11 CNN Conv(9/12 →32 →64) → AdaptAvgPool 
+
+→ FC(64 →32 →3/4) → Softmax LR / Epochs 10 −4 / 50 Batch size 4
+
+# 4 Network Architecture Details 
+
+We summarize the architecture of the prediction heads and the Confidence-guided Aggregator in Tab. 2. The confidence head uses a deeper MLP than the flow head to capture the more complex mapping from hidden state to reliability score. 
+
+# 5 Visual Odometry Application 
+
+We validate the practical utility of LC-Flow by integrating its sparse local flow and confidence into SMF-VO [32], a sparse optical flow-based visual odometry pipeline. 
+
+5.1 Setup 
+
+We evaluate on the MVSEC indoor_flying3 sequence at ∆t = 0 .05 s and com-pare three flow inputs: (i) ground-truth flow (upper bound), (ii) DCEIFlow [29] Title Suppressed Due to Excessive Length 19              
+
+> Fig. 1: Qualitative visualization of flow and confidence under different λvalues on MVSEC. Rows correspond to λ= 0 .1,0.2,0.4,0.8from top to bottom; columns show local flow, confidence map, and ground-truth flow from left to right. At λ= 0 .4and
+> λ= 0 .8, the confidence maps become near-uniform (saturated), losing the ability to discriminate reliable from unreliable predictions.
+
+(supervised baseline), and (iii) our sparse local flow, with and without confidence-based filtering (thresholds 0.0 and 0.3, respectively). The local estimator is trained exclusively on the outdoor_day2 sequence and applied directly to the in-door scene without fine-tuning, following the standard cross-domain evaluation protocol. 
+
+5.2 Results 
+
+Figs. 2a and 2b report relative translation and rotation RMSE as a function of translation magnitude |t|. Applying a stricter confidence threshold (0.3 vs. 0.0) consistently reduces translation error across all motion magnitudes, with the gap growing as |t| increases, confirming that the learned confidence reliably identifies high-quality flow estimates. The effect on rotation is more modest, as rotational 20    
+
+> (a) Translation Error (b) Rotation Error
+
+Fig. 2: Relative RMSE as a function of translation magnitude |t| on MVSEC in-door_flying3 . Both plots show that our method outperforms DCEIFlow. (a) Apply-ing a stricter confidence threshold (0.3 vs. 0.0) consistently reduces translation error, confirming that learned confidence identifies high-quality flow. (b) The benefit of con-fidence filtering is less pronounced for rotation, as rotational motion is inherently more challenging. 
+
+motion is inherently harder to resolve from local observations alone. In both metrics, our method outperforms DCEIFlow, which relies on image frames in addition to events for dense flow estimation.

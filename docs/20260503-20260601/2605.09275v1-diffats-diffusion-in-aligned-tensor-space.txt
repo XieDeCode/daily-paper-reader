@@ -1,0 +1,1313 @@
+Title: DiffATS: Diffusion in Aligned Tensor Space
+
+URL Source: https://arxiv.org/pdf/2605.09275v1
+
+Published Time: Tue, 12 May 2026 01:39:30 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+## DiffATS: Diffusion in Aligned Tensor Space 
+
+Jinhua Lyu ∗ Tianmin Yu ∗ Brian Kim ∗ Lizhuo Zhou ∗ Chanwook Park ∗ Naichen Shi ∗,†
+
+Abstract 
+
+Direct diffusion modeling of high-resolution spatiotemporal fields is computa-tionally challenging. Parameter-efficient primitives address this by representing high-dimensional data with a compact set of parameters. In this paper, we construct data-dependent tensor primitives without pretrained compression autoencoders. Our construction starts from Tucker decomposition, which captures low-rank mul-tilinear structure through a core tensor and mode-wise factors. However, Tucker factors are non-unique: the same tensor can be represented by different rotated fac-tors, which complicates generative modeling. We address this issue with orthogonal Procrustes (OP) alignment. Specifically, we select medoid anchor matrices from the data and align the factor matrices to resolve the gauge ambiguity. This yields matrix Grassmannian primitives and tensor Grassmannian primitives that are com-pact, data-adaptive, and directly decodable by explicit multilinear reconstruction. Theoretically, we prove that the proposed primitive maps are homeomorphisms between low-rank tensors and their corresponding primitive spaces, certifying that the representations are non-degenerate and topologically faithful. Building on these primitives, we propose Diffusion in Aligned Tensor Space (DiffATS), a genera-tive framework that trains diffusion models directly on aligned tensor primitives. Across images, videos, and PDE solutions, DiffATS achieves strong unconditional and conditional generation performance while compressing original data by 3.9×
+
+to 210 ×, without relying on any pretrained deep compression autoencoders. 
+
+Figure 1: Generation results of DiffATS on CelebA-HQ 1024, Moving MNIST, Kármán vortex street and 2-d Burgers’ equation. “GT” denotes the ground truth.   
+
+> ∗All authors are with Northwestern University. †Corresponding authors: naichen.shi@northwestern.edu .Preprint.
+> arXiv:2605.09275v1 [cs.LG] 10 May 2026
+
+1 Introduction 
+
+Diffusion models (DMs) [ 49 , 51 , 18 , 52 , 50 ] have become central tools for learning and sampling from complex unknown distributions, with success in generating images [ 18 , 50 ], audio [ 28 , 34 ], videos [ 20 ,35 ], protein structures [ 1], inorganic materials [ 63 ], and flow fields [ 48 ]. However, standard DMs often require huge computational resources to model high-resolution spatiotemporal data that are naturally represented as large tensors, such as videos, weather observations, fluid states, and parametric PDE solutions. Direct diffusion in the original tensor space is computationally demanding as training and sampling require repeated function evaluations in the full data dimension [ 45 ]. This cost is particularly severe for scientific tensors. For instance, GenCast [ 43 ], a diffusion model for global weather forecasting, trains on tensors of size 84 × 720 × 1440 and requires 3.5 days on 32 TPUs. To mitigate the computational cost, a common strategy is to perform diffusion in a lower-dimensional representation space. Latent diffusion models (LDMs) [ 45 ] first train a regularized variational autoencoder [ 25 , 44 ] to compress data into latent embeddings, then learn a diffusion model in the latent space. Many subsequent image synthesis methods build on this framework, such as transformer-based architectures [ 41 ] and high-resolution text-to-image models [ 12 , 42 ]. The same approach extends to video generation [ 16 , 3, 37 ], with the latent space coming from a pretrained or task-specific video autoencoder. LDMs have become the de facto standard for natural images and videos, where large-scale pretrained autoencoders are available. Scientific data poses a different challenge. For the generative modeling of scientific problems, such as weather forecasting [ 43 ] and turbulent flow generation [ 33 ], off-the-shelf autoencoders pretrained on large-scale datasets are often not available. Training task-specific autoencoders is expensive: the cost scales with both network size and data dimensionality. Training also requires sophisticated optimization techniques [ 60 , 11 , 12 ]. This motivates autoencoder-free primitives that compress data through explicit transforms. Recent examples include primitives based on discrete cosine transforms [ 39 ] and tensor factorizations [ 4, 14 ]. These methods reduce dimension efficiently, yet they rely on predefined cosine or tensor factor bases, which can limit their ability to approximate the raw tensors. In light of these challenges, this paper asks the following question: 
+
+Can we construct data-dependent parameter-efficient primitives for high-resolution spatiotemporal data by exploiting their inherent low-rank structure to improve generative modeling? 
+
+The starting point is the Tucker decomposition [ 58 ], which represents a tensor X ∈ Rn1×···× nd by a core tensor and d factor matrices. This decomposition gives a natural data-adaptive and low-rank parametrization. However, as evidenced in Fig. 3, training DMs on this parametrization yields inferior performance. We attribute this to the degeneracy of the standard Tucker decomposition: infinitely many combinations of core tensors and factor matrices yield the same tensor X . This arbitrariness breaks the continuity of the primitive map, and complicates downstream modeling. Our primary contribution lies in resolving this degeneracy problem through the orthogonal Procrustes (OP) alignment of factor matrices. Under proper conditions, OP selects a unique representative from each Grassmannian equivalence class. Building on this technique, we define two families of primitives: matrix Grassmannian primitives (MGPs) for low-rank matrices and tensor Grassmannian primitives (TGPs) for low-multilinear-rank tensors. They preserve the parameter efficiency of Tucker representations while removing the rotational ambiguity that destabilizes DM training. Our theoretical analysis further shows that the primitive map Φ is a homeomorphism under an anchor-overlap condition, which guarantees that the primitive space preserves the local topological structure of the original data space. By combining these primitives with diffusion modeling, we propose Diffusion in Aligned Tensor Space 
+
+(DiffATS). The pipeline is shown in Fig. 2. During training, DiffATS maps each high-dimensional tensor (or matrix) to its TGP (or MGP) and trains DMs in the aligned primitive space. During inference, the generated primitive is mapped back to the original data space through the multilinear reconstruction map. We conduct experiments on images, videos, and PDE solutions, with representative samples shown in Fig. 1. Across all settings, DiffATS outperforms DCTDiff [ 39 ], SDIFT [ 4 ], FNO [ 32 ], and average pooling (AvgPool) in generation quality, despite using compression ratios that match or exceed those of the baselines. 2n2
+
+n1
+
+n3
+
+∈ ℝn1×n2×n3
+
+Input tensor 1
+
+U1
+
+U2
+
+U3
+
+U2 U3
+
+Tucker decomposition 2
+
+˜U2 ˜U3
+
+n1 × r2 × r3
+
+Tucker Grassmannian 
+
+primitive 
+
+3
+
+n1 × r2 × r3 n2 × r2 n2 × r2 n3 × r3n3 × r3
+
+Generative 
+
+training 
+
+4
+
+Diffusion 
+
+model 
+
+∇log pθ
+
+Train 
+
+Sampling 5
+
+Sample 
+
+<latexit sha1_base64="gfGSRCBiblUYmqzYIHEg3xV1l3I=">AAAB8nicbVDLSgMxFM3UV62vqks3wSK4KjMi1WWxG5cV7AOmQ8mkmTY0kwzJHaEM/Qw3LhRx69e482/MtLPQ1gOBwzn3knNPmAhuwHW/ndLG5tb2Tnm3srd/cHhUPT7pGpVqyjpUCaX7ITFMcMk6wEGwfqIZiUPBeuG0lfu9J6YNV/IRZgkLYjKWPOKUgJX8QUxgQonIWvNhtebW3QXwOvEKUkMF2sPq12CkaBozCVQQY3zPTSDIiAZOBZtXBqlhCaFTMma+pZLEzATZIvIcX1hlhCOl7ZOAF+rvjYzExszi0E7mEc2ql4v/eX4K0W2QcZmkwCRdfhSlAoPC+f14xDWjIGaWEKq5zYrphGhCwbZUsSV4qyevk+5V3WvUGw/XteZdUUcZnaFzdIk8dIOa6B61UQdRpNAzekVvDjgvzrvzsRwtOcXOKfoD5/MHduqRZA==</latexit> 
+
+C
+
+<latexit sha1_base64="z7FfPkNvlGSN5n8Ohbnf7BlO2oc=">AAAB8nicbVDLSgMxFM3UV62vqks3wSK4KjMi1WXRhS4r2AdMh5JJM21oJhmSO0IZ+hluXCji1q9x59+YaWehrQcCh3PuJeeeMBHcgOt+O6W19Y3NrfJ2ZWd3b/+genjUMSrVlLWpEkr3QmKY4JK1gYNgvUQzEoeCdcPJbe53n5g2XMlHmCYsiMlI8ohTAlby+zGBMSUiu5sNqjW37s6BV4lXkBoq0BpUv/pDRdOYSaCCGON7bgJBRjRwKtis0k8NSwidkBHzLZUkZibI5pFn+MwqQxwpbZ8EPFd/b2QkNmYah3Yyj2iWvVz8z/NTiK6DjMskBSbp4qMoFRgUzu/HQ64ZBTG1hFDNbVZMx0QTCralii3BWz55lXQu6l6j3ni4rDVvijrK6ASdonPkoSvURPeohdqIIoWe0St6c8B5cd6dj8VoySl2jtEfOJ8/fP6RaA==</latexit> 
+
+G <latexit sha1_base64="RaV0GYHNmjlqa4B1ozSal8DQXSU=">AAAB/HicbVDLSsNAFJ3UV62vaJduBovgqiQi1WXRhS4r2Ac0oUwmk3bo5MHMjVBC/BU3LhRx64e482+ctFlo64GBwzn3cs8cLxFcgWV9G5W19Y3Nrep2bWd3b//APDzqqTiVlHVpLGI58IhigkesCxwEGySSkdATrO9Nbwq//8ik4nH0ALOEuSEZRzzglICWRmbdAS58ljkhgQklIrvN85HZsJrWHHiV2CVpoBKdkfnl+DFNQxYBFUSpoW0l4GZEAqeC5TUnVSwhdErGbKhpREKm3GwePsenWvFxEEv9IsBz9fdGRkKlZqGnJ4uMatkrxP+8YQrBlZvxKEmBRXRxKEgFhhgXTWCfS0ZBzDQhVHKdFdMJkYSC7qumS7CXv7xKeudNu9Vs3V802tdlHVV0jE7QGbLRJWqjO9RBXUTRDD2jV/RmPBkvxrvxsRitGOVOHf2B8fkDdAqVTw==</latexit> 
+
+˜G
+
+Multiplication 
+
+<latexit sha1_base64="fDOLwOcAA+yedyTcERK5GoVcJuo=">AAAB8nicbVDLSsNAFL3xWeur6tLNYBFclUSkuiy6cVnBPqANZTKdtEMnkzBzI5TQz3DjQhG3fo07/8ZJm4W2Hhg4nHMvc+4JEikMuu63s7a+sbm1Xdop7+7tHxxWjo7bJk414y0Wy1h3A2q4FIq3UKDk3URzGgWSd4LJXe53nrg2IlaPOE24H9GREqFgFK3U60cUx4zKrDsbVKpuzZ2DrBKvIFUo0BxUvvrDmKURV8gkNabnuQn6GdUomOSzcj81PKFsQke8Z6miETd+No88I+dWGZIw1vYpJHP190ZGI2OmUWAn84hm2cvF/7xeiuGNnwmVpMgVW3wUppJgTPL7yVBozlBOLaFMC5uVsDHVlKFtqWxL8JZPXiXty5pXr9UfrqqN26KOEpzCGVyAB9fQgHtoQgsYxPAMr/DmoPPivDsfi9E1p9g5gT9wPn8AltOReQ==</latexit> 
+
+X
+
+×1 U1
+
+<latexit sha1_base64="VVaFkiaKokxJXZ+4K/4KYOS7D9k=">AAACAnicbVDLSsNAFL2pr1pfUVfiZrAIrkoiUt0IxS50WcE+oA1lMp20QycPZiZCCcGNv+LGhSJu/Qp3/o2TNoi2Hhg4c8693HuPG3EmlWV9GYWl5ZXVteJ6aWNza3vH3N1ryTAWhDZJyEPRcbGknAW0qZjitBMJin2X07Y7rmd++54KycLgTk0i6vh4GDCPEay01DcPej5WI4J5cp2iS/Tzq6d9s2xVrCnQIrFzUoYcjb752RuEJPZpoAjHUnZtK1JOgoVihNO01IsljTAZ4yHtahpgn0onmZ6QomOtDJAXCv0Chabq744E+1JOfFdXZivKeS8T//O6sfIunIQFUaxoQGaDvJgjFaIsDzRgghLFJ5pgIpjeFZERFpgonVpJh2DPn7xIWqcVu1qp3p6Va1d5HEU4hCM4ARvOoQY30IAmEHiAJ3iBV+PReDbejPdZacHIe/bhD4yPb8/AlxM=</latexit> 
+
+G = Ĉ
+
+U2̂ U3
+
+<latexit sha1_base64="/rl5r886GqT0NvwOE3UEPrc6YDo=">AAAB+nicbVDLSsNAFL3xWesr1aWbwSK4KolIdVl0ocsK9gFNKJPptB06mYSZiVJiPsWNC0Xc+iXu/BsnbRbaemDgcM693DMniDlT2nG+rZXVtfWNzdJWeXtnd2/frhy0VZRIQlsk4pHsBlhRzgRtaaY57caS4jDgtBNMrnO/80ClYpG419OY+iEeCTZkBGsj9e2KN8Y69UKsxwTz9CbL+nbVqTkzoGXiFqQKBZp9+8sbRCQJqdCEY6V6rhNrP8VSM8JpVvYSRWNMJnhEe4YKHFLlp7PoGToxygANI2me0Gim/t5IcajUNAzMZJ5RLXq5+J/XS/Tw0k+ZiBNNBZkfGiYc6QjlPaABk5RoPjUEE8lMVkTGWGKiTVtlU4K7+OVl0j6rufVa/e682rgq6ijBERzDKbhwAQ24hSa0gMAjPMMrvFlP1ov1bn3MR1esYucQ/sD6/AHYMZRm</latexit> 
+
+ˆG
+
+OP align ：U2, U3
+
+<latexit sha1_base64="aHul38SyMcP0Cj6Q4Pwgkj6WDN4=">AAACU3icbVFNSwMxFMyuVWu1WvXoJViEeim7ragXoehBjy1YK3TbJZtm22j2g+StUJb9jyJ48I948aDZWqFWHwQm8+bxJhMvFlyBZb0Z5kphdW29uFHa3Cpv71R29+5UlEjKujQSkbz3iGKCh6wLHAS7jyUjgSdYz3u8yvu9JyYVj8JbmMZsEJBxyH1OCWjKrTw4wMWIpU5AYEKJSK+zDF/ghSvWioApt4FrM9bz007mNoaOAiKPhw5E8Y+k+UvSXJQ4TsmtVK26NSv8F9hzUEXzaruVF2cU0SRgIVBBlOrbVgyDlEjgVLCs5CSKxYQ+kjHraxgS7WGQzjLJ8JFmRtiPpD4h4Bm7OJGSQKlp4Gllblkt93Lyv14/Af98kPIwToCF9HuRnwgMEc4DxiMuGQUx1YBQybVXTCdEEgr6G/IQ7OUn/wV3jbp9Wj/tnFRbl/M4iugAHaIastEZaqEb1EZdRNEzekefBjJejQ/TNAvfUtOYz+yjX2WWvwASlLQB</latexit> 
+
+˜G = G →2 (Qω
+
+2)→ →3 (Qω
+
+3)→
+
+<latexit sha1_base64="BIYPYDx9AeIOsIFPNlJoOsD7Q54=">AAACIXicbVBdSwJBFJ21L9u+rB57GZKgJ9mVMF8CqZceFVoVXJPZcVYHZz+YuRvI4l/ppb/SSw9F+Bb9mUbdqLQDA+ecey9z7/FiwRVY1oeRW1vf2NzKb5s7u3v7B4XDo6aKEkmZQyMRybZHFBM8ZA5wEKwdS0YCT7CWN7qZ1VsPTCoehXcwjlk3IIOQ+5wS0FavUDVNF7jos9QNCAw9P3Umk14ZX+EfreW3aGhx7yogslcoWiVrDrxK7IwUUYZ6rzB1+xFNAhYCFUSpjm3F0E2JBE4Fm5huolhM6IgMWEfTkARMddP5hRN8pp0+9iOpXwh47v6eSEmg1DjwdOdsU7Vcm5n/1ToJ+NVuysM4ARbSxUd+IjBEeBYX7nPJKIixJoRKrnfFdEgkoaBDNXUI9vLJq6RZLtmVUqVxUaxdZ3Hk0Qk6RefIRpeohm5RHTmIokf0jF7Rm/FkvBjvxnTRmjOymWP0B8bnF/Swo3E=</latexit> 
+
+˜U2 = U2Qω
+
+2<latexit sha1_base64="wN1v/ghhryTlodJFekIaRmNVVKQ=">AAACIXicbVDLSgMxFM3UVx1fVZdugkVwVWZUajdC0Y3LFuwDOmPJpJk2NPMguSOUob/ixl9x40KR7sSfMW1H1NYDgXPOvZfce7xYcAWW9WHkVlbX1jfym+bW9s7uXmH/oKmiRFLWoJGIZNsjigkesgZwEKwdS0YCT7CWN7yZ1lsPTCoehXcwipkbkH7IfU4JaKtbqJimA1z0WOoEBAaenzbG4+45vsI/WstvUdfi3lFAZLdQtErWDHiZ2Bkpogy1bmHi9CKaBCwEKohSHduKwU2JBE4FG5tOolhM6JD0WUfTkARMuenswjE+0U4P+5HULwQ8c39PpCRQahR4unO6qVqsTc3/ap0E/Iqb8jBOgIV0/pGfCAwRnsaFe1wyCmKkCaGS610xHRBJKOhQTR2CvXjyMmmelexyqVy/KFavszjy6Agdo1Nko0tURbeohhqIokf0jF7Rm/FkvBjvxmTemjOymUP0B8bnF/l3o3Q=</latexit> 
+
+˜U3 = U3Qω
+
+3
+
+OP align 
+
+×2̂ U2 ×3̂ U3
+
+<latexit sha1_base64="wH3T58VaZnfWImo4Pvrpx0Agy3Q=">AAACDnicbVBNS8NAEN3Ur1q/oh69LJaCp5KIVC9C0YMeK9haaEKZbDft0s0HuxuhhPwCL/4VLx4U8erZm//GTZuDbX0w8Hhvhpl5XsyZVJb1Y5RWVtfWN8qbla3tnd09c/+gI6NEENomEY9E1wNJOQtpWzHFaTcWFAKP0wdvfJ37D49USBaF92oSUzeAYch8RkBpqW/WnBGo1AlAjQjwtJtl+BLPazdZ1jerVt2aAi8TuyBVVKDVN7+dQUSSgIaKcJCyZ1uxclMQihFOs4qTSBoDGcOQ9jQNIaDSTafvZLimlQH2I6ErVHiq/p1IIZByEni6M79RLnq5+J/XS5R/4aYsjBNFQzJb5Cccqwjn2eABE5QoPtEEiGD6VkxGIIAonWBFh2AvvrxMOqd1u1Fv3J1Vm1dFHGV0hI7RCbLROWqiW9RCbUTQE3pBb+jdeDZejQ/jc9ZaMoqZQzQH4+sXC6mcwg==</latexit> 
+
+ˆX = ˆG
+
+<latexit sha1_base64="MhTaaahpVKmb9eVp+v7TEodLVHo=">AAAB+nicbVDLSsNAFJ3UV62vVJduBovgqiQi1WXRjcsK9gFtKDfTSTt0MgkzE6XEfIobF4q49Uvc+TdO2iy09cDA4Zx7uWeOH3OmtON8W6W19Y3NrfJ2ZWd3b//Arh52VJRIQtsk4pHs+aAoZ4K2NdOc9mJJIfQ57frTm9zvPlCpWCTu9SymXghjwQJGQBtpaFcHE9DpIAQ9IcDTXpYN7ZpTd+bAq8QtSA0VaA3tr8EoIklIhSYclOq7Tqy9FKRmhNOsMkgUjYFMYUz7hgoIqfLSefQMnxplhINImic0nqu/N1IIlZqFvpnMM6plLxf/8/qJDq68lIk40VSQxaEg4VhHOO8Bj5ikRPOZIUAkM1kxmYAEok1bFVOCu/zlVdI5r7uNeuPuota8Luooo2N0gs6Qiy5RE92iFmojgh7RM3pFb9aT9WK9Wx+L0ZJV7ByhP7A+fwDyF5R3</latexit> 
+
+ˆXFigure 2: Pipeline overview of DiffATS. 
+
+Our main contributions are summarized as follows: • We introduce MGPs and TGPs as data-adaptive, parameter-efficient representations for low-rank matrices and tensors. These primitives retain the expressive power of Tucker decompositions while resolving the rotational ambiguity through anchored OP alignment. • Theoretically, we prove the continuity and bijectivity of the primitive map Φ under overlap-ping conditions. To our knowledge, this is the first low-rank primitive family with a formal homeomorphism guarantee. • We propose DiffATS, an end-to-end autoencoder-free diffusion framework that trains and samples directly in the MGP and TGP spaces, and reconstructs generated samples via the multilinear reconstruction map. • We conduct extensive experiments on images, videos, and PDE solutions, and show that DiffATS outperforms all baselines on generation quality given a matching or higher com-pression ratio. 
+
+2 Related Works 
+
+We briefly present the overview of the related work in the main paper, while the comprehensive review is available in the supplementary material. DCTDiff [ 39 ] reduces image dimension with cosine bases; SDIFT [ 4] and Tucker-based diffusion [ 14 ] do so with Tucker bases. DiffATS uses data-dependent rather than predefined bases. The idea of reducing representation-induced variation has been explored in molecular graph generation [ 21 , 61 , 22 , 1, 62 , 66 ] to resolve the rotation ambiguity in SO(3) through data augmentation [ 1 , 61 ], projecting the score functions [ 62 ], or projecting the target distributions [66]. DiffATS leverages the idea of resolving variation through canonicalization but operates in the Grassmann manifold via OP. OP alignment has been widely used in the theoretical analysis of nonconvex low-rank factorization [ 57 , 65 , 36 ]. These works use Procrustes alignment as an analytical tool for characterizing the landscape of the optimization geometry, while we use it to construct primitives for diffusion model training. 
+
+3 Background 
+
+This section reviews the preliminaries used throughout the paper. 
+
+Stiefel and Grassmann Manifolds. Given integers r < n , the Stiefel manifold is Stie( n, r ) = {X ∈
+
+Rn×r : X⊤X = Ir }, the set of n × r matrices with orthonormal columns, where Ir is the r × r
+
+identity matrix. The Grassmann manifold Gr( n, r ) is the set of r-dimensional subspaces of Rn,which can also be identified with the set of n × n rank-r projection matrices. 
+
+Tucker Decomposition. The Tucker decomposition expresses a tensor as a core tensor multiplied by a factor matrix along each mode. We focus on the variant with orthonormal factor matrices, which is the form computed by standard algorithms such as the higher-order singular value decomposition (HOSVD) [7] and higher-order orthogonal iteration (HOOI) [8]. 3Following the convention of [ 27 ], the mode-k product of a tensor C ∈ Rr1×···× rk ×···× rd with a matrix 
+
+Uk ∈ Rnk ×rk , denoted C × k Uk, is the tensor in Rr1×···× rk−1×nk ×rk+1 ×···× rd with entries 
+
+(C × k Uk)i1,...,i k−1,j k ,i k+1 ,...,i d =
+
+> rk
+
+X 
+
+> ik=1
+
+Ci1,...,i k ,...,i d (Uk)jk ,i k ,
+
+where ia ∈ { 1, . . . , r a} indexes mode a of C, and jk ∈ { 1, . . . , n k} indexes the new mode-k axis of the product. For d = 2 , this reduces to matrix CUR decomposition [ 38 ]: with C ∈ Rr1×r2 and 
+
+Uk ∈ Rnk ×rk , we have C × 1 U1 = U1C and C × 2 U2 = CU⊤ 
+
+> 2
+
+.Given a tensor X ∈ Rn1×···× nd , the rank-(r1, . . . , r d) Tucker decomposition seeks a core tensor 
+
+C ∈ Rr1×···× rd and factor matrices Uk ∈ Stie( nk, r k) that minimize the reconstruction error 
+
+min C,U1,..., Ud ∥X − C × 1 U1 ×2 U2 · · · × d Ud∥2 
+
+> F
+
+, under the constraint that U⊤ 
+
+> k
+
+Uk = Irk ,
+
+k = 1 , . . . , d. Both HOSVD and HOOI compute approximate solutions to this problem. We refer to any such solution (C, U1, . . . , Ud) as a Tucker decomposition of X with rank (r1, . . . , r d).
+
+Score-matching Diffusion Models. A diffusion model [ 52 ] learns the data distribution p0 through a pair of forward and reverse-time stochastic differential equations (SDEs). The forward SDE 
+
+dx = f (x, t )dt + g(t)dw gradually corrupts a sample x(0) ∼ p0 into noise as t grows from 0 to 
+
+T , where w is a standard Wiener process. Let pt denote the marginal distribution of x(t). By [ 2], the reverse-time SDE dx = [ −f (x, t ) − g(t)2+σ(t)2 
+
+> 2
+
+∇x log pt(x)] dt + σ(t)d ¯w recovers p0 when integrated backward from x(T ) ∼ pT [ 24 ]. The only unknown term in the reverse-time SDE is the 
+
+score function ∇x log pt(x), the gradient of the log marginal diffused density at t with respect to x.Score matching trains a neural network sθ (x, t ) to approximate the score, and sampling is performed by simulating the reverse-time SDE with sθ in place of ∇x log pt.
+
+4 Search for Tensor Primitives 
+
+Given a tensor X with low Tucker rank, our goal is to construct a parameter-efficient primitive Φ( X )
+
+amenable to generative modeling. An effective tensor primitive should satisfy three desiderata: (i) it is expressive enough to represent a rich class of low-rank tensors; (ii) it reduces the parameter count of the original tensor; and (iii) it is compatible with standard diffusion model training and sampling. 
+
+4.1 Why Are Natural Low-rank Primitives Undesirable? 
+
+An unpretentious choice is to take the Tucker factors themselves as the primitive: Φ( X ) =(C, U1, . . . , Ud), where C is the core tensor and U1, . . . , Ud are the factor matrices. We refer to this representation as the natural primitive . Since HOSVD and HOOI provide efficient algorithms for computing such factors, the natural primitive appears appealing at first glance. However, the Tucker decomposition is non-unique. For any orthogonal matrix Q ∈ O( rk) = {Q ∈
+
+Rrk ×rk : Q⊤Q = Irk } and any mode k, replacing (C, Uk) with (C × k Q⊤, UkQ) leaves the reconstructed tensor unchanged: (C × k Q⊤) ×1 U1 · · · × k (UkQ) · · · × d Ud = C × 1 U1 · · · × d Ud.Thus a single tensor corresponds to infinitely many equivalent natural primitives. These primitives all reconstruct X exactly, yet can lie arbitrarily far apart in the primitive space. This poses a problem for diffusion training: if a single X is encoded by a dispersed cloud of primitives, the diffusion model must spread mass across all of them, artificially inflating the support of the target distribution. We illustrate this dispersion with a scalar toy example. Let X = U V with U, V ∈ R. For any fixed x,the equivalent factorizations form the hyperbola {(u, v ) : uv = x}, which is unbounded, even when 
+
+X has bounded support. To evaluate diffusion generative modeling on this primitive, we sample N = 20 ,000 points {xi}Ni=1 
+
+from the two-component Gaussian mixture: p(X) = 12 N (1 , 0.22) + 12 N (3 , 0.22). For each xi, we draw vi ∼ Uniform( a, b ) and set ui = xi/v i, producing equivalent factorizations {(ui, v i)}Ni=1 . We then train a two-layer MLP score network sθ (u, v, t ) with the denoising score-matching objective [ 18 ]to approximate ∇ log pt(u, v ).Fig. 3 (a) shows that increasing the range of V spreads the training distribution over a much larger region of the primitive space. The score field becomes harder to learn, and the generated X = U V 
+
+deviates from the target mixture distribution, as is evidenced in Fig. 3 (b). The failure mode arises 4Figure 3: Effect of OP alignment. (a) Density and learned score fields ∇(U,V ) log pt(U, V ) at diffusion step t = 10 for four sampling distributions of V (arrows normalized within each panel). Pink shading shows the density p10 (U, V ), with darker color indicating higher density. (b) Sample KDE of X generated by the trained sθ . (c) Samples generated by DMs trained on CelebA-HQ (1024 × 1024 ), with and without OP alignment. Both models share the same training budget. from the unnecessary variance in the natural (U, V ) primitive: the variance of U and V can be orders of magnitude larger than that of X.This observation suggests a guiding principle: a useful primitive should not introduce variation within an equivalence class . In the scalar example, anchoring V = 1 and encoding X as (U, V ) = ( X, 1) 
+
+produces a primitive distribution as concentrated as p(X), yielding an accurate sampler (Fig. 3(a,b)). Although the scalar model is deliberately simple, the same mechanism appears in Tucker factors. Fig. 3 (c) illustrates this on CelebA-HQ. These observations motivate the remainder of this section, which extends the anchoring idea from the scalar model to the multilinear setting via OP alignment. 
+
+4.2 Orthogonal Procrustes Provides Stable Representations 
+
+The toy example highlights the importance of controlling dispersion of primitives. We therefore seek a primitive map Φ that is single-valued and continuous with respect to the underlying tensor. 
+
+Orthogonal Procrustes Alignment. We fix the rotation ambiguity in Tucker factorization through OP. Given orthonormal matrices A, B ∈ Stie( n1, n 2), OP finds the orthogonal matrix, Q⋆ ∈
+
+arg min Q∈O( n2) ∥AQ − B∥2 
+
+> F
+
+. The solution to the OP problem admits a closed form [ 47 ]: if 
+
+A⊤B = LΛR ⊤ is an SVD, then Q⋆ = LR ⊤ is an optimal solution. OP alignment allows us to choose a canonical representative for each r-dimensional subspace of Rn, relative to a fixed anchor 
+
+V0. The following proposition formalizes this selection. 
+
+Proposition 4.1. Let V, V0 ∈ Stie( n, r ) satisfy V⊤ 
+
+> 0
+
+VV ⊤V0 ≻ 0. Then the optimization problem 
+
+arg min eV: eV eV⊤=VV ⊤ ∥V0 − eV∥2 
+
+> F
+
+has a unique solution VQ ⋆, where Q⋆ is the optimal solution to the OP problem arg min Q∈O( r) ∥V0 − VQ ∥2 
+
+> F
+
+.We denote the unique solution by OP( V, V0). Geometrically, Prop. 4.1 selects the orthonormal frame of span( V) that is closest to the anchor V0. Note that OP( V, V0) depends on V only through span( V): OP( VQ , V0) = OP( V, V0) for any Q ∈ O( r). Thus, OP( V, V0) defines a canonical representative of the equivalence class [V] = {VQ : Q ∈ O( r)}, which is in one-to-one correspondence with a point on the Grassmann manifold. We define gr( n, r | V0) := {OP( V, V0) : 
+
+V ∈ Stie( n, r ), V⊤ 
+
+> 0
+
+VV ⊤V0 ≻ 0}. Then gr( n, r | V0) has a one-to-one correspondence with the subset of Gr( n, r ) consisting of subspaces having no direction perpendicular to span( V0).
+
+Reduction in Dispersion. We next quantify the contraction induced by OP alignment. We start with a random subspace model. Let V0, V ∈ Stie( p, r ) be two independent, uniformly distributed orthonormal matrices with respect to the Haar measure. The expected squared distance between them is E∥V − V0∥2 
+
+> F
+
+= E∥V∥2 
+
+> F
+
++ E∥V0∥2 
+
+> F
+
+− 2Tr( E[V⊤V0]) = 2 r. In contrast, the following proposition characterizes their asymptotic distance after OP alignment. 5Proposition 4.2 (Asymptotic Procrustes distance between random subspaces) . Let V0, V ∈
+
+Stie( p, r ) be two independent Haar-distributed orthonormal matrices. Suppose that p, r → ∞ and  
+
+> pr
+
+→ c > 1. Let Q⋆ ∈ argmin Q∈O( r) ∥V0 −VQ ∥2 
+
+> F
+
+be an optimal OP solution and eV = VQ ⋆. Then 
+
+∥V0 − eV∥2 
+
+> F
+
+will converge to 2r(1 − ℓ(c)) + o(r), where ℓ(c) = cπ
+
+√b − √1 − b arctan 
+
+q b
+
+> 1−b
+
+
+
++max {2 − c, 0}, and b = 4( c−1)  
+
+> c2
+
+.Prop. 4.2 shows that OP alignment reduces the squared distance by ≈ 2rℓ (c). For example, when 
+
+c = p/r = 4 , ℓ(c) ≈ 0.44 , so OP alignment removes about 44% of the unaligned baseline distance. 5 0 5  
+
+> MDS-1
+> 6
+> 4
+> 2
+> 0
+> 2
+> 4
+> 6
+> MDS-2
+> 505
+> MDS-1
+> 0
+> 200
+> 400
+> 600
+> 800
+> Image index
+> Anchor
+
+Figure 4: OP alignment of factor matrices makes diffusion models easier to train. (Left): Without alignment. (Right): With OP alignment. To visualize the dispersion reduction on realis-tic data, we randomly select N = 1000 images from CelebA-HQ, patchify each into 32 × 32 
+
+patches, and compute the SVD of the patch ma-trix on the first channel, yielding a right singular matrix Vi per image. We select the anchor as the medoid of these N = 1000 right singular matrices, following Step 2 of Sec. 4.3. Fig. 4 visualizes the right singular matrices under mul-tidimensional scaling (MDS) [ 29 ], with each marker corresponding to one Vi projected to two dimensions. Before alignment, the matrices are widely scattered. After OP alignment to a common anchor, they concentrate around the anchor, indicating that alignment substantially reduces the variation in the raw singular subspaces. 
+
+4.3 Matrix Grassmannian Primitives (MGPs) 
+
+We now leverage OP alignment to construct the mapping Φ from a matrix to its primitives. The result is named the matrix Grassmannian primitive . We take three steps to implement Φ.
+
+Step 1: Singular value decomposition. Consider a rank-r matrix M ∈ Rn1×n2 with singular value decomposition M = UΣV ⊤, where U ∈ Stie( n1, r ), V ∈ Stie( n2, r ), and Σ ∈ Rr×r is diagonal. In real-world applications, observation matrices are rarely exactly low-rank; however, if their singular values decay rapidly, they can be well-approximated by a low-rank matrix. In that case, we apply truncated SVD ( r-SVD) to retain the top r singular vectors. 
+
+Step 2: Anchor matrix selection. We choose the anchor as the training sample whose right singular subspace is most representative of the empirical distribution. Specifically, given candidate right singular subspaces {Vi}Ni=1 , the medoid index is i⋆ ∈ arg max i∈[N ]
+
+PNj=1 ∥V⊤ 
+
+> i
+
+Vj ∥2 
+
+> F
+
+. The quan-tity ∥V⊤ 
+
+> i
+
+Vj ∥2 
+
+> F
+
+measures the overlap between two subspaces, with larger values indicating closer alignment. Hence setting V0 = Vi⋆ creates the largest average overlap with the training subspaces. 
+
+Step 3: Primitive construction. For each data matrix Mi, we apply OP to align its right singular matrix Vi to the anchor V0, producing the optimal rotation Q⋆i such that ViQ⋆i is closest to V0. We obtain the pair Φ( Mi) = ( UiΣiQ⋆i , ViQ⋆i ). We call this primitive a matrix Grassmannian primitive 
+
+(MGP) as it exploits the inherent low-rank structure in matrices. The total parameter count of Φ( Mi) is (n1 + n2)r, compared to n1n2 for the original matrix Mi.The MGP thus achieves substantial parameter reduction when r ≪ min( n1, n 2), while preserving exact reconstruction for rank-r matrices. 
+
+Analysis of the Matrix Grassmannian Primitive. The MGP construction explicitly respects the low-rank structure in matrices while preventing the dispersion of natural primitives. We justify the MGP Φ by characterizing its continuity. 
+
+Theorem 4.3. For r < n1, n 2, let M(n1, n 2, r | V0) = {M ∈ Rn1×n2 : rank( M) =
+
+r, V⊤ 
+
+> 0
+
+M⊤MV 0 ≻ 0} denote rank-r matrices whose principal angles with span( V0) are all strictly smaller than π/ 2, and Rn1×r 
+
+> ∗
+
+= { eU ∈ Rn1×r : rank( eU) = r}. Then the map 
+
+Φ( · | V0) : M(n1, n 2, r | V0) → Rn1×r 
+
+> ∗
+
+⊗ gr( n2, r | V0), M 7 → (M eV, eV)
+
+is a homeomorphism, where eV = OP( V, V0) is solved via the OP alignment introduced in Prop. 4.1, and V comes from the SVD M = UΣV ⊤.6Thm. 4.3 shows that the MGP is a continuous, one-to-one parametrization of rank-r matrices. Hence, the primitive map resolves the rotational degeneracy in matrix factorization and introduces no additional variation in the primitive. The full proof is deferred to App. B.3. We remark on the requirement V⊤ 
+
+> 0
+
+M⊤MV 0 ≻ 0. For image and video data, the right singular subspaces empirically concentrate around a small number of dominant directions (see Fig. 4). Selecting V0 by the medoid criterion makes V⊤ 
+
+> 0
+
+ViV⊤ 
+
+> i
+
+V0 more strongly positive definite than an arbitrary choice, either by attaining a larger minimum eigenvalue or a larger trace. 
+
+4.4 Tensor Grassmannian Primitives (TGPs) 
+
+We extend the Grassmannian primitive construction to tensors. Consider d-th order tensors {X i}Ni=1 
+
+with each Xi ∈ Rn1×···× nd . The TGP is constructed in three steps parallel to the matrix case. 
+
+Step 1: Tucker decomposition. Apply HOOI to each Xi to obtain Xi = Ci ×1 U1,i ×2 U2,i · · ·× d Ud,i ,where Ci ∈ Rr1×···× rd is the core tensor and Uk,i ∈ Stie( nk, r k) is the factor matrix along mode k
+
+for k = 1 , . . . , d . Since Tucker decomposition is non-unique, we fix only one such decomposition. 
+
+Step 2: Anchor matrix selection. Select anchor matrices for modes in Il = {l, l + 1 , . . . , d } for some 
+
+l ≥ 2. For each k ∈ I l, find the medoid Uk, 0 from {Uk,i }Ni=1 via the medoid criterion of Sec. 4.3. 
+
+Step 3: Primitive construction. For each k ∈ I l and i, apply OP to align Uk,i to the anchor Uk, 0,yielding eUk,i = OP( Uk,i , Uk, 0). The TGP is Φ( Xi) = ( Xi ×l eU⊤ 
+
+> l,i
+
+· · · × d eU⊤
+
+> d,i
+
+, eUl,i , . . . , eUd,i ).DiffATS then trains DMs on {Φ( Xi)}Ni=1 . At inference, the DM generates ( bG, bUl, . . . , bUd) by DDIM [50], and the generated tensor is reconstructed as bX = bG × l bUl · · · × d bUd (see Fig. 2). 
+
+Analysis of the Tensor Grassmannian Primitive. The TGP construction is an intuitive extension of the MGP. However, since Tucker decomposition is multilinear (rather than bilinear, as in matrix factorization), the theoretical analysis of the TGP is more delicate. The major challenge is that tensors do not admit a single “rank” notion with the same stability properties as matrix rank [27, 46]. To address this, we adopt the technique of [ 64 ], which replaces tensor rank by the ranks of its mode-k unfoldings. More specifically, for a tensor X ∈ Rn1×n2×···× nd , we define an operator Sk such that Sk(X ) is an nk × nk matrix whose (α, β )-th entry is [S k(X )] αβ =Pn1 
+
+> i1=1
+
+· · · Pnk−1
+
+> ik−1=1
+
+Pnk+1  
+
+> ik+1 =1
+
+· · · Pnd 
+
+> id=1
+
+Xi1,...,i k−1,α,i k+1 ,...,i d · X i1,...,i k−1,β,i k+1 ,...,i d . We define the mode-k rank of X as rank(S k(X )) .
+
+Theorem 4.4 (TGP Homeomorphism, informal) . Fix l ∈ { 1, . . . , d } and mode-wise anchor matrices 
+
+Ul, 0, . . . , Ud, 0. The TGP map Φ( · | Ul, 0, . . . , Ud, 0) is a homeomorphism between the set of tensors X ∈ Rn1×···× nd such that, for every k = l, . . . , d , rank(S k(X )) = rk and the anchor-overlap condition U⊤ 
+
+> k, 0
+
+Sk(X )Uk, 0 ≻ 0 holds, and a product space of a coefficient tensor space and 
+
+(d − l + 1) Grassmann manifolds. The formal statement and proof are deferred to App. B.1. Thm. 4.4 justifies the construction of TGP as stable parametrizations for anchored low-multilinear-rank tensors. As long as the factor matrices of X have nontrivial overlap with the anchor matrix, the map Φ is a continuous bijective function. The bijectivity of Φ ensures that the TGP retains the representation power of Tucker decomposition while removing the rotational ambiguity. The continuity of Φ further ensures that the primitive distribution p(Φ( X )) inherits the local geometry of the data distribution p(X ), so a diffusion model trained to match the score ∇ log pt(Φ( X )) in the primitive space effectively characterizes p(X ) through inverse mapping. 
+
+5 Experiments 
+
+In this section, we evaluate DiffATS on CelebA-HQ [ 23 ], Moving MNIST [ 53 ], and four PDE datasets: 1-d Burgers, 1-d reaction-diffusion, 2-d Burgers, and 2-d Kármán vortex street. See App. D for generated samples across all baselines and datasets. We apply MGPs to matrix-structured data (CelebA-HQ images and 1-d PDEs) and TGPs to tensor-structured data (Moving MNIST videos and 2-d PDEs). For each dataset, we choose the rank to keep the average relative ℓ2 reconstruction error smaller than a threshold. For PDE data, where 7physical fidelity matters, we select the threshold from ∼ 10 −6 to ∼ 10 −3 (see Tab. 5). The resulting compression factors range from 3.9× to 210 × across datasets (see Tab. 1), and the diffusion model is trained directly on the compressed MGPs and TGPs. The image and video experiments are unconditional. The PDE experiments are conditional: given the initial frame, the model generates the subsequent trajectory. Our code is available at https://github.com/JinhuaLyu/DiffATS .       
+
+> Dataset Compression ratio CelebA-HQ 16 .00
+> Moving MNIST 3.94
+> 1-d Burgers 6.67
+> 1-d reaction-diffusion 13 .33
+> 2-d Burgers 210 .31
+> 2-d Kármán 137 .41
+
+Table 1: Per-sample compression ratio across the six benchmark datasets used by DiffATS. 
+
+We compare DiffATS with four baselines: (i) DCTDiff [ 39 ], which trains DMs in the DCT frequency space; (ii) SDIFT [ 4 ], which trains DMs on Tucker cores with shared factor bases; (iii) FNO [ 32 ], a neural operator for learning solution maps of parametric PDEs; and (iv) AvgPool, which trains DMs on spatially downsampled data. Note that we focus on generative baselines that compress information using lower-dimensional representations without autoencoders . We further conduct abla-tion studies on CelebA-HQ to evaluate our low-rank primitives and the OP alignment. 
+
+Settings. For each dataset, we use the same training epochs and batch size across all methods, with 250 sampling steps. All experiments use a DiT backbone [ 41 ](our method is compatible with other DM architectures). To compare representation choices fairly, we match the per-sample compression ratio across DCTDiff, SDIFT, AvgPool, and DiffATS, so that all four methods operate on representations of comparable dimensionality. FNO is the only exception: as a neural operator, it operates directly in the original data space and does not admit an analogous compression step. Full experimental details are provided in App. C. 
+
+5.1 Image and Video Synthesis 
+
+Image and video experiments provide visually interpretable tests of representation quality and allow comparison with established generative metrics. 
+
+Datasets. The CelebA-HQ dataset [ 23 ] consists of 30 ,000 images of celebrity faces at a resolution of 
+
+1024 ×1024 . We apply 32 ×32 channel-wise patchification (see App. C.2). Patchification consistently reduces the SVD truncation error at the same rank on CelebA, as validated by the ablation in Tab. 7. The Moving MNIST dataset [ 53 ] consists of 20 ,000 video clips of moving handwritten digits, each with 20 frames at 64 × 64 resolution. We follow the DiffATS pipeline in Fig. 2 directly. 
+
+Metrics. For unconditional image synthesis, we report the Fréchet Inception Distance (FID) [ 17 ]with both Inception-V3 [ 55 ] and DINOv2 [ 40 ] embeddings; the latter follows [ 54 ] for a less biased evaluation. For video generation, we report the standard Fréchet Video Distance (FVD) [59]. 
+
+Results. Generated samples are shown in Fig. 6 (App. D). Tab. 2 shows that DiffATS attains the best FID and FVD among autoencoder-free methods, validating the representational benefits of MGPs and TGPs. DiffATS does not aim to match state-of-the-art image and video synthesis models that rely on large pretrained autoencoders. Instead, the target is on spatiotemporal physical fields, where such autoencoders are typically unavailable and low-rank structure is more pronounced. 
+
+Ablation study. We further ablate the key design choices of DiffATS: data-dependent Tucker bases, OP alignment, and factor-space augmentation. The full DiffATS uses data-dependent bases with OP alignment and without augmentation. “Shared bases” uses global Tucker bases estimated from the training set and trains only the projected coefficients. “Data-dep. bases w/ aug.” applies factor-space augmentation to the data-dependent bases. “Data-dep. bases w/o align.” trains on unaligned data-dependent Tucker factors without augmentation. As shown in Tab. 2, data-dependent bases with OP alignment notably improve generation quality, while factor-space augmentation severely degrades it; the full DiffATS attains the lowest FID under both Inception-V3 and DINOv2 evaluations. 
+
+5.2 PDE Trajectory Prediction 
+
+The merits of DiffATS shine on parametric PDE trajectory synthesis. Many PDE solutions admit accurate low-rank approximations in smooth regimes [ 15 , 13 ], making them a natural fit for low-rank primitive-based diffusion modeling. In this section, we consider the task of solution synthesis, where we train DMs to generate PDE solutions from initial conditions. 8CelebA-HQ ( 1024 × 1024 , image) Moving MNIST ( 64 × 64 , video) Method FID (Inception-V3) ↓ FID (DINOv2) ↓ FVD ↓
+
+DCTDiff [39] 52.22 787.11 555.36 SDIFT [4] 309.50 2455.57 1183.69 AvgPool 32.89 559.67 487.82 DiffATS (ours) 23 .57 381 .58 415 .42 
+
+Ablations of DiffATS (CelebA-HQ only) 
+
+Shared bases 24 .23 455 .11 
+
+Data-dep. bases w/ aug. 339 .01 2550 .36 
+
+Data-dep. bases w/o align. 76 .94 1175 .78 
+
+Table 2: Generation quality on image and video benchmarks. Both datasets use 10,000 generated samples and 10,000 real samples for evaluation. The bottom block compares alternative factor-space designs of DiffATS on CelebA-HQ for ablation.                                                                  
+
+> 1-d 2-d Method Burgers Reaction-Diffusion Burgers Kármán DCTDiff [39] 0.2953 ±0.0100 0.0713 ±0.0001 0.3241 ±0.0048 0.5550 ±0.0710
+> SDIFT [4] 0.3884 ±0.2600 0.3406 ±0.0069 0.7323 ±0.2030 0.8654 ±0.1200
+> FNO [32] 0.1913 ±0.1800 0.3114 ±0.0069 0.3423 ±0.3000 0.3442 ±0.0190
+> AvgPool 0.6602 ±0.0120 0.3975 ±0.0038 0.3747 ±0.0029 0.6161 ±0.0020
+> DiffATS (ours) 0.1203 ±0.0001 0.0085 ±0.0000 0.1845 ±0.0005 0.2233 ±0.0005
+
+Table 3: Generation quality on PDE datasets. Relative ℓ2 error between generated and ground-truth trajectories, averaged over 5 random seeds. Full results with Rel . Err .1 and Avg . rMSE are in App. D.1 (Tab. 11 and Tab. 12). 
+
+Datasets. We use four PDE datasets. The matrix datasets (1-d Burgers and 1-d reaction-diffusion) have size 1024 × 201 , and the tensor datasets (2-d Burgers and 2-d Kármán vortex street) have size 
+
+128 × 128 × 201 . Each trajectory consists of 201 frames: the first is the initial condition, and the remaining 200 are the target trajectory. Each dataset contains 10 ,000 training and 500 test trajectories. 
+
+PDE with MGPs. For matrix data, we split each trajectory into the initial frame M0 ∈ Rn1 (the condition) and the subsequent frames M1: T ∈ Rn1×T (the target). We construct an MGP Φ( M1: T )
+
+following Sec. 4.3, anchoring the left singular vectors with U0 ∈ Rn1×r . The initial frame M0
+
+is encoded as Φ( M0) using the same anchor. A conditional diffusion model [ 18 , 19 ] is trained on 
+
+pθ
+
+ Φ( M1: T ) | Φ( M0), with Φ( M0) injected into the denoising network as conditional inputs. 
+
+PDE with TGPs. Similar to the 1-d case, we split each trajectory X ∈ Rn1×n2×(T +1) into the condition X0 ∈ Rn1×n2 and the target X1: T ∈ Rn1×n2×T . We construct the TGP Φ( X1: T ) = ( eG, eU2, eU3) following Sec. 4.4, anchoring the mode-2 and mode-3 factor matrices with (U2,0, U3,0).The initial frame X0 is encoded as Φ( X0) = ( eU0, eV0) via MGP, anchoring its right singular vectors with the same U2,0 so that condition and target share a consistent factor representation. 
+
+Results. DiffATS outperforms all baselines in predictive metrics by a large margin on all four PDE benchmarks (Tab. 3), reducing the relative ℓ2 error by roughly 9× over the best baseline on 1-d reaction-diffusion. The improvement compared with SDIFT and DCTDiff suggests that data-dependent Tucker bases used in DiffATS adapt to each trajectory’s spatial patterns more flexibly. 
+
+6 Conclusion and Discussion 
+
+We presented DiffATS, a diffusion framework on OP-aligned low-rank primitives (MGPs and TGPs) that resolves Tucker’s rotational ambiguity and outperforms chosen autoencoder-free baselines on unconditional and conditional generative tasks. Future research directions include multi-anchor OP alignment and dynamic rank selection to relax the assumptions in Thm. 4.3 and 4.4. 9References 
+
+[1] Abramson, J., Adler, J., Dunger, J., Evans, R., Green, T., Pritzel, A., Ronneberger, O., Willmore, L., Ballard, A. J., Bambrick, J., et al. (2024). Accurate structure prediction of biomolecular interactions with alphafold 3. Nature , 630(8016):493–500. [2] Anderson, B. D. (1982). Reverse-time diffusion equation models. Stochastic Processes and their Applications , 12(3):313–326. [3] Blattmann, A., Rombach, R., Ling, H., Dockhorn, T., Kim, S. W., Fidler, S., and Kreis, K. (2023). Align your latents: High-resolution video synthesis with latent diffusion models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 22563–22575. [4] Chen, P., Sun, Y., Cheng, L., Yang, Y., Li, W., Liu, Y., Liu, W., Bian, J., and Fang, S. (2025). Generating full-field evolution of physical dynamics from irregular sparse observations. arXiv preprint arXiv:2505.09284 .[5] Davis, C. and Kahan, W. M. (1970). The rotation of eigenvectors by a perturbation. iii. SIAM Journal on Numerical Analysis , 7(1):1–46. [6] De Bortoli, V., Mathieu, E., Hutchinson, M., Thornton, J., Teh, Y. W., and Doucet, A. (2022). Riemannian score-based generative modelling. Advances in neural information processing systems ,35:2406–2422. [7] De Lathauwer, L., De Moor, B., and Vandewalle, J. (2000a). A multilinear singular value decomposition. SIAM journal on Matrix Analysis and Applications , 21(4):1253–1278. [8] De Lathauwer, L., De Moor, B., and Vandewalle, J. (2000b). On the best rank-1 and rank-(r 1, r 2,..., rn) approximation of higher-order tensors. SIAM journal on Matrix Analysis and Applications ,21(4):1324–1342. [9] Eckart, C. and Young, G. (1936). The approximation of one matrix by another of lower rank. 
+
+Psychometrika , 1(3):211–218. [10] Edelman, A., Arias, T. A., and Smith, S. T. (1998). The geometry of algorithms with orthogo-nality constraints. SIAM journal on Matrix Analysis and Applications , 20(2):303–353. [11] Esser, P., Rombach, R., and Ommer, B. (2021). Taming transformers for high-resolution image synthesis. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,pages 12873–12883. [12] Gu, S., Chen, D., Bao, J., Wen, F., Zhang, B., Chen, D., Yuan, L., and Guo, B. (2022). Vector quantized diffusion model for text-to-image synthesis. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10696–10706. [13] Guo, J., Domel, G., Park, C., Zhang, H., Gumus, O. C., Lu, Y., Wagner, G. J., Qian, D., Cao, J., Hughes, T. J., et al. (2025a). Tensor-decomposition-based a priori surrogate (taps) modeling for ultra large-scale simulations. Computer Methods in Applied Mechanics and Engineering ,444:118101. [14] Guo, J., Kong, X., Li, Z., and Mao, J. (2026). Tucker diffusion model for high-dimensional tensor generation. arXiv preprint arXiv:2604.00481 .[15] Guo, J., Xie, X., Park, C., Zhang, H., Politis, M. J., Domel, G., and Liu, W. K. (2025b). Interpolating neural network-tensor decomposition (inn-td): a scalable and interpretable approach for large-scale physics-based problems. In International Conference on Machine Learning , pages 21138–21162. PMLR. [16] He, Y., Yang, T., Zhang, Y., Shan, Y., and Chen, Q. (2022). Latent video diffusion models for high-fidelity long video generation. arXiv preprint arXiv:2211.13221 .[17] Heusel, M., Ramsauer, H., Unterthiner, T., Nessler, B., and Hochreiter, S. (2017). Gans trained by a two time-scale update rule converge to a local nash equilibrium. Advances in neural information processing systems , 30. 10 [18] Ho, J., Jain, A., and Abbeel, P. (2020). Denoising diffusion probabilistic models. Advances in neural information processing systems , 33:6840–6851. [19] Ho, J., Saharia, C., Chan, W., Fleet, D. J., Norouzi, M., and Salimans, T. (2022a). Cascaded diffusion models for high fidelity image generation. Journal of Machine Learning Research ,23(47):1–33. [20] Ho, J., Salimans, T., Gritsenko, A., Chan, W., Norouzi, M., and Fleet, D. J. (2022b). Video diffusion models. Advances in neural information processing systems , 35:8633–8646. [21] Hoogeboom, E., Satorras, V. G., Vignac, C., and Welling, M. (2022). Equivariant diffusion for molecule generation in 3d. In International conference on machine learning , pages 8867–8887. PMLR. [22] Igashov, I., Stärk, H., Vignac, C., Schneuing, A., Satorras, V. G., Frossard, P., Welling, M., Bronstein, M., and Correia, B. (2024). Equivariant 3d-conditional diffusion model for molecular linker design. Nature Machine Intelligence , 6(4):417–427. [23] Karras, T., Aila, T., Laine, S., and Lehtinen, J. (2017). Progressive growing of gans for improved quality, stability, and variation. arXiv preprint arXiv:1710.10196 .[24] Karras, T., Aittala, M., Aila, T., and Laine, S. (2022). Elucidating the design space of diffusion-based generative models. Advances in neural information processing systems , 35:26565–26577. [25] Kingma, D. P. and Welling, M. (2013). Auto-encoding variational bayes. arXiv preprint arXiv:1312.6114 .[26] Koehler, F., Niedermayr, S., Westermann, R., and Thuerey, N. (2024). Apebench: A benchmark for autoregressive neural emulators of pdes. Advances in Neural Information Processing Systems ,37:120252–120310. [27] Kolda, T. G. and Bader, B. W. (2009). Tensor decompositions and applications. SIAM review ,51(3):455–500. [28] Kong, Z., Ping, W., Huang, J., Zhao, K., and Catanzaro, B. (2020). Diffwave: A versatile diffusion model for audio synthesis. arXiv preprint arXiv:2009.09761 .[29] Kruskal, J. B. and Wish, M. (1978). Multidimensional scaling . Number 11. Sage. [30] Kunisky, D. (2023). Generic manova limit theorems for products of projections. arXiv preprint arXiv:2301.09543 .[31] Kynkäänniemi, T., Karras, T., Laine, S., Lehtinen, J., and Aila, T. (2019). Improved precision and recall metric for assessing generative models. Advances in neural information processing systems , 32. [32] Li, Z., Kovachki, N., Azizzadenesheli, K., Liu, B., Bhattacharya, K., Stuart, A., and Anandku-mar, A. (2020). Fourier neural operator for parametric partial differential equations. arXiv preprint arXiv:2010.08895 .[33] Lienen, M., Lüdke, D., Hansen-Palmus, J., and Günnemann, S. (2023). From zero to turbulence: Generative modeling for 3d flow simulation. arXiv preprint arXiv:2306.01776 .[34] Liu, H., Chen, Z., Yuan, Y., Mei, X., Liu, X., Mandic, D., Wang, W., and Plumbley, M. D. (2023). Audioldm: Text-to-audio generation with latent diffusion models. arXiv preprint arXiv:2301.12503 .[35] Liu, Y., Zhang, K., Li, Y., Yan, Z., Gao, C., Chen, R., Yuan, Z., Huang, Y., Sun, H., Gao, J., et al. (2024). Sora: A review on background, technology, limitations, and opportunities of large vision models. arXiv preprint arXiv:2402.17177 .[36] Ma, J. and Fattahi, S. (2024). Convergence of gradient descent with small initialization for unregularized matrix completion. In The Thirty Seventh Annual Conference on Learning Theory ,pages 3683–3742. PMLR. 11 [37] Ma, X., Wang, Y., Chen, X., Jia, G., Liu, Z., Li, Y.-F., Chen, C., and Qiao, Y. (2024). Latte: Latent diffusion transformer for video generation. arXiv preprint arXiv:2401.03048 .[38] Mahoney, M. W., Maggioni, M., and Drineas, P. (2006). Tensor-cur decompositions for tensor-based data. In Proceedings of the 12th ACM SIGKDD international conference on Knowledge discovery and data mining , pages 327–336. [39] Ning, M., Li, M., Su, J., Jia, H., Liu, L., Beneš, M., Chen, W., Salah, A. A., and Ertugrul, I. O. (2024). Dctdiff: Intriguing properties of image generative modeling in the dct space. arXiv preprint arXiv:2412.15032 .[40] Oquab, M., Darcet, T., Moutakanni, T., Vo, H., Szafraniec, M., Khalidov, V., Fernandez, P., Haziza, D., Massa, F., El-Nouby, A., et al. (2023). Dinov2: Learning robust visual features without supervision. arXiv preprint arXiv:2304.07193 .[41] Peebles, W. and Xie, S. (2023). Scalable diffusion models with transformers. In Proceedings of the IEEE/CVF international conference on computer vision , pages 4195–4205. [42] Podell, D., English, Z., Lacey, K., Blattmann, A., Dockhorn, T., Müller, J., Penna, J., and Rombach, R. (2023). Sdxl: Improving latent diffusion models for high-resolution image synthesis. 
+
+arXiv preprint arXiv:2307.01952 .[43] Price, I., Sanchez-Gonzalez, A., Alet, F., Andersson, T. R., El-Kadi, A., Masters, D., Ewalds, T., Stott, J., Mohamed, S., Battaglia, P., et al. (2023). Gencast: Diffusion-based ensemble forecasting for medium-range weather. arXiv preprint arXiv:2312.15796 .[44] Rezende, D. J., Mohamed, S., and Wierstra, D. (2014). Stochastic backpropagation and approximate inference in deep generative models. In International conference on machine learning , pages 1278–1286. PMLR. [45] Rombach, R., Blattmann, A., Lorenz, D., Esser, P., and Ommer, B. (2022). High-resolution image synthesis with latent diffusion models. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 10684–10695. [46] Schaefer, M. and Štefankoviˇ c, D. (2018). The complexity of tensor rank. Theory of Computing Systems , 62(5):1161–1174. [47] Schönemann, P. H. (1966). A generalized solution of the orthogonal procrustes problem. 
+
+Psychometrika , 31(1):1–10. [48] Shu, D., Li, Z., and Farimani, A. B. (2023). A physics-informed diffusion model for high-fidelity flow field reconstruction. Journal of Computational Physics , 478:111972. [49] Sohl-Dickstein, J., Weiss, E., Maheswaranathan, N., and Ganguli, S. (2015). Deep unsupervised learning using nonequilibrium thermodynamics. In International conference on machine learning ,pages 2256–2265. pmlr. [50] Song, J., Meng, C., and Ermon, S. (2020a). Denoising diffusion implicit models. In International Conference on Learning Representations .[51] Song, Y. and Ermon, S. (2019). Generative modeling by estimating gradients of the data distribution. Advances in neural information processing systems , 32. [52] Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Ermon, S., and Poole, B. (2020b). Score-based generative modeling through stochastic differential equations. arXiv preprint arXiv:2011.13456 .[53] Srivastava, N., Mansimov, E., and Salakhudinov, R. (2015). Unsupervised learning of video representations using lstms. In International conference on machine learning , pages 843–852. PMLR. [54] Stein, G., Cresswell, J., Hosseinzadeh, R., Sui, Y., Ross, B., Villecroze, V., Liu, Z., Caterini, A. L., Taylor, E., and Loaiza-Ganem, G. (2023). Exposing flaws of generative model evaluation metrics and their unfair treatment of diffusion models. Advances in Neural Information Processing Systems , 36:3732–3784. 12 [55] Szegedy, C., Vanhoucke, V., Ioffe, S., Shlens, J., and Wojna, Z. (2016). Rethinking the inception architecture for computer vision. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 2818–2826. [56] Takamoto, M., Praditia, T., Leiteritz, R., MacKinlay, D., Alesiani, F., Pflüger, D., and Niepert, M. (2022). Pdebench: An extensive benchmark for scientific machine learning. Advances in neural information processing systems , 35:1596–1611. [57] Tu, S., Boczar, R., Simchowitz, M., Soltanolkotabi, M., and Recht, B. (2016). Low-rank solutions of linear matrix equations via procrustes flow. In International conference on machine learning , pages 964–973. PMLR. [58] Tucker, L. R. (1966). Some mathematical notes on three-mode factor analysis. Psychometrika ,31(3):279–311. [59] Unterthiner, T., Van Steenkiste, S., Kurach, K., Marinier, R., Michalski, M., and Gelly, S. (2018). Towards accurate generative models of video: A new metric & challenges. arXiv preprint arXiv:1812.01717 .[60] Van Den Oord, A., Vinyals, O., et al. (2017). Neural discrete representation learning. Advances in neural information processing systems , 30. [61] Xu, M., Yu, L., Song, Y., Shi, C., Ermon, S., and Tang, J. (2022). Geodiff: A geometric diffusion model for molecular conformation generation. arXiv preprint arXiv:2203.02923 .[62] Xu, Y., Wang, Y., Luo, S., Gao, K., He, T., He, D., and Liu, C. (2026). Quotient-space diffusion models. In The Fourteenth International Conference on Learning Representations .[63] Zeni, C., Pinsler, R., Zügner, D., Fowler, A., Horton, M., Fu, X., Wang, Z., Shysheya, A., Crabbé, J., Ueda, S., et al. (2025). A generative model for inorganic materials design. Nature ,639(8055):624–632. [64] Zhang, A. and Xia, D. (2018). Tensor svd: Statistical and computational limits. IEEE Transac-tions on Information Theory , 64(11):7311–7338. [65] Zhang, X., Du, S., and Gu, Q. (2018). Fast and sample efficient inductive matrix completion via multi-phase procrustes flow. In International Conference on Machine Learning , pages 5756–5765. PMLR. [66] Zhou, C., Chen, Z., Li, Z., Wang, J., Jiang, K., Li, P., Yu, R., Zhang, M., Bates, S., and Jaakkola, T. (2026). Rethinking diffusion models with symmetries through canonicalization with applications to molecular graph generation. arXiv preprint arXiv:2602.15022 .13 A Full Related Works 
+
+Autoencoder-free Diffusion Models. Among autoencoder-free approaches, DCTDiff [ 39 ] maps images to the DCT frequency domain and discards the highest-frequency coefficients as perceptually negligible, training a DM directly on the retained ones. SDIFT [ 4] and Tucker-based diffusion [ 14 ]apply Tucker (or functional Tucker) decomposition with factor matrices shared across the dataset, training DMs only on the per-sample core tensor. In contrast, our method uses per-sample Tucker factors aligned to a medoid anchor via OP, and trains the DM jointly on the core tensor and the aligned factor matrices. 
+
+Symmetry Structures in Diffusion Models. The factor matrices in tensor decompositions such as SVD [ 9] and Tucker [ 58 ] are determined only up to an orthogonal transformation. Similar group symmetries arise in molecular graph generation [ 21 , 61 , 22 , 1, 62 , 66 ], where a rotated molecule or a re-indexed graph represents the same physical entity. Existing approaches to group symmetry fall into two categories: (i) augmenting the target distribution in the original space by assigning equal probability to all elements in an invariance class through data augmentation [ 1] or modeling score function in the symmetry manifold [ 61 ]; (ii) removing the redundancy by collapsing each equivalence class to a single element, either through a quotient space [ 62 ] or canonicalization to a unique representative [66]. DiffATS follows the philosophy from the second category, as it resolves the usual difficulty of describing equivalence classes by Grassmannian primitives. [ 62 ] formulates a quotient space diffusion model that projects the diffusion process onto the quotient space and lifts it back to the original space. This requires computing geodesics and the exponential map in the Grassmann manifold [ 10 ], which is non-trivial and involves additional computation in the DM training and inference steps [ 6]. We instead keep the diffusion in the ambient space and select a canonical representative through OP alignment of factor matrices to a medoid anchor. A concurrent work [ 66 ] similarly pursues canonicalization in SO(3) for molecule generation. In contrast, we study the geometric structure in the Grassmann manifold. 
+
+Orthogonal Procrustes. OP alignment has been widely used in the theoretical analysis of noncon-vex low-rank factorization, where it resolves the rotational non-identifiability of matrix factors by comparing estimates up to an orthogonal transformation [ 57 , 65 , 36 ]. These works use Procrustes alignment as an analytical tool for proving optimization and recovery guarantees. In contrast, we use it to construct canonicalized factor representations for diffusion model training. 
+
+B Proofs 
+
+B.1 Proof of Proposition 4.1 
+
+Proof. Since VV ⊤ is the n × n orthogonal projection onto span( V), the constraint eV eV⊤ = VV ⊤
+
+forces eV to have orthonormal columns spanning span( V). Hence 
+
+{ eV ∈ Rn×r : eV eV⊤ = VV ⊤} = {VQ : Q ∈ O( r)},
+
+and the constrained problem reduces to the OP problem 
+
+min  
+
+> Q∈O( r)
+
+∥V0 − VQ ∥2 
+
+> F
+
+.
+
+Since eV = VQ gives a one-to-one correspondence between eV and Q, we only need the uniqueness of the optimal solution Q∗ to the OP problem. Expanding ∥V0 − VQ ∥2 
+
+> F
+
+and using ∥VQ ∥2 
+
+> F
+
+= ∥V0∥2 
+
+> F
+
+= r, then 
+
+∥V0 − VQ ∥2 
+
+> F
+
+= 2 r − 2Tr( V⊤ 
+
+> 0
+
+VQ ),
+
+the OP problem is equivalent to maximizing Tr( V⊤ 
+
+> 0
+
+VQ ) over Q ∈ O( r). Let V⊤V0 = LΛR ⊤
+
+be a compact SVD with Λ = diag( λ1, . . . , λ r ), λ1 ≥ · · · ≥ λr > 0, and L, R ∈ O( r). Setting 
+
+M = L⊤QR ∈ O( r),
+
+Tr( V⊤ 
+
+> 0
+
+VQ ) = Tr( RΛL ⊤Q) = Tr( ΛM ) = 
+
+> r
+
+X
+
+> i=1
+
+λiMii .
+
+14 Since |Mii | ≤ 1 for all M ∈ O( r), the trace has a maximum P 
+
+> i
+
+λi, achieved by M = Ir , i.e., 
+
+Q⋆ = LR ⊤ [47]. This gives VQ ⋆ as a minimizer of the original problem. For the uniqueness, we need to prove that when the SVD V⊤V0 = LΣR ⊤ cannot uniquely determine the tuple (L, Σ, R), the product LR ⊤ is still uniquely determined. In fact, 
+
+LR ⊤ = LΛR ⊤(RΛ −1R⊤) = V⊤V0(V⊤ 
+
+> 0
+
+VV ⊤V0)− 12 , (B.1) where we use S− 12 for a positive definite matrix S to denote the inverse of its square root, the unique positive definite matrix T such that T 2 = S.
+
+B.2 Proof of Proposition 4.2 
+
+Proof. For any Q ∈ O( r), since V⊤ 
+
+> 0
+
+V0 = V⊤V = Ir , we have 
+
+∥V0 − VQ ∥2 
+
+> F
+
+= tr( V⊤ 
+
+> 0
+
+V0) + tr( Q⊤V⊤VQ ) − 2 tr( V⊤ 
+
+> 0
+
+VQ ).
+
+Hence 
+
+∥V0 − VQ ∥2 
+
+> F
+
+= 2 r − 2 tr( V⊤ 
+
+> 0
+
+VQ ).
+
+Maximizing the last trace over Q ∈ O( r) gives the OP solution. If V⊤ 
+
+> 0
+
+V = UΣW ⊤ is a singular value decomposition, then one maximizer is 
+
+Q⋆ = WU ⊤,
+
+and 
+
+max  
+
+> Q∈O( r)
+
+tr( V⊤ 
+
+> 0
+
+VQ ) = ∥V⊤ 
+
+> 0
+
+V∥∗.
+
+Therefore, 
+
+∥V0 − VQ ⋆∥2 
+
+> F
+
+= 2 r − 2∥V⊤ 
+
+> 0
+
+V∥∗.
+
+It remains to compute the asymptotic value of ∥V⊤ 
+
+> 0
+
+V∥∗/r . Let 
+
+P0 = V0V⊤ 
+
+> 0
+
+, P = VV ⊤
+
+be the two random rank-r orthogonal projectors in Rp. The nonzero eigenvalues of 
+
+P0PP 0 = V0V⊤ 
+
+> 0
+
+VV ⊤V0V⊤
+
+> 0
+
+coincide with the eigenvalues of 
+
+V⊤ 
+
+> 0
+
+VV ⊤V0 = ( V⊤ 
+
+> 0
+
+V)( V⊤ 
+
+> 0
+
+V)⊤.
+
+Consequently, if μp denotes the empirical spectral distribution of P0PP 0, normalized by p, then 
+
+1
+
+p ∥V⊤ 
+
+> 0
+
+V∥∗ =
+
+Z ∞
+
+> 0
+
+√xdμ p(x).
+
+By Wachter’s MANOVA law [30] with parameters 
+
+α = β = 1
+
+c ,
+
+the empirical spectral distribution μp converges weakly to 
+
+dμ (x) = 
+
+px(b − x)2πx (1 − x) 1[0 ,b ](x)dx + max 
+
+ 2
+
+c − 1, 0
+
+
+
+δ1(x) + 
+
+
+
+1 − 1
+
+c
+
+
+
+δ0(x),
+
+where 
+
+b = 4 1
+
+c
+
+
+
+1 − 1
+
+c
+
+
+
+= 4( c − 1) 
+
+c2 .
+
+Since x 7 → √x is continuous and bounded on [0 , 1] , we obtain 
+
+1
+
+p ∥V⊤ 
+
+> 0
+
+V∥∗ →
+
+Z ∞
+
+> 0
+
+√xdμ (x).
+
+15 The limiting integral equals 
+
+Z ∞
+
+> 0
+
+√xdμ (x) = 
+
+Z b
+
+> 0
+
+√b − x
+
+2π(1 − x) dx + max 
+
+ 2
+
+c − 1, 0
+
+
+
+.
+
+A direct calculation gives 
+
+Z b
+
+> 0
+
+√b − x
+
+2π(1 − x) dx = 1
+
+π
+
+√b − √1 − b arctan 
+
+r b
+
+1 − b
+
+!
+
+.
+
+Thus 
+
+1
+
+p ∥V⊤ 
+
+> 0
+
+V∥∗ → 1
+
+π
+
+√b − √1 − b arctan 
+
+r b
+
+1 − b
+
+!
+
++ max 
+
+ 2
+
+c − 1, 0
+
+
+
+.
+
+Since p/r → c, it follows that 
+
+1
+
+r ∥V⊤ 
+
+> 0
+
+V∥∗ → cπ
+
+√b − √1 − b arctan 
+
+r b
+
+1 − b
+
+!
+
++ c max 
+
+ 2
+
+c − 1, 0
+
+
+
+.
+
+Equivalently, 
+
+1
+
+r ∥V⊤ 
+
+> 0
+
+V∥∗ → ℓ(c),
+
+where 
+
+ℓ(c) = cπ
+
+√b − √1 − b arctan 
+
+r b
+
+1 − b
+
+!
+
++ max {2 − c, 0}.
+
+Combining this with 
+
+∥V0 − VQ ⋆∥2 
+
+> F
+
+= 2 r − 2∥V⊤ 
+
+> 0
+
+V∥∗
+
+yields 
+
+1
+
+r ∥V0 − VQ ⋆∥2 
+
+> F
+
+→ 2(1 − ℓ(c)) .
+
+Equivalently, 
+
+∥V0 − VQ ⋆∥2 
+
+> F
+
+= 2 r(1 − ℓ(c)) + o(r).
+
+Finally, we verify that ℓ(c) ∈ (0 , 1) . Since the singular values of V⊤ 
+
+> 0
+
+V lie in [0 , 1] , for every p, r ,
+
+0 ≤ 1
+
+r ∥V⊤ 
+
+> 0
+
+V∥∗ ≤ 1.
+
+Passing to the limit gives 0 ≤ ℓ(c) ≤ 1. Moreover, for any fixed c > 1, the Wachter limiting measure has nonzero continuous mass on (0 , b ), where b = 4( c − 1) /c 2 > 0. Hence 
+
+ℓ(c) = c
+
+Z ∞
+
+> 0
+
+√xdμ (x) > 0.
+
+The inequality ℓ(c) < 1 follows because the limiting measure is not concentrated at x = 1 when 
+
+c > 1. Thus 
+
+0 < ℓ (c) < 1.
+
+This proves the claim. 
+
+B.3 Proof of Theorem 4.3 
+
+Proof. As we have the uniqueness from Prop. 4.1 of the eV part, Φ( · | V0) is injective. For surjectivity, we claim that each pair (M, V) ∈ Rn1×r 
+
+> ∗
+
+⊗ gr( n2, r | V0) is the image of the matrix MV ⊤. Given that M has full rank, the projection matrix of the row subspace of MV ⊤ is just 
+
+VV ⊤, then V ∈ gr( n2, r | V0) implies that the second part of Φ( MV ⊤) is V itself, so Φ( · | V0)
+
+is surjective and thus a bijection. 16 The inverse map of Φ( · | V0) is just a product map and is continuous. So we only need to prove the continuity of the map M → eV, as this also implies the continuity of the map M → M eV.Since M has fixed rank, the row subspace of M continuously depends on M [ 5], so is the projection matrix VV ⊤. This can also be understood by the fact that the Moore-Penrose inverse S† of a matrix 
+
+S is continuous if S has fixed rank, and that the projection matrix can be expressed as VV ⊤ = M†M.Then we just need the continuity of 
+
+eV = arg min   
+
+> eV:eVeV⊤=VV ⊤
+
+∥V0 − eV∥2 
+
+> F
+
+(B.2) with respect to the factor VV ⊤.As eV = VQ ∗ and Q∗ can be expressed as (B.1), the unique solution eV can be expressed as 
+
+eV = VV ⊤V0(V⊤ 
+
+> 0
+
+VV ⊤V0)− 12 , (B.3) the continuity of eV with respect to the projection matrix VV ⊤ is then clear. 
+
+B.4 Proof of Theorem B.1 
+
+We first state the formal version of the TGP homeomorphism result (informal version: Thm. 4.4 in the main text). 
+
+Theorem B.1 (TGP Homeomorphism, formal) . For any l = 1 , ..., d , let Il = {l, l + 1 , · · · , d }.Given anchor matrices Uk, 0 ∈ Stie( nk, r k) for k ∈ I l, let 
+
+M(n1, ..., n l−1, (nl, r l | Ul, 0), ..., (nd, r d | Ud, 0)) ={X ∈ Rn1×···× nd : rank(S k(X )) = rk, U⊤ 
+
+> k, 0
+
+Sk(X )Uk, 0 ≻ 0, k ∈ I l} (B.4) be the set of tensors whose mode-k unfolding has rank rk and the mode-k subspace contains no direction that is perpendicular to the anchor matrix Uk, 0, for each k ∈ I l.We also abbreviate 
+
+M(n1, ..., n l−1, (rl)∗, ..., (rd)∗) := M(n1, ..., n l−1, (rl, r l | Ul, 0), ..., (rd, r d | Ud, 0)) , (B.5) which is the set of tensors whose mode-k unfolding has full rank rk.Then the following map is a homeomorphism, 
+
+Φ( · | Ul, 0, ..., Ud, 0) : M(n1, ..., n l−1, (nl, r l | Ul, 0), ..., (nd, r d | Ud, 0)) 
+
+7→ M (n1, ..., n l−1, (rl)∗, ..., (rd)∗) ⊗ gr( nl, r l | Ul, 0) ⊗ · · · ⊗ gr( nd, r d | Ud, 0),
+
+X 7 → (X × l eUl · · · × d eUd, eUl, ..., eUd), (B.6) where eUk = OP( Uk, Uk, 0) and Uk is the top-rk singular vectors of Sk(X ) for k = l, ..., d .
+
+Proof. From the proof B.3, we have already proved the continuity of the map Φ( · | V0) : M →
+
+(M eV, eV). For the tensor case, notice that the map Φ( · | Ul, 0, ..., Ud, 0) is obtained by the iterative use of Φ( · | Uk, 0) for different unfoldings of the tensor, the continuity of Φ( · | Ul, 0, ..., Ud, 0) is also clear. More precisely, for each k with l ≤ k ≤ d, the map from X → eUk is given by eUk = OP( Uk, Uk, 0),with Uk obtained from the SVD of Xk = UkΣkV⊤ 
+
+> k
+
+, where Xk ∈ Rnk ×(n1··· nk−1nk+1 ··· nd) is the matricization of X . Equivalently, we have Φ( Xk | Uk, 0) = ( Mk, eUk) for some Mk. Since the matricization X → X k is clearly continuous, the map X → eUk is also continuous. For bijectivity, since eUk are all uniquely determined by X , we have the injectivity of Φ( · | Ul, 0, ..., Ud, 0). The surjectivity comes from the fact that for any (C, eUl, ..., eUd), and X = C × l eU⊤ 
+
+> l
+
+· · · × d eU⊤ 
+
+> d
+
+, the projection matrix of the mode-k subspace of X is eUk eU⊤ 
+
+> k
+
+which is independent of other Grassmannian factors, so the k-th Grassmannian factor of X is just eUk.The inverse map is still a product map and is also continuous, so the proof is finished. 17 C Experiment Details 
+
+All baseline results share the same number of training epochs, batch size, and sampling steps as DiffATS, summarized in Table 4. All experiments are run on a single NVIDIA H100 GPU. Dataset Epochs Batch Size Sampling Steps CelebA-HQ 1000 32 250 Moving MNIST 2000 1-d Burgers 1000 1-d reaction-diffusion 1000 2-d Burgers 500 2-d Kármán vortex street 500 Table 4: Training hyperparameters across all datasets and methods. C.1 Compression Ratio 
+
+For each dataset, Tab. 5 reports the relative ℓ2 reconstruction error of the rank-r Tucker projection used in DiffATS, computed as ∥X − bX ∥ F /∥X ∥ F over 100 test samples. The chosen ranks retain the dominant signal content, with mean relative errors ranging from ∼ 10 −6 (1-d reaction-diffusion) to 
+
+∼ 2.2 × 10 −1 (Moving MNIST). As a reference, CelebA-HQ images reconstructed at rank 32 per 
+
+32 × 32 patch attain a mean PSNR of 34 .11 ± 3.78 dB (range [25 .46 , 41 .94] ).                                                          
+
+> Dataset Shape Rank Mean Std Min Max CelebA-HQ 1024 (patch size 32 ×32 )1024 ×1024 ×332 4.45 ×10 −22.19 ×10 −21.56 ×10 −21.18 ×10 −1
+> Moving MNIST 20 ×64 ×64 [15 ,64 ,20] 2.24 ×10 −14.48 ×10 −21.15 ×10 −13.46 ×10 −1
+> 2-d Burgers 200 ×128 ×128 [5 ,20 ,20] 3.26 ×10 −32.42 ×10 −34.41 ×10 −51.18 ×10 −2
+> 2-d Kármán vortex 200 ×128 ×128 [10 ,128 ,30] 3.40 ×10 −23.92 ×10 −21.02 ×10 −31.78 ×10 −1
+> 1-d Burgers (patch size 32 ×20 )320 ×640 32 5.62 ×10 −36.73 ×10 −33.24 ×10 −82.52 ×10 −2
+> 1-d reaction-diffusion (patch size 32 ×20 )320 ×640 16 4.66 ×10 −61.56 ×10 −53.82 ×10 −71.55 ×10 −4
+
+Table 5: Rank-r reconstruction error. Relative ℓ2 error ∥X − bX ∥ F /∥X ∥ F of the Tucker projection used in DiffATS, evaluated over 100 test samples per dataset. For 1-d datasets, shapes are reported after patchification. Tab. 6 summarizes the per-sample compression ratios used by each method across all datasets. Across all datasets, DiffATS uses a compression ratio at least as large as those of the compressed-domain baselines (DCTDiff, SDIFT, AvgPool); FNO operates directly on the full-resolution field and does not compress. 
+
+Dataset DiffATS DCTDiff SDIFT AvgPool FNO CelebA-HQ 16 .00 16 .00 16 .00 16 .00 –Moving MNIST 3.94 3.94 3.94 4.00 –1-d Burgers 6.67 6.67 6.67 4.00 1.00 
+
+1-d reaction-diffusion 13 .33 13 .33 13 .33 4.00 1.00 
+
+2-d Burgers 210 .31 210 .31 202 .00 64 .00 1.00 
+
+2-d Kármán vortex 137 .41 130 .60 118 .87 64 .00 1.00 
+
+Table 6: Per-sample compression ratios across methods and datasets. “–” indicates the baseline is not applied. FNO has compression ratio 1 since it operates on the full-resolution field. 
+
+C.2 Patchification 
+
+Fig. 5 illustrates the patchification process used in our experiments. Although not all datasets require it, we apply patchification to CelebA-HQ, 1-d Burgers, and 1-d reaction-diffusion to reduce the truncation error of the low-rank approximation and improve generation quality. 18 For each layer of the tensor, we partition the spatial dimensions into non-overlapping patches and flatten each patch into a vector. Concatenating these vectors yields a new tensor on which we apply TGP (or MGP in the matrix case). Table 7 demonstrates the effectiveness of patchification in preserving information. Patchify (optional) 
+
+n2
+
+n1
+
+n3
+
+Input tensor 1 2
+
+Flatten  Combine 
+
+p1 × p2
+
+Vectors  Patchified 
+
+tensor 
+
+n1 × n2
+
+∈ ℝn1×n2×n3 
+
+> <latexit sha1_base64="fDOLwOcAA+yedyTcERK5GoVcJuo=">AAAB8nicbVDLSsNAFL3xWeur6tLNYBFclUSkuiy6cVnBPqANZTKdtEMnkzBzI5TQz3DjQhG3fo07/8ZJm4W2Hhg4nHMvc+4JEikMuu63s7a+sbm1Xdop7+7tHxxWjo7bJk414y0Wy1h3A2q4FIq3UKDk3URzGgWSd4LJXe53nrg2IlaPOE24H9GREqFgFK3U60cUx4zKrDsbVKpuzZ2DrBKvIFUo0BxUvvrDmKURV8gkNabnuQn6GdUomOSzcj81PKFsQke8Z6miETd+No88I+dWGZIw1vYpJHP190ZGI2OmUWAn84hm2cvF/7xeiuGNnwmVpMgVW3wUppJgTPL7yVBozlBOLaFMC5uVsDHVlKFtqWxL8JZPXiXty5pXr9UfrqqN26KOEpzCGVyAB9fQgHtoQgsYxPAMr/DmoPPivDsfi9E1p9g5gT9wPn8AltOReQ==</latexit>
+
+X
+
+Figure 5: Patchification .
+
+RMSE ↓ PSNR ↑ (dB) Rank r Patchify No patch Patchify No patch 
+
+16 7.55 12 .35 31 .03 26 .50 32 5.52 8.57 33 .99 29 .80 64 3.47 5.54 38 .49 33 .83 128 1.74 2.89 45 .19 40 .01 
+
+Table 7: SVD low-rank reconstruction on CelebA-HQ (1024 × 1024 × 3, 100 images, seed 42 ). Patchify uses 
+
+32 × 32 patches; the no-patch variant applies SVD directly to the 1024 × 1024 pixel matrix. Metrics are averaged across the three RGB channels and ten images. 
+
+C.3 DiffATS 
+
+Tab. 8 summarizes the hyperparameter settings of DiffATS across all datasets. We use a DiT backbone [41] as the score network, with the per-dataset configuration detailed in Tab. 9. Dataset Patchification Diffusion Type Scheduler Optimizer CelebA-HQ ✓ Unconditional Linear AdamW ( lr = 10 −4, β = (0 .9, 0.99) )Moving MNIST × Unconditional 1-d Burgers ✓ Conditional 1-d reaction-diffusion ✓ Conditional 2-d Burgers × Conditional 2-d Kármán × Conditional Table 8: Hyperparameter settings of DiffATS for all datasets. 
+
+Dataset Hidden Dim Depth Heads CelebA-HQ 
+
+768 12 12 1-d Burgers 1-d reaction-diffusion Moving MNIST 
+
+512 8 82-d Burgers 2-d Kármán Table 9: DiT backbone configuration of DiffATS across datasets. C.4 Diffusion Training and Sampling 
+
+All diffusion-based methods (DiffATS, DCTDiff, SDIFT, and AvgPool) share the same training and sampling protocol; only the representation on which the score network operates differs. For training, we adopt the standard DDPM formulation with T = 1000 timesteps and a linear β-schedule, optimizing the ϵ-prediction loss. For sampling, we use DDIM [ 50 ] with 250 steps. DDIM defines a family of non-Markovian forward processes that share the same marginals as DDPM, which admits a deterministic reverse sampler and yields high-quality samples in far fewer steps than the T = 1000 
+
+used at training time. FNO is a deterministic neural operator and does not involve diffusion training or sampling. 19 C.5 Baselines DCTDiff. For DCTDiff, the original implementation operates in the YCbCr color space and uses chroma subsampling. On CelebA-HQ, to provide a fair comparison baseline, we train DCTDiff entirely in RGB by applying a block DCT independently to each RGB channel without chroma subsampling. To adapt DCTDiff to spatiotemporal tensor data such as 2-d Burgers and 2-d Kármán vortex, we extend the 2D block DCT to a 3D block DCT. The (T, H, W ) volume is divided into non-overlapping rectangular prisms, then 3D DCT is applied within each block, and coefficients are ordered using a 3D zigzag traversal from low to high frequency. The remaining compression and diffusion steps then follow the DCTDiff procedure in the resulting compressed DCT space. 
+
+SDIFT. For SDIFT, each trajectory is represented as an explicit sequence of Tucker cores. Equiva-lently, the compressed latent for one trajectory has shape (T × R1 × R2 × R3), where T indexes time, and (R1, R 2, R 3) denote the spatial Tucker-core ranks at each timestep. Importantly, SDIFT does not compress across time, but instead keeps a separate Tucker core for each timestep. For the 1-d PDE datasets, such as Burgers and reaction-diffusion with shape (T, X ), we use a sequence of one-dimensional spatial cores, represented as (T × 1 × 1 × Rx), to fit the Tucker-core representa-tion. For 2-d Burgers and 2-d Kármán vortex, with T = 201 and H = W = 128 , this means the compressed representation still contains T cores per trajectory. Therefore under a fixed compression budget, long temporal sequences require smaller spatial/core ranks, which can reduce reconstruction quality and represents a limitation of the SDIFT for PDEs with many timesteps. 
+
+FNO. FNO, by contrast, operates directly on the full-resolution field without spatial compression. We train FNO on one-step prediction pairs (ut, u t+1 ) and generate the full temporal sequence autoregressively. Since each epoch iterates over N (T − 1) full-resolution training pairs, the per-epoch cost scales with the full spatiotemporal data volume rather than with a compressed latent representation. Consequently, under similar time budgets, FNO requires substantially higher training cost per epoch than the compressed-domain baselines. In our experiments, this higher computational cost did not translate into stronger predictive performance. 
+
+Average pooling. Average pooling serves as a straightforward spatial compression baseline that reduces each field to a compact latent representation without any learned transform. Concretely, for a 2-d PDE trajectory with shape (T, H, W ), we apply average pooling with a spatial stride of k, yielding a compressed representation of shape (T, H/k, W/k ). For 1-d PDE datasets with field shape (T, X ), we apply 1-d average pooling along the spatial axis to obtain (T, X/k ). The compression ratio is thus k2 for 2-d fields and k for 1-d fields. For the CelebA-HQ dataset, which consists of static RGB images of shape (3 , H, W ), we apply 2-d average pooling and give compressed representations of shape (3 , H/k, W/k ). For Moving MNIST where each sample is a grayscale video of shape (T, H, W ), we apply 2-d average pooling to each frame, yielding (T, H/k, W/k ) with a k2
+
+compression ratio. At inference, generated samples are upsampled back to the original resolution via linear interpolation for 1-d fields and bilinear interpolation for all 2-d domains, and all metrics are evaluated at the original resolution. 
+
+C.6 Network Capacity 
+
+To ensure a fair comparison, we configure each baseline so that its score network has a number of parameters comparable to DiffATS. Tab. 10 reports the per-dataset parameter counts, and differences across methods are within a few percent on every dataset.                             
+
+> Dataset DiffATS DCTDiff FNO SDIFT CelebA-HQ 134 .40 M134 .00 M–128 .00 MMoving MNIST 38 .90 M39 .70 M–40 .27 M1-d Burgers 131 .93 M132 .10 M131 .78 M132 .20 M1-d reaction-diffusion 131 .93 M132 .10 M131 .78 M133 .30 M2-d Burgers 40 .11 M41 .68 M40 .22 M40 .00 M2-d Kármán vortex street 41 .33 M42 .40 M41 .50 M42 .40 M
+
+Table 10: Number of score-network parameters across methods and datasets. “M” denotes million. “–” indicates the baseline is not applied (FNO is PDE-specific). 20 C.7 PDE Datasets Generation Details 1-d Burgers’ equation. For the dataset generation, we follow the same procedure in [ 56 ]. The 1-d Burgers’ equation is a nonlinear PDE modeling the diffusion process in fluid dynamics as 
+
+∂tu(t, x ) + ∂x
+
+ u2(t, x )/2 = ν/π∂ xx u(t, x ), x ∈ (0 , 1) , t ∈ (0 , 2] ,u(0 , x ) = u0(x), x ∈ (0 , 1) ,
+
+with periodic boundary conditions u(t, 0) = u(t, 1) and ∂xu(t, 0) = ∂xu(t, 1) for t ∈ (0 , 2] , where 
+
+ν is the diffusion coefficient. In our datasets, we generate training samples and test samples with ν
+
+i.i.d. sampled from [10 −5, 5 × 10 −5, 10 −4, 5 × 10 −4, 10 −3, 5 × 10 −3, 10 −2, 5 × 10 −2, 10 −1].And ν is also provided as a conditioning variable to the diffusion model. 
+
+1-d reaction-diffusion. For 1-d reaction-diffusion dataset generation, we also follow the same procedure in [56]. The equation is expressed as 
+
+∂tu(t, x ) − ν∂ xx u(t, x ) − ρu (1 − u) = 0 , x ∈ (0 , 1) , t ∈ (0 , 1] ,u(0 , x ) = u0(x), x ∈ (0 , 1) ,
+
+with periodic boundary conditions u(t, 0) = u(t, 1) and ∂xu(t, 0) = ∂xu(t, 1) for t ∈ (0 , 1] , where ν
+
+is the diffusion coefficient and ρ is the reaction rate of the logistic source term. For both training and test samples, we draw ν i.i.d. from [10 −5, 5 × 10 −5, 10 −4, 5 × 10 −4, 10 −3, 5 × 10 −3, 10 −2, 5 ×
+
+10 −2, 10 −1] and ρ i.i.d. from [0 .1, 0.5, 1.0, 2.0] . Both ν and ρ are provided as conditioning variables injected into the diffusion model. 
+
+2-d Burgers’ equation. The dataset generation process follows the procedure in [ 26 ]. The 2-d Burgers’ equation describes the evolution of a two-dimensional velocity field u = ( u1, u 2) on a periodic domain: 
+
+∂tu + ( u · ∇ )u = ν∆u, x ∈ (0 , 1) 2, t ∈ (0 , T ],
+
+u(0 , x) = u0(x), x ∈ (0 , 1) 2,
+
+with periodic boundary conditions u(t, 0, y ) = u(t, 1, y ) and u(t, x, 0) = u(t, x, 1) for t ∈ (0 , T ].Here x = ( x, y ) and ν > 0 is the viscosity coefficient; the vector equation corresponds to two coupled nonlinear PDEs for the velocity components u1 and u2. For both training and test samples, 
+
+ν is sampled i.i.d. from the continuous interval Uniform(1 × 10 −5, 1 × 10 −4) and provided as a conditioning variable to the diffusion model. For training, the two components u1 and u2 are pooled as independent samples rather than modeled as a joint vector field. 
+
+2-d Kármán vortex street. The Kármán vortex street describes the periodic vortex shedding behind a 2-d incompressible flow past a cylinder at moderate Reynolds number. We generate trajectories with a 2-d Lattice Boltzmann Method (LBM) solver implemented in Taichi, following the setup of https://github.com/hietwll/LBM_Taichi#lbm_taichi . The simulation domain is a rectangular channel with the following boundary conditions: Dirichlet inflow u = (0 .1, 0) on the left, zero-gradient (Neumann) outflow on the right, Dirichlet no-slip ( u = 0 ) on the top and bottom walls, and no-slip (bounce-back) on the cylinder surface. The dataset enumerates the Cartesian product of four parameters, yielding 5 × 5 × 4 × 2 = 200 trajectories in total: the LBM viscosity 
+
+ν ∈ { 0.020 , 0.022 , 0.025 , 0.028 , 0.032 }, the cylinder center cx ∈ { 26 , 29 , 32 , 35 , 38 } and 
+
+cy ∈ { 56 , 61 , 67 , 72 } (in pixels), and the cylinder radius r ∈ { 7, 9} (in pixels). All four parameters are provided as conditioning variables to the diffusion model. The resulting Reynolds numbers 
+
+Re = 0 .1 · 2r/ν fall in [50 , 80] , the classical periodic vortex-shedding regime. 
+
+D Additional Experiment Results 
+
+In this section, we provide additional experimental results and generated samples for reference. 
+
+D.1 Full PDE Metrics 
+
+We report the complete metric breakdown for the PDE benchmarks summarized in Tab. 3. Each entry is the mean ± standard deviation over 5 random seeds. Rel . Err .1 and Rel . Err .2 are relative errors in ℓ1 and ℓ2 norms, respectively; Avg . rMSE is the average rMSE across time frames. 21 1-d Burgers 1-d reaction-diffusion Method Rel . Err .1 ↓ Rel . Err .2 ↓ Avg . rMSE ↓ Rel . Err .1 ↓ Rel . Err .2 ↓ Avg . rMSE ↓                                                                                          
+
+> DCTDiff [39] 0.2103 ±0.0090 0.2953 ±0.0100 0.1195 ±0.0040 0.0681 ±0.0002 0.0713 ±0.0001 0.0497 ±0.0001
+> SDIFT [4] 0.3513 ±0.3100 0.3884 ±0.2600 0.1497 ±0.0590 0.3355 ±0.0087 0.3406 ±0.0069 0.2199 ±0.0030
+> FNO [32] 0.1296 ±0.1500 0.1913 ±0.1800 0.0697 ±0.1100 0.2649 ±0.0061 0.3114 ±0.0069 0.2103 ±0.0045
+> AvgPool 0.5933 ±0.0140 0.6602 ±0.0120 0.2465 ±0.0019 0.3405 ±0.0038 0.3975 ±0.0038 0.2655 ±0.0025
+> DiffATS (ours) 0.0816 ±0.0001 0.1203 ±0.0001 0.0517 ±0.0000 0.0076 ±0.0000 0.0085 ±0.0000 0.0057 ±0.0000
+
+Table 11: Full results on 1-d PDE datasets. Lower is better for all metrics.                                                                                                              
+
+> 2-d Burgers 2-d Kármán vortex street Method Rel .Err .1↓Rel .Err .2↓Avg .rMSE ↓Rel .Err .1↓Rel .Err .2↓Avg .rMSE ↓
+> DCTDiff [39] 0.3036 ±0.0046 0.3241 ±0.0048 0.0639 ±0.0011 0.3789 ±0.0540 0.5550 ±0.0710 0.0040 ±0.0006
+> SDIFT [4] 0.7831 ±0.2370 0.7323 ±0.2030 0.1070 ±0.0015 0.8053 ±0.1200 0.8654 ±0.1200 0.7631 ±0.2000
+> FNO [32] 0.2971 ±0.2000 0.3423 ±0.3000 0.0790 ±0.1000 0.2508 ±0.0200 0.3442 ±0.0190 0.0025 ±0.0002
+> AvgPool 0.3544 ±0.0036 0.3747 ±0.0029 0.0780 ±0.0006 0.6468 ±0.0049 0.6161 ±0.0020 0.0044 ±0.0000
+> DiffATS (ours) 0.1775 ±0.0005 0.1845 ±0.0005 0.0424 ±0.0001 0.1640 ±0.0003 0.2233 ±0.0005 0.0016 ±0.0000
+
+Table 12: Full results on 2-d PDE datasets. Lower is better for all metrics. 
+
+D.2 CelebA-HQ 
+
+We additionally report the precision and recall [ 31 ] as secondary metrics. We achieve the highest precision with our method across all baselines and ablation variations, while the recall of our method is slightly lower than that of AvgPool. Generated samples from each method are shown in Fig. 6. The qualitative comparison is consistent with the quantitative results in Tab. 2 and Tab. 13: DiffATS produces sharper facial details and more coherent compositions than DCTDiff, SDIFT, and AvgPool, matching its leading FID and precision scores. Method Precision ↑ Recall ↑
+
+DCTDiff [39] 0.28 0.08 
+
+SDIFT [4] 0.00 0.00 
+
+AvgPool 0.47 0.34 
+
+DiffATS (ours) 0.66 0.25 
+
+Ablations of DiffATS 
+
+Shared bases 0.51 0.32 
+
+Data-dep. bases w/ aug. 0.00 0.00 
+
+Data-dep. bases w/o align. 0.37 0.03 
+
+Table 13: Precision and recall on CelebA-HQ at 1024 × 1024 . Computed using 10,000 generated and 10,000 real images. Boldface indicates the best value in each column among all reported methods. 
+
+D.3 Moving MNIST 
+
+Fig. 7 shows five generated samples from each method on Moving MNIST, with each sample visualized as 5 frames. DiffATS produces the sharpest and most coherent digit trajectories, consistent with its leading FVD score in Tab. 2. 22 DiffATS 
+
+> DCTdiff
+> SDIFT
+> AvgPool
+> Shared bases
+> Data-dep. bases
+> w/ aug.
+> Data-dep. bases
+> w/o align.
+
+Figure 6: Generated samples on CelebA-HQ at 1024 × 1024 . Five samples per method. DiffATS 
+
+> DCTdiff
+> SDIFT
+> AvgPool
+
+Figure 7: Generated samples on Moving MNIST. Five video samples per method, with each sample shown as a sequence of 5 frames. 23 D.4 1-d Burgers Ground 
+
+> truth
+> t
+> DiffATS
+> DCTdiff
+> SDIFT
+> FNO
+> AvgPool
+
+Figure 8: Generated samples on 1-d Burgers. Two randomly selected samples per method, visualized as 2-d spatiotemporal renderings. The top row shows the ground truth; subsequent rows show DiffATS and the baselines. 24 D.5 1-d reaction-diffusion Ground 
+
+> truth
+> t
+> DiffATS
+> DCTdiff
+> SDIFT
+> FNO
+> AvgPool
+
+Figure 9: Generated samples on 1-d reaction-diffusion. Two randomly selected samples per method, visualized as 2-d spatiotemporal renderings. The top row shows the ground truth; subsequent rows show DiffATS and the baselines. 25 D.6 2-d Burgers Ground    
+
+> truth
+> t
+> T= 200 T= 200
+> DiffATS
+> DCTdiff
+> SDIFT
+> FNO
+> AvgPool
+
+Figure 10: Generated samples on 2-d Burgers. Two randomly selected samples per method, visualized as 3-d spatiotemporal renderings. The top row shows the ground truth; subsequent rows show DiffATS and the baselines. DiffATS most faithfully reproduces the spatial structure and temporal evolution of the ground-truth trajectories, consistent with its leading relative error and rMSE in Tab. 12. 26 D.7 2-d Kármán Vortex Street Ground                    
+
+> truth
+> T= 1 T= 51 T= 101 T= 151 T= 200 T= 1 T= 51 T= 101 T= 151 T= 200
+> DiffATS
+> DCTdiff
+> SDIFT
+> FNO
+> AvgPool
+
+Figure 11: Generated samples on 2-d Kármán vortex street. Two randomly selected samples per method, visualized as 5 frames. The top row shows the ground truth; subsequent rows show DiffATS and the baselines. 27

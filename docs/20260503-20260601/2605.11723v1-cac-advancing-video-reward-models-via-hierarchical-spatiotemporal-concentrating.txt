@@ -1,0 +1,746 @@
+Title: CaC: Advancing Video Reward Models via Hierarchical Spatiotemporal Concentrating
+
+URL Source: https://arxiv.org/pdf/2605.11723v1
+
+Published Time: Wed, 13 May 2026 01:03:37 GMT
+
+Number of Pages: 27
+
+Markdown Content:
+# CaC: Advancing Video Reward Models via Hierarchical Spatiotemporal Concentrating 
+
+Jiyuan Wang 1,2,∗ Huan Ouyang 3,4,∗ Jiuzhou Lin 4 Chunyu Lin 1,† Dewen Fan 4,‡
+
+Boheng Zhang 4 Haonan Fan 4 Fei Zuo 4 Jia Sun 4 Huaiqing Wang 4
+
+Honglie Wang 4 Yiyang Fan 4 Zhenlong Yuan 4 Zijun Li 4 Yongrui Heng 4
+
+Guosheng Lin 2 Fan Yang 4,† Tingting Gao 41BJTU 2NTU 3BUPT 4Kuaishou Technology 
+
+Figure 1: Anomalies in generated videos are highly sparse in both space and time — deformed shoes/legs may appear in only a few frames within a small region. Our CaC model temporally “ Concentrates” on the anomalous frames (red box), and then spatially “ Concentrates” on the distorted region (orange box), enabling precise and interpretable anomaly detection. 
+
+Abstract 
+
+Recently, video generation models have achieved remarkable progress in global visual fidelity. However, when synthesizing complex dynamic content, they fre-quently produce sparse subtle anomalies . Existing video reward models primarily emphasize overall visual quality and text alignment; yet as generation quality improves, these coarse-grained defects become less frequent, while the sparse structural, temporal, and physical anomalies become an increasingly important bottleneck. Therefore, in this paper, we propose Concentrate and Concentrate (CaC), a coarse-to-fine anomaly reward model based on Vision-Language Models. During inference, it first conducts a global temporal scan to anchor anomalous time windows, then performs fine-grained spatial grounding within the localized interval, and finally derives robust judgments via structured spatiotemporal Chain-of-Thought reasoning. To equip the model with these capabilities, we construct the first large-scale generated video anomaly dataset with per-frame bounding-box annotations, temporal anomaly windows, and fine-grained attribution labels. Build-ing on this dataset, we design a three-stage progressive training paradigm. The model initially learns spatial and temporal anchoring through single- and multi-frame supervised fine-tuning, and then is optimized by a reinforcement learning strategy based on two-turn Group Relative Policy Optimization (GRPO). Beyond conventional accuracy rewards, we introduce Temporal and Spatial IoU rewards to supervise the intermediate localization process, effectively guiding the model toward more grounded and interpretable spatiotemporal reasoning. Extensive ex-periments demonstrate that CaC can stably “concentrate” on subtle anomalies, achieving a 25.7% accuracy improvement on fine-grained anomaly benchmarks and, when used as a reward signal, CaC reduces generated-video anomalies by 11.7% while improving overall video quality.   
+
+> ∗Equal contribution †Corresponding author ‡Project leader
+> arXiv:2605.11723v1 [cs.CV] 12 May 2026
+
+1 Introduction 
+
+Recent advances in video generation models [ 5, 40 , 42 , 22 , 14 , 29 ] have significantly improved the visual fidelity of generated videos. However, when producing complex and dynamic content, these models still frequently exhibit hallucinations [ 17 , 18 ], including structural distortions [ 13 , 55 ], physical-law violations [ 57 , 6], temporal inconsistencies [ 4, 33 ], and corrupted text rendering [ 28 , 10 ]. Unlike the well-defined anomalies observed in other areas, anomalies in generated videos are far more complex and often manifest as subtle violations of physical/logical priors. Recently, the reinforcement learning (RL) paradigm has significantly enhanced the capabilities of generative models by employing reward models to evaluate outputs and drive optimization. In the domain of video generation, there is a critical need for a robust reward model capable of providing stable and accurate feedback on video anomalies, thereby advancing video generation quality. While existing video reward models [ 54 , 52 , 56 , 60 , 16 , 50 ] play a pivotal role in aligning human pref-erences, they still largely emphasize visual quality and text alignment, leaving structural distortions and localization errors relatively under-explored. Unlike global visual quality issues, hallucinations in generated videos are often spatiotemporally sparse, appearing only in a few frames or occupying small localized regions. Consequently, identifying these subtle errors requires fine-grained spatiotem-poral perception to isolate weak anomaly signals from large amounts of normal context, yet these faint signals are often overwhelmed by current models’ global video-level reasoning. To bridge this gap, video reward modeling requires a dedicated mechanism that can actively concentrate on these sparse anomalies through spatiotemporal focusing, filtering out the vast normal context to enable fine-grained reasoning. In this paper, we propose Concentrate and Concentrate (CaC) , a VLM-based reward model with a coarse-to-fine two-turn localization strategy for focusing on subtle anomalies. During inference, CaC first conducts a global scan to anchor the anomalous temporal range, followed by fine-grained spatial grounding within the selected time window. This design not only reduces the burden of spatiotemporal search, but also mitigates VLM hallucinations by deriving final judgments from interpretable spatiotemporal CoT reasoning. To enable this coarse-to-fine reasoning ability, we construct a three-stage training framework. First, we train the model to recognize and localize anomalies. Given single frames extracted from videos, the model learns anomaly comprehension and bbox grounding, laying a foundation for subsequent video-level detection. Second, we extend training to multi-frame inputs, enabling the model to capture temporal errors in dynamic scenes. This stage jointly trains global video scanning and fine-grained video-clip localization, ensuring that the model outputs the formats required for two-turn interaction. Finally, we employ two-turn GRPO to optimize the VLM’s reasoning trajectory, enabling it to produce more stable and accurate judgments. We design a diversified reward mechanism, including format verification, temporal IoU, spatial IoU, attribution IoU, and result accuracy, which guides the model toward more accurate spatiotemporal localization and interpretable anomaly judgment. To support the above pipeline, we construct the first large-scale dataset for sparse anomalies in generated videos, with expert annotations of temporal segments, anomaly types, and per-frame bboxes . Although labor-intensive, these annotations are crucial: 1) they improve CoT ground-truth (GT) construction by allowing video clips with GT spatiotemporal annotations to be fed into the foundation model, effectively reducing hallucinations during label generation compared with prior work [ 16 , 54 ]; 2) they provide references for attribution and temporal/spatial IoU rewards in the third training stage, guiding the model toward more interpretable reasoning through explicit localization. Extensive experiments on our anomaly benchmark demonstrate that CaC reliably detects sparse anomalies, achieving 81.7% overall accuracy and improving over the strongest baseline by 25.7%. On a harder split with increasingly sparse anomalies, CaC’s advantage grows as anomalies become shorter in duration and smaller in spatial extent. CaC also improves accuracy by 19.9% on the external Skyra-derived subset, providing an out-of-domain generalization. More importantly, when used as a reward signal for downstream video generation, CaC reduces generated-video anomalies by 11.7% and improves overall video quality, demonstrating that its judgments provide actionable optimization feedback. Our contributions can be summarized as follows: • We construct the first large-scale comprehensive dataset for sparse anomalies in generated videos, providing anomaly types, reasons, temporal windows, and per-frame bboxes. These annotations support high-quality CoT synthesis for SFT and provide verifiable reward signals for the RL stage. 2• We propose CaC, a coarse-to-fine two-turn reward model that recognizes sparse video anomalies through hierarchical spatiotemporal focusing. Its structured judgments can be converted into reward feedback for reducing anomalies in generated videos. • We develop a three-stage progressive pipeline for CaC training. In the RL stage, we further introduce temporal, spatial, and attribution IoU rewards to guide the VLM toward grounded, interpretable anomaly CoT reasoning and stable judgments. 
+
+2 Related Work 
+
+Video Reward Models. With the development of generative models [ 46 , 45 , 47 , 48 ], reward modeling has become a key technique for aligning them with human preferences. Early single-scalar approaches [ 59 , 21 , 30 ] are insufficient for capturing multi-faceted visual quality. Subsequent video-domain methods incorporate human-annotated ratings [ 23 , 15 ] and Bradley–Terry loss [ 27 , 32 ], with some frameworks unifying cross-task evaluation [ 53 ] or extending to multi-dimensional scoring [ 16 ,51 , 27 ]. More recent VLM-based reward models further integrate CoT reasoning [ 52 ], dynamic sampling, or visual rechecking [ 54 , 50 ] to improve evaluation depth. However, localized structural and physical anomalies can still be overwhelmed by predominantly normal context. In contrast, CaC introduces a coarse-to-fine spatiotemporal grounding mechanism, effectively concentrating on sparse anomalies amid normal context. 
+
+Reinforcement Learning. The integration of RL [ 25 ] into LLMs and MLLMs [ 8 , 49 , 2 ] has significantly advanced their reasoning capabilities [ 58 , 31 , 39 ]. While early implementations relied on PPO [ 34 ], GRPO [ 35 , 12 ] simplifies advantage estimation via group-relative baselines and leverages verifiable rewards to elicit long-chain reasoning without extensive preference data. Recently, GRPO has been further applied to visual understanding [ 53 , 60 , 50 , 52 , 37 ] and visual generation [ 61 , 44 , 26 ]. In this work, we use LLM-style GRPO to train the CaC reward model, while downstream video alignment follows generation-style GRPO. 
+
+Video Anomaly Detection. This traditional CV task primarily studies abnormal events in real-world surveillance videos, such as human, vehicle, and environment anomalies [ 1 ]. This setting is fundamentally different from our generated-video anomalies studied here: our anomalies refer to structural distortions, temporal inconsistencies, etc. A few recent benchmarks and evaluators study these anomalies in generated videos [ 18 , 3 , 54 ], but they typically focus on video-level judgments or rule-level assessment rather than fine-grained spatiotemporal anomalies. Additionally, detector-style methods [ 37 , 24 ] discriminate real from AI-generated videos via artifact reasoning. Though their default task differs from ours, we still include them as baselines and leverage their data for out-of-domain evaluation given the scarcity of open-source generated-video artifact models. 
+
+Visual Focusing. This line of work aims to allocate computation to informative regions or moments for fine-grained visual understanding. Existing studies explore image-level zooming and cropping [ 7,36 ], frame-level keyframe selection for long-video understanding [ 62 , 63 ], and spatiotemporal grounding as a reference basis [ 43 , 41 ]. These works improve general visual understanding or target grounding, but typically stop at perception or localization. In contrast, CaC focuses on sparse anomalies in generated videos and, after temporal focusing and spatial grounding, further converts the anomaly evidence into actionable reward feedback for improving video generation quality. 
+
+3 Method 
+
+3.1 Dataset Preparation 
+
+To enable the model to detect subtle hallucinations in generated videos, we construct a large-scale dataset with fine-grained spatiotemporal anomaly annotations, specifically targeting sparse video distortions. The overall construction pipeline is illustrated in Fig. 2. 
+
+Data Collection and Taxonomy. We collect images and prompts describing complex scenes and motions, and synthesize videos using SoTA video generation models, including Kling [ 40 ], Sora [ 5], and Wan [ 42 ]. We manually screen the outputs and curate ∼25K videos covering broad anomaly types. As shown in the top-right of Fig. 2, we build a new anomaly taxonomy de-signed to help VLMs identify subtle anomalies and support the subsequent three-stage training. Single-frame recognizable anomalies (Stage 1) include object distortion and human distortion, with common subtypes such as object deformation and extra limbs. We also include character anomalies, 3Instruction 
+
+I2V 
+
+T2V Uniform Sampling                                                            
+
+> Manual
+> Annotation
+> Time Window :Frames 4-5
+> Anomaly Type :Inconsistent
+> character expression
+> Reason :Foo t,leg —
+> deformed ,distorted
+> BBox :F4[161, 256, 302,
+> 445 ]F5[…]
+> Gemini
+> Reason
+> Type
+> BBox
+> Time
+> window
+> <think> Step 1: Frame -by -frame analysis of the picture
+> content .Frame 1 ,global scanning ,... Fine -grained
+> inspection ,…Frame 4, …At 161, 256, 302, 445 ….Step
+> 2: Inter -frame coherence and motion trajectory analysis ,
+> combined with information in Step 1 .... . Step 3:
+> Overall video anomaly assessment ,judge whether the 6
+> problem types have anomalies :…In frames 4to 5 of the
+> video .Step 4: Final determination </think> Remarkable .
+> Anomaly COT data synthesis and Verify
+> Anomaly
+> Taxonomy
+> Single -Frame
+> Object Dist. Deformation Mutation Clipping
+> Human Dist. Limb
+> deformity
+> Abnormal
+> fingers
+> Extra limbs
+> Body splitting
+> Multi -Frame
+> Motion Anom .Unnatural
+> trajectory
+> Jitter /
+> flicker
+> Disappear /
+> appear
+> Physics Viol. Unsupporte
+> d floating
+> Physical
+> contradiction
+> Global Defects
+> Text Anom .Unreadable
+> text Abnormal layout
+> ≤5×
+> ≤3×
+> Prompt
+> inconsistent
+> Low
+> aesthetic
+> Motion
+> mismatch
+
+Figure 2: The processing pipeline for our CaC dataset. Please refer to Sec. 3.1 for details. which are largely overlooked by existing reward models. Multi-frame anomalies (Stage 2) include motion anomalies and physical violations, covering common issues such as flickering and object dis-appearance. Moreover, we further filter these anomalous videos by excluding global quality issues such as text-video mismatch and low aesthetic quality, retaining 21,396 videos, ∼80% of the screened videos. This highlights that localized and sparse spatiotemporal anomalies are becoming increasingly dominant failure modes in current video generation. 
+
+CoT Synthesis with Human Annotation. High-quality CoT data can improve the effectiveness of reward models [ 16 ]. To construct such data for sparse video anomalies, we design an annota-tion pipeline that combines expert human labels with VLM-based CoT synthesis, extending prior practices [ 37 , 38 , 52 ]. As shown in Fig. 2 (left), we uniformly downsample each video into frame sequences, which are examined frame by frame by human experts. For anomalous samples, annotators label the temporal segments, anomaly types, underlying reasons, and affected-region bboxes. Given that subtle anomalies are difficult to annotate accurately, we organize 50 video evaluation experts, including 40 annotators and 10 reviewers, and adopt a two-round review mechanism where errors are returned for correction. We further randomly check 10% of the annotations to verify bbox and anomaly-type accuracy. Detailed annotation procedures are provided in Appendix B.1. Based on these annotations, as shown in Fig. 2 (bottom), we feed the original video, human-annotated GT, and cropped anomalous frames into Gemini-2.5-Pro [ 9], and design a four-step reasoning template to encourage comprehensive VLM analysis. Since some sparse anomalies are extremely difficult for VLMs to recognize, we introduce a generate-verify process, where the generated CoT and human annotations are sent back to Gemini to check their consistency. Samples verified within three rounds are deemed salient anomalies ; those verified within five rounds are deemed non-salient anomalies ;and the remaining samples are discarded, as they may be overly difficult or affected by human annotation errors. Ultimately, we retain 15,374 anomalous training samples. The detailed prompt templates are provided in Appendix B.2. We further pair the anomalous set with an equal number of normal videos constructed using the same pipeline, resulting in a dataset of approximately 30K videos. More dataset details are provided in Appendix B.3, with additional statistics visualized in Fig. S1. 
+
+3.2 Multi-stage Progressive Training for Hierarchical Concentrating 
+
+Based on the constructed dataset, we build a 3-stage progressive training pipeline, as shown in Fig. 3. 
+
+Stage 1: Single-frame Warmup. Existing pre-trained VLMs are typically unexposed to anomaly scenes in generated videos. We therefore first teach the VLM to recognize and localize these distortions from anomalous frames. As shown in Fig. 3 (Stage 1), each training sample contains an extracted anomalous frame, the video prompt, and the corresponding CoT reasoning sequence constructed in Sec. 3.1. This sequence includes the judgment, reasoning, and spatial bbox coordinates of the affected region. Through this stage, the model acquires a structured CoT format and establishes a mapping from visual cues to anomaly attribution and spatial grounding. 
+
+Stage 2: Multi-frame SFT. After establishing frame-level anomaly understanding and spatial ground-ing capabilities, we move to video-level training. As shown in Fig. 3 (Stage 2), we propose a joint 4VLM 
+
+VLM     
+
+> Output:
+> <think> Step 1...
+> Step 2... Step 3...
+> </think> (CoT )
+> <answer>
+> Anomaly ,…, BBox :
+> [161, 256,
+> 302,445] </answer>
+
+Stage 1：Warmup Stage 2：SFT 
+
+VLM 
+
+Stage 3：GRPO 
+
+> Reward
+> Weighted
+
+Training Pipeline                      
+
+> Cross
+> Entropy
+> Cross
+> Entropy
+> Frame Extract  Instruction
+> Video
+> Clip
+> Instruction
+> <think> CoT …</think>
+> <answer> Anomaly ,…,
+> Time_Window :[Frame 1,
+> Frame 6] </answer>
+> <think> CoT …
+> </think> <answer>
+> Anomaly ,…,
+> BBox :{ F1:[ 89 ,…,73
+> ], ..., F6 :[8 6,…,77]}
+> </answer> Instruction
+> Time_Window :
+> [Frame 3, Frame 5]
+> Anomaly, …
+> BBox :{F 3:[ 39, …,73], .
+> .., F 5:[ 59, …,96 ]}
+> Anomaly ,…
+> Advantage
+> Compute  Optimize
+> 𝑅 spat
+> SFT  Data
+> RL  Data
+
+VLM   
+
+> 𝑅 format
+> 𝑅 temp
+> 𝑅 type ,𝑅 status
+> ×𝛾 (𝑠 !)
+
+Figure 3: Overview of the CaC Reward Model’s Coarse-to-Fine three-stage training paradigm. Please refer to Sec. 3.2 for details. training strategy that prepares the model for both global temporal scanning and fine-grained spatial localization in the subsequent GRPO stage. Specifically, the model is optimized simultaneously on two types of video inputs: uniformly sampled (4 fps) global videos for localizing anomalous temporal regions within the full context, and densely sampled (8 fps) clips for precise anomaly localization after temporal focusing. These clips are cropped from the full videos as pure abnormal/normal temporal windows, and are all shorter than 1s. Using the constructed CoT supervision (Sec. 3.1), the model learns the spatial and temporal CoT reasoning format required by the third-stage two-turn video input and acquires basic video anomaly recognition capability. 
+
+Stage 3: Two-Turn GRPO. To further strengthen the model’s multimodal spatiotemporal reasoning and improve the reliability of its CoT process, we adopt two-turn GRPO fine-tuning. As shown in Fig. 3 (Stage 3), given an instruction c and a video f , the model generates a structured anomaly prediction y in a predefined format. The prediction contains two rounds: in the first round, the model takes the uniformly sampled video f and predicts the anomaly judgment, temporal boundaries, and anomaly type, denoted as y1. For each rollout, the video is then cropped along its predicted time window to obtain a localized clip f ′ 
+
+> i
+
+= crop (f, y 1 
+
+> i
+
+). In the second round, the model takes the densely sampled f ′ together with the CoT derived from y1, and predicts the anomaly judgment, spatial bboxes, and anomaly type, denoted as y2. The complete response is defined as yi = [ y1 
+
+> i
+
+, y 2 
+
+> i
+
+].During training, for each input (c, f ), GRPO samples a group of G rollouts {y1, y 2, . . . , y G} from the old policy (VLM). Each yi is evaluated by a weighted combination of rewards, and the rewards are normalized within the group to obtain the advantage ˆAi. The policy is optimized by maximizing: 
+
+JGRPO (θ) = Jclip (θ) − βD KL (πθ ∥πref ), (1) where πθ and πref denote the fine-tuned and original VLMs, respectively, Jclip (θ) is computed from 
+
+ˆAi, and β controls the KL strength. See Appendix C.1 for details and the formal definition of GRPO. We next introduce these rewards. 
+
+3.3 Reward for CaC Format Reward evaluates the structural correctness of outputs. We require each response to be a parsable JSON object satisfying the stage-specific, status-conditioned schema: valid judgment for all samples; empty anomaly list if predicted normal; and anomaly taxonomy with a valid time window or frame-indexed bboxes in the first/second turn if predicted anomalous. The format reward is defined as: 
+
+Rfmt (yi) = 12
+
+> 2
+
+X
+
+> t=1
+
+0, Valid t(yti ),
+
+−1, otherwise . (2) Invalid or unparsable outputs are penalized, while semantically incorrect predictions cannot receive additional positive reward merely by being well formatted. 5Status Reward evaluates anomaly judgment accuracy by comparing the predicted status with the GT status. Similar to Rfmt (·), it assigns 0 to correct status predictions and −1 otherwise. For normal videos, a correct prediction can directly pass the status check in the first turn, while a false prediction is penalized and cannot receive IoU-based rewards because no GT anomaly exists. For anomalous videos, the model passes the status check only when its predictions are correct across both turns. Although anomalous samples can receive additional IoU-based rewards, these rewards are gated by correct multi-turn prediction and accurate attribution/localization; simply predicting “abnormal” therefore brings no benefit. For GT-normal samples, IoU terms are masked out, and GRPO normalizes rollouts per input, avoiding cross-sample bias. 
+
+Attribution Type IoU Reward evaluates the model’s ability to identify five anomaly types introduced in Sec. 3.1 (object/human distortions; text/motion anomalies; physics violations), guiding the model to reach its judgment through accurate attribution CoT. For anomalous samples, we extract the anomaly type sets from the t-th turn prediction and the GT annotations, denoted as T t 
+
+> pred
+
+and Tgt ,and compute their set IoU: 
+
+Rtype (yi) = 12
+
+> 2
+
+X
+
+> t=1
+
+|T t 
+
+> pred
+
+∩ T gt |/|T t 
+
+> pred
+
+∪ T gt | (3) 
+
+Temporal IoU Reward evaluates the accuracy of the temporal intervals identified in the first turn. Let Fpred and Fgt denote the sets of predicted and GT anomalous frame indices, respectively. The temporal reward is computed as: 
+
+Rtemp (yi) = |F pred ∩ F gt |/|F pred ∪ F gt |. (4) 
+
+Spatial IoU Reward evaluates the precision of the frame-level bboxes predicted in the second turn. We compute spatial IoU on temporally matched frames, i.e., Fpred ∩ F gt , where M is the number of GT bboxes on these frames. The reward is formulated as the mean IoU: 
+
+Rspa (yi) = 1
+
+M
+
+> M
+
+X
+
+> m=1
+
+IoU (bpred  
+
+> m
+
+, b gt 
+
+> m
+
+), M > 0; 0, otherwise . (5) Together, these temporal and spatial IoU rewards encourage more accurate temporal grounding and spatial localization, leading to more reliable and interpretable CoT reasoning. 
+
+Reward Aggregation. In Sec. 3.1, each GT anomaly receives a saliency label sn ∈{salient , non-salient } based on its verification difficulty. For anomalies with varying recognition difficulty, it is unreasonable to penalize all prediction errors equally. Therefore, we introduce a saliency discount factor γ(sn) and define the final reward as: 
+
+R(yi) = w1Rfmt (yi) + w2 ¯γiRstat (yi) + mi
+
+ w3 eRtype (yi) + w4 eRtemp (yi) + w5 eRspa (yi), (6) where mi masks IoU terms for GT-normal samples, set to 1/0 for GT-anomalous/normal samples, respectively. The wi values denote the weights of the respective reward components, and we set 
+
+(w1, w 2, w 3, w 4, w 5) = (1 , 2, 2, 2, 5) . ¯γi is set to 1 for GT-normal samples and otherwise denotes the average saliency discount over GT anomalies in the sample, and eRk = 1 − ¯γi(1 − Rk) for 
+
+k ∈ { type , temp , spa }. We set γ(sn) = 0 .5/1 for non-salient/salient anomalies, respectively. 
+
+3.4 Two-turn Inference Strategy for Hierarchical Concentrating 
+
+Existing video reward models typically sample frames at fixed temporal intervals, feeding all sampled frames into the model simultaneously for inference. However, capturing subtle or fleeting anoma-lies inherently demands denser sampling, which incurs prohibitive computational overhead when processing long videos. In this work, we propose the Coarse-to-Fine Two-turn Inference strategy to efficiently localize anomalies. First, the input video is uniformly downsampled to obtain a sparse frame sequence (4 fps), which is fed into the VLM for global temporal scanning. The model initially detects anomalies in the video; if detected, it outputs the anomalous time window, along with its attribution analysis. Second, we extract the video clip corresponding to the predicted time window and densely resample it (8 fps). This clip is then fed back into the VLM for fine-grained spatial reasoning, where the model confirms the anomalies and outputs the anomaly attribution and spatial bboxes. The first turn therefore proposes a candidate anomalous window, while the second turn makes the final anomaly decision. If the second turn does not confirm the anomaly, the video is conservatively classified as normal. 6Table 1: Quantitative comparison against general MLLMs, video reward models, and video detectors on CaC-Bench-Main. Best and second-best results are in bold and underlined . Note that some baselines exhibit extreme single-sided metrics ( e.g., Skyra achieves 0.982 Anomalous Recall but only 0.018 Normal Recall), reflecting a strong prediction bias rather than detection capability. Model Anomalous Video Normal Video Acc. Recall Precision F1-Score Recall Precision F1-Score Gemini-2.5-Pro [9] 0.854 0.530 0.654 0.244 0.626 0.351 0.549 Gemini-3.1-Pro [11] 0.537 0.692 0.605 0.583 0.476 0.524 0.560 GPT-4o [19] 0.364 0.454 0.404 0.562 0.469 0.511 0.463 Qwen3-VL-8B [2] 0.108 0.574 0.182 0.920 0.508 0.654 0.514 Qwen3-VL-32B [2] 0.066 0.702 0.121 0.972 0.510 0.669 0.519 UnifiedReward [53] 0.538 0.563 0.550 0.582 0.557 0.569 0.560 UnifiedReward-Think [52] 0.428 0.504 0.463 0.578 0.503 0.538 0.503 VR-Thinker [50] 0.382 0.554 0.452 0.692 0.528 0.599 0.537 Skyra-RL [24] 0.982 0.500 0.663 0.018 0.500 0.035 0.500 VideoVeritas [37] 0.414 0.539 0.468 0.646 0.524 0.579 0.530 Ours (CaC) 0.910 0.767 0.833 0.724 0.889 0.798 0.817 
+
+Reward Interface. CaC is used as a reward model through a structured-to-scalar interface. Given a video v and its instruction p, CaC produces a structured response, and we convert the final judgment into a smooth scalar reward using the VLM’s vocabulary probabilities. Specifically, we read the probabilities of “normal” and “abnormal”, denoted as Pnorm and Pabn , and define: 
+
+RCaC (v, p ) = Pnorm /(Pnorm + Pabn ). (7) Thus, CaC assigns higher rewards to likely normal videos and lower rewards to likely anomalous ones. The structured CoT, type, time window, and bbox can serve as interpretable evidence. 
+
+4 Experiment 
+
+Implementation. We adopt Qwen3-VL-8B [ 2 ] as the foundational model for CaC. All training stages unfreeze the full pipeline, including the ViT encoder, the adapter, and the LLM. In the warmup stage, we fine-tune the model with LoRA (rank =32) at a learning rate of 1 × 10 −4. In the Multi-frame SFT stage, we switch to full-parameter tuning with the same learning rate. In the RL stage, we perform two-turn GRPO for 250 steps with a learning rate of 1.0 × 10 −6, a rollout group size of 
+
+G = 8 , a batch size of 64, and gradient accumulation over 32 steps. Further implementation details are provided in Appendix C.2. 
+
+Benchmark. Existing benchmarks for video reward models [ 20 , 27 ] primarily evaluate aesthetics and text-video alignment via pairwise preference accuracy, differing from our task in both evaluation dimensions and protocols. We therefore construct CaC-Bench . This evaluation set is separated from the training data in videos, prompts, anomaly distribution, and fine-grained taxonomy, and contains two subsets: (1) CaC-Bench-Main (500 normal + 500 anomalous videos), human-annotated with anomaly types and causes, all cross-verified; (2) CaC-Bench-Hard (400 anomalous-only videos), categorized by temporal duration ( <1s / ≥1s) and spatial extent ( <20% / ≥20% of frame area) into four difficulty levels to stress-test model sensitivity. We also evaluate on an external annotated subset derived from open-source Skyra/ViF-CoT-4K data [ 24 ]. More benchmark construction details are provided in Appendix A. 
+
+Baseline. On CaC-Bench-Main, we compare CaC with three groups of baselines: (1) leading general VLMs (Gemini-3.1-Pro [ 11 ], Gemini-2.5-Pro [ 9], GPT-4o [ 19 ], Qwen3-VL-8/32B [ 2]); (2) video reward models (UnifiedReward [ 53 ], UnifiedReward-Think [ 52 ], and VR-Thinker [ 50 ]); and (3) AIGC video detectors (VideoVeritas [ 37 ], Skyra-RL [ 24 ]). We keep frame sampling and prompting/protocol conversion consistent across methods, with details in Appendix C.2. For CaC-Bench-Hard, which contains only anomalous videos, we exclude models that exhibit strong prediction bias on CaC-Bench-Main ( e.g., Gemini-2.5-Pro variants that default to “abnormal”) and retain only those with reasonably balanced detection behavior for a fair comparison. 
+
+4.1 Main Results 
+
+As shown in Tab. 1, CaC outperforms all existing methods in sparse anomaly detection, achieving an overall accuracy of 81.7% – a 25.7-point absolute improvement over the previous best. This not only 7Model 
+
+< 1s
+
+< 20% 
+
+< 1s
+
+≥ 20% 
+
+≥ 1s
+
+< 20% 
+
+≥ 1s
+
+≥ 20% 
+
+Gemini-3.1-Pro 0.21 0.46 0.31 0.57 UnifiedReward 0.32 0.53 0.37 0.51 VR-Thinker 0.23 0.39 0.40 0.33 
+
+CaC (Ours) 0.70 0.69 0.76 0.71 38% 
+
+> 14%
+
+Figure 4: Quantitative comparison on CaC-Bench-Hard across four difficulty splits (we report recall because it contains only anomalous videos). Table 2: Quantitative comparison of reward models for improving video generation quality. We evaluate aligned videos with automatic VBench [ 18 ] metrics and human-expert anomaly annotations. Details of the selected metrics and qualitative before/after comparisons are provided in Appen-dices C.4 and D.2.2, respectively. Group Metric Base model Best-of-N Flow-GRPO Wan-2.1-1.3B UR UR+CaC UR UR+CaC VBench Dynamic Degree ↑ 0.347 0.542 0.514 0.597 0.583 Subject Consistency ↑ 0.949 0.959 0.965 0.947 0.970              
+
+> Imaging Quality ↑0.633 0.637 0.648 0.640 0.667
+> Expert Anomaly Rate ↓0.290 0.253 0.216 0.241 0.173
+
+demonstrates that CaC can accurately detect anomalies, but also confirms that prior reward models overlook this critical evaluation dimension. In contrast, Qwen3-VL-8/32B [ 2] achieve low recall on anomalous videos, while Gemini-2.5-Pro [ 9] and Skyra-RL [ 24 ] exhibit low recall on normal videos, reflecting clear prediction biases: the former fail to recognize generative anomalies, whereas the latter are oversensitive. As shown in Fig. 4, benefiting from the progressive coarse-to-fine localization design, CaC out-performs the best competing model on the four difficulty splits of CaC-Bench-Hard by 38%, 16%, 36%, and 14%, respectively. This advantage remains clear across different anomaly durations and spatial extents, and becomes pronounced for sparse anomalies, further validating the effectiveness of our approach. Per-category recall results are provided in Appendix D.1. CaC also maintains the strongest recall across all five anomaly categories (Tab. S3), indicating that the proposed reward model improves anomaly sensitivity without introducing diagnostic blind spots. We further evaluate CaC on the open-source Skyra-ViF-CoT-4K data from an independent source (Appendix A.2). As shown in Tab. S1, CaC still improves over the strongest baseline by 19.9 points in accuracy. Qualitative results of the CaC CoT process are detailed in Appendix D.2.1 and Fig. S2, and Table S4 further reports Temporal IoU and Spatial IoU improvements over baselines. Together, these results demonstrate the effectiveness of the coarse-to-fine focusing strategy in detecting subtle video anomalies. 
+
+4.2 Video Alignment 
+
+To validate CaC as a reward model for video generation, we integrate it into two downstream optimization paradigms: Best-of-N sampling and Flow-GRPO on Wan-2.1-1.3B [ 42 ]. For Best-of-N ,we generate five candidate videos for each prompt and select the one with the highest reward. For Flow-GRPO, CaC is used as a non-differentiable scalar reward for optimization, with group size 16 
+
+and LoRA rank 32 ; other details are provided in Appendix C.4. Since CaC is a sparse-anomaly specialist, a general preference reward is still needed to evaluate text-video alignment and other holistic qualities, preventing reward hacking toward anomaly-free but low-quality videos. We therefore use UnifiedReward (UR) and average the normalized scores of UR and CaC as the final reward. We evaluate generated videos using VBench and expert anomaly annotations. As shown in Tab. 2, UR+CaC consistently improves over both the unaligned baseline and UR-only alignment on subject consistency and imaging quality, while reducing the expert-annotated anomaly rate from 29.0% to 17.3% (an 11.7% absolute reduction). Dynamic degree shows only a marginal decrease, since static videos are inherently less prone to anomalies — this indicates that CaC does not trivially suppress motion to avoid anomalies, but instead provides complementary sparse-anomaly feedback without sacrificing overall generation quality. 8Table 3: Ablation results on CaC-Bench-Main. ⑥ w/o Inference Strategy* is retrained with Stages 2 and 3 under a single-turn formulation. Due to space limitations, we report only Overall Accuracy; the remaining metrics are provided in Appendix D.3. ID Ablations Overall Acc. ID Ablations Overall Acc.                                   
+
+> ①Base Model (Qwen3-VL-8B) 0.514 ⑥w/o Inference Strategy* 0.734
+> ②w/o Single-frame Warmup 0.701 ⑦w/o Temporal IoU Reward 0.629
+> ③w/o Multi-frame SFT 0.651 ⑧w/o Spatial IoU Reward 0.716
+> ④w/o Two-Turn GRPO 0.674 ⑨w/o Attribution IoU Reward 0.710
+> ⑤Base Model w/ Inference Strategy 0.537 ⑩Ours (CaC) 0.817
+
+Qualitative before/after comparisons are provided in Appendix D.2.2 and Fig. S3, showing that CaC mainly suppresses localized structural distortions and temporal inconsistencies present in the unaligned baseline. 
+
+4.3 Ablation Results Effectiveness of the Progressive Training Paradigm. As shown in Tab. 3 ① vs. ②③④ vs. ⑩, all three training stages contribute substantially to the final performance and are jointly indispensable. In particular, ② removes the pre-training stage and reduces the overall accuracy by 12%, indicating that initial anomaly grounding provides an important foundation. ③ removes the SFT stage, which weakens the model’s ability to output correct formats, makes the RL stage unstable, and reduces accuracy by 16%. ④ disables the RL stage and leads to a significant performance degradation with a 14% drop. Together, these results confirm the necessity of the progressive three-stage training paradigm. 
+
+Effectiveness and Efficiency of the Inference Strategy. As shown in Tab. 3 ⑤ vs. ①, when applying our two-turn CoT strategy to Qwen3-VL-8B, even in a training-free setting, it still marginally outperforms single-turn inference. In ⑥, CaC is retrained with a single-turn formulation that performs temporal and spatial localization simultaneously. Compared to ⑩, its accuracy drops by 8.3%. Taken together, both ⑤ and ⑥ validate the effectiveness of our inference strategy, suggesting that without the densified second-stage spatial grounding, the model struggles to reliably localize subtle anomalies. Compute analysis is provided in Appendix C.3 and Table S2. We acknowledge that this two-turn strategy doubles the reward-model inference time, but this overhead remains acceptable in video RL training, as our downstream experiments show that video sampling is more than 8 × slower than reward evaluation. Importantly, the added time cost yields a clear accuracy gain (for anomaly judgment, 56% accuracy is insufficient for reliable use), resulting in a substantially better performance-to-cost trade-off at the full training-system scale. 
+
+Effectiveness of Individual Rewards. As shown in Tab. 3 ⑦⑧⑨ vs. ⑩, we remove the Tempo-ral/Spatial/Attribution IoU reward, respectively (the effectiveness of JSON-format/status rewards has been widely validated in prior work [ 53 ], so we omit them here). Among them, the Temporal IoU reward is the most critical: removing it causes a 19% performance drop because it directly determines the decision range of the second turn. These ablations collectively show that using process-level rewards to guide the model toward high-quality spatiotemporal CoT reasoning leads to more accurate anomaly judgment. 
+
+5 Conclusion 
+
+In this paper, we presented CaC (Concentrate and Concentrate), a coarse-to-fine reward model for detecting and localizing subtle anomalies in generated videos. By combining a two-turn inference strategy, progressive three-stage training, and verifiable spatiotemporal rewards, CaC mitigates the attention dilution caused by the extreme sparsity of video anomalies and produces more reliable grounded judgments. We further introduced a dataset with per-frame bbox annotations to support both training and evaluation in this setting. Extensive experiments show that CaC consistently outperforms existing video reward models, detector-style baselines, and general VLMs, while downstream alignment results further confirm its value as an effective reward signal for improving video generation quality. 9References 
+
+[1] Ghazal Alinezhad Noghre, Armin Danesh Pazho, and Hamed Tabkhi. A survey on video anomaly detection via deep learning: Human, vehicle, and environment. arXiv preprint arXiv:2508.14203 , 2025. [2] Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng, Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, et al. Qwen3-vl technical report. arXiv preprint arXiv:2511.21631 , 2025. [3] Hritik Bansal, Clark Peng, Yonatan Bitton, Roman Goldenberg, Aditya Grover, and Kai-Wei Chang. Videophy-2: A challenging action-centric physical commonsense evaluation in video generation. arXiv preprint arXiv:2503.06800 , 2025. [4] Omer Bar-Tal, Hila Chefer, Omer Tov, Charles Herrmann, Roni Paiss, Shiran Zada, Ariel Ephrat, Junhwa Hur, Guanghui Liu, Amit Raj, et al. Lumiere: A space-time diffusion model for video generation. In SIGGRAPH Asia 2024 Conference Papers , pages 1–11, 2024. [5] Tim Brooks, Bill Peebles, Connor Holmes, Will DePue, Yufei Guo, Leo Jing, David Schnurr, Joe Taylor, Troy Luhman, Eric Luhman, et al. Video generation models as world simulators. 
+
+OpenAI Blog , 1(8):1, 2024. [6] Yuanhao Cai, Kunpeng Li, Menglin Jia, Jialiang Wang, Junzhe Sun, Feng Liang, Weifeng Chen, Felix Juefei-Xu, Chu Wang, Ali Thabet, et al. Phygdpo: Physics-aware groupwise direct preference optimization for physically consistent text-to-video generation. arXiv preprint arXiv:2512.24551 , 2025. [7] Miguel Carvalho, Helder Dias, and Bruno Martins. Cropvlm: Learning to zoom for fine-grained vision-language perception, 2026. URL https://arxiv.org/abs/2511.19820 .[8] Zhe Chen, Jiannan Wu, Wenhai Wang, Weijie Su, Guo Chen, Sen Xing, Muyan Zhong, Qinglong Zhang, Xizhou Zhu, Lewei Lu, et al. Internvl: Scaling up vision foundation models and aligning for generic visual-linguistic tasks. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 24185–24198, 2024. [9] Gheorghe Comanici, Eric Bieber, Mike Schaekermann, Ice Pasupat, Noveen Sachdeva, Inderjit Dhillon, Marcel Blistein, Ori Ram, Dan Zhang, Evan Rosen, et al. Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities. arXiv preprint arXiv:2507.06261 , 2025. [10] Nikai Du, Zhennan Chen, Shan Gao, Zhizhou Chen, Xi Chen, Zhengkai Jiang, Jian Yang, and Ying Tai. Textcrafter: Accurately rendering multiple texts in complex visual scenes. arXiv preprint arXiv:2503.23461 , 2025. [11] Google. Gemini-3-pro. https://deepmind.google/models/gemini/pro/ , 2025. [12] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Peiyi Wang, Qihao Zhu, Runxin Xu, Ruoyu Zhang, Shirong Ma, Xiao Bi, et al. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 , 2025. [13] Yuwei Guo, Ceyuan Yang, Anyi Rao, Zhengyang Liang, Yaohui Wang, Yu Qiao, Maneesh Agrawala, Dahua Lin, and Bo Dai. Animatediff: Animate your personalized text-to-image diffusion models without specific tuning. arXiv preprint arXiv:2307.04725 , 2023. [14] Yoav HaCohen, Benny Brazowski, Nisan Chiprut, Yaki Bitterman, Andrew Kvochko, Avishai Berkowitz, Daniel Shalem, Daphna Lifschitz, Dudu Moshe, Eitan Porat, et al. Ltx-2: Efficient joint audio-visual foundation model. arXiv preprint arXiv:2601.03233 , 2026. [15] Xuan He, Dongfu Jiang, Ge Zhang, Max Ku, Achint Soni, Sherman Siu, Haonan Chen, Abhranil Chandra, Ziyan Jiang, Aaran Arulraj, et al. Videoscore: Building automatic metrics to simulate fine-grained human feedback for video generation. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing , pages 2105–2123, 2024. 10 [16] Xuan He, Dongfu Jiang, Ping Nie, Minghao Liu, Zhengxuan Jiang, Mingyi Su, Wentao Ma, Junru Lin, Chun Ye, Yi Lu, et al. Videoscore2: Think before you score in generative video evaluation. arXiv preprint arXiv:2509.22799 , 2025. [17] Roberto Henschel, Levon Khachatryan, Hayk Poghosyan, Daniil Hayrapetyan, Vahram Tade-vosyan, Zhangyang Wang, Shant Navasardyan, and Humphrey Shi. Streamingt2v: Consistent, dynamic, and extendable long video generation from text. In Proceedings of the Computer Vision and Pattern Recognition Conference , pages 2568–2577, 2025. [18] Ziqi Huang, Yinan He, Jiashuo Yu, Fan Zhang, Chenyang Si, Yuming Jiang, Yuanhan Zhang, Tianxing Wu, Qingyang Jin, Nattapol Chanpaisit, et al. Vbench: Comprehensive benchmark suite for video generative models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 21807–21818, 2024. [19] Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, et al. Gpt-4o system card. arXiv preprint arXiv:2410.21276 , 2024. [20] Dongfu Jiang, Max Ku, Tianle Li, Yuansheng Ni, Shizhuo Sun, Rongqi Fan, and Wenhu Chen. Genai arena: An open evaluation platform for generative models. Advances in Neural Information Processing Systems , 37:79889–79908, 2024. [21] Yuval Kirstain, Adam Polyak, Uriel Singer, Shahbuland Matiana, Joe Penna, and Omer Levy. Pick-a-pic: An open dataset of user preferences for text-to-image generation. Advances in neural information processing systems , 36:36652–36663, 2023. [22] Weijie Kong, Qi Tian, Zijian Zhang, Rox Min, Zuozhuo Dai, Jin Zhou, Jiangfeng Xiong, Xin Li, Bo Wu, Jianwei Zhang, et al. Hunyuanvideo: A systematic framework for large video generative models. arXiv preprint arXiv:2412.03603 , 2024. [23] Tengchuan Kou, Xiaohong Liu, Zicheng Zhang, Chunyi Li, Haoning Wu, Xiongkuo Min, Guangtao Zhai, and Ning Liu. Subjective-aligned dataset and metric for text-to-video quality assessment. In Proceedings of the 32nd ACM International Conference on Multimedia , pages 7793–7802, 2024. [24] Yifei Li, Wenzhao Zheng, Yanran Zhang, Runze Sun, Yu Zheng, Lei Chen, Jie Zhou, and Jiwen Lu. Skyra: Ai-generated video detection via grounded artifact reasoning. arXiv preprint arXiv:2512.15693 , 2025. [25] Youfang Lin, Jinji Fu, Haomin Wen, Jiyuan Wang, Zhenjie Wei, Yuting Qiang, Xiaowei Mao, Lixia Wu, Haoyuan Hu, Yuxuan Liang, et al. Drl4aoi: A drl framework for semantic-aware aoi segmentation in location-based services. arXiv preprint arXiv:2412.05437 , 2024. [26] Jie Liu, Gongye Liu, Jiajun Liang, Yangguang Li, Jiaheng Liu, Xintao Wang, Pengfei Wan, Di Zhang, and Wanli Ouyang. Flow-grpo: Training flow matching models via online rl. arXiv preprint arXiv:2505.05470 , 2025. [27] Jie Liu, Gongye Liu, Jiajun Liang, Ziyang Yuan, Xiaokun Liu, Mingwu Zheng, Xiele Wu, Qiulin Wang, Menghan Xia, Xintao Wang, et al. Improving video generation with human feedback. arXiv preprint arXiv:2501.13918 , 2025. [28] Zichen Liu, Yihao Meng, Hao Ouyang, Yue Yu, Bolin Zhao, Daniel Cohen-Or, and Huamin Qu. Dynamic typography: Bringing text to life via video diffusion prior. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 14787–14797, 2025. [29] Chetwin Low, Weimin Wang, and Calder Katyal. Ovi: Twin backbone cross-modal fusion for audio-video generation. arXiv preprint arXiv:2510.01284 , 2025. [30] Yuhang Ma, Xiaoshi Wu, Keqiang Sun, and Hongsheng Li. Hpsv3: Towards wide-spectrum hu-man preference score. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 15086–15095, 2025. 11 [31] Yi Peng, Peiyu Wang, Xiaokun Wang, Yichen Wei, Jiangbo Pei, Weijie Qiu, Ai Jian, Yunzhuo Hao, Jiachun Pan, Tianyidan Xie, et al. Skywork r1v: Pioneering multimodal reasoning with chain-of-thought. arXiv preprint arXiv:2504.05599 , 2025. [32] Pejaver V Rao and Lawrence L Kupper. Ties in paired-comparison experiments: A general-ization of the bradley-terry model. Journal of the American Statistical Association , 62(317): 194–204, 1967. [33] Weiming Ren, Huan Yang, Ge Zhang, Cong Wei, Xinrun Du, Wenhao Huang, and Wenhu Chen. Consisti2v: Enhancing visual consistency for image-to-video generation. arXiv preprint arXiv:2402.04324 , 2024. [34] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms. arXiv preprint arXiv:1707.06347 , 2017. [35] Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei Zhang, Mingchuan Zhang, YK Li, Yang Wu, et al. Deepseekmath: Pushing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. [36] Yuxiang Shen, Hailong Huang, Zhenkun Gao, Xueheng Li, Man Zhou, Chengjun Xie, Haoxuan Che, Xuanhua He, and Jie Zhang. Svfeye: A semantic-visual fusion framework with multi-scale visual context for multimodal reasoning, 2026. URL https://arxiv.org/abs/2603.00171 .[37] Hao Tan, Jun Lan, Senyuan Shi, Zichang Tan, Zijian Yu, Huijia Zhu, Weiqiang Wang, Jun Wan, and Zhen Lei. Videoveritas: Ai-generated video detection via perception pretext reinforcement learning. arXiv preprint arXiv:2602.08828 , 2026. [38] Huajie Tan, Yuheng Ji, Xiaoshuai Hao, Xiansheng Chen, Pengwei Wang, Zhongyuan Wang, and Shanghang Zhang. Reason-rft: Reinforcement fine-tuning for visual reasoning of vision language models. arXiv preprint arXiv:2503.20752 , 2025. [39] Kimi Team, Yifan Bai, Yiping Bao, Y Charles, Cheng Chen, Guanduo Chen, Haiting Chen, Huarong Chen, Jiahao Chen, Ningxin Chen, et al. Kimi k2: Open agentic intelligence. arXiv preprint arXiv:2507.20534 , 2025. [40] Kling Team, Jialu Chen, Yuanzheng Ci, Xiangyu Du, Zipeng Feng, Kun Gai, Sainan Guo, Feng Han, Jingbin He, Kang He, et al. Kling-omni technical report. arXiv preprint arXiv:2512.16776 ,2025. [41] Xuezhen Tu, Jingyu Wu, Fangyu Kang, Qingpeng Nong, Kaijin Zhang, Chaoyue Niu, and Fan Wu. Bridging time and space: Decoupled spatio-temporal alignment for video grounding, 2026. URL https://arxiv.org/abs/2604.08014 .[42] Team Wan, Ang Wang, Baole Ai, Bin Wen, Chaojie Mao, Chen-Wei Xie, Di Chen, Feiwu Yu, Haiming Zhao, Jianxiao Yang, Jianyuan Zeng, Jiayu Wang, Jingfeng Zhang, Jingren Zhou, Jinkai Wang, Jixuan Chen, Kai Zhu, Kang Zhao, Keyu Yan, Lianghua Huang, Mengyang Feng, Ningyi Zhang, Pandeng Li, Pingyu Wu, Ruihang Chu, Ruili Feng, Shiwei Zhang, Siyang Sun, Tao Fang, Tianxing Wang, Tianyi Gui, Tingyu Weng, Tong Shen, Wei Lin, Wei Wang, Wei Wang, Wenmeng Zhou, Wente Wang, Wenting Shen, Wenyuan Yu, Xianzhong Shi, Xiaoming Huang, Xin Xu, Yan Kou, Yangyu Lv, Yifei Li, Yijing Liu, Yiming Wang, Yingya Zhang, Yitong Huang, Yong Li, You Wu, Yu Liu, Yulin Pan, Yun Zheng, Yuntao Hong, Yupeng Shi, Yutong Feng, Zeyinzi Jiang, Zhen Han, Zhi-Fan Wu, and Ziyu Liu. Wan: Open and advanced large-scale video generative models, 2025. URL https://arxiv.org/abs/2503.20314 .[43] Jiankang Wang, Zhihan Zhang, Zhihang Liu, Yang Li, Jiannan Ge, Hongtao Xie, and Yongdong Zhang. Spacevllm: Endowing multimodal large language model with spatio-temporal video grounding capability, 2025. URL https://arxiv.org/abs/2503.13983 .[44] Jin Wang, Jianxiang Lu, Guangzheng Xu, Comi Chen, Haoyu Yang, Linqing Wang, Peng Chen, Mingtao Chen, Zhichao Hu, Longhuang Wu, et al. Tagrpo: Boosting grpo on image-to-video generation with direct trajectory alignment. arXiv preprint arXiv:2601.05729 , 2026. 12 [45] Jiyuan Wang, Chunyu Lin, Lang Nie, Kang Liao, Shuwei Shao, and Yao Zhao. Digging into contrastive learning for robust depth estimation with diffusion models. In Proceedings of the 32nd ACM International Conference on Multimedia , pages 4129–4137. ACM, 2024. [46] Jiyuan Wang, Chunyu Lin, Cheng Guan, Lang Nie, Jing He, Haodong Li, Kang Liao, and Yao Zhao. Jasmine: Harnessing diffusion prior for self-supervised depth estimation. arXiv preprint arXiv:2503.15905 , 2025. [47] JiYuan Wang, Chunyu Lin, Lei Sun, Rongying Liu, Lang Nie, Mingxing Li, Kang Liao, Xiangxiang Chu, and Yao Zhao. From editor to dense geometry estimator. arXiv preprint arXiv:2509.04338 , 2025. [48] Jiyuan Wang, Chunyu Lin, Lei Sun, Zhi Cao, Yuyang Yin, Lang Nie, Zhenlong Yuan, Xi-angxiang Chu, Yunchao Wei, Kang Liao, et al. Geometry-guided reinforcement learning for multi-view consistent 3d scene editing. arXiv preprint arXiv:2603.03143 , 2026. [49] Peng Wang, Shuai Bai, Sinan Tan, Shijie Wang, Zhihao Fan, Jinze Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wenbin Ge, et al. Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution. arXiv preprint arXiv:2409.12191 , 2024. [50] Qunzhong Wang, Jie Liu, Jiajun Liang, Yilei Jiang, Yuanxing Zhang, Jinyuan Chen, Yaozhi Zheng, Xintao Wang, Pengfei Wan, Xiangyu Yue, et al. Vr-thinker: Boosting video reward models through thinking-with-image reasoning. arXiv preprint arXiv:2510.10518 , 2025. [51] Yibin Wang, Zhiyu Tan, Junyan Wang, Xiaomeng Yang, Cheng Jin, and Hao Li. Lift: Leveraging human feedback for text-to-video model alignment. arXiv preprint arXiv:2412.04814 , 2024. [52] Yibin Wang, Zhimin Li, Yuhang Zang, Chunyu Wang, Qinglin Lu, Cheng Jin, and Jiaqi Wang. Unified multimodal chain-of-thought reward model through reinforcement fine-tuning. arXiv preprint arXiv:2505.03318 , 2025. [53] Yibin Wang, Yuhang Zang, Hao Li, Cheng Jin, and Jiaqi Wang. Unified reward model for multimodal understanding and generation. arXiv preprint arXiv:2503.05236 , 2025. [54] Yuan Wang, Borui Liao, Huijuan Huang, Jinda Lu, Ouxiang Li, Kuien Liu, Meng Wang, and Xiang Wang. Thinking with frames: Generative video distortion evaluation via frame reward model. arXiv preprint arXiv:2601.04033 , 2026. [55] Jay Zhangjie Wu, Yixiao Ge, Xintao Wang, Stan Weixian Lei, Yuchao Gu, Yufei Shi, Wynne Hsu, Ying Shan, Xiaohu Qie, and Mike Zheng Shou. Tune-a-video: One-shot tuning of image diffusion models for text-to-video generation. In Proceedings of the IEEE/CVF international conference on computer vision , pages 7623–7633, 2023. [56] Jie Wu, Yu Gao, Zilyu Ye, Ming Li, Liang Li, Hanzhong Guo, Jie Liu, Zeyue Xue, Xiaoxia Hou, Wei Liu, et al. Rewarddance: Reward scaling in visual generation. arXiv preprint arXiv:2509.08826 , 2025. [57] Shang Wu, Chenwei Xu, Zhuofan Xia, Weijian Li, Lie Lu, Pranav Maneriker, Fan Du, Manling Li, and Han Liu. Phyprompt: Rl-based prompt refinement for physically plausible text-to-video generation. arXiv preprint arXiv:2603.03505 , 2026. [58] Tianhe Wu, Jian Zou, Jie Liang, Lei Zhang, and Kede Ma. Visualquality-r1: Reasoning-induced image quality assessment via reinforcement learning to rank. arXiv preprint arXiv:2505.14460 ,2025. [59] Jiazheng Xu, Xiao Liu, Yuchen Wu, Yuxuan Tong, Qinkai Li, Ming Ding, Jie Tang, and Yuxiao Dong. Imagereward: Learning and evaluating human preferences for text-to-image generation. 
+
+Advances in Neural Information Processing Systems , 36:15903–15935, 2023. [60] Jiazheng Xu, Yu Huang, Jiale Cheng, Yuanming Yang, Jiajun Xu, Yuan Wang, Wenbo Duan, Shen Yang, Qunlin Jin, Shurun Li, et al. Visionreward: Fine-grained multi-dimensional human preference learning for image and video generation. arXiv preprint arXiv:2412.21059 , 2024. 13 [61] Zeyue Xue, Jie Wu, Yu Gao, Fangyuan Kong, Lingting Zhu, Mengzhao Chen, Zhiheng Liu, Wei Liu, Qiushan Guo, Weilin Huang, et al. Dancegrpo: Unleashing grpo on visual generation. 
+
+arXiv preprint arXiv:2505.07818 , 2025. [62] Yuan Zhou, Litao Hua, Shilong Jin, Wentao Huang, and Haoran Duan. Reason: Reinforced causal search with information bottleneck for video understanding, 2025. URL https:// arxiv.org/abs/2511.12530 .[63] Zirui Zhu, Hailun Xu, Yang Luo, Yong Liu, Kanchan Sarkar, Zhenheng Yang, and Yang You. Focus: Efficient keyframe selection for long video understanding, 2025. URL https: //arxiv.org/abs/2510.27280 .14 Appendix 
+
+In this appendix, we provide additional implementation details, experimental results, analyses, and discussions for a comprehensive evaluation and understanding of CaC. Detailed contents are listed as follows: 
+
+Contents 
+
+A Benchmark Details and Results 15 
+
+A.1 CaC-Bench Construction Details . . . . . . . . . . . . . . . . . . . . . . . . . . . 15 A.2 External Evaluation on a Skyra Annotated Subset . . . . . . . . . . . . . . . . . . 16 
+
+B Dataset Construction and Details 16 
+
+B.1 Detailed Annotation Guidelines . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 B.1.1 Frame Extraction and Inspection . . . . . . . . . . . . . . . . . . . . . . . . . 17 B.1.2 Anomaly Structured Description . . . . . . . . . . . . . . . . . . . . . . . . . 17 B.1.3 Bounding Box Grounding . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17 B.2 Prompt Templates for CoT Synthesis . . . . . . . . . . . . . . . . . . . . . . . . . 18 B.3 Dataset Statistics and Visualizations . . . . . . . . . . . . . . . . . . . . . . . . . . 18 
+
+C Additional Training and Inference Details 19 
+
+C.1 GRPO Formulation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 19 C.2 Training Implementation Details . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 C.3 Inference Compute Analysis . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 20 C.4 Video Alignment Experiment Details . . . . . . . . . . . . . . . . . . . . . . . . . 20 C.4.1 VBench Metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 
+
+D Additional Experimental Results 21 
+
+D.1 Per-category Recall Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 D.2 Qualitative Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 D.2.1 CaC Result Visualization . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 21 D.2.2 Video Alignment Qualitative Results . . . . . . . . . . . . . . . . . . . . . . . 22 D.3 Full Ablation Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23 
+
+E Limitations and Broader Impact 23 
+
+A Benchmark Details and Results 
+
+A.1 CaC-Bench Construction Details 
+
+CaC-Bench is constructed as an independent evaluation suite for sparse anomaly detection in gen-erated videos. It is separated from the training data in videos, prompts, anomaly distribution, and fine-grained taxonomy, and is never used for SFT, GRPO, prompt selection, reward-weight selec-tion, or hyperparameter tuning. The goal is to evaluate whether a reward model can identify subtle localized structural, temporal, and physical anomalies under a test distribution that is distinct from the training stages. Specifically, unlike the data construction in Sec. 3.1, we collect a new set of 5K videos for CaC-Bench and do not require annotators to use the taxonomy in Fig. 2. Instead, GT labels are obtained through two rounds of consensus-based anomaly verification. 15 Table S1: External evaluation on the Skyra-ViF-CoT-4K-derived annotated subset. Best and second-best results are in bold and underlined. Model Anomalous Video Normal Video Acc. Recall Precision F1-Score Recall Precision F1-Score Gemini-3.1-Pro [11] 0.164 0.689 0.265 0.926 0.526 0.671 0.545 UnifiedReward [53] 0.472 0.506 0.489 0.540 0.506 0.522 0.506 Qwen3-VL-8B [2] 0.448 0.526 0.484 0.596 0.519 0.555 0.522        
+
+> Ours (CaC) 0.564 0.881 0.688 0.924 0.679 0.783 0.744
+
+CaC-Bench-Main contains 1,000 generated videos, balanced between 500 normal and 500 anomalous samples. For anomalous samples, annotators record the anomaly type and the underlying cause, and the annotations are cross-verified before inclusion. Normal samples are also selected only when no clear localized structural, temporal, physical, or character anomaly is observed after two rounds of verification. CaC-Bench-Hard contains 400 anomalous videos designed to stress-test sensitivity to sparse defects. We divide the samples into four difficulty groups according to two axes: temporal duration ( <1s / 
+
+≥1s) and spatial extent ( <20% / ≥20% of the frame area). Since all videos in this split are anomalous, we report recall on each difficulty group. This split is used only for final evaluation and is not used to choose prompts, thresholds, reward weights, or model checkpoints. 
+
+A.2 External Evaluation on a Skyra Annotated Subset 
+
+To the best of our knowledge, there is currently no open-source benchmark specifically designed for generated-video anomaly detection. To provide an additional out-of-domain check beyond CaC-Bench and more fairly assess CaC’s performance and generalization, we construct an auxiliary external evaluation subset from the open-source Skyra-ViF-CoT-4K data [ 24 ]. Skyra studies AI-generated video detection through grounded artifact reasoning, i.e., , determining whether a video is AI-generated, and its annotated training data records human-perceivable visual artifacts in generated videos. These artifact categories are closely aligned with our anomaly taxonomy: person inconsis-tency corresponds to Human Distortion, text artifacts correspond to Character Anomalies, object inconsistency corresponds to Object Distortion, physics violations correspond to Physical Violations, and motion artifacts correspond to Motion Anomalies. The Skyra-ViF-CoT-4K subset is not intended to replace CaC-Bench, since CaC-Bench focuses on sparse anomalies. Instead, it evaluates whether models can detect annotated artifacts from an independent data source while maintaining low false positives on normal videos. The subset is balanced between anomalous and normal samples, and all methods are evaluated under the same frame-sampling setting and binary normal/abnormal parsing protocol. It is worth noting that we do not use ViF-Bench because it only provides real/synthetic video labels and does not include anomaly annotations. We also do not compare against Skyra-RL because this auxiliary test subset is derived from its training set. As shown in Table S1, existing general VLMs and other reward models remain close to random performance on this external subset, with either conservative normal-biased predictions or weak abnormal recall. In contrast, CaC achieves the best accuracy, anomalous F1, and normal F1, indicating that its anomaly-sensitive reasoning generalizes beyond CaC-Bench to artifacts annotated by an independent data source. 
+
+B Dataset Construction and Details 
+
+B.1 Detailed Annotation Guidelines 
+
+We provide the complete annotation protocol for the CaC dataset, which comprises four stages: 
+
+frame extraction and inspection , anomaly structured descriptions , bounding box grounding ,and quality assurance . We assemble a dedicated team of 50 video evaluation experts (40 annotators and 10 senior reviewers), all of whom complete a calibration session with exemplar videos covering our five predefined anomaly categories prior to formal annotation. The protocol operates on generated videos and does not rely on personal user metadata. 16 B.1.1 Frame Extraction and Inspection 
+
+As described in Sec. 3.1, each video is first uniformly downsampled to extract a sequence of frames. Human experts then inspect each frame sequentially to detect anomalies. This frame-level examination ensures that both single-frame defects and multi-frame anomalies are captured. Videos in which no anomaly is identified in any frame are labeled as normal samples. 
+
+B.1.2 Anomaly Structured Description 
+
+For each of the five predefined categories in our taxonomy, annotators determine whether the anomaly type is present via binary classification. A single video may be associated with multiple categories simultaneously. The five categories are: Object Distortion (deformation, mutation, or clipping artifacts in inanimate objects), Human Distortion (limb deformity, abnormal fingers, extra limbs, or body splitting in human subjects), Motion Anomalies (unnatural trajectories, jitter/flicker, or sudden disappearance/appearance of entities across frames), Physical Violations (unsupported floating, interpenetration, or other behaviors contradicting real-world physics), and Character Anomalies 
+
+(unreadable text, abnormal layout, or inconsistent textual content across frames). 
+
+Annotation Format. For each detected anomaly, annotators provide a structured description that encodes the frame range, the affected objects, the anomaly types, and the underlying reason. The temporal boundaries are recorded as start and end indices on the uniformly sampled frame sequence, rather than timestamps. This unified format enables frame-level grounding of each anomaly instance while the underlying reason field captures the semantic context behind the anomalies. When multiple anomaly instances belong to the same category, they are concatenated within a single group; anomalies belonging to different categories are recorded in separate groups following the category ordering defined in the taxonomy. This hierarchical scheme enables unambiguous parsing of annotations into per-category anomaly groups, each containing one or more frame-grounded instances. 
+
+Annotation Conventions. To resolve ambiguities during annotation, we establish several guiding principles. When an anomaly is detectable from a single frame ( e.g., , a deformed hand or unreadable text), it is assigned to a single-frame category (Object Distortion, Human Distortion, or Character Anomalies) even if it persists across multiple frames, whereas multi-frame categories (Motion Anomalies and Physical Violations) are reserved for anomalies whose identification inherently requires cross-frame comparison. To distinguish Object Distortion from Physical Violations, the former captures structural deformation of the object itself, while the latter targets implausible interactions between objects or with the environment. For Character Anomalies, annotators compare textual content across the full frame sequence when needed, and inconsistent text is annotated with the complete frame range over which the inconsistency is observable, even if each individual frame appears plausible in isolation. 
+
+B.1.3 Bounding Box Grounding 
+
+For each identified anomaly instance, annotators draw a tight bounding box around the anomalous region in the corresponding frames within the annotated frame range. Bounding boxes are stored as 
+
+(xmin , y min , x max , y max ) in the Qwen-style normalized coordinate system, where each frame axis is mapped to the range [0 , 1000] . The following principles guide this process: • Each bounding box must fully encompass the relevant distorted region such that the anomaly can be identified solely from the visual content within the box, without relying on surrounding context. • Multiple bounding boxes may be assigned to a single anomaly instance when the corresponding distortion manifests in multiple disjoint regions within the same frame. • When partial occlusion occurs, annotators approximate the full extent of the affected area based on visible cues and structural priors. • Bounding boxes should be as tight as possible, avoiding unnecessary inclusion of irrelevant visual content to minimize interference from unrelated structures. • For multi-frame anomalies that involve entity state transitions ( e.g., , sudden disappearance, appear-ance, or abrupt transformation), bboxes are annotated on the boundary frames where the transition occurs. Specifically, for disappearance events, the bounding box is placed on the last frame in which the entity is still visible, enclosing its full extent at that moment. For sudden appearance events, the bounding box is placed on the first frame in which the entity becomes visible. This convention 17 anchors the bbox annotation to the most informative frame while the structured description captures the full frame range of the anomaly. To guarantee annotation reliability, we adopt a rigorous two-round review mechanism. In the first round, each completed annotation is independently verified by a senior reviewer, who examines the anomaly types, frame boundaries, bboxes, and underlying reasons; any inconsistencies are flagged and returned to the original annotator for correction, and this cycle repeats until the reviewer approves the annotation. In the second round, we randomly sample 10% of the accepted annotations for a spot-check audit conducted by a separate group of reviewers, verifying the accuracy and consistency of both the bboxes and the anomaly types. Only batches achieving an inter-annotator agreement rate above 95% are accepted into the final dataset; those falling below this threshold are returned for complete re-annotation. 
+
+B.2 Prompt Templates for CoT Synthesis 
+
+In this section, we provide a detailed overview of the prompt templates used throughout the CoT data construction process. As described in Sec. 3.1, we feed each video along with its manual annotations into Gemini-2.5-Pro [ 9] to synthesize structured reasoning chains. The core synthesis prompt is shown in Figs. S4 and S5. Specifically, we supply the annotated anomaly types, temporal spans, underlying reasons, and corresponding bboxes to guide the model toward the difficult regions while still requiring it to re-examine the visual evidence. The model is instructed to follow a four-step reasoning template: first performing detailed frame-level inspection, then analyzing cross-frame consistency and motion, then making an overall anomaly assessment with concrete attribution, and finally producing a structured JSON output with the anomaly status, frame range, label, reason, problem region, and per-frame bboxes. Although the ground-truth annotations are provided, they are treated as guidance rather than answers to be copied; the model must independently verify whether the visual content supports the annotated anomaly. This design reduces hallucinated rationales and yields higher-quality CoT labels for subtle anomalies that are difficult for VLMs to discover from the raw video alone. For the verification stage, the generated CoT is checked against the human annotations to ensure that the reasoning chain is not only plausible but also aligned with the verified labels and localization; the verification prompt is shown in Fig. S6. For anomaly presence and type predictions, we perform exact string matching against the ground-truth labels to determine correctness; for the temporal segments and spatial bounding boxes, we compute the Intersection-over-Union (IoU) between the predicted and ground-truth regions, and consider a prediction correct if the IoU exceeds 0.5. A sample passes verification only when all criteria are simultaneously satisfied. This verification is necessary because GT-conditioned generation may still produce inconsistent reasoning, incorrect attribution, or imprecise localization, especially for non-salient anomalies. The process is repeated for up to five rounds—samples passing within the first three rounds are deemed salient anomalies, those passing in the fourth or fifth round are deemed non-salient anomalies, and those failing all five rounds are discarded to avoid introducing noise. By incorporating detailed descriptions of all five anomaly categories from our taxonomy into both prompts, we ensure that the synthesized CoT data faithfully reflects the fine-grained spatiotemporal reasoning required for video anomaly detection, thereby providing high-quality supervision for our three-stage progressive training pipeline. 
+
+B.3 Dataset Statistics and Visualizations 
+
+The CaC dataset contains 30,748 videos in total, evenly split between normal and anomalous samples. All videos are paired with synthesized CoT reasoning data. The anomalous videos are further enriched with manual annotations, including anomalous video segments, anomaly types, underlying reasons, corresponding bboxes, and generated saliency labels. Quality Assurance. As shown in Fig. S1, we report four complementary statistics of the anomalous subset: (a) anomaly type distribution, (b) anomaly saliency distribution, (c) anomaly temporal span distribution, and (d) anomaly item distribution. In (a), Object Distortion accounts for the largest proportion, indicating that artifacts in inanimate objects remain the most common failure mode in current video generation models; Physical Violations are the second most frequent category, while Human Distortion, Motion Anomalies, and Character Anomalies appear with smaller proportions. In (b), most anomalous samples are classified as salient, while the remaining samples are non-salient. In (c), anomalous segments are usually short, confirming that many generation failures appear only within a few frames and can be overlooked by 18 48.56%                       
+
+> 13.74%
+> 10.24%
+> 21.36%
+> 6.10%
+> Object Distortion Human Distortion
+> Motion Anomalies Physical Violations
+> Character Anomalies
+> (a) Anomaly Type Distribution
+> 26.54%
+> 8.84%
+> 9.25%
+> 7.56%
+> 21.40%
+> 10.08%
+> 16.33%
+> [1, 2) [2, 3) [3, 4) [4, 5)
+> [5, 10) [10, 15) [15, 21]
+> (c) Anomaly Temporal Span Distribution
+> 63.45%
+> 36.55%
+> Salient Non-Salient
+> (b) Anomaly Salience Distribution
+> 16.91%
+> 9.86%
+> 8.42%
+> 5.94%
+> 3.62%
+> 2.72%
+> 2.14%
+> 1.84%
+> 48.55%
+> Bag Phone Hands
+> Legs Shoes Feet
+> Fingers Characters Others
+> (d) Anomaly Item Distribution
+
+Figure S1: Statistical analysis of the CaC dataset. reward models that rely on holistic video-level assessment. In (d), the affected items are concentrated on fine-grained and small-scale entities, especially human body parts such as hands, fingers, legs, and feet, as well as objects such as bags and phones. Together, these statistics show that generated-video anomalies are sparse in both duration and affected region, motivating a coarse-to-fine reasoning strategy for reliable localization and judgment. 
+
+C Additional Training and Inference Details 
+
+C.1 GRPO Formulation 
+
+In this section, we provide the detailed formulation of the Group Relative Policy Optimization (GRPO) objective. For simplicity, we denote the overall conditioning context at step t as Xi,t , which encapsulates the task instruction c, the original or cropped video frames ( f or f ′), and the previously generated tokens yi,<t across the two autoregressive stages. In the second turn, the cropped frames are rollout-specific: each f ′ 
+
+> i
+
+is constructed from the frame-index window predicted in the corresponding first-turn response y1 
+
+> i
+
+. If the predicted window is empty, invalid, or cannot be parsed into frame indices, we do not construct f ′ 
+
+> i
+
+and the rollout terminates after the first turn. For each input (c, f ), the old policy samples a group of G complete two-turn rollouts {yi}Gi=1 . Each rollout receives a scalar reward R(yi) from the weighted reward function in Sec. 3.3. We compute the group-relative advantage by normalizing rewards within the group: 
+
+ˆAi = R(yi) − mean( {R(yj )}Gj=1 )std( {R(yj )}Gj=1 ) + ϵA
+
+, (8) where ϵA is a small constant for numerical stability. During training, the surrogate objective is maximized. The clipped surrogate objective Jclip (θ)
+
+restricts the policy update to prevent excessively large step sizes, and is formulated at the token level over all generated tokens in the rollout as: 
+
+Jclip (θ) = 1
+
+G
+
+> G
+
+X
+
+> i=1
+
+1
+
+|yi|
+
+> |yi|
+
+X
+
+> t=1
+
+min 
+
+
+
+ri,t (θ) ˆAi, clip (ri,t (θ), 1 − ϵ, 1 + ϵ) ˆAi
+
+
+
+, (9) where ri,t (θ) is the probability ratio between the current policy πθ and the old policy πθold :
+
+ri,t (θ) = πθ (yi,t | Xi,t )
+
+πθold (yi,t | Xi,t ) , (10) and ϵ is the clipping hyperparameter. To prevent the fine-tuned model πθ from deviating too far from the initial reference model πref , a KL divergence penalty is applied. Following standard GRPO implementations, we employ an unbiased estimator of the KL divergence. The KL penalty is then written as: 
+
+DKL (πθ ∥πref ) = 1
+
+G
+
+> G
+
+X
+
+> i=1
+
+1
+
+|yi|
+
+> |yi|
+
+X
+
+> t=1
+
+(ρi,t − log ρi,t − 1) , ρ i,t = πref (yi,t | Xi,t )
+
+πθ (yi,t | Xi,t ) . (11) Combining these components yields the full GRPO objective: 
+
+JGRPO (θ) = E(c,f )∼D ,{yi}Gi=1 ∼πθold 
+
+[Jclip (θ) − βD KL (πθ ∥πref )] , (12) 19 Table S2: Preliminary inference-time and accuracy comparison on a single-machine NVIDIA A800 setup. We report the average wall-clock time per video (21 frames sampled). Method Stage / Pass Avg. Time ↓ Acc. ↑                  
+
+> Video Generation Sampling (1 GRPO step) 272s -UnifiedReward Single pass 3.79s 0.560 UnifiedReward-Think Single pass with reasoning 16.5s 0.503 VR-Thinker Multiturn adaptive stopping 42.3s 0.537 Gemini-3.1-Pro API calling 65.6s 0.560
+> CaC (Ours) Two-turn inference 33.2s 0.817
+
+where β is the coefficient controlling the strength of the KL penalty. By calculating advantages relative to the group rather than using an external value network, GRPO significantly reduces the memory overhead while maintaining stable optimization. 
+
+C.2 Training Implementation Details 
+
+We adopt Qwen3-VL-8B [ 2] as the backbone of CaC and train the full model pipeline across all stages, including the vision encoder, adapter, and language model. The three training stages use disjoint data splits, and each stage keeps a 1:1 ratio between normal and anomalous samples. The first stage learns single-frame anomaly grounding from about 20K frames. The anomalous frames are sampled from 5K videos that contain single-frame recognizable anomalies, while normal frames are randomly sampled from normal videos. The second stage performs multi-frame SFT with about 20K full-video samples and 15K local clips. Full-video samples are collected from the CaC dataset to train global temporal localization. Clip-level samples are cropped from the full videos and restricted to within 1 second. For anomalous videos, we require the cropped clip to fully cover the annotated anomalous region, because partial crops of cross-frame inconsistency events may introduce ambiguous or incorrect labels. The third stage constructs 7.5K training instances for two-turn GRPO from a non-overlapping data split. For optimization and compute, the warmup stage uses LoRA with rank 32 and a learning rate of 
+
+1 × 10 −4, and is trained for 9,330 steps on 8 NVIDIA H200 GPUs, taking about 11.5 hours. The multi-frame SFT stage switches to full-parameter tuning with the same learning rate, and is trained for 7K steps on 8 H200 GPUs, taking about 30.5 hours. The RL stage runs GRPO with a learning rate of 1.0 × 10 −6, rollout group size G = 8 , batch size 64, and gradient accumulation over 32 steps; it is trained for 250 steps on 16 H200 GPUs, taking about 42 hours. 
+
+Baseline Evaluation Protocol. For all comparison methods, we first use the same prompt as CaC under the same frame-sampling setting to obtain a binary normal/abnormal decision. For reward and detector-style baselines, we additionally run their official inference prompts or scoring protocols described in the corresponding papers [ 53 , 52 , 37 , 50 , 24 ]. We report the stronger result between the unified anomaly-prompt evaluation and the official-protocol evaluation for each baseline. 
+
+C.3 Inference Compute Analysis 
+
+As shown in Table S2, compared with single-turn reward models, the two-stage strategy roughly doubles the reward-model inference time because the model is queried twice. This is a reasonable trade-off: CaC spends more inference time but improves the overall accuracy from the strongest baseline’s 0.560 to 0.817, yielding a 25.7-point gain. This overhead is also modest in video-generation RL, where video sampling typically dominates reward evaluation. In a representative training iteration, video sampling takes at least 4 minutes, whereas reward-model evaluation takes at most 1 minute. Thus, the additional verification cost does not dominate the end-to-end optimization budget. 
+
+C.4 Video Alignment Experiment Details 
+
+For downstream video alignment, we use Wan-2.1-1.3B [ 42 ] as the base video generation model and evaluate two optimization paradigms. For Best-of-N sampling, we generate five candidate videos for each prompt and select the one with the highest reward score. For Flow-GRPO, CaC is used as a non-differentiable scalar reward and is combined with UnifiedReward by averaging the normalized reward scores, which preserves general alignment quality while discouraging localized structural, 20 Table S3: Recall comparison of CaC with representative reward and detector-style baselines across different anomaly types. Best and second-best results are in bold and underlined. Model Object Human Motion Physics Character Dist. Dist. Anom. Viol. Anom. Gemini-3.1-Pro 0.498 0.361 0.343 0.578 0.621 Qwen3-VL-32B 0.072 0.136 0.125 0.111 0.483 UnifiedReward-Think 0.162 0.157 0.106 0.223 0.474 VideoVeritas 0.245 0.176 0.171 0.198 0.572      
+
+> Ours (CaC) 0.704 0.492 0.414 0.633 0.724
+
+temporal, and physical artifacts. We use 240 prompts for training. Flow-GRPO is trained on 32 NVIDIA H200 GPUs for 120 steps with batch size 2, rollout group size 16, LoRA rank 32, noise level 0.3, and 50 sampling steps. Each generated video is 480P, 5 seconds long, and contains 81 frames. During optimization, generated videos are scored by the same two-turn CaC inference framework as in Sec. 3.4, using 4 fps in the first turn and 8 fps in the second turn. This CaC-based scoring is used only for reward selection or optimization; for the final evaluation in Tab. 2, VBench metrics are computed automatically, while the anomaly rate is obtained from human-expert annotations. 
+
+C.4.1 VBench Metrics 
+
+We report three VBench [ 18 ] metrics that are most relevant to generation-induced distortions and inconsistencies. Subject Consistency measures whether the main subject remains visually stable across frames, making it sensitive to identity drift, object deformation, and structural distortions. Imaging Quality evaluates frame-level visual degradation such as blur, noise, exposure errors, and low-level artifacts. Dynamic Degree serves as a necessary control metric: high consistency can be obtained by producing nearly static videos, so we use it to verify that the aligned model preserves nontrivial motion while improving subject stability and visual quality. 
+
+D Additional Experimental Results 
+
+D.1 Per-category Recall Results 
+
+To evaluate CaC’s diagnostic sensitivity to different anomaly patterns, we compare its recall with representative baselines across the predefined anomaly categories. As shown in Table S3, CaC achieves the highest recall for all anomaly types, indicating that it can detect not only salient structural distortions but also motion anomalies and physical violations that require cross-frame reasoning. These results suggest that CaC provides stable anomaly coverage without obvious category-specific diagnostic blind spots. 
+
+D.2 Qualitative Results D.2.1 CaC Result Visualization 
+
+Fig. S2 visualizes the complete two-turn reasoning process of CaC. In the first turn, the model performs a global temporal scan over sparsely sampled frames, examines suspicious anomalies, and outputs coarse temporal anchors. The flagged interval is then clipped and densely resampled (e.g., 4 fps → 8 fps), and in the second turn, the model conducts fine-grained spatial grounding within this narrowed window, producing structured diagnoses with anomaly labels, explanations, and bounding boxes. As shown in the examples, CaC successfully detects subtle physics violations such as a physically implausible floating phone and an object appearing from nowhere in the baby’s hand — anomalies that are highly sparse and easily overlooked by holistic evaluation. Table S4 further quantifies localization quality by reporting Temporal IoU and Spatial IoU for CaC and other baselines, showing that CaC substantially improves spatiotemporal anomaly localization accuracy. 21 {“Step 1: Frame 0:\n1. Character analysis: …... Overall, no anomalies.\n2. Object analysis: …Upon careful observation, the white phone is completely suspended and floating in front of the character's face without any physical support, and neither of the character's hands is holding it . There is a clear anomaly.\n3. Environment analysis: …. No anomalies.\n\nFrame 1:\n1. Character analysis: ….. No anomalies for the character.\n2. Object analysis: The white phone is still located in front of the character's face. Although the character's right hand is nearby and completely not touching the phone, the phone still maintains a suspended and still state without falling. This phenomenon severely violates physical laws of reality. There is an anomaly. …..n\nFrame 2:\n1. Character analysis: …... No anomalies.\n2. Object analysis: The white phone continues to be in a suspended state in front of the character's face. At this time, the character's hands are far away from the phone. The phone still does not fall without any external support, which is an extremely unreasonable suspension anomaly …..Step 2: ……Is there an issue with object motion: Anomaly exists . The white phone in the frame remains anti-physically suspended and still in mid-air in front of the character's face from Frame 0 to Frame 2, without being held by a hand and without any support, failing to undergo the expected free fall.\n- ……Step 3: Abnormal object motion: Anomaly exists. The white phone in front of the character's face remains suspended and still in mid-air without any hand holding or physical support, violating basic laws of gravity .\...... "status": "Anomaly","anomalies": [{ "Label": "Abnormal object motion", "Anomaly Reason": "The white phone in front of the character's face anti-physically remains suspended and still in mid-air without falling, in the absence of any external support or hand holding.", "BBOX": {"Frame 2": [266, 100, 363, 256],"Frame 1": [263, 98, 369, 258],"Frame 0": [264, 97, 370, 256]}, "Problem Area": "The white phone in front of the character's face in the center of the frame"}]} 
+
+2nd Turn 1st Turn 
+
+Frame 9 Frame 8 Frame 7 Frame 6 Frame 5 Frame 4 Frame 3 
+
+{“Step 1: Frame-by-frame analysis of the video content\nFrame 0: …..Frame 8: \n1. Character analysis: .... No anomalies.\n2 . Object analysis: Anomaly exists! The phone is completely suspended, violating physical laws. \n3. Environment analysis: ..... No anomalies.\n\nFrame 9: \n1. Character analysis: .... No anomalies.\n2. Object analysis: Anomaly exists! The phone continues to be in a suspended and still state .\n3. Environment analysis: No anomalies.\n\n### Step 2:\n- …..- Is there an issue with character motion: 
+
+From Frame 2 to Frame 3, the character's action 
+
+suddenly changes from raising a hand for a selfie to 
+
+putting both hands down. There is a jump, but it does 
+
+not belong to severe expression inconsistency. No 
+
+obvious anomalies.\n - Is there an issue with object 
+
+motion: Anomaly exists. Starting from Frame 8, the phone originally held in the hand detaches from the character's hand and, without any external support, violates the laws of gravity and remains suspended in front of the character's face. \..... Step 3: Overall video anomaly assessment\n- Abnormal object motion: Anomaly exists. In frames 8 to 9, the phone remains static and suspended in front of the character's face without hand support .\n- ….. "status": "Anomaly", "anomalies": [{ "Frame Range": "Frame 8 to Frame 9", "Label": "Abnormal object motion", "Anomaly Reason": "The phone, originally held in the right hand, violates the laws of gravity by remaining suspended in front of the character's face without any external support after the hand is moved away." ,"Problem Area": "The phone in front of the character's face in the frame" } ]} 
+
+Frame 2 
+
+Video Clipping and Dense Sampling 4FPS → 8FPS Frame 8,9 → 8, 8.5, 9 Remap: Frame 0, 1, 2 
+
+Frame 9 Frame 8 Frame 7 Frame 6 Frame 5 Frame 12 Frame 11 Frame 10 
+
+Special case: One frame Last frame, sample previous Frame 12 → 11.5 12 Remap: Frame 0, 1 
+
+2nd Turn 1st Turn 
+
+{“Step 1:\nFrame 0:....\nFrame 1:\n1. Character analysis: …..2. Object analysis: Anomaly exists. A white rectangular object with edges (similar to a card or booklet) suddenly appears out of thin air in the lower left corner of the frame. Since this position was completely empty in the previous frame, the appearance of this object lacks a physical source and reasonable transition, violating objective logic.\n3. Environment analysis: No anomaly. …...\nStep 2: Is there an issue with character consistency: ……- Is there an issue with character motion: Issue exists, the sudden flash of the left hand and arm lacks a normal motion trajectory and physical process .\n ……Is there an issue with object consistency: Issue exists, the white rectangular object suddenly mutates from nothing to something in the time series. \n- Is there an issue with object rationality: Anomaly exists , the white rectangular object and hand appear out of thin air, severely violating physical logic of reality .\n- …...\nStep 3:\n- Abnormal object motion: …….- Inconsistent object expression: Anomaly exists , the white rectangular object does not exist in Frame 0, but suddenly appears in Frame 1, being highly unstable in the time series .\n-Unreasonable object: Anomaly exists, a white rectangular object appears out of thin air in the lower left corner of the frame, accompanied by a hand holding it. This does not conform to physical reality and belongs to a typical phenomenon of objects appearing out of thin air.\n- Abnormal character motion: …...\n- Inconsistent character expression: No anomaly.\n- Abnormal text: No anomaly.", “status”: “Anomaly”,“anomalies”: [{ “Label”: “Unreasonable object” , “Anomaly Reason”: “The lower left corner of the frame was originally empty, and in Frame 1, a white rectangular object (similar to a booklet) and part of a hand holding it suddenly appeared out of thin air, violating the physical logic of reality.” , “BBOX”: {“Frame 1”: [28, 615, 192, 753],“Frame 0”: [24, 655, 198, 754]}, "Problem Area": "The white rectangular object and hand in the lower left corner of the frame"}]} 
+
+{“Step 1:\nFrame 0:......\nFrame 12:\nCharacter analysis: ……Hand state: A hand (inferred to be the character‘s right hand) suddenly appears in the lower left corner of the frame, holding a white, slender, strip-like item. I n the previous frames when the character’s hand was lowering, there was no such item in the hand. \nObject analysis: The white, slender item appearing in the character‘s hand has a regular shape, 
+
+but its sudden appearance at this moment lacks realistic logic. …..Step 2: Character consistency: …… Object rationality: The character’s right hand was in the frame from Frame 0 to Frame 8, from raising to touch the hat to lowering, holding no items in hand. 
+
+Subsequently, the hand moves out of the frame, but in the lower left corner of Frame 12, it is holding a white, slender, strip-like item out of thin air . This item appears out of nowhere, violating the physical logic and interaction causality of physical space. ....\n\nStep 3: Overall video anomaly assessment\n....\nUnreasonable object: In Frame 12, a white, slender, strip-like object suddenly appears in the character's hand in the lower left corner of the frame, while in the previous frames 
+
+(Frame 0 to Frame 7) when the hand was shown, there was absolutely no such object in the hand......", "status": "Anomaly","anomalies": [{ "Frame Range": "Frame 12", "Label": "Unreasonable object", "Anomaly Reason": "A white, slender, strip-like item appears out of thin air in the character's hand, whereas the hand was completely empty in the preceding frames, violating physical logic.", "Problem Area": "The white, slender, strip-like item in the hand in the lower left corner of the frame"} ]} Figure S2: Qualitative analysis of CaC. Bold text marks key analysis, while underlined text indicates suspicious anomalies that are effectively filtered out. Redundant analyses of normal frames are omitted for clarity. These examples also illustrate that generated-video anomalies are highly sparse, appearing only in a few frames and occupying small local regions. Table S4: Temporal IoU and Spatial IoU comparison of CaC and baseline models. Model Temporal IoU Spatial IoU Gemini-3.1-Pro 0.163 0.085 Base Model w/ Inference Strategy 0.235 0.067 
+
+Ours (CaC) 0.695 0.340 
+
+D.2.2 Video Alignment Qualitative Results 
+
+To qualitatively examine whether CaC provides useful feedback for video alignment, we compare generated videos before and after RL-guided optimization (using UR+CaC). As shown in Fig. S3, the baseline model exhibits various localized artifacts — train carriage distortion, an unnatural mouth opening in the dog, blurry faces, and temporally inconsistent road signs behind the motorcycle — all of which are substantially mitigated after optimization. These results confirm that incorporating CaC as an anomaly-sensitive reward signal effectively reduces localized structural defects and temporal inconsistencies while preserving visual coherence. 22 Table S5: Complete ablation results on CaC-Bench-Main. ⑥ w/o Inference Strategy* is retrained with Stages 2 and 3 under a single-turn formulation. ID Ablations Anomalous Video Normal Video Acc. Recall Precision F1-Score Recall Precision F1-Score                                                                                          
+
+> ①Base Model (Qwen3-VL-8B) 0.108 0.574 0.182 0.920 0.508 0.654 0.514
+> ②w/o Single-frame Grounding Warmup 0.706 0.699 0.702 0.696 0.703 0.699 0.701
+> ③w/o Multi-frame SFT 0.506 0.713 0.592 0.796 0.617 0.695 0.651
+> ④w/o Two-Turn GRPO 0.600 0.704 0.648 0.748 0.652 0.696 0.674
+> ⑤Base Model w/ Inference Strategy 0.102 0.785 0.181 0.972 0.520 0.677 0.537
+> ⑥w/o Inference Strategy* 0.802 0.706 0.751 0.666 0.771 0.715 0.734
+> ⑦w/o Temporal IoU Reward 0.484 0.682 0.566 0.774 0.600 0.676 0.629
+> ⑧w/o Spatial IoU Reward 0.610 0.774 0.682 0.822 0.678 0.743 0.716
+> ⑨w/o Attribution IoU Reward 0.668 0.729 0.697 0.752 0.694 0.722 0.710
+> ⑩Ours (CaC) 0.910 0.767 0.833 0.724 0.889 0.798 0.817
+
+D.3 Full Ablation Results 
+
+Table S5 reports the complete ablation results with anomalous-video metrics, normal-video metrics, and overall accuracy. 
+
+E Limitations and Broader Impact 
+
+CaC is designed as a specialist reward model for sparse structural, temporal, and physical anomalies in generated videos, and therefore should not be used as the only objective for downstream alignment. We have to combine CaC with UnifiedReward: the general reward preserves text-video alignment and holistic quality, while CaC provides complementary anomaly-sensitive feedback. However, we believe this is also a future direction: as video generation becomes increasingly realistic, reliable evaluation may require multiple expert reward models working together rather than a single monolithic reward. Due to limited computational resources, our experiments are still restricted in scale. Although our training already uses 16-card and 32-card H200-level settings for the most expensive stages, broader multi-seed studies, larger downstream alignment sweeps, and evaluation on substantially longer videos would require considerably more compute. We therefore leave more exhaustive scaling analysis to future work. The dataset construction also relies on fine-grained human annotations of frame ranges and bounding boxes. These annotations improve supervision quality, but they are costly and may still contain subjective ambiguity in borderline cases. We hope that releasing and further improving CaC can support future work on more automated fine-grained annotation pipelines, reducing the manual burden while preserving localization quality. Finally, although the current RL formulation obtains a continuous reward through token-probability-based optimization, the reward feedback is still applied at the generated-video level. While CaC predicts temporal windows and spatial boxes, the optimization signal is not yet immediately mapped back to the exact anomalous frames or regions in the generator’s denoising process. A promising future direction is to combine anomaly localization with more localized RL guidance, so that the predicted spatiotemporal boxes can directly indicate where and how generation should be corrected. From a broader-impact perspective, CaC can support safer and more reliable video-generation systems by exposing subtle structural, temporal, and physical artifacts that are often missed by holistic evaluators. At the same time, improving anomaly detection and reward feedback may also help optimize generators toward more realistic synthetic media. Future release and deployment should therefore consider appropriate access control, usage restrictions, provenance tracking, and monitoring for harmful or misleading applications. 23 A train accelerating to gain speed Wan 2.1 Wan 2.1 w/ RL 
+
+A dog playing in park Wan 2.1 Wan 2.1 w/ RL 
+
+> A person giving a presentation to a room full of colleagues
+
+Wan 2.1 Wan 2.1 w/ RL 
+
+a motorcycle cruising along a coastal highway Wan 2.1 Wan 2.1 w/ RL Figure S3: Qualitative comparison between videos generated by Wan-2.1-1.3B [ 42 ] before and after RL optimization with CaC. Red dashed boxes highlight anomalous regions in the baseline outputs. 24 Prompt for Video Anomaly Analysis 
+
+You are an expert in AI-generated video assessment, responsible for detecting whether anomalies exist in a video. You now need to analyze an AI-generated video. 
+
+Abnormal During the analysis process, please pay special attention to the following phenomena that may exist in the video: 
+
+{error_description} .
+
+Normal Human annotation considers this video to be normal, and you should conduct a careful review and inspection. Human annotation is generally correct. Of course, if you observe clear and explicit problems, you may also judge it as abnormal. But for minor anomalies, do not easily judge it as abnormal. However, if after careful observation you confirm that the human annotation is incorrect, you may adhere to your own judgment. 
+
+Abnormal The following information comes from human annotation and is only intended to help you localize the key observation region; it is not guaranteed to be correct. If after careful inspection you believe the whole snippet is normal and the human hint does not match the visual content, you may adhere to your actual observation and truthfully output “normal.” This input is already a clipped anomalous time segment; if you finally judge it as abnormal, then the attributed time region is by default the entire snippet. During the analysis process, please pay special attention to the following phenomena that may exist in the video: {error_description} . The following are reference coordinates of the target region in each frame ( [xmin, ymin, xmax, ymax] ). When outputting BBOX, please use them as a reference and refine them according to the actual visual content: {bbox_hint_str} . The BBOX dictionary must cover every frame in these {snippet_length} frames and must not omit any frame. 
+
+Normal Human annotation considers this snippet to be normal, and you should conduct a careful review and inspection. If the video is overall smooth and natural, with no obvious visible defects, please judge it as normal. But if after careful observation you confirm that the human annotation is incorrect, and there is indeed a clear, explicit, and explainable anomaly in the video, you may still judge it as abnormal. 
+
+Abnormal However, in your thinking and response, you must behave as if you are completely unaware of the above hints. You must not mention in any form expressions such as “according to the hint,” “as stated,” or “as informed.” You should treat these phenomena as suspicious cues that you naturally discovered through careful observation, and then carry out independent, objective, and professional analysis on this basis. 
+
+The sampled video frames are as follows 
+
+{image_tokens} 
+
+The anomaly types are as follows 
+
+• Object Distortion : detect deformation, mutation, clipping artifacts, or other structural defects in inanimate objects. • Human Distortion : detect limb deformity, abnormal fingers, extra limbs, body splitting, or other structural defects in human subjects. • Motion Anomalies : detect unnatural trajectories, abnormal jittering or flickering, and sudden disappearance or appearance of entities across frames. • Physical Violations : detect unsupported floating, interpenetration between entities, or other behaviors that contradict real-world physics. • Character Anomalies : detect unreadable text, abnormal text layout, or inconsistent textual content across frames. 
+
+Analysis steps and chain-of-thought requirements 
+
+In the COT field of the final output JSON object, strictly follow the following three-step structure to write the complete chain-of-thought analysis process, and ensure logical coherence (omission, merging, or skipping is forbidden): 
+
+Step 1: Analyze the visual content frame by frame, and determine whether issues such as object distortion, human distortion, motion anomalies, physical violations, and character anomalies exist. 
+
+Analyze each frame independently, starting from Frame 0. Each frame must begin with “Frame N:” (where N is the specific frame index). Please ensure that Step 1 contains a complete description of all frames. A complete paragraph must be written separately for Frame 0, Frame 1, Frame 2, . . . , Frame {frame_count_index} . Expressions such as “Frame 0–2” or “the first few frames” are forbidden. The following three aspects must be covered in order and in full. If an aspect does not apply, this must be explicitly stated and must not be omitted. Analyze each frame independently, starting from Frame {new_start} . Each frame must begin with “Frame N:” (where N is the specific frame index). Please ensure that Step 1 contains a complete description of all frames. A complete paragraph must be written separately for Frame {new_start} , each subsequent frame, . . . , Frame {new_end} . Expressions such as “Frame 0–2” or “the first few frames” are forbidden. The following three aspects must be covered in order and in full. If an aspect does not apply, this must be explicitly stated and must not be omitted. 1. Human analysis (if there is no visible person, you must explicitly write “no visible person”), and the analysis must explicitly state whether an anomaly exists. Clothing: precisely describe the clothing type, color, clarity of patterns or textures, and all accessories. Posture: describe the overall pose and specifically describe the positions of the limbs. Expression: characterize eyebrow shape, gaze direction, and mouth state, and evaluate naturalness. Hand state: describe each finger one by one, whether the hand is holding an object, and hand details. 2. Object analysis , and the analysis must explicitly state whether an anomaly exists. Object identification: list all visible objects. Object attributes: describe the shape, color, and texture clarity of each object, and evaluate whether its size proportion is reasonable. Spatial relationship: state the positions between objects and people, and between objects and objects. 3. Environment analysis , and the analysis must explicitly state whether an anomaly exists. Scene: clearly specify the background type. Lighting: judge the direction of the main light source, and describe the position, length, and softness or hardness of shadows. Environment details: check whether the background contains blur, repeated textures, geometric distortion, pixel tearing, or unnatural patterns. 
+
+Figure S4: Prompt for Video Anomaly Analysis CoT Creation (Part 1 of 2). shared content; turn-one long-video-specific content; turn-two short-video-specific content; placeholders that will be replaced by specific inputs; conditional branches. 25 Prompt for Video Anomaly Analysis (Continued) 
+
+Step 2: Inter-frame coherence and motion trajectory analysis. Based on the human, object, and environment information in Step 1, determine whether anomalies exist. 
+
+Using information from multiple preceding and following frames, evaluate the following dimensions one by one. If an anomaly exists, give the corresponding description; if there is no change or no anomaly, you must still explicitly state “no anomaly”: whether there are any issues related to object distortion, human distortion, motion anomalies, physical violations, or character anomalies. 
+
+Step 3: Overall video anomaly assessment 
+
+Based on all details in Step 1 and Step 2, comprehensively determine whether anomalies exist in the following five problem types. If an anomaly exists, the reason must be given; if no anomaly exists, write “no anomaly”: Object Distortion, Human Distortion, Motion Anomalies, Physical Violations, Character Anomalies. 
+
+Output format requirements 
+
+You must output one and only one valid JSON object. Do not wrap it in a Markdown code block, and do not output any extra text. The JSON structure is as follows: 
+
+{"COT": "Write the complete Step 1 / Step 2 / Step 3 chain-of-thought analysis process here.", "status": "abnormal / normal", "anomalies": [{"Attributed Time Region": "Fill in the frame range.", "Attributed Label": "Fill in the specific anomaly category.", "Reason for Anomaly": "Concrete anomaly description with the object name and the specific phenomenon.", "Problem Region": "Semantic description of the problematic location.", "BBOX": {"Frame 0": [xmin, ymin, xmax, ymax], "Frame 1": [xmin, ymin, xmax, ymax] }}]}
+
+Strict rules for filling the anomalies field 
+
+• When status is “normal”: this means that the visual content has no defects, and anomalies must be an empty list [] . Do not fabricate descriptions of normal content in the list. • When status is “abnormal” and there is only one problem: output one dictionary with complete fields in the anomalies list. • When status is “abnormal” and there are multiple problems: output multiple dictionaries in the anomalies list, separating different anomalies so that each dictionary corresponds to one independent anomaly point. Regarding the BBOX coordinate output format: the key is the re-indexed frame number, such as "Frame 0" and "Frame 1" ; the value is an integer coordinate array [xmin, ymin, xmax, ymax] ; the BBOX dictionary must cover all frames in the snippet and must not omit any frame. 
+
+Please begin your analysis. 
+
+Figure S5: Prompt for Video Anomaly Analysis CoT Creation (Part 2 of 2). White indicates shared content, blue indicates long-video-specific content, orange indicates short-video-specific content, green indicates placeholders, and pink indicates conditional branches. 26 Prompt for Consistency Verification 
+
+Abnormal 
+
+You are an expert reviewer for video quality assessment. Please strictly judge whether the following AI-generated video analysis report reasonably identifies and explains the human-annotated errors. 
+
+[Human-Annotated Error Information] 
+
+Segment ID: {segment_id} 
+
+Video ID: {video_id} 
+
+Annotation conclusion: the video has problems Specific errors: 
+
+{gt_error_str} 
+
+[Complete AI Analysis Report (JSON)] 
+
+{full_analysis_str} 
+
+Absolute strict evaluation criteria 
+
+The judgment can be “consistent” only if all of the following conditions are satisfied: 1. The error type is exactly the same : the error category used and described by the AI model must be completely consistent with the human annotation. 2. The erroneous object is essentially the same : the erroneous object identified by the AI model must refer to the same entity as the human annotation. the erroneous object identified by the AI model must refer to the same entity or the same region as the human annotation. 3. The error phenomenon is essentially the same : the error phenomenon described by the AI model must be identical in underlying nature to the phenomenon in the human annotation. 4. The time range matches strictly : the time range identified by the AI model must match the time range in the human annotation under the following criteria: the start-frame deviation must be no more than 2 frames; the end-frame deviation must be no more than 2 frames; the overall overlap of the time range must be at least 85%. the time range identified by the AI model must be broadly consistent with the time range in the human annotation, and both the start-frame deviation and the end-frame deviation must not exceed 2 frames. 5. There is an exact one-to-one correspondence : each analysis item produced by the AI model must form an exact one-to-one match with each human-annotated error description. Please output only “consistent” or “inconsistent,” and do not add any other explanation. 
+
+Figure S6: Prompt for Consistency Verification. Colors follow Fig. S4. 27
