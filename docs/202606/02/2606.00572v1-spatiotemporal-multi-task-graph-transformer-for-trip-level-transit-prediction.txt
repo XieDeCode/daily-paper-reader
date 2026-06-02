@@ -1,0 +1,695 @@
+Title: Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+
+URL Source: https://arxiv.org/pdf/2606.00572v1
+
+Published Time: Tue, 02 Jun 2026 00:38:07 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+## Oluwaleke Yusuf a, Adil Rasheed a and Frank Lindseth b
+
+> a
+
+Department of Engineering Cybernetics, Norwegian University of Science and Technology (NTNU), Trondheim NO-7491, Norway 
+
+> b
+
+Department of Computer Science, Norwegian University of Science and Technology (NTNU), Trondheim NO-7491, Norway 
+
+A R T I C L E I N F O 
+
+Keywords :Public Transit Demand Prediction Transformer Networks Deep Learning Spatio-temporal Graphs Sequence Modelling 
+
+A B S T R A C T 
+
+Passenger count data from public transit systems reveals urban mobility patterns and is essential for planning, operation, and optimisation. However, non-linear spatiotemporal interdependencies across stops and lines make modelling and prediction challenging. Existing approaches often rely on fixed temporal, spatial, or stop-level formulations, limiting their ability to capture within-trip evolution and network context. This study proposes SMT-GraphFormer, a spatiotemporal multi-task graph transformer that frames trip-level transit prediction as sequence-to-sequence modelling. Given a line’s stop sequence and trip-level context, the model predicts successive boarding and alighting counts, with delay and dwell time treated as encoder-side surrogate tasks. Key components include graph embeddings for multi-relational stop similarity, a context encoder for weather and temporal information, and a multi-gate mixture-of-experts module that produces task-specific decoder representations for boarding and alighting predictions. Evaluation on public bus transit data from Trondheim, Norway, shows that SMT-GraphFormer outperforms stop-level tabular benchmarks, with ablation studies examining each component’s contribution. The sequential formulation yields substantial gains on alighting prediction ( +0.24 in 𝑅 2) and consistent improvements on boarding, delay, and dwell, confirming the value of explicit trip-level sequential bias and inter-target dependencies. These findings demonstrate the potential of transformer-based sequence modelling for capturing complex spatiotemporal dynamics in public transit and underscore the value of architectures tailored to transit data rather than off-the-shelf tabular models. The proposed framework provides a horizon-agnostic basis for scenario analysis in digital twin environments, supporting informed decision-making by planners and transit operators. 
+
+## 1. Introduction 
+
+Population growth in urban areas has placed increasing strain on mobility systems and their capability to serve residents adequately. With urban populations expected to continue growing rapidly (Gulc and Budna, 2024), the sustainability of contemporary mobility solutions and their impact on urban quality of life have become central concerns (Ritchie and Roser, 2020). Mobility policy is increasingly shifting away from car-centred approaches towards people-centred planning (Millard-Ball and Schipper, 2011; Jones, 2016), prioritising public transit and active mobility over private car use. This shift underscores the need to improve public transit services and make integration with active modes more seamless, helping residents choose more sustainable forms of mobility. These trends have also intensified the need for data-driven historical analysis and predictive modelling of passenger counts and operational metrics in urban public transit systems (Egu and Bonnel, 2021). Detailed analyses and accurate predictions of passenger counts and scheduling deviations at the stop and trip level support urban planners allocating resources, transit operators adjusting schedules, and travellers planning journeys. Focusing on public bus transit, this study addresses the prediction of boarding and alighting passenger counts at each stop along a trip, together with delays relative to scheduled arrival times and dwell times. These quantities are critical for understanding demand patterns, operational performance, and passenger experience, and are interdependent through complex spatiotemporal dynamics. There have been various approaches to modelling these quantities across short- and long-term horizons in urban public transit systems such as bus (Kong et al., 2024; Shrivastava et al., 2024), metro (Hu et al., 2024), and scooter (Xu et al., 2023) networks. However, such approaches face difficulties with the complex non-linearities and dynamic spatiotemporal interdependencies of human mobility flows. This is further complicated by the interplay of various factors intrinsic and extrinsic to the transit system. Extrinsic influences such as weather conditions, urban 
+
+> ORCID
+
+(s): 0000-0002-5904-648X (O. Yusuf); 0000-0003-2690-983X (A. Rasheed); 0000-0002-4979-9218 (F. Lindseth) 
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 1 of 25 
+
+> arXiv:2606.00572v1 [cs.LG] 30 May 2026 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+
+characteristics, natural terrain, and temporal information influence mobility patterns (Wei, 2022; Verma et al., 2021; Yang et al., 2023). Intrinsically, the target variables are coupled through cascading dependencies: dwell time at a stop rises with the number of boarding passengers; the resulting delay propagates to the next stop; alighting at that stop depends on earlier boarding; and higher alighting in turn extends dwell. These chains imply that predictions at successive stops cannot be treated independently but must be modelled as an ordered sequence within a trip. Furthermore, there are interdependencies across lines at the network level, where shared stops and transfer points create complex spatial relationships that influence passenger counts. Previous work on predictive modelling of passenger counts and operational metrics (Yusuf et al., 2025) has shown that stop-level modelling alone lacks inductive biases on the spatial structure of transit networks and cannot adequately capture relationships between boarding and alighting counts without explicit sequential context. In addition, studies on transit-related modelling typically focus on fixed spatial or temporal aggregation levels, such as origin–destination (OD) pairs (Li et al., 2022; Hu et al., 2024), predefined time intervals (Shrivastava et al., 2024; Kong et al., 2024), or spatial regions (Xu et al., 2023; Li et al., 2022). This aggregation overlooks the evolution of passenger counts at the stop and trip level, disregarding spatial interdependencies between successive stops and their local attributes. Temporal aggregation reduces the temporal resolution of predictions, limiting insights into the effects of operational metrics such as delays relative to scheduled arrival and dwell times at stops. Treating passenger counts solely as a time-series problem limits the model’s predictive window and generalisation over time, reducing its applicability for 
+
+what-if? scenario analyses. To address these limitations, this study reframes the trip-level prediction of passenger counts and operational metrics as a sequence modelling problem akin to natural language modelling. Individual trips are treated as sentences, individual stops as tokens, and the prediction of boarding and alighting counts proceeds autoregressively from the first stop to the last. The proposed framework, SMT-GraphFormer , uses a modified encoder-decoder transformer architecture whose input is a comprehensive representation of a trip, including the line and stop sequence, stop-level features such as natural terrain and urban characteristics, and trip-level context such as weather conditions and temporal information. The encoder processes this input to produce contextual stop representations and predicts delay and dwell times as surrogate tasks. The decoder then produces autoregressive states for boarding and alighting prediction, with a multi-gate mixture-of-experts module producing task-specific decoder representations that feed into the prediction heads. This formulation allows the model to learn the complex spatiotemporal dynamics of passenger counts across stops within a trip, while also integrating operational metrics and external factors without being constrained to fixed temporal or spatial aggregation levels. This horizon-agnostic approach is well-suited for scenario analysis in digital twin environments, where urban planners and transport operators can vary input parameters such as trip schedules, stop sequences, urban characteristics, and weather conditions, then simulate the resulting evolution of passenger counts and operational metrics across the trip. Thus, the transformation of stop-level tabular data into trip-level sequential format, along with feature engineering at the stop, trip, and network levels, is a critical component of the proposed approach. The main contributions of this study are as follows: 1. Data Pipeline: Preprocessing pipeline that transforms stop-level tabular transit records into trip-level sequential representations. Terrain, urban, and weather features are engineered from external sources at the stop and trip level, alongside relational stop-similarity matrices for the graph autoencoder. 2. Model Architecture: Modified encoder-decoder transformer predicting boarding, alighting, delay, and dwell jointly across a trip sequence. Key SMT-GraphFormer components include spatiotemporal graph embeddings, a trip-level context encoder, encoder-side surrogate-task supervision, and a multi-gate mixture-of-experts module for task-specific decoder representations. 3. Empirical Validation: Evaluation on one month of real-world data from the public bus transit system in Trondheim, Norway. Results demonstrate that the sequential formulation outperforms stop-level tabular benchmarks on all four targets, supported by ablation studies examining each component’s contribution. 4. Generalised Framework: Horizon-agnostic predictive framework that, given a line’s stop sequence and trip-level context, generates the full per-stop trajectory of passenger counts and operational metrics. Enables what-if? 
+
+scenario analysis in digital twin environments without reliance on fixed temporal windows. The rest of this paper is organised as follows: Section 2 reviews the relevant literature on transit prediction, use of graph-based embeddings and transformer architectures, and integration of external factors. Section 3 details the   
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 2 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+
+data preprocessing pipeline for transforming raw stop-level records into the trip-level sequential format, along with the feature engineering of stop-level attributes, trip-level context, and relational matrices for graph embeddings. Section 4 describes the SMT-GraphFormer architecture, model training and inference protocols, and the benchmark models used for comparison. Section 5 presents the experimental results and comparison with benchmarks, in addition to the ablation studies on model components and the analysis of autoregressive inference. Section 6 summarises the key findings, discusses the implications and limitations of the results, and outlines potential directions for future research. 
+
+## 2. Related Work 
+
+This section reviews the relevant literature across four themes that inform the design of SMT-GraphFormer :
+
+(i) predictive modelling of mobility-related variables, (ii) graph-based embeddings for encoding spatiotemporal relationships between transit system elements, (iii) transformer architectures that integrate graph representations, and 
+
+(iv) the role of external factors in shaping mobility patterns and thus improving predictive performance. 
+
+2.1. Mobility-Related Predictive Modelling 
+
+There have been numerous studies on predicting passenger counts across short- and long-term horizons in urban public transit systems such as bus (Kong et al., 2024; Shrivastava et al., 2024; Li et al., 2022; Kong et al., 2022), metro (Hu et al., 2024), scooter (Xu et al., 2023), and bike-sharing (Rühmann et al., 2024) networks. There have also been similar studies in mobility-adjacent domains dealing with traffic flow (Zhang et al., 2024; Zhao et al., 2024; Dong et al., 2024; Zeng and Tang, 2023), bus arrival time (Jeong et al., 2024; Alam et al., 2021), demand distribution (Guo et al., 2023), daily human mobility (Wang and Osaragi, 2024; Corrias et al., 2023; Sun et al., 2022), origin–destination (OD) estimates (Li et al., 2023), road correlations (Dong et al., 2022), and transit mobility structure (Zhang et al., 2021), amongst others. However, such studies are often limited in their ability to capture the complex spatiotemporal dependencies and non-linearities inherent in human mobility dynamics, which are challenging to analyse, model, and predict accurately and consistently. This challenge has led to the development of various methodological approaches with varying degrees of efficacy. The demonstrated ability of transformer architectures, first introduced by Vaswani et al. (2017), to model long-range dependencies in sequential data has increasingly been leveraged in the transit domain. Within bus transit prediction specifically, Li et al. (2022) and Hu et al. (2024) aggregate passenger counts across origin–destination pairs, modelling demand between pairs of stations or zones. Shrivastava et al. (2024) cluster transit segment relations based on ridership patterns and train separate LSTM models per cluster to predict occupancy across time bins. Kong et al. (2022) and Kong et al. (2024) construct stop relationship networks and apply graph-based deep clustering to extract mobility patterns for stop-level count prediction. Pei et al. (2023) decompose bus passenger count time series using wavelet packets and feed the components into a bidirectional LSTM with an attention mechanism. Limited data granularity and the complexity of the underlying dynamics push these approaches towards a common compromise: prediction is framed at an aggregated level, whether spatially across OD pairs, temporally across predefined intervals, or independently at individual stops. None of them explicitly model the sequential evolution of passenger counts across the ordered stops of a single trip, where boarding and alighting at each stop are conditioned on the preceding sequence. This trip-level sequential structure is central to the formulation proposed in our study. 
+
+2.2. Graph Embeddings for Transit Systems 
+
+When applying transformer architectures to transit prediction, a key consideration is how to encode the various elements of the transit system in a way that captures their spatiotemporal relationships and provides rich information on stop-, line-, and network-level mobility dynamics. While standard learnable embedding layers (Dong et al., 2024; Abideen et al., 2021; Hu and Xiong, 2023) and field embeddings (Guo et al., 2023) can be incorporated into the transformer architecture, these approaches cannot accurately capture the true spatiotemporal dependencies of mobility flows, as noted by Zhang et al. (2024). This has motivated the integration of graph-based embeddings aimed at exploiting the inherent graph structure of transit systems. Such embeddings are derived from relational matrices that encode pairwise relationships and correlations between transit system elements at various levels of granularity. Beyond basic binary adjacency matrices, more informative variants include distance-weighted matrices based on threshold Gaussian kernels (Zhao et al., 2024; Kong et al., 2024), demand similarity matrices derived from Pearson correlations of historical passenger demand sequences (Li et al., 2022; Shrivastava et al., 2024), matrices based on dynamic time warping of traffic volume time series (Zeng and   
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 3 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+
+Tang, 2023), attribute similarity matrices encoding local static attributes of nodes (Zhang et al., 2021; Xu et al., 2023), and cosine similarity matrices derived from traffic volume characteristics (Dong et al., 2022). Several studies construct multiple such matrices to capture different relational aspects simultaneously (Xu et al., 2023; Zhao et al., 2024; Zeng and Tang, 2023). To convert these relational matrices into dense, low-dimensional embeddings, various strategies have been employed. Random walk algorithms such as DeepWalk and Word2Vec treat random walks on the graph as sentences for language model training (Sun et al., 2022; Guo et al., 2023). Zhang et al. (2021) proposed a joint graph embedding framework using autoencoders to learn shared low-dimensional representations from both attribute similarity and transit mobility pattern matrices. In addition, autoencoders based on graph convolutional networks (GCNs) have been used to cluster mobility patterns from passenger networks based on shared stop usage (Kong et al., 2022) and stop networks based on inter-stop distance (Kong et al., 2024). Dong et al. (2022) used trajectory next-hop prediction models to learn dynamic road embeddings that capture correlations beyond direct route connectivity. Three-dimensional convolutions have also been applied to jointly extract spatial and temporal features from structured traffic data (Zhang et al., 2024). Our framework builds on this line of work by constructing multiple relational matrices to capture stop- and line-level relationships, including distance-based, demand-based, and attribute-based correlations. These matrices are then encoded through a graph autoencoder into dense embeddings that capture the spatial structure and temporal dynamics of the transit network. 
+
+2.3. Graph Transformer Architectures 
+
+The integration of graph-based embeddings into transformer architectures has been explored in various studies, motivated by the complementary strengths of graph representations for spatial relationships and transformers for sequential modelling. Zhao et al. (2024) proposed a traffic flow prediction framework that represents sensor data as nodes in a graph, extracting spatial features with a multi-view graph convolutional network (GCN) that constructs adjacency matrices reflecting human mobility patterns. The temporal component utilises a transformer, along with Convolutional LSTM (ConvLSTM) to enhance temporal perception. Xu et al. (2023) applied this approach to scooter-sharing demand forecasting, where the GCN module integrates four graph types to model spatial adjacency, functional similarity, demographic similarity, and transportation supply similarity between urban zones. In Wang and Osaragi (2024), a self-attention embedding mechanism was used to map regional attributes into location embeddings, enabling a transformer to learn and generate the daily mobility sequences of individuals. Hu et al. (2024) integrated complex network indicators to dynamically capture spatial dependencies between subway stations within a transformer. The multi-gate Mixture-of-Experts (MMoE) module was used to model the interdependencies between entry and exit passenger counts for improved predictive performance. In Zhang et al. (2024), the traditional fixed positional encodings of the transformer were replaced with learnable encodings, allowing the model to adaptively fit different temporal trends and horizons. A spatiotemporal embedding mechanism was also introduced for integrating information from external factors. Guo et al. (2023) addressed demand forecasting during the COVID-19 pandemic with a transformer encoder that models high-order feature interactions between demand distributions and spatiotemporal features, incorporating a population mobility graph for spatial dependencies and an auxiliary pandemic trend prediction task. Our architecture also combines graph-based embeddings with a transformer, but differs from these studies principally in its use of the encoder-decoder formulation. Where the studies above use graph-enhanced transformers for predictions at fixed aggregation levels, our architecture uses the encoder to build contextual representations and the decoder for autoregressive predictions across the ordered stops of a trip. This formulation allows us to explicitly model the sequential evolution of passenger counts across a trip, where boarding and alighting at each stop are conditioned on the preceding sequence, which is not captured by stop-level or aggregated approaches. 
+
+2.4. Integrating External Factors 
+
+The spatiotemporal dynamics of human mobility are influenced by a wide range of factors beyond the mobility system itself. Externalities such as weather conditions (Wei, 2022; Tian et al., 2024; Ngo and Bashar, 2024), residential densification (Kim and Li, 2021), urban structures (Verma et al., 2021), the built environment (Yang et al., 2023; Zhang et al., 2025; Liu et al., 2023), and the COVID-19 pandemic (Zeb et al., 2024) have all been shown to influence mobility patterns. Thus, several of the aforementioned studies – Wang and Osaragi (2024); Hu et al. (2024); Zhang et al. (2024); Hu and Xiong (2023); Rühmann et al. (2024) and Zhang et al. (2021), amongst others – have integrated   
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 4 of 25
+
+Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction Raw APC Records    
+
+> ▪Data Preprocessing
+> ▪Feature Engineering
+
+Benchmark Models       
+
+> ▪XGBoost
+> ▪MLP –ResNet –FT -Transformer
+
+Chronological Split Plan      
+
+> ▪Training –Validation –Test
+
+Feature Transformation         
+
+> ▪Fit Statistics on Training Split
+> ▪Feature Groups:
+> ▪Categorical –Continuous
+> ▪Cyclic –Target
+
+Trip -Level Sequences  
+
+> ▪Grouped & Flattened Per Trip
+
+Relational Matrices    
+
+> ▪Stop Attributes
+> ▪Stop Coordinates
+> ▪Historical Passenger Counts
+
+Model -Specific Adapters   
+
+> ▪Data Type Conversions
+> ▪Categorical Feature Handling
+
+CANONICAL 
+
+STOP -LEVEL 
+
+DATASET 
+
+SMT -GRAPHFORMER 
+
+Graph Embeddings   
+
+> ▪Graph Autoencoder Training
+> ▪Frozen Stop Embeddings
+
+Shared Evaluation       
+
+> ▪Inverse Transformations
+> ▪Metrics: RMSE –MAE –R2
+
+Figure 1: Overview of the data preprocessing and feature engineering pipeline, showing the flow from raw stop-level APC records to the canonical dataset and its transformations for the SMT-GraphFormer and benchmark models. 
+
+such information to enhance predictive performance and generalisation. Previous work in similar contexts (Yusuf et al., 2025) also demonstrated that incorporating information on weather, terrain, socio-demographics, and built environment improved the modelling of stop-level passenger counts. In the current framework, information from multiple external sources is integrated at separate levels. Weather conditions and temporal information are classified as trip-level context and processed through a dedicated context encoding pathway, while natural terrain and urban characteristics are associated with individual stops and encoded as graph-based embeddings. This design aims to exploit the different roles that these factors play in shaping mobility patterns at different levels of granularity. 
+
+## 3. Data Pipeline and Feature Engineering 
+
+This section describes the pipeline that transforms raw stop-level automated passenger counting (APC) records into the canonical dataset and evaluation protocol shared by SMT-GraphFormer and the benchmark models. Figure 1 provides a visual overview of the data pipeline, which can be broadly categorised into four stages: (i) initial data preprocessing and feature engineering (orange); (ii) canonical stop-level dataset and shared evaluation protocol (blue); 
+
+(iii) trip-level transformation and feature engineering for SMT-GraphFormer (green); and (iv) minor post-processing for benchmark models (purple). 
+
+3.1. Data Description and Preprocessing 
+
+The raw dataset is a stop-level APC archive provided by AtB, the public transport authority in Trondheim, Norway, covering 31 days in May 2024 across 48 bus lines and 743 bus stops in the Trondheim metropolitan area. Each bus “line” is defined as a unique route with a fixed sequence of stops, and each “trip” is a single traversal of that route on a given day, with stop visits ordered by their “stop sequence” index. The same stop name may correspond to multiple stop identifiers due to different platforms or travel directions at the same physical location. For example, a stop on a straight road typically maps to two identifiers (one per direction), while a junction stop may correspond to up to four 
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 5 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+identifiers. This many-to-one mapping results in 1,291 unique stop identifiers across the 743 unique stop names in the dataset. Each record in the dataset represents a single stop visit within a bus trip and contains 21 fields that cover: identifiers for the line, trip, and stop; scheduled and actual arrival and departure times; stop name and geographic coordinates; binary quality flags for APC sensor activity and extreme value detection; and boarding and alighting passenger counts. Throughout this work, the term “stop” refers to a unique stop identifier, the granularity at which all feature engineering, external data linkage, and relational modelling are performed; stop names are used solely when aggregating transfer connectivity across different lines. The preprocessing stage then applies deterministic rules to handle missing values, enforce type consistency, engineer derivative features, and filter records on quality criteria, as detailed below. 
+
+Missing Value Imputation: Temporal fields with missing values are filled from their corresponding scheduled arrival or actual departure counterparts. The APC activity flag defaults to True , while its extreme value flag defaults to False . Missing passenger count values are imputed with zero. Missing bus type information is filled with “No Information”, except for the tram service on Line 9 where “Streetcar/Tram” is assigned. 
+
+Derivative Features: Since raw trip numbers are reused across different days, a unique trip identifier is constructed by concatenating the date with the trip number to ensure that each trip is uniquely identifiable across the entire dataset. This is crucial for maintaining the integrity of trip-level sequences during data processing and model training. Several features are then computed from the raw fields to capture operational metrics and contextual information. The dwell time at each stop is calculated as the difference between actual departure and actual arrival times, while the delay is computed as the non-negative deviation from the scheduled arrival time, with negative values clipped to zero to reflect only late arrivals. Transfer connectivity is quantified by counting the number of other bus lines that serve the same stop name, and a binary label distinguishes transfer stops (those served by multiple lines) from ordinary stops (those served by a single line). Temporal metadata including day of week, workday and holiday flags, and departure hour are derived from the date and scheduled departure time using the Norwegian public holidays calendar to capture temporal patterns in ridership and operations. 
+
+Quality Filtering: The intended sequence modelling approach requires complete stop-level trajectories for each trip, so the dataset is filtered to retain only trips with complete records across all stops in their route. Entire trips (grouped by their unique trip identifier) are removed if: (i) the APC sensor was inactive on any stop, (ii) extreme passenger count values were flagged, (iii) negative boarding or alighting counts were recorded, or (iv) the observed set of stop sequences did not match the expected range {0 , 1, … , 𝑛 } where 𝑛 is the last stop sequence index. The filtered dataset contains 2,218,467 stop-level records spanning 90,329 unique trips across the 31-day study period. 
+
+Exploratory Analysis: Figure 2 shows the temporal distribution of aggregated ridership (boarding counts) across the dataset. The hourly distribution exhibits the expected bimodal pattern with morning and afternoon peaks, while the daily distribution shows increasing ridership across the week with a drop-off on weekends. Figure 3 further disaggregates the daily ridership across the study period by line, showing the temporal ridership patterns of the busiest lines that together account for 85% of total ridership. Some lines exhibit pronounced weekday peaks, while others maintain more consistent ridership across the week, underscoring the importance of modelling line-specific dynamics in addition to overall temporal trends. 
+
+3.2. Feature Engineering 
+
+The filtered stop-level dataset encodes the core operational and ridership information for each stop visit, along with relevant temporal metadata. To capture the effect of extrinsic factors on passenger demand and operational performance, the dataset is further enriched with engineered features derived from external data sources, as detailed below. 
+
+Natural Terrain: The elevation at each stop is obtained from the Copernicus EU-DEM based on its geographic coordinates, with negative values clipped to zero. The elevation data (in meters) is then used to derive several features that characterise the topographic context of each stop and the elevation profile along each trip. For each consecutive pair of stops 𝑖 and 𝑖 + 1 within a trip, the pipeline computes: (i) the straight-line inter-stop distance 𝑑 𝑖 in meters, (ii) 
+
+the signed elevation change Δ𝑒 𝑖 = 𝑒 𝑖 +1 − 𝑒 𝑖 , (iii) the absolute elevation change |Δ𝑒 𝑖 |, (iv) a categorical elevation type     
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 6 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+> Figure 2: Temporal distribution of passenger counts across the dataset, aggregated by hour of day (left) and day of week (right).
+> Figure 3: Total daily passenger counts for the busiest lines (85% of total ridership) across the study period, showing the temporal ridership patterns of individual lines.
+
+(uphill if Δ𝑒 𝑖 > 3 m, downhill if Δ𝑒 𝑖 < −3 m, flat otherwise), and (v) the slope gradient 𝛼 𝑖 = arctan( |Δ𝑒 𝑖 |∕𝑑 𝑖 ).For the last stop in each trip, elevation change and inter-stop distance are set to zero. 
+
+Urban Characteristics: To capture the influence of the socio-demographics and built environment on transit dynamics, each stop is enriched with features describing its urban context, based on official statistics from Statistics Norway (SSB). Four datasets for the year 2024 were integrated: (i) business statistics recording the number of businesses and employees (Statbank Norway, 2025), (ii) resident population (Statbank Norway, 2024b), (iii) total dwellings (Statbank Norway, 2024c), and (iv) building counts classified according to function (Statbank Norway, 2024a). These statistics are provided in a grid format at 250 m resolution, with each cell containing aggregated values for the corresponding features. These grid-based features are linked to each stop by averaging the values of all grid cells within a 250 m radius of the stop’s coordinates, thus capturing the local urban context around each stop while smoothing out small-scale variations. 
+
+Weather Conditions: Weather conditions can significantly influence individual travel mode choices (public transit 
+
+vs. private vehicles vs. active mobility modes) (Wei, 2022), and can also cause operational disruptions leading to   
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 7 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+
+delays and cancellations (Ngo and Bashar, 2024). To capture these effects, historical daily weather observations for Trondheim covering the study period are sourced from Visual Crossing Corporation (2024). The available weather features were filtered to exclude those with: (i) low relevance to public transit, (ii) high correlation with other features, or (iii) potential for temporal leakage. The retained features include: daily minimum and maximum temperature, feels-like temperature, maximum wind gust speed, and a categorical weather condition label. These weather features are merged with the stop-level dataset on the date field, so that all stops on a given day share the same weather values. 
+
+3.3. Canonical Stop-Level Dataset 
+
+The preprocessing and feature engineering steps produce a comprehensive canonical stop-level dataset shared by all downstream models. The final feature set (40 in total) is organised into six functional groups: core transit features (11), temporal metadata (4), urban characteristics (10), natural terrain (6), weather conditions (5), and target variables (4). Each feature is described in detail in Appendix A, including its original form, the transformations applied to it, and how it is integrated into the SMT-GraphFormer architecture. 
+
+Temporal Split Strategy: The temporal split strategy used in this study is designed to ensure generalisation to unseen temporal contexts, reflecting real-world forecasting scenarios where models are trained on historical data and deployed to predict future demand and performance. The May 2024 dataset is partitioned chronologically by date into training (1–21 May; 21 days; 57,360 trips), validation (22–26 May; 5 days; 14,685 trips), and test (27–31 May; 5 days; 18,284 trips) subsets, yielding an approximate 68:16:16 split by day and a 63:16:20 split by trip count. The unequal trip distribution reflects higher average daily trip volumes in the test period relative to the validation period. The four Norwegian public holidays in May 2024 fall within the training period, while the validation and test splits reflect normal ridership and operating conditions with no holidays present. 
+
+Normalisation and Encoding: The canonical features can be categorised into four types: categorical (10), contin-uous (24), cyclic (2), and target variables (4). The distribution-dependent transformations applied to the continuous features and target variables are fitted exclusively on the training subset to prevent data leakage, while categorical features are encoded using mappings derived from the full dataset to ensure coverage of all categories. The categorical features are mapped to integer codes using schema-defined mappings where applicable or order-of-appearance indices otherwise. The continuous features are z-score standardised, and the cyclic features are encoded as sine–cosine pairs to avoid discontinuities at temporal boundaries. Each target variable undergoes a three-step transformation: negative values are clipped to zero, a log(1 + 𝑥 ) transform compresses the right-skewed distributions, and the result is z-score standardised. These transformations define the common target space used by all models during training and prediction. 
+
+Evaluation Protocol: Evaluation is performed after restoring predictions and transformed ground-truth values to their original units. The inverse target transformation first undoes the z-score standardisation, then reverses the log (1 + 𝑥 ) compression, and finally clips values to a minimum of zero, with predictions also capped at the training-set maximum. This common post-processing is applied to all models before computing three metrics per target variable and data split. These are the mean absolute difference between predictions and ground truth (MAE), the square root of the mean squared difference (RMSE), and the coefficient of determination ( 𝑅 2), which measures explained variance relative to a mean-value baseline. The metrics are computed as follows: MAE = 1
+
+𝑛 
+
+∑
+
+> 𝑖
+
+|𝑦 𝑖 −̂𝑦 𝑖 | ||| RMSE =
+
+√
+
+1
+
+𝑛 
+
+∑
+
+> 𝑖
+
+(𝑦 𝑖 −̂𝑦 𝑖 )2 ||| 𝑅 2 = 1 − 
+
+∑𝑖 (𝑦 𝑖 −̂𝑦 𝑖 )2
+
+∑𝑖 (𝑦 𝑖 −̄𝑦 )2 (1) where 𝑦 𝑖 are ground-truth values, ̂𝑦 𝑖 predictions, and ̄𝑦 the mean of ground-truth values. The same evaluation pipeline is applied to all models to ensure consistency. 
+
+3.4. Post-Processing for SMT-GraphFormer 
+
+The canonical dataset is used directly by the benchmark models, while SMT-GraphFormer applies further operations to adapt the data for sequence modelling and extract relational information for the graph autoencoder. 
+
+Trip-Level Transformation: Three dummy stop identifiers are reserved for the special tokens used by the sequence model: ⟨SOS ⟩ (start of sequence), ⟨EOS ⟩ (end of sequence), and ⟨PAD ⟩ (padding). Their corresponding feature values   
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 8 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+
+are set to zero for all features. The stop-level dataset is then reshaped into trip-level sequences, where each record is partitioned into trip-level features (those that are constant across all stops in a trip) and stop-level features (those that vary across stops). Each stop-level feature is then flattened into an ordered sequence of per-stop values, bracketed by its corresponding start-of-sequence and end-of-sequence values, and padded to the maximum observed stop sequence length across all trips. Trip-level features include line identifier, bus type, temporal metadata, and weather information, while stop-level features include stop identifier, scheduled arrival time, stop attributes, and target variables. 
+
+Stop Attributes: To capture the intrinsic characteristics of each stop and their influence on passenger demand and operational performance, a per-stop feature matrix is constructed from the 10 urban characteristics, 6 natural terrain, and 2 transfer connectivity features. This matrix has dimensions 1,294 × 18 , covering the 1,291 stop identifiers plus the three reserved positions for the special tokens, with all special-token entries set to zero. 
+
+Relational Matrices: To create a compact representation of the transit network and encode the relational structure of its elements, six dense stop-to-stop similarity matrices are constructed from the static stop attributes and their historical demand profiles. Each matrix has dimensions 1,294 × 1 ,294 , covering the 1,291 stop identifiers plus the three reserved positions for the special tokens, with all special-token and diagonal entries set to zero. The matrices are constructed from static stop attributes and historical demand profiles as follows: (i) geographic proximity is captured by converting pairwise Euclidean distances to similarities via a Gaussian radial basis function; (ii) attribute similarity is computed as the cosine similarity of L2-normalised feature vectors across 18 stop attributes; and (iii) mobility pattern similarity is encoded using the Pearson correlation between each pair of stop-level temporal profiles derived from the training subset. Four pattern variants are computed from boarding and alighting counts at both hourly and daily resolutions. These matrices serve as input to the graph autoencoder, which compresses the multi-relational structure into fixed per-stop embeddings that are consumed by the transformer. 
+
+## 4. SMT-GraphFormer Architecture and Evaluation 
+
+This section describes the SMT-GraphFormer architecture, the components that adapt the transformer for the transit prediction task, the training and inference protocols, and the benchmark models used for comparison. The model receives the transformed trip-level sequential data and complementary shared artefacts produced from the canonical stop-level dataset and outputs per-stop predictions for all four target variables: boarding, alighting, delay, and dwell. 
+
+4.1. Model Architecture 
+
+The SMT-GraphFormer is a modified encoder-decoder transformer adapted from the machine translation paradigm (Vaswani et al., 2017) to the transit prediction setting, as shown in Figure 4. Each trip is treated as analogous to a sentence, with bus stops as tokens, and the prediction of passenger counts proceeds sequentially from the first stop to the last. The encoder ingests the full ordered sequence of stops together with stop-, trip-, and network-level context to produce a condensed representation of the evolving stop context along the trip, while the decoder generates boarding and alighting predictions at each stop conditioned on this context and its own history of previous predictions. The operational metrics (delay and dwell time) are predicted from the encoder’s stop context as surrogate tasks, providing an additional training signal that encourages the model to learn representations informative of the trip’s spatiotemporal setting. In addition, the decoder uses a multi-gate mixture-of-experts (MMoE) module to enable task-specific specialisation for boarding and alighting predictions while sharing computation across the two tasks. The following sections describe each component in detail, starting with the input representation and proceeding through the encoder, decoder, and MMoE module. The encoder and decoder input representations are constructed from a rich set of features derived from the canonical stop-level dataset, including learned stop embeddings, learned positional encodings, precomputed graph-based embeddings, stop-level attributes, and trip-level context. A graph autoencoder compresses the multi-relational stop-to-stop similarity matrices into fixed per-stop embeddings, while a context encoder fuses trip-level features into a single context vector. This comprehensive input representation allows the model to leverage multiple sources of information about the stop sequence, the transit network structure, and the trip context to inform its predictions. 
+
+Graph Autoencoder: The graph autoencoder (GAE) (Figure 5) compresses the multi-relational stop-to-stop sim-ilarity structure into fixed per-stop embeddings as an “offline” preprocessing step independent of the main model training. Its input is the stacked similarity tensor of shape (𝑁 matrices , 𝑁 stops , 𝑁 stops ), where 𝑁 matrices = 6 matrices span   
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 9 of 25
+
+Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction Trip Context  Passenger Count History 
+
+[ Boarding | Alighting ] 
+
+Positional Encodings  Positional Encodings 
+
+Stop Embeddings 
+
+Time Encodings 
+
+——— 
+
+Graph Embeddings 
+
+Stop Attributes 
+
+Stop Context 
+
+Output Head 
+
+Surrogate Tasks 
+
+ENCODER 
+
+Self -Attention 
+
+N x 
+
+Output Heads 
+
+Primary Tasks 
+
+DECODER 
+
+Cross Attention 
+
+Self -Attention 
+
+x N 
+
+Time 
+
+[ Delay | Dwell ] 
+
+Count 
+
+[ Boarding | Alighting ] 
+
+MMoE Module 
+
+Figure 4: Overview of the SMT-GraphFormer architecture, showing the encoder pathway for surrogate operational predictions and the decoder pathway for autoregressive passenger count predictions. The decoder is conditioned on the encoder output and uses task-specific heads through a multi-gate mixture-of-experts module. Per -Stop Embeddings 
+
+L = MSE (x̂ , x)
+
+DECODER 
+
+#1
+
+DECODER 
+
+#2
+
+DECODER 
+
+#N   
+
+> Concatenated
+> Feature s
+> Relational
+> Matrices *N
+
+Figure 5: Graph autoencoder architecture, showing the compression of each stop’s rows across multiple relational matrices into a dense embedding. Parallel decoder heads reconstruct the corresponding similarity rows independently from the per-stop embedding. O. Yusuf et al.: Preprint submitted to Elsevier Page 10 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+𝑁 stops = 1 ,294 stops (1,291 physical stops plus three special tokens). For each stop, the encoder concatenates its rows across all six matrices into a vector of length 𝑁 stops × 𝑁 matrices = 7 ,764 and passes it through a three-layer feedforward network that compresses the high-dimensional similarity information into dense embeddings of dimension 𝑑 embed . The decoder comprises six parallel heads, one per matrix, each a three-layer network that reconstructs the corresponding similarity row of dimension 𝑁 stops . The GAE is trained by minimising the mean MSE reconstruction loss across the six matrices. After training, the encoder produces the per-stop embedding matrix of shape (𝑁 stops , 𝑑 embed ), which is detached and passed to the main model as a frozen buffer. 
+
+Context Encoder: The context encoder fuses trip-level scalar features into a fixed-size context vector that is broadcast across all stop positions in the encoder pathway. It receives 15 features per trip covering operational, temporal, and weather information. Six are categorical, while the remaining nine comprise five continuous features and four cyclic encodings. Each categorical feature is mapped through a learned embedding of dimension 𝑑 context and the resulting embeddings are directly concatenated with the z-scored continuous features and cyclic encodings to form a single context vector of length 105. This vector is then passed through LayerNorm and a two-layer MLP that projects it to 
+
+SMT-GraphFormer ’s embedding dimension 𝑑 embed .
+
+Input Representation: The model constructs its input representation by summing six components at each stop position, with the encoder and decoder differing only in their additional pathway-specific signals. Two-layer feed-forward adapter networks are applied across the model to project input features and output predictions between their native dimensions and the model’s embedding dimension 𝑑 embed where necessary. Learnable gates allow the model to modulate the influence of each component during training, with the exception of the context encoder contribution which is controlled by a fixed gate that can be disabled for ablation. A learned embedding layer maps each of the 1,294 stop token indices (1,291 physical stops plus three special tokens) to a dense vector of dimension 𝑑 embed . The z-scored scheduled arrival time at each stop is projected from a scalar to 
+
+𝑑 embed through an adapter. The precomputed GAE embeddings are registered as a frozen buffer and looked up at each position, then projected through an adapter and scaled by a learnable scalar gate. Although the GAE embeddings are already at the model’s embedding dimension, the adapter allows the model to learn its own transformation of the independently trained GAE space. The stop attributes matrix of shape (𝑁 stops , 18) is looked up at each position, projected to 𝑑 embed , and scaled by a learnable gate. These four components are shared between the encoder and decoder pathways, along with two additional components that differ between the pathways. Separate learned positional embedding tables for the encoder and decoder map the stop positions within the trip to the embedding dimension. For the encoder, the context encoder output is broadcast-added to all stop positions, with a fixed gate (configurable for ablation) controlling this contribution. For the decoder, the ground-truth (during training) or previously predicted (during inference) boarding and alighting values at each position are projected to 𝑑 embed through an adapter. The final input representation at each position is the sum of all components, yielding a tensor of shape (𝐵, 𝑇 , 𝑑 embed ) where 𝐵 is the batch size and 𝑇 the contextualised trip length (including special and padding tokens). 
+
+Encoder and Decoder: The sequence backbone follows a standard pre-norm encoder-decoder transformer structure, with multi-head attention, residual connections, position-wise feedforward networks, and final layer normalisation in both pathways. The encoder processes the full stop sequence, using a key-padding mask to suppress padding positions, and produces contextual stop representations of shape (𝐵, 𝑇 , 𝑑 embed ). These representations serve as memory for decoder cross-attention and as inputs to an encoder-side prediction head for the surrogate operational targets (delay and dwell time). The decoder receives a shifted stop sequence and produces autoregressive decoder states of shape 
+
+(𝐵, 𝑇 , 𝑑 embed ), conditioned on the encoder memory through cross-attention. These states do not directly represent passenger-count predictions, but are passed to the MMoE module for task-specific processing before the boarding and alighting heads. The decoder’s causal self-attention ensures that each position can only attend to information from the same or previous stops, while cross-attention allows the decoder states to leverage the full encoder context. 
+
+MMoE: The MMoE module (Figure 6) sits between the decoder output and the passenger-count prediction heads, enabling task-specific specialisation while sharing computation across the two primary targets (boarding and alighting). It comprises 𝑁 expert expert networks and two task-specific gates. Each expert is a two-layer feedforward network of fixed width 𝑑 embed that processes the decoder output independently to learn different transformations of the decoder   
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 11 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction Gate:
+> Boarding
+> Gate:
+> Alighting
+> Decoder Output
+
+= 
+
+> MMoE Input
+> Output Head
+> Boarding
+> Output Head
+> Alighting
+> Prediction:
+> Boarding
+> Prediction:
+> Alighting
+
+SHARED EXPERTS   
+
+> Expert
+> 01
+> Expert
+> 02
+> Expert
+> 03
+> Figure 6: Multi-gate mixture-of-experts module. Each expert processes the decoder output independently, while task-specific gates produce weights over experts to yield one specialised representation per task. Note: Adapted from Hu et al. (2024).
+
+states that may be more or less relevant for each task. Each task gate is a learned linear projection to 𝑁 expert followed by softmax, producing a weight vector over experts. The task output is the corresponding weighted sum applied to the expert outputs, yielding one specialised representation per task of shape (𝐵, 𝑇 , 𝑑 embed ). Two independent decoder-side prediction heads then map these representations to scalar boarding and alighting predictions at each position. 
+
+4.2. Model Training and Inference 
+
+Loss Functions: The total training loss  combines a primary loss for passenger-count predictions from the decoder with a surrogate loss for operational metric predictions from the encoder. Both terms are computed as mean squared error (MSE) over non-padding positions. The surrogate task provides an auxiliary training signal that encourages the encoder to learn representations informative of operational performance, which may indirectly benefit the primary passenger-count predictions. 
+
+primary = MSE (̂𝑏 [𝐦 ], 𝑏 [𝐦 ]) + MSE (̂𝑎 [𝐦 ], 𝑎 [𝐦 ])
+
+surrogate = MSE (̂𝑠 [𝐦 ], 𝑠 [𝐦 ])
+
+ = primary + 𝑤 surrogate ⋅ surrogate 
+
+(2) where ̂ 𝑏 and ̂𝑎 are predicted boarding and alighting counts, 𝑏 and 𝑎 the ground-truth values, 𝐦 the non-padding mask, and 𝑠 = [ delay , dwell ]⊤ the surrogate targets. The weight 𝑤 surrogate controls the relative importance of the surrogate task and can be tuned or set to zero for ablation. 
+
+Scheduled Sampling: Under standard teacher-forced training, the decoder always receives the ground-truth passen-ger count history as input. During inference, the model must feed its own predictions back for subsequent positions, creating a distribution mismatch known as exposure bias that can lead to error accumulation along the trip. To mitigate this, the model is also trained with a scheduled sampling variant in which the decoder progressively replaces ground-truth inputs with its own predictions during training, exposing it to its own errors and teaching it to recover from them. The replacement probability 𝑝 remains at zero throughout the warmup phase and then increases linearly to a maximum 
+
+𝑝 max over the remaining iterations. At each step where 𝑝 > 0, a teacher-forced forward pass first obtains predictions at   
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 12 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+
+all positions without gradient tracking. A Bernoulli mask with probability 𝑝 then determines which positions receive the model’s detached predictions in place of ground truth, and a second forward pass with gradient tracking computes the loss from these mixed inputs. 
+
+Inference Protocols: Two inference protocols are supported. In the teacher-forced protocol, the full ground-truth boarding and alighting sequences are provided as decoder inputs in a single forward pass. In the autoregressive protocol, the decoder generates boarding and alighting predictions one stop at a time, initialised with fill values for the first position ( ⟨SOS ⟩). At each step, the predicted passenger counts are fed back as decoder inputs for subsequent positions. The encoder’s stop context is computed once and reused across all decoding steps. 
+
+4.3. Benchmark Models 
+
+The benchmarks are chosen to represent the strongest non-sequential alternatives. They receive the same input features and predict the same four targets, but treat each stop visit as an independent tabular record rather than as an explicit position within a trip sequence. This choice isolates the contribution of the SMT-GraphFormer ’s sequential formulation and graph-based components from the value of the enriched feature set alone. The benchmarks share the same canonical transformed stop-level dataset and evaluation protocol as the main model. The complete training and hyperparameter configurations for each model are provided in Appendix B. 
+
+4.3.1. XGBoost 
+
+XGBoost (Extreme Gradient Boosting) (Chen and Guestrin, 2016) is a popular gradient-boosted decision tree implementation which remains a strong baseline for tabular modelling tasks. It builds trees sequentially, each learning to correct the residual errors of the preceding ensemble using gradient-based optimisation. XGBoost represents a strong reference point for this data and has been shown to capture non-linear interactions between stop-level attributes despite treating each record independently without an explicit relational inductive bias (Yusuf et al., 2025). For this task, a meta-regressor trains a dedicated set of trees per target within a single coordinated boosting process, with iteration count and early stopping applied jointly across all targets. The native handling for categorical features is enabled. 
+
+4.3.2. RTDL Models 
+
+Three deep learning (DL) architectures from the RTDL (Research on Tabular Deep Learning) benchmark suite (Gorishniy et al., 2021) are selected that together span the main families of tabular DL models. These models serve as a well-calibrated complement to XGBoost for evaluating the SMT-GraphFormer against both simple and sophisticated tabular alternatives. 
+
+MLP: The multi-layer perceptron (MLP) is the simplest deep baseline, consisting of stacked fully connected blocks with ReLU activations and dropout. It receives a flat input vector in which categorical features are one-hot encoded, and learns feature interactions purely through depth and width. 
+
+ResNet: Here, the residual network (ResNet) paradigm is adapted to tabular data by applying an input projection followed by a stack of residual blocks with skip connections. The skip connections provide shorter gradient paths from input to output, enabling effective training of deeper networks than a plain MLP. Gorishniy et al. (2021) found ResNet to be a strong tabular baseline that is often missing from tabular DL comparisons. Like MLP, it operates on a flat input vector with one-hot-encoded categorical features. 
+
+FT-Transformer: The Feature Tokeniser Transformer (FT-Transformer) was introduced by Gorishniy et al. (2021) and has shown competitive performance across several tabular modelling tasks. FT-Transformer treats all input features (categorical and continuous) as tokens, transforms them into embeddings, and applies multi-head self-attention to learn pairwise interactions across the full feature set. Categorical features are embedded through learned lookup tables, while continuous features are projected through feedforward adapters. This approach avoids the high-dimensional sparse one-hot representations required by the MLP and ResNet for high-cardinality features such as the stop identifier. FT-Transformer is the most architecturally sophisticated of the tabular DL models and shares the same transformer heritage as the SMT-GraphFormer , while remaining a purely stop-level model with no sequential structure. Its inclusion helps to directly test whether a transformer architecture alone is sufficient to capture the necessary feature interactions for this task.     
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 13 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+> Figure 7: Training curves for the SMT-GraphFormer baseline, showing training and validation loss across iterations for the combined primary and surrogate objectives. Note: The validation loss is computed at sparse intervals, which results in the stepped appearance of the validation curve.
+
+## 5. Results and Discussion 
+
+This section evaluates the SMT-GraphFormer against the stop-level benchmarks, followed by ablation studies examining individual architectural components and an analysis of the autoregressive inference gap. The discussion focuses on the test-set 𝑅 2 as the primary performance metric, since its scale-free nature allows for direct com-parison across targets with different units and magnitudes (passenger counts versus seconds). Unless otherwise noted, SMT-GraphFormer results refer to teacher-forced evaluation, which is directly comparable to the stop-level benchmarks that do not have an autoregressive component. 
+
+5.1. Experimental Setup 
+
+SMT-GraphFormer is optimised with AdamW using a learning rate of 3 × 10 −4 and weight decay of 10 −2 , with gradients clipped to a maximum norm of 1.0. The learning rate follows a linear warmup from 1% of the base rate over the first 7.5% of training iterations, then cosine annealing to 10 −6 over the remainder. Training proceeds for a maximum of 40 epochs with a batch size of 256, with 10% dropout applied throughout the model. Detailed architecture and training configurations for all models are provided in Appendix B. All experiments were conducted on a Linux HPC cluster node equipped with an NVIDIA V100 GPU (16 GB VRAM), 16-core CPU, and 64 GB of system RAM. The software environment comprised Python 3.12 and Py-Torch 2.9.1+cu128. XGBoost was trained using the xgboost library, and the RTDL models were trained using code adapted from the official rtdl_revisiting_models package. To ensure reproducibility, random seeds were fixed for Python, NumPy, and PyTorch, and PyTorch’s deterministic execution mode was enabled across all runs. The full codebase is publicly available at https://github.com/Outsiders17711/SMTGraphFormer .
+
+5.2. Baseline Performance 
+
+Table 1 presents the detailed per-target performance of SMT-GraphFormer across all three data splits under teacher-forced evaluation. The complementary training curves in Figure 7 show smooth convergence of the combined loss with minimal divergence between training and validation losses across iterations. While the training loss continues to decrease, the validation loss stopped improving after approximately 33 epochs, suggesting that the model has reached its optimal generalisation performance within the current architecture and training configuration. The most notable performance is on the primary targets: boarding achieves a test 𝑅 2 of 0.550 and alighting reaches 0.715, the latter benefiting substantially from the sequential formulation in which ground-truth boarding history at preceding stops provides a strong signal for downstream alighting. The operational targets are harder to predict, likely reflecting the dominance of real-world stochasticity that the input features cannot capture. This appears most clearly in delay, which achieves a test 𝑅 2 of only 0.186, while dwell performs better at 0.346, consistent with its closer coupling to passenger volumes rather than external traffic conditions.                                                                           
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 14 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+> Table 1
+> SMT-GraphFormer baseline performance across training, validation, and test splits under teacher-forced evaluation. Note: Boarding and alighting are unitless passenger counts, while delay and dwell are in seconds.
+> Target Split RMSE MAE 𝑹 𝟐
+> Boarding Training 1.901 0.887 0.651 Validation 1.978 0.940 0.554 Test 1.861 0.892 0.550 Alighting Training 1.538 0.732 0.783 Validation 1.597 0.786 0.716 Test 1.505 0.743 0.715 Delay Training 121.590 66.583 0.400 Validation 130.928 76.026 0.129 Test 116.498 70.958 0.186 Dwell Training 34.213 8.914 0.355 Validation 34.430 9.236 0.337 Test 33.739 9.109 0.346
+> Table 2
+> Test-set 𝑅 2comparison across all models. Note: The best-performing model for each target is highlighted in bold.
+> Model Boarding Alighting Delay Dwell
+> XGBoost 0.487 0.449 0.115 0.311 MLP 0.484 0.440 0.096 0.309 ResNet 0.486 0.439 0.046 0.301 FT-Transformer 0.511 0.476 0.147 0.300 SMT-GraphFormer 0.550 0.715 0.186 0.346
+
+The train–test 𝑅 2 gaps are moderate for boarding (0.101) and alighting (0.068), indicating reasonable generalisation to unseen data without overfitting. There is a larger gap for delay of 0.214, which was even more pronounced on the validation set (0.271), suggesting that the distinct temporal character of the splits described in Section 3 may have a significant impact on delay prediction. On the other hand, dwell shows more consistent performance across splits with a gap of only 0.009, suggesting that its explained variance is stable and generalisable. 
+
+5.3. Benchmark Comparison 
+
+Table 2 compares the test-set 𝑅 2 scores of the SMT-GraphFormer baseline against the stop-level benchmarks, with detailed per-split results provided in Appendix C. The benchmark models are ordered by increasing architectural complexity, but the results show that complexity does not translate into a monotonic improvement in performance, as also noted by Gorishniy et al. (2021) and Yusuf et al. (2025). XGBoost remains competitive, slightly outperforming MLP and ResNet on all targets. ResNet does not improve on MLP, indicating that increased depth alone does not guarantee better performance. FT-Transformer remains the strongest stop-level benchmark overall, suggesting that its per-feature tokenisation and self-attention mechanism provide a better inductive bias for tabular transit data. 
+
+SMT-GraphFormer outperforms all stop-level benchmarks on all four targets, improving on FT-Transformer by 
+
++0.038 on boarding, +0.239 on alighting, +0.039 on delay, and +0.046 on dwell. The dominant gain is on alighting, which is strongly shaped by upstream boarding history that the stop-level FT-Transformer cannot adequately exploit despite also being transformer-based. The more modest gains on boarding, delay, and dwell reflect their weaker dependence on within-trip dynamics: boarding is driven mainly by local stop attributes and temporal context, delay by external traffic conditions, and dwell partly by passenger volumes.                                         
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 15 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+> Table 3
+> Test-set 𝑅 2results for SMT-GraphFormer component ablations. Each row disables one component relative to the baseline version; the stripped version disables all optional components simultaneously. Note: Differences from the baseline are shown in parentheses; improvements are marked with +and degradations with −; dashes indicate omitted metrics.
+> Configuration Boarding Alighting Delay Dwell
+> Baseline (Full Model) 0.550 0.715 0.186 0.346 Stripped (No Optional Components) 0.555 ( +0.006) 0.719 ( +0.005) ––No Graph Embeddings 0.538 ( −0.012) 0.708 ( −0.006) 0.199 ( +0.013) 0.335 ( −0.010) No Stop Attributes 0.534 ( −0.016) 0.705 ( −0.010) 0.144 ( −0.042) 0.348 ( +0.002) No Context Encoding 0.556 ( +0.007) 0.722 ( +0.007) 0.200 ( +0.014) 0.332 ( −0.014) No Surrogate Tasks 0.542 ( −0.008) 0.696 ( −0.019) ––No MMoE 0.551 ( +0.001) 0.712 ( −0.003) 0.146 ( −0.040) 0.346 ( +0.001)
+
+The consistent improvement across all targets suggests that SMT-GraphFormer ’s sequential formulation, inter-target interactions, and shared representations provide a useful inductive bias beyond the alighting-specific benefit. Coupled with the non-monotonic relationship between architectural complexity and performance observed in the benchmarks, these results underscore the need for adapting DL architectures to the specific structure of transit data rather than assuming that more complex off-the-shelf models will automatically yield better performance. 
+
+5.4. Component Ablations 
+
+The architecture supports systematic ablation of five components. The graph embeddings, stop attributes, and context encoding are disabled by zeroing their respective gates, while surrogate tasks are removed by setting 𝑤 surr = 0 
+
+in the combined loss. In the surrogate-task ablation, the delay and dwell heads no longer receive a training signal, so those outputs are not evaluated. The MMoE module is replaced with a pass-through that copies the decoder output identically to the decoder-side prediction heads. To isolate the contribution of each component, six ablation configurations are evaluated with all other hyperparameters kept identical to the baseline. Table 3 presents the test-set 
+
+𝑅 2 for each configuration. The ablations show that stop attributes and graph embeddings are the most consistently useful input components. Removing graph embeddings reduces boarding by 0.012, alighting by 0.006, and dwell by 0.010, while delay improves slightly by 0.013. This suggests that stop topology is more useful for demand-related targets than for delay. Removing stop attributes produces the broadest degradation, especially for delay, which falls by 0.042, indicating that natural terrain and urban characteristics provide local context that is not recoverable from the other input channels. Surrogate supervision also contributes to the primary decoder tasks, since removing it reduces boarding by 0.008 and alighting by 0.019. This suggests that delay and dwell supervision regularises the shared encoder and improves the representations passed to the decoder through cross-attention. The remaining components have weaker or more mixed effects. Removing context encoding improves boarding, alighting, and delay, but reduces dwell by 0.014, suggesting that the context pathway may duplicate information already available through the graph embeddings and scheduled arrival times. Replacing the MMoE with a pass-through leaves the passenger count targets almost unchanged, while delay falls by 0.040. Since delay is predicted from the encoder-side surrogate head rather than through the MMoE itself, this effect is best interpreted as an indirect interaction within the shared multi-task training objective rather than a direct benefit of expert routing. The stripped model marginally exceeds the full baseline on boarding and alighting, suggesting some interaction cost among components that are individually useful. However, the full model is the better-balanced configuration for the broader multi-task objective, providing operationally useful delay and dwell predictions alongside competitive passenger-count predictions. This pattern suggests that the issue is less the presence of graph, stop-attribute, or context signals in isolation than how they are injected into the shared representation. More targeted conditioning, such as layer-specific gates for graph embeddings and stop attributes, or moving temporal and line-level context closer to the output heads, may reduce this entanglement while preserving the broader multi-task benefit.                          
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 16 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction
+> Table 4
+> Test-set 𝑅 2under teacher-forced (TF) and autoregressive (AR) evaluation, including scheduled sampling (SS) as a training variant. Note: Differences in parentheses are relative to the corresponding baseline protocol.
+> Evaluation Boarding Alighting Delay Dwell
+> Baseline (TF) 0.550 0.715 0.186 0.346
+> Baseline (AR) 0.515 ( −0.035) 0.474 ( −0.241) 0.186 0.346 Scheduled Sampling (TF) 0.550 ( −0.000) 0.683 ( −0.032) 0.146 ( −0.040) 0.339 ( −0.007) Scheduled Sampling (AR) 0.513 ( −0.002) 0.473 ( −0.001) 0.146 ( −0.040) 0.339 ( −0.007)
+
+5.5. Autoregressive Evaluation and Scheduled Sampling 
+
+Autoregressive evaluation tests the decoder under deployment-like conditions, where predicted boarding and alighting values are fed back as inputs at subsequent stop positions. This differs from teacher-forced evaluation, where ground-truth passenger counts are provided as decoder inputs and error accumulation is removed. Delay and dwell are produced by the encoder-side surrogate heads and are therefore not affected by this inference loop. Table 4 compares the test-set 𝑅 2 under both evaluation protocols together with a scheduled sampling variant, which changes the training signal by exposing the model to its own predictions during training. Switching from teacher-forced to autoregressive evaluation reveals an asymmetric degradation. Boarding drops by only 0.035, while alighting falls by 0.241 to 0.474, almost identical to the FT-Transformer score of 0.476 in Table 2. The teacher-forced gain from the sequential formulation is therefore largely lost when the model must rely on its own predicted passenger counts. This reflects the different autoregressive dependence of the two passenger-count targets: boarding is driven mainly by local stop characteristics and trip-level context available through cross-attention, whereas alighting depends more directly on upstream boarding history and is more vulnerable to accumulated prediction error. To investigate whether the gap can be narrowed through exposure-bias mitigation, a scheduled sampling variant was trained in which the replacement probability 𝑝 ramps linearly from 0 after learning rate warmup to a maximum of 0.5. This replaces some ground-truth decoder inputs with predictions from a gradient-free first pass. The strategy does not improve autoregressive performance, with boarding and alighting changing by only −0.002 and −0.001 relative to the baseline autoregressive scores. Instead, teacher-forced performance degrades, most notably for alighting ( −0.032) and delay ( −0.040). The smaller teacher-forced to autoregressive gap is therefore caused by a weaker teacher-forced model rather than improved autoregressive robustness. The results suggest that the decoder benefits from a clean passenger-count history under teacher forcing, but is sensitive to errors when that history is replaced by self-generated predictions. Once the autoregressive trajectory becomes noisy, the remaining stop-level and contextual channels are not sufficient to recover the alighting performance observed under teacher forcing. Scheduled sampling introduces this noise during training, but in this configuration it weakens the teacher-forced model without improving autoregressive robustness. Narrowing the gap would therefore require either making the autoregressive pathway more robust to accumulated error or removing the loop by routing encoder-side passenger-count estimates to the decoder. 
+
+## 6. Conclusion 
+
+This paper presented SMT-GraphFormer , a spatiotemporal multi-task graph transformer that frames trip-level public transit prediction as a sequence modelling task. The model uses a modified encoder-decoder transformer enriched with graph-based stop embeddings and trip-level context. An encoder-side prediction head estimates delay and dwell times as surrogate tasks, while a multi-gate mixture-of-experts module produces task-specific decoder representations that feed into the boarding and alighting heads. This architecture is supported by a data pipeline that transforms stop-level transit records into enriched trip-level sequences with terrain, urban, weather, and relational network features. Together, these elements form a horizon-agnostic framework that can produce complete per-stop trajectories for a given line, stop sequence, and trip context, making it suitable for scenario analysis in digital twin environments. Experimental evaluation on data from the public bus transit system in Trondheim, Norway, confirmed that the sequential formulation yields substantial gains over stop-level benchmark models under teacher-forced evaluation.   
+
+> O. Yusuf et al.: Preprint submitted to Elsevier Page 17 of 25
+
+Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+The model achieved test 𝑅 2 scores of 0.55 for boarding, 0.71 for alighting, 0.19 for delay, and 0.35 for dwell. The largest gain was observed for alighting, with a +0.24 𝑅 2 improvement over the best-performing benchmark, alongside smaller but consistent gains on boarding ( +0.04), delay ( +0.04), and dwell ( +0.05). Since alighting is strongly shaped by upstream boarding history, this result supports the central hypothesis that explicit trip-level sequential bias and inter-target dependencies provide a useful inductive bias for transit prediction. The principal limitations concern the autoregressive inference gap and the handling of trip-level context. In offline deployment, error accumulation under autoregressive decoding substantially degrades alighting performance, and scheduled sampling was not sufficient to close this gap in the tested configuration. This limitation is less severe in online settings where observed passenger counts from previous stops can be used as decoder inputs, but it remains important for fully simulated scenarios. The context encoder also showed mixed effects in the ablation study, suggesting that the current injection pathway may duplicate or interfere with information already available through other channels. Future work should therefore focus on improving robustness under autoregressive inference, redesigning the context pathway, and simplifying the architecture for greater interpretability and efficiency without sacrificing predictive performance. 
+
+## Acknowledgement 
+
+This research received funding from the PERSEUS project, part of the European Union’s Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No. 101034240. The authors also acknowledge the financial support of MobilitetsLab Stor-Trondheim (MoST), a collaborative initiative for research and development of future-oriented sustainable urban mobility solutions in Norway. The authors are grateful to AtB AS, the public transport authority in Trondheim, for sharing mobility data and insights that informed our analysis. 
+
+## References 
+
+Abideen, Z.U., Sun, H., Yang, Z., Ahmad, R.Z., Iftekhar, A., Ali, A., 2021. Deep Wide Spatial-Temporal Based Transformer Networks Modeling for the Next Destination According to the Taxi Driver Behavior Prediction. Applied Sciences 11, 17. doi: 10.3390/app11010017 .Alam, O., Kush, A., Emami, A., Pouladzadeh, P., 2021. Predicting irregularities in arrival times for transit buses with recurrent neural networks using GPS coordinates and weather data. Journal of Ambient Intelligence and Humanized Computing 12, 7813–7826. doi: 10.1007/s12652-020-02507-9 .Chen, T., Guestrin, C., 2016. XGBoost: A scalable tree boosting system, in: Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, ACM, New York, NY, USA. pp. 785–794. doi: 10.1145/2939672.2939785 .Corrias, R., Gjoreski, M., Langheinrich, M., 2023. Exploring Transformer and Graph Convolutional Networks for Human Mobility Modeling. Sensors 23, 4803. doi: 10.3390/s23104803 .Dong, X., Zhao, W., Han, H., Zhu, Z., Zhang, H., 2024. MTESformer: Multi-Scale Temporal and Enhance Spatial Transformer for Traffic Flow Prediction. IEEE Access 12, 47231–47245. doi: 10.1109/ACCESS.2024.3381987 .Dong, Z., Chen, Q., Jiang, R., Wang, H., Song, X., Tian, H., 2022. Learning Latent Road Correlations from Trajectories, in: 2022 IEEE International Conference on Big Data (Big Data), pp. 5458–5467. doi: 10.1109/BigData55660.2022.10020759 .Egu, O., Bonnel, P., 2021. Medium-term public transit route ridership forecasting: What, how and why? A case study in Lyon. Transport Policy 105, 124–133. doi: 10.1016/j.tranpol.2021.03.002 .Gorishniy, Y., Rubachev, I., Khrulkov, V., Babenko, A., 2021. Revisiting Deep Learning Models for Tabular Data. doi: 10.48550/arXiv.2106. 11959 , arXiv:2106.11959 .Gulc, A., Budna, K., 2024. Classification of Smart and Sustainable Urban Mobility. Energies 17, 2148. doi: 10.3390/en17092148 .Guo, X., Xie, W., Li, X., 2023. Spatial-Temporal Correlation Neural Network for Long Short-Term Demand Forecasting During COVID-19. IEEE Access 11, 75573–75586. doi: 10.1109/ACCESS.2023.3297143 .Hu, S., Chen, J., Zhang, W., Liu, G., Chang, X., 2024. Graph transformer embedded deep learning for short-term passenger flow prediction in urban rail transit systems: A multi-gate mixture-of-experts model. Information Sciences 679, 121095. doi: 10.1016/j.ins.2024.121095 .Hu, S., Xiong, C., 2023. High-dimensional population inflow time series forecasting via an interpretable hierarchical transformer. Transportation Research Part C: Emerging Technologies 146, 103962. doi: 10.1016/j.trc.2022.103962 .Jeong, S., Oh, C., Jeong, J., 2024. BAT-Transformer: Prediction of Bus Arrival Time with Transformer Encoder for Smart Public Transportation System. Applied Sciences 14, 9488. doi: 10.3390/app14209488 .Jones, P., 2016. The evolution of urban transport policy from car-based to people-based cities: Is this development path universally applicable?, in: Proceedings of the 14th World Conference on Transport Research, Shanghai, China. p. 20. URL: https://discovery.ucl.ac.uk/id/ eprint/1502400/ .Kim, J.H., Li, X., 2021. Building more housing near transit: A spatial analysis of residential densification dynamics. Transport Policy 114, 15–24. doi: 10.1016/j.tranpol.2021.08.018 .Kong, X., Shen, Z., Wang, K., Shen, G., Fu, Y., 2024. Exploring Bus Stop Mobility Pattern: A Multi-Pattern Deep Learning Prediction Framework. IEEE Transactions on Intelligent Transportation Systems 25, 6604–6616. doi: 10.1109/TITS.2023.3345872 .Kong, X., Wang, K., Hou, M., Xia, F., Karmakar, G., Li, J., 2022. Exploring Human Mobility for Multi-Pattern Passenger Prediction: A Graph Learning Framework. IEEE Transactions on Intelligent Transportation Systems 23, 16148–16160. doi: 10.1109/TITS.2022.3148116 .
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 18 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+Li, C., Bai, L., Liu, W., Yao, L., Waller, S.T., 2022. Graph Neural Network for Robust Public Transit Demand Prediction. IEEE Transactions on Intelligent Transportation Systems 23, 4086–4098. doi: 10.1109/TITS.2020.3041234 .Li, G., Wu, J., He, Y., Li, D., 2023. CQDFormer: Cyclic Quasi-Dynamic Transformers for Hourly Origin-Destination Estimation. Applied Sciences 13, 11257. doi: 10.3390/app132011257 .Liu, X., Chen, X., Potoglou, D., Tian, M., Fu, Y., 2023. Travel impedance, the built environment, and customized-bus ridership: A stop-to-stop level analysis. Transportation Research Part D: Transport and Environment 122, 103889. doi: 10.1016/j.trd.2023.103889 .Millard-Ball, A., Schipper, L., 2011. Are We Reaching Peak Travel? Trends in Passenger Transport in Eight Industrialized Countries. Transport Reviews 31, 357–378. doi: 10.1080/01441647.2010.518291 .Ngo, N.S., Bashar, S., 2024. The impacts of extreme weather events on U.S. Public transit ridership. Transportation Research Part D: Transport and Environment 137, 104504. doi: 10.1016/j.trd.2024.104504 .Pei, Y., Ran, S., Wang, W., Dong, C., 2023. Bus-Passenger-Flow Prediction Model Based on WPD, Attention Mechanism, and Bi-LSTM. Sustainability 15, 14889. doi: 10.3390/su152014889 .Ritchie, H., Roser, M., 2020. Cars, planes, trains: Where do CO 2 emissions from transport come from? Our World in Data URL: https: //ourworldindata.org/co2-emissions-from-transport .Rühmann, S., Leible, S., Lewandowski, T., 2024. Interpretable Bike-Sharing Activity Prediction with a Temporal Fusion Transformer to Unveil Influential Factors: A Case Study in Hamburg, Germany. Sustainability 16, 3230. doi: 10.3390/su16083230 .Shrivastava, A., Rawat, N., Agarwal, A., 2024. Deep-learning-based model for prediction of crowding in a public transit system. Public Transport 16, 449–484. doi: 10.1007/s12469-024-00360-z .Statbank Norway, 2024a. 03158: Existing building stocks. All buildings, by type of building (M) 1997 - 2024. URL: https://www.ssb.no/en/ statbank/table/03158 .Statbank Norway, 2024b. 04861: Area and population of urban settlements (M) 2000 - 2024. URL: https://www.ssb.no/en/statbank/ table/04861/ .Statbank Norway, 2024c. 06265: Dwellings, by type of building (M) 2006 - 2024. URL: https://www.ssb.no/en/statbank/table/06265/ .Statbank Norway, 2025. 07091: Establishments, by activity codes (SIC2007) and number of employees (M) 2009 - 2025. URL: https: //www.ssb.no/en/statbank/table/07091 .Sun, G., Qi, H., Shen, Y., Yin, B., 2022. TCSA-Net: A Temporal-Context-Based Self-Attention Network for Next Location Prediction. IEEE Transactions on Intelligent Transportation Systems 23, 20735–20745. doi: 10.1109/TITS.2022.3181339 .Tian, X., Lu, C., Song, Z., An, C., Wan, S., Peng, H., Feng, Q., Chen, Z., 2024. Quantifying weather-induced unreliable public transportation service in cold regions under future climate model scenarios. Sustainable Cities and Society 113, 105660. doi: 10.1016/j.scs.2024.105660 .Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, L., Polosukhin, I., 2017. Attention Is All You Need. doi: 10.48550/arXiv.1706.03762 , arXiv:1706.03762 .Verma, T., Sirenko, M., Kornecki, I., Cunningham, S., Araújo, N.A.M., 2021. Extracting spatiotemporal commuting patterns from public transit data. Journal of Urban Mobility 1, 100004. doi: 10.1016/j.urbmob.2021.100004 .Visual Crossing Corporation, 2024. Visual Crossing Weather (2019-2024). URL: https://www.visualcrossing.com/ .Wang, W., Osaragi, T., 2024. Learning Daily Human Mobility with a Transformer-Based Model. ISPRS International Journal of Geo-Information 13, 35. doi: 10.3390/ijgi13020035 .Wei, M., 2022. Investigating the influence of weather on public transit passenger’s travel behaviour: Empirical findings from Brisbane, Australia. Transportation Research Part A: Policy and Practice 156, 36–51. doi: 10.1016/j.tra.2021.12.001 .Xu, Y., Zhao, X., Zhang, X., Paliwal, M., 2023. Real-Time Forecasting of Dockless Scooter-Sharing Demand: A Spatio-Temporal Multi-Graph Transformer Approach. IEEE Transactions on Intelligent Transportation Systems 24, 8507–8518. doi: 10.1109/TITS.2023.3239309 .Yang, Y., Samaranayake, S., Dogan, T., 2023. Assessing impacts of the built environment on mobility: A joint choice model of travel mode and duration. Environment and Planning B: Urban Analytics and City Science 50, 2359–2375. doi: 10.1177/23998083231154263 .Yusuf, O., Rasheed, A., Lindseth, F., 2025. Data-driven predictive modelling of stop-level public transit patterns. Transportation doi: 10.1007/ s11116-025-10689-4 .Zeb, M.S., Khan, M.A., Khattak, M.M.H., Ud-Din, S., Habib, M.F., Khan, M.Z., 2024. Forecasting public transit ridership amidst COVID-19: A machine learning approach. Public Transport doi: 10.1007/s12469-024-00368-5 .Zeng, J., Tang, J., 2023. Modeling Dynamic Traffic Flow as Visibility Graphs: A Network-Scale Prediction Framework for Lane-Level Traffic Flow Based on LPR Data. IEEE Transactions on Intelligent Transportation Systems 24, 4173–4188. doi: 10.1109/TITS.2022.3231959 .Zhang, K., Ren, H., Kang, J., Guo, C., Chen, W., Tao, M., Dai, H.N., Wan, S., Bao, H., 2024. TST-Trans: A Transformer Network for Urban Traffic Flow Prediction. IEEE Internet of Things Journal , 1–1doi: 10.1109/JIOT.2024.3501294 .Zhang, S., Zhang, J., Yang, Y., Kong, Y., Li, Z., Shen, Y., Tang, J., 2025. The non-linear effects of built environment on bus ridership of vulnerable people. Transportation Research Part D: Transport and Environment 139, 104540. doi: 10.1016/j.trd.2024.104540 .Zhang, T., Duan, X., Li, Y., 2021. Unveiling transit mobility structure towards sustainable cities: An integrated graph embedding approach. Sustainable Cities and Society 72, 103027. doi: 10.1016/j.scs.2021.103027 .Zhao, Z., Shen, G., Wang, L., Kong, X., 2024. Graph Spatial-Temporal Transformer Network for Traffic Prediction. Big Data Research 36, 100427. doi: 10.1016/j.bdr.2024.100427 .
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 19 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+## A. Detailed Feature Descriptions 
+
+Table A1 
+
+Canonical stop-level feature descriptions, transformations, and model usage, categorised by core transit features, temporal metadata, urban characteristics, natural terrain, weather conditions, and target variables. 
+
+Feature Description, Transformation, and Usage Core Transit Features (11) 
+
+StopIdentifier – Categorical. The unique identifier for the stop in NeTEx format, serving as the primary key for all stop-level lookups across the dataset. – Mapped to an integer code and used as an index into a learnable stop embedding table. The resulting stop embedding is shared between the encoder and decoder. 
+
+StopSequence – Categorical. The ordinal position of the stop within the trip, 0-indexed from the first stop. – Used directly as a sequence index into a learnable positional encoding table. Separate positional encoding tables are maintained for the encoder and the decoder. 
+
+StopScheduledArrival – Continuous. The scheduled arrival time of the bus at the stop, expressed as seconds since midnight. – Z-score normalised on the train split, then passed through a small MLP to produce a time encoding vector. The time encoding is shared between the encoder and decoder. 
+
+Latitude , Longitude – Continuous. The WGS-84 latitude and longitude coordinates of the stop location in decimal degrees. – Combined and projected to a metric CRS, then used to compute pairwise geographic distance matrices between stops. These matrices serve as relational node features for the graph autoencoder, which produces the precomputed stop graph embeddings. 
+
+StopType – Categorical. The binary transfer category of the stop, distinguishing between "Transfer stops" (where passengers can transfer to other lines) and "Ordinary stops" (where no transfers are available). – (1) Mapped to an integer code ( 0 = Ordinary, 1 = Transfer) and passed as a raw scalar into the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+TransferStop – Continuous. A count indicating the degree of transfer importance of the stop, reflecting how many alternate lines are accessible from that stop. A value of zero denotes a non-transfer stop. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+Line – Categorical. The line or route number of the bus, identifying the service pattern operated during the trip. – Mapped to an integer code and embedded as part of the trip context. The trip context is broadcast globally across all encoder positions. 
+
+FLAG_TripDirection – Categorical. A binary flag indicating the direction of travel: 1 denotes travel away from the assigned home stop, and 0 denotes travel towards it. – Mapped to an integer code and embedded as part of the trip context. 
+
+nStops – Continuous. The total number of stops on the trip. This also serves as a proxy for route length. – Z-score normalised and included in the trip context as a continuous scalar. 
+
+BusType – Categorical. The vehicle type used for the trip, reflecting capacity and operational differences across the fleet. – Mapped to an integer code and embedded as part of the trip context. 
+
+Temporal Metadata (4) 
+
+Hour – Cyclic. The hour of the day at which the trip departs, ranging from 0 to 23. – Encoded as sine and cosine components to preserve the cyclic nature of the 24-hour clock. The resulting two-dimensional encoding is included in the trip context. 
+
+DayType – Cyclic. The day of the week, capturing intra-week variation in travel demand patterns. – Encoded as sine and cosine components to preserve the cyclic weekly pattern. The resulting two-dimensional encoding is included in the trip context. 
+
+FLAG_Workday – Categorical. A binary flag indicating whether the day is a workday, distinguishing regular working days from weekends and public holidays. – Mapped to an integer code and embedded as part of the trip context. 
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 20 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+Table A1 
+
+Cont. 
+
+Feature Description, Transformation, and Usage 
+
+FLAG_Holiday – Categorical. A binary flag indicating whether the day falls on a public holiday or an observed rest day. – Mapped to an integer code and embedded as part of the trip context. 
+
+Urban Characteristics (10) 
+
+luPopulation – Continuous. The resident population count in the grid cells within a 250 m radius of the stop, derived from SSB population statistics at 250 m resolution. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+luDwelling – Continuous. The total number of residential dwellings in the grid cells within a 250 m radius of the stop, derived from SSB housing statistics at 250 m resolution. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+luBusiness – Continuous. The total number of registered businesses in the grid cells within a 250 m radius of the stop, derived from Statistics Norway (SSB) business statistics at 250 m resolution. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+luEmployee – Continuous. The total number of employees across all businesses in the grid cells within a 250 m radius of the stop, derived from SSB business statistics at 250 m resolution. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+luBuiAll – Continuous. The total built floor area across all building classifications in the grid cells within a 250 m radius of the stop, derived from SSB building area statistics at 250 m resolution. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+luBuiDwell – Continuous. The built floor area attributed to residential dwellings in the grid cells within a 250 m radius of the stop. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+luBuiOffice – Continuous. The built floor area attributed to office and business premises in the grid cells within a 250 m radius of the stop. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+luBuiHotel – Continuous. The built floor area attributed to hotel and restaurant premises in the grid cells within a 250 m radius of the stop. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+luBuiEduEnt – Continuous. The built floor area attributed to educational, entertainment and religious buildings in the grid cells within a 250 m radius of the stop. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+luBuiMedical – Continuous. The built floor area attributed to hospital and institutional care buildings in the grid cells within a 250 m radius of the stop. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+Natural Terrain (6) 
+
+StopElevation – Continuous. The elevation of the stop above sea level in metres, derived from a digital elevation model (DEM). – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 21 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+Table A1 
+
+Cont. 
+
+Feature Description, Transformation, and Usage 
+
+StopDistance – Continuous. The distance in metres between the current stop and the following stop along the route. – (1) Z-score normalised and included in the stop attributes vector. (2) Used as a cosine similarity node feature for the graph autoencoder. 
+
+diffElevation ,
+
+absElevation 
+
+– Continuous. The signed and absolute elevation change in metres between the current stop and the following stop, capturing the direction and magnitude of the road gradient respectively. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+typeElevation – Categorical. The terrain type of the route segment from the current stop to the following stop, encoded as an ordinal: −1 = Downhill, 0 = Flat, 1 = Uphill. – (1) Averaged across the stop’s observed route segments and included as a numeric scalar in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+slopeElevation – Continuous. The gradient of the route segment from the current stop to the following stop, expressed as a percentage and computed as the ratio of the elevation change to the horizontal distance between consecutive stops. – (1) Z-score normalised and included in the stop attributes vector. (2) Used to build the attribute-similarity matrix for the graph autoencoder. 
+
+Weather Conditions (5) 
+
+dwTempMin ,
+
+dwTempMax 
+
+– Continuous. The minimum and maximum recorded temperatures in degrees Celsius for the day. – Z-score normalised and included in the trip context as continuous scalars. 
+
+dwTempFeels – Continuous. The apparent temperature in degrees Celsius for the day, accounting for wind chill and humidity effects on perceived warmth. – Z-score normalised and included in the trip context as a continuous scalar. 
+
+dwConditions – Categorical. A short textual summary of the prevailing weather conditions for the day. – Mapped to an integer code and embedded as part of the trip context. 
+
+dwWindGust – Continuous. The maximum instantaneous wind gust speed in km/h for the day. – Z-score normalised and included in the trip context as a continuous scalar. 
+
+Target Variables (4) 
+
+PC_Boarding ,
+
+PC_Alighting 
+
+– Continuous. The number of passengers boarding and alighting the bus at the stop, recorded by the automated passenger counting system. These are the primary prediction targets for the decoder. – Transformed via log1p followed by z-score normalisation to reduce skewness. (1) Historical stop-level demand series form the inter-stop correlation matrix used in graph embeddings. (2) Per-trip sequences at time step 𝑡 − 1 serve as decoder inputs during teacher-forced training and autoregressive inference; the sequence at time step 𝑡 is the primary decoder output. 
+
+ST_Delay – Continuous. The arrival delay of the bus at the stop in seconds, defined as the difference between the actual and scheduled arrival times. This is a surrogate prediction target for the encoder. – Clipped at zero, then transformed via log1p followed by z-score normalisation. Predicted by the encoder as a surrogate task to encourage learning of operationally relevant stop representations. 
+
+ST_Dwell – Continuous. The dwell time of the bus at the stop in seconds. This is a surrogate prediction target for the encoder. – Transformed via log1p followed by z-score normalisation. Predicted by the encoder as a surrogate task to encourage learning of operationally relevant stop representations. 
+
+## B. Model Configurations 
+
+This section reports the architecture and training settings used for SMT-GraphFormer and the stop-level benchmark models. Table A2 gives the SMT-GraphFormer configuration, Table A3 lists the XGBoost hyperparameters, and Table A4 summarises the RTDL model variants. The RTDL models use the same training setup: AdamW optimisation with learning rate 3 × 10 −4 , weight decay 10 −5 , batch size 256, a maximum of 100 epochs, and early stopping patience of 20 epochs. 
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 22 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+Table A2 
+
+Model architecture and training configuration for the SMT-GraphFormer model. Note: All optional components (graph embeddings, stop features, context encoding, surrogate tasks, and MMoE) are enabled by default. 
+
+Parameter Value 
+
+Embedding Dimension ( 𝑑 embed ) 256 Number of Attention Heads ( 𝑁 head ) 8Number of Transformer Layers ( 𝑁 layer ) 4Number of MMoE Experts ( 𝑁 expert ) 3Dropout (Hidden) 0.10 Optimiser AdamW Learning Rate 3 × 10 −4 
+
+Weight Decay 10 −2 
+
+Maximum Gradient Norm 1.0 LR Warmup Fraction 0.075 LR Schedule (Post-Warmup) Cosine Annealing Batch Size 256 Maximum Epochs 40 Early Stopping Patience 20 Surrogate Loss Weight ( 𝑤 surrogate ) 1.0 Graph Autoencoder: Training Epochs 4,096 Graph Autoencoder: Optimiser Adam Context Encoder: Embedding Dimension ( 𝑑 context ) 16 Scheduled Sampling: Maximum Probability ( 𝑝 max ) 0.5 
+
+Table A3 
+
+Training configuration for the XGBoost benchmark model. Note: The meta-regressor trains a dedicated set of trees per target within a single coordinated boosting process. 
+
+Parameter Value 
+
+Objective reg:squarederror 
+
+Multi-Output Strategy one_output_per_tree 
+
+Tree Method hist 
+
+Categorical Features true 
+
+Number of Estimators 2048 Early Stopping Rounds 205 Learning Rate ( 𝜂 ) 0.04 Maximum Tree Depth 16 Minimum Child Weight 8.5 Minimum Split Loss ( 𝛾 ) 0.12 Row Subsampling 0.90 Column Subsampling per Tree 0.50 L1 Regularisation ( 𝛼 ) 0.001 L2 Regularisation ( 𝜆 ) 0.0 
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 23 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+Table A4 
+
+Model architecture configurations for the RTDL benchmark models: MLP, ResNet, and FT-Transformer. 
+
+Parameter MLP ResNet FT-Transformer 
+
+Number of Blocks / Layers 2 2 3Block Width ( 𝑑 block ) 384 192 192 Hidden Multiplier – 2.0 1.333 1
+
+Activation ReLU ReLU ReGLU Number of Attention Heads – – 8Dropout (Hidden) 0.10 0.15 0.10 2
+
+Dropout (Residual) – 0.0 0.0 Dropout (Attention) – – 0.20 Output Dimension 4 4 4Categorical Handling One-Hot Encoding One-Hot Encoding Learned Embeddings  
+
+> 1
+
+Effective hidden dimension is 256 as the first linear layer outputs 512 which ReGLU halves.  
+
+> 2
+
+This dropout is applied to feedforward layers only, separate from the attention dropout. 
+
+## C. Detailed Predictive Performance 
+
+This section reports RMSE, MAE, and 𝑅 2 across the training, validation, and test splits. Table A5 gives the XGBoost benchmark results, Table A6 gives the RTDL benchmark results for MLP, ResNet, and FT-Transformer, and Table A7 gives the SMT-GraphFormer results under teacher-forced and autoregressive inference. Delay and dwell metrics are identical across the two SMT-GraphFormer inference protocols because these outputs are produced by the encoder. 
+
+Table A5 
+
+Predictive performance of the XGBoost benchmark model across data splits. 
+
+Target Data Split RMSE MAE 𝑹 𝟐 
+
+Boarding Training 2.081 0.927 0.581 Validation 2.180 1.048 0.459 Test 1.987 0.954 0.487 Alighting Training 2.211 0.932 0.552 Validation 2.288 1.074 0.417 Test 2.092 0.972 0.449 Delay Training 128.25 66.77 0.333 Validation 131.21 75.42 0.125 Test 121.44 73.57 0.115 Dwell Training 32.70 8.40 0.411 Validation 35.37 9.36 0.300 Test 34.62 9.12 0.311 
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 24 of 25 Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction 
+
+Table A6 
+
+Predictive performance of the RTDL benchmark models across data splits. 
+
+Target Data Split MLP ResNet FT-Transformer RMSE MAE 𝑹 𝟐 RMSE MAE 𝑹 𝟐 RMSE MAE 𝑹 𝟐 
+
+Boarding Training 2.225 0.979 0.521 2.200 0.983 0.532 2.198 0.983 0.533 Validation 2.115 1.008 0.490 2.093 1.000 0.501 2.072 0.993 0.511 Test 1.992 0.952 0.484 1.987 0.955 0.486 1.939 0.935 0.511 Alighting Training 2.398 0.998 0.474 2.349 0.996 0.495 2.359 0.992 0.491 Validation 2.214 1.024 0.454 2.192 1.014 0.464 2.157 1.000 0.482 Test 2.110 0.964 0.440 2.111 0.964 0.439 2.040 0.940 0.476 Delay Training 134.23 71.35 0.269 139.34 73.45 0.213 129.15 70.72 0.324 Validation 136.70 79.14 0.050 134.62 77.43 0.079 128.62 74.71 0.159 Test 122.77 74.69 0.096 126.10 76.71 0.046 119.26 72.38 0.147 Dwell Training 35.19 8.98 0.318 35.38 9.09 0.311 35.67 9.08 0.299 Validation 35.33 9.40 0.301 35.45 9.39 0.297 35.50 9.29 0.295 Test 34.67 9.24 0.309 34.87 9.29 0.301 34.90 9.15 0.300 
+
+Table A7 
+
+Split-wise predictive performance of the SMT-GraphFormer model under teacher-forced (TF) and autoregressive (AR) inference. Note: Delay and dwell are produced by the encoder and are identical under both inference protocols. 
+
+Protocol Target Data Split RMSE MAE 𝑹 𝟐 
+
+Teacher-forced (TF) Boarding Training 1.901 0.887 0.651 Validation 1.978 0.940 0.554 Test 1.861 0.892 0.550 Alighting Training 1.538 0.732 0.783 Validation 1.597 0.786 0.716 Test 1.505 0.743 0.715 Autoregressive (AR) Boarding Training 2.082 0.945 0.581 Validation 2.063 0.979 0.515 Test 1.932 0.926 0.515 Alighting Training 2.269 0.970 0.529 Validation 2.170 0.997 0.475 Test 2.044 0.941 0.474 TF or AR Delay Training 121.59 66.58 0.400 Validation 130.93 76.03 0.129 Test 116.50 70.96 0.186 Dwell Training 34.21 8.91 0.355 Validation 34.43 9.24 0.337 Test 33.74 9.11 0.346 
+
+O. Yusuf et al.: Preprint submitted to Elsevier Page 25 of 25

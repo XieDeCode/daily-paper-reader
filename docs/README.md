@@ -6,91 +6,89 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-01
-- 运行时间：2026-06-01 23:11:30 UTC
+- 最新运行日期：2026-06-02
+- 运行时间：2026-06-02 21:59:21 UTC
 - 运行状态：成功
 - 本次总论文数：23
 - 精读区：10
 - 速读区：13
 
 ### 今日简报（AI）
-1) 今日精读获9分双星：X-Foresight联合视觉-动作因果预测网络与大都市尺度可信交通流推断。
-2) 最值得深读：基于预测世界建模的视觉-动作因果框架，以及多源数据驱动的韧性交通流推断。
-3) 建议优先精读这两篇高分论文，再拓展至强化学习优化和视频几何估计等方向。
-- 详情：[/202606/01/README](/202606/01/README)
+今日精读23篇论文，重点推荐高分研究《Clustering Guided Domain-Specific Pretrained Foundation Model for Arctic Remote Sensing》与《Theoretical Foundations for Policy-Aware Simulator Learning》。建议优先阅读这两篇精读文章，深入掌握高分辨率遥感与政策模拟的前沿方法。
+- 详情：[/202606/02/README](/202606/02/README)
 
 ### 精读区论文标签
-1. [X-Foresight: A Joint Vision-Action Causal Forecasting Network via Predictive World Modeling](/202606/01/2605.24892v1-x-foresight-a-joint-vision-action-causal-forecasting-network-via-predictive-world-modeling)  
+1. [Clustering Guided Domain-Specific Pretrained Foundation Model Very High-Resolution Arctic Remote Sensing](/202606/02/2605.30467v1-clustering-guided-domain-specific-pretrained-foundation-model-very-high-resolution-arctic-remote-sensing)  
+   标签：评分：10.0/10、query:rs-fm
+   evidence：提出了面向北极的遥感基础模型，使用ViT和MAE预训练
+2. [Theoretical Foundations and Effective Algorithms for Policy-Aware Simulator Learning](/202606/02/2605.29032v1-theoretical-foundations-and-effective-algorithms-for-policy-aware-simulator-learning)  
    标签：评分：9.0/10、query:world-models
-   evidence：用于视觉-语言-动作规划的预测世界建模
-2. [Metropolis-Scale Resilient and Trustworthy Traffic Flow Inference Using Multi-Source Data](/202606/01/2605.25004v1-metropolis-scale-resilient-and-trustworthy-traffic-flow-inference-using-multi-source-data)  
+   evidence：模型强化学习中策略感知的模拟器学习
+3. [World Models: A Comprehensive Survey of Architectures, Methodologies, Reasoning Paradigms, and Applications](/202606/02/2606.00133v1-world-models-a-comprehensive-survey-of-architectures-methodologies-reasoning-paradigms-and-applications)  
+   标签：评分：9.0/10、query:world-models
+   evidence：世界模型架构与应用综述
+4. [Spatiotemporal Multi-Task Graph Transformer for Trip-Level Transit Prediction](/202606/02/2606.00572v1-spatiotemporal-multi-task-graph-transformer-for-trip-level-transit-prediction)  
+   标签：评分：9.0/10、query:world-models
+   evidence：提出了用于交通预测的时空多任务图变换器
+5. [CR-JEPA: Cross-Modal Joint-Embedding Predictive Learning for Remote Sensing Image Retrieval](/202606/02/2606.00706v1-cr-jepa-cross-modal-joint-embedding-predictive-learning-for-remote-sensing-image-retrieval)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：跨模态遥感检索的基础模型
+6. [Behavior-Invariant Task Representation Learning with Transformer-based World Models for Offline Meta-Reinforcement Learning](/202606/02/2606.00780v1-behavior-invariant-task-representation-learning-with-transformer-based-world-models-for-offline-meta-reinforcement-learning)  
+   标签：评分：9.0/10、query:world-models
+   evidence：基于Transformer的世界模型用于离线元强化学习
+7. [AdaKernel: Learning Adaptive Kernel Parameters for Spatiotemporal Graph Neural Networks](/202606/02/2606.01283v1-adakernel-learning-adaptive-kernel-parameters-for-spatiotemporal-graph-neural-networks)  
    标签：评分：9.0/10、query:stm
-   evidence：结合空间和时间数据的城市级交通流推断
-3. [SpatialBench: Is Your Spatial Foundation Model an All-Round Player?](/202606/01/2605.27367v2-spatialbench-is-your-spatial-foundation-model-an-all-round-player)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：全面评估空间基础模型的基准
-4. [ForestHG-Trace: Traceable Long-Horizon Ecological Reasoning over Large-Scale Forest Scenes](/202606/01/2605.27590v1-foresthg-trace-traceable-long-horizon-ecological-reasoning-over-large-scale-forest-scenes)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：用于生态推理的遥感基础模型，使用超图和LLM
-5. [CLEAR-NeRF: Collinearity and Local-region Enhanced Accurate 3D Reconstruction in Unbounded Scenes](/202606/01/2605.28125v1-clear-nerf-collinearity-and-local-region-enhanced-accurate-3d-reconstruction-in-unbounded-scenes)  
+   evidence：为时空图神经网络提出自适应核参数
+8. [IMWM: Intuition Models Complement World Models for Latent Planning](/202606/02/2606.01626v1-imwm-intuition-models-complement-world-models-for-latent-planning)  
    标签：评分：9.0/10、query:world-models
-   evidence：神经辐射场用于3D场景表示
-6. [Optimizing Latent Representations for Robust Building Damage Assessment Onboard Earth Observation Satellites](/202606/01/2605.29575v1-optimizing-latent-representations-for-robust-building-damage-assessment-onboard-earth-observation-satellites)  
+   evidence：提出直觉模型辅助世界模型进行潜在规划
+9. [LALE: Lightweight-Transformer Architecture for Land-Cover Estimation](/202606/02/2606.02092v1-lale-lightweight-transformer-architecture-for-land-cover-estimation)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：基于星上预处理潜表示的建筑物损伤评估遥感应用
-7. [CogniVerse: Revolutionizing Multi-Modal Retrieval-Augmented Generation with Cognitive Reflection and Geometric Reasoning](/202606/01/2605.29602v1-cogniverse-revolutionizing-multi-modal-retrieval-augmented-generation-with-cognitive-reflection-and-geometric-reasoning)  
-   标签：评分：9.0/10、query:world-models
-   evidence：具有认知推理的多模态RAG框架，用于多模态基础模型
-8. [HQ-JEPA: Hybrid Quantum Joint-Embedding Predictive Architecture for Cross-Modal Remote Sensing Representation Learning](/202606/01/2605.31068v1-hq-jepa-hybrid-quantum-joint-embedding-predictive-architecture-for-cross-modal-remote-sensing-representation-learning)  
+   evidence：用于遥感土地覆盖估计的轻量级Transformer
+10. [Spatial Representation Learning Beyond Pixels: Unifying Raster Data and Vector Semantics for Human-Centric Geospatial Foundation Models](/202606/02/2606.02374v1-spatial-representation-learning-beyond-pixels-unifying-raster-data-and-vector-semantics-for-human-centric-geospatial-foundation-models)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：使用混合量子经典JEPA进行跨模态遥感表示学习
-9. [PolSAR Image Classification using a Hybrid Complex-Valued Network (HybridCVNet)](/202606/01/2605.31137v1-polsar-image-classification-using-a-hybrid-complex-valued-network-hybridcvnet)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：混合CV-CNN和CV视觉变压器用于PolSAR分类
-10. [Inside insight: decoding how insight emerges from competing world models](/202606/01/biorxiv-10-64898-2026-05-21-726889-v1-inside-insight-decoding-how-insight-emerges-from-competing-world-models)  
-   标签：评分：9.0/10、query:world-models
-   evidence：从竞争的世界模型中解码洞察动力学
+   evidence：统一栅格和矢量数据的地理空间基础模型
 
 ### 速读区论文标签
-1. [Reinforcement Learning for Laser Additive Manufacturing Scan-Order Optimisation: A Bilevel Proxy--FEA Diagnostic Framework for Reward and World-Model Diagnosis](/202606/01/2605.25063v1-reinforcement-learning-for-laser-additive-manufacturing-scan-order-optimisation-a-bilevel-proxy--fea-diagnostic-framework-for-reward-and-world-model-diagnosis)  
+1. [PolyFusionAgent: A Multimodal Foundation Model and Autonomous AI Assistant for Polymer Property Prediction and Inverse Design](/202606/02/2605.26543v1-polyfusionagent-a-multimodal-foundation-model-and-autonomous-ai-assistant-for-polymer-property-prediction-and-inverse-design)  
    标签：评分：8.0/10、query:world-models
-   evidence：用于规划控制的强化学习中的世界模型诊断
-2. [From General Vision to Reliable Traversability Estimation: Adapting Vision Foundation Models for Unstructured Outdoor Environments](/202606/01/2605.29565v1-from-general-vision-to-reliable-traversability-estimation-adapting-vision-foundation-models-for-unstructured-outdoor-environments)  
+   evidence：提出PolyFusion多模态基础模型，对齐聚合物的序列、拓扑、三维几何和指纹
+2. [Learning Energy-Based Models from Stochastic Interpolants using Spatiotemporal Differences](/202606/02/2605.26850v1-learning-energy-based-models-from-stochastic-interpolants-using-spatiotemporal-differences)  
+   标签：评分：8.0/10、query:stm
+   evidence：提出利用联合时空差异的stNCE框架学习能量模型
+3. [Do Physics Foundation Models Learn Generalizable Physics? A Bias-Aware Benchmark Across Physical Regimes and Distribution Shifts](/202606/02/2605.29283v1-do-physics-foundation-models-learn-generalizable-physics-a-bias-aware-benchmark-across-physical-regimes-and-distribution-shifts)  
    标签：评分：8.0/10、query:world-models
-   evidence：适应视觉基础模型用于户外环境可穿越性估计
-3. [Towards Consistent Video Geometry Estimation](/202606/01/2605.30060v2-towards-consistent-video-geometry-estimation)  
-   标签：评分：8.0/10、query:world-models
-   evidence：用于视频几何的基础模型，包含Transformer和时空一致性
-4. [Grounded 3D-Aware Spatial Vision-Language Modeling](/202606/01/2605.30307v1-grounded-3d-aware-spatial-vision-language-modeling)  
-   标签：评分：8.0/10、query:world-models
-   evidence：空间视觉语言模型，具备显式2D、隐式2D和单目3D接地能力
-5. [Learning Global Motion with Compact Gaussians for Feed-Forward 4D Reconstruction](/202606/01/2605.31595v1-learning-global-motion-with-compact-gaussians-for-feed-forward-4d-reconstruction)  
-   标签：评分：8.0/10、query:world-models
-   evidence：用于时空建模的时间戳条件高斯令牌的4D重建
-6. [3D Gaussian Map with Open-Set Semantic Grouping for Vision-Language Navigation](/202606/01/2605.26500v1-3d-gaussian-map-with-open-set-semantic-grouping-for-vision-language-navigation)  
+   evidence：针对物理基础模型时空预测泛化能力的基准测试
+4. [Improving Visual Grounding in Remote Sensing via Cluster-Guided Refinement and Model Ensemble Voting](/202606/02/2606.00556v1-improving-visual-grounding-in-remote-sensing-via-cluster-guided-refinement-and-model-ensemble-voting)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：使用遥感专用模型RemoteSAM和通用模型SAM3集成改进遥感视觉定位
+5. [GLIDE: Graph-guided Leap Inference for Diffusion Estimation of Spatio-Temporal Point Processes](/202606/02/2606.01273v1-glide-graph-guided-leap-inference-for-diffusion-estimation-of-spatio-temporal-point-processes)  
+   标签：评分：8.0/10、query:stm
+   evidence：面向时空点过程的图引导扩散框架
+6. [Mind-Omni: A Unified Multi-Task Framework for Brain-Vision-Language Modeling via Discrete Diffusion](/202606/02/2605.29591v1-mind-omni-a-unified-multi-task-framework-for-brain-vision-language-modeling-via-discrete-diffusion)  
    标签：评分：7.0/10、query:world-models
-   evidence：用于VLN的开放集3D高斯地图
-7. [Uncertainty-Aware Gaussian Map for Vision-Language Navigation](/202606/01/2605.26503v1-uncertainty-aware-gaussian-map-for-vision-language-navigation)  
+   evidence：Mind-Omni通过离散扩散统一七项脑-视觉-语言任务，是一种多模态基础模型方法
+7. [EnergyMamba: An Uncertainty-Aware Graph-Enhanced Selective State Space Model for Energy Consumption Prediction](/202606/02/2606.00506v1-energymamba-an-uncertainty-aware-graph-enhanced-selective-state-space-model-for-energy-consumption-prediction)  
+   标签：评分：7.0/10、query:stm
+   evidence：面向能耗预测的时空学习框架
+8. [Dynamic Resilient Spatio-Semantic Memory with Hybrid Localization for Mobile Manipulation](/202606/02/2606.00576v1-dynamic-resilient-spatio-semantic-memory-with-hybrid-localization-for-mobile-manipulation)  
    标签：评分：7.0/10、query:world-models
-   evidence：用于场景表示的3D高斯地图
-8. [RoadGIE: Towards A Global-Scale Aerial Benchmark for Generalizable Interactive Road Extraction](/202606/01/2605.26862v1-roadgie-towards-a-global-scale-aerial-benchmark-for-generalizable-interactive-road-extraction)  
+   evidence：用于移动操作的在线时空语义体素记忆作为世界模型
+9. [DINO-GFSA: Geo-Localization via Semantic Gated Fusion and Mamba-based Sequential Aggregation](/202606/02/2606.00784v1-dino-gfsa-geo-localization-via-semantic-gated-fusion-and-mamba-based-sequential-aggregation)  
    标签：评分：7.0/10、query:rs-fm
-   evidence：大规模航拍道路提取数据集，支持遥感预训练
-9. [Q-GeoMem: Question-Guided Geometric Memory for Video Spatial Reasoning](/202606/01/2605.27318v1-q-geomem-question-guided-geometric-memory-for-video-spatial-reasoning)  
-   标签：评分：7.0/10、query:world-models
-   evidence：Q-GeoMem使用基于变压器的记忆进行视频空间推理
-10. [Grow-Prune-Freeze Networks: Adaptive & Continual Learning Technique for Olfactory Navigation](/202606/01/2605.25170v1-grow-prune-freeze-networks-adaptive--continual-learning-technique-for-olfactory-navigation)  
+   evidence：使用DINOv3（ViT-L）骨干网络和LoRA进行遥感地理定位
+10. [Generic Interpretation Approach for Transformer Models Incorporating Heterogenous Attention Structures](/202606/02/2605.27458v2-generic-interpretation-approach-for-transformer-models-incorporating-heterogenous-attention-structures)  
    标签：评分：6.0/10、query:world-models
-   evidence：提出GPF网络用于嗅觉导航中的持续学习，解决世界模型构建
-11. [Learning to Search and Searching to Learn for Generalization in Planning](/202606/01/2605.25720v1-learning-to-search-and-searching-to-learn-for-generalization-in-planning)  
+   evidence：解释具有异构注意力结构的Transformer模型，支持多模态融合
+11. [Towards Understanding Modality Interaction in Multimodal Language Models via Partial Information Decomposition](/202606/02/2606.00959v1-towards-understanding-modality-interaction-in-multimodal-language-models-via-partial-information-decomposition)  
    标签：评分：6.0/10、query:world-models
-   evidence：自改进WA*学习与值启发式的规划方法
-12. [From GPS Points to Travel Patterns: Flexible and Semantic Trajectory Generation with LLMs](/202606/01/2605.30014v1-from-gps-points-to-travel-patterns-flexible-and-semantic-trajectory-generation-with-llms)  
-   标签：评分：6.0/10、query:stm
-   evidence：使用大语言模型进行时空轨迹模式生成
-13. [PARCEL: Pool-Anchored Resampling with Conditioned Elastic Queries for Efficient Vision-Language Understanding](/202606/01/2605.30126v1-parcel-pool-anchored-resampling-with-conditioned-elastic-queries-for-efficient-vision-language-understanding)  
+   evidence：使用部分信息分解分析多模态语言模型中的模态交互
+12. [Reasmory: 3D Reconstruction as Explicit Memory for VLMs Spatial Reasoning](/202606/02/2606.00963v1-reasmory-3d-reconstruction-as-explicit-memory-for-vlms-spatial-reasoning)  
    标签：评分：6.0/10、query:world-models
-   evidence：面向多模态基础模型的高效视觉标记压缩
+   evidence：将三维重建作为VLM空间推理的显式记忆，与神经辐射场思路互补
+13. [Not All Points Are Equal: Uncertainty-Aware 4D LiDAR Scene Synthesis](/202606/02/2606.02510v1-not-all-points-are-equal-uncertainty-aware-4d-lidar-scene-synthesis)  
+   标签：评分：6.0/10、query:world-models
+   evidence：利用空间不确定性进行4D LiDAR场景合成以构建真实世界
 
 
 <div class="dpr-home-promo-card">
