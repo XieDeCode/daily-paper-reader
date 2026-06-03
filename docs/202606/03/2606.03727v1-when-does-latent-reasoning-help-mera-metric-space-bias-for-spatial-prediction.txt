@@ -1,0 +1,441 @@
+Title: When Does Latent Reasoning Help? MeRa: Metric-Space Bias for Spatial Prediction
+
+URL Source: https://arxiv.org/pdf/2606.03727v1
+
+Published Time: Wed, 03 Jun 2026 01:18:39 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# When Does Latent Reasoning Help? MeRa: Metric-Space Bias for Spatial Prediction 
+
+Zhenyu Yu, Shuigeng Zhou 
+
+Fudan University 
+
+yuzhenyuyxl@foxmail.com, sgzhou@fudan.edu.cn 
+
+## Abstract 
+
+Latent reasoning has improved sequential recommendation by iteratively refining representations before prediction, but does it help spatial prediction? We find that the answer depends on whether reasoning is grounded in the underlying metric space. Without such grounding, latent reasoning degrades spatial prediction below the unmodified baseline, while a learned metric-space bias derived from pairwise distances produces consistent gains. We formalize this finding through 
+
+MeRa (Me tric-space Reasoning), a lightweight backbone-agnostic module that can be inserted between any sequence encoder and its prediction heads. On the GETNext backbone, the gap between reasoning without and with metric-space bias reaches 4.5% NDCG@10. MeRa achieves the best NDCG@10 on all three spatial prediction benchmarks among the compared methods, surpassing recent approaches such as GeoMamba and HMST. We prove that metric-space-constrained reasoning converges to a unique fixed point and that N -step reasoning is strictly more expressive than (N −1) -step reasoning. A controlled experiment on CLEVR with Euclidean distance confirms that the finding generalizes beyond geographic coordinates. The code is included in the supplementary material. 
+
+## 1 Introduction 
+
+Spatial prediction tasks require models to reason over geographic or geometric structure. A represen-tative example is next Point-of-Interest (POI) recommendation, which predicts a user’s next location visit from their check-in trajectory and plays an important role in location-based services, urban computing, and smart-city applications [Yang et al., 2022, Li et al., 2025a]. Unlike general sequential recommendation where items have no inherent spatial structure, POI prediction is governed by the metric space defined by geographic coordinates, in which distances carry direct semantic meaning and spatial proximity is a primary driver of human mobility [Luo et al., 2021, Qin et al., 2025]. This spatial structure creates both opportunities and challenges for representation learning, and motivates the development of methods that can reason over geographic relationships within user trajectories. State-of-the-art POI recommendation methods have made significant progress through graph-enhanced Transformers [Yang et al., 2022], selective state-space models with geographic priors [Qin et al., 2025], and hyperbolic geometry [Li et al., 2025a]. In parallel, latent reasoning [Tang et al., 2025, Liu et al., 2025, Geiping et al., 2025] has emerged as a promising paradigm in general sequential recommendation, refining representations through multiple computation steps before prediction at much lower cost than explicit chain-of-thought generation. A natural idea is to combine these two lines of research by adding latent reasoning to spatial prediction models. Doing so naively, however, risks degrading performance, because standard cross-attention treats all history positions equally regardless of geographic proximity, and iterative refinement without distance awareness can dilute the spatial signal that is critical for location prediction. 
+
+> 40th Conference on Neural Information Processing Systems (NeurIPS 2026).
+> arXiv:2606.03727v1 [cs.IR] 2 Jun 2026
+
+This observation leads to our central hypothesis: latent reasoning for spatial prediction must be grounded in the underlying metric space . Rather than applying latent reasoning in a domain-agnostic manner, each reasoning step should attend preferentially to spatially nearby context, so that iterative refinement respects the distance structure of the prediction space. We formalize this idea through the concept of metric-space bias , an attention modulation derived from a distance function satisfying the metric axioms. We propose MeRa (Me tric-space Reasoning), a lightweight backbone-agnostic module that performs multi-step latent reasoning with learned metric-space bias. MeRa can be inserted between any sequence encoder and its prediction heads without modifying the training objective, and we validate it on two backbones (LSTM and GETNext), three spatial prediction datasets (NYC, TKY, CA), and one synthetic spatial reasoning benchmark (CLEVR). The main contributions of this work are summarized as follows. • Metric-space bias. We introduce metric-space bias (Definition 1), a learnable attention modulation derived from a distance function satisfying the metric axioms. Geographic distance and Euclidean distance are two instantiations validated in this paper. The resulting module, MeRa, is backbone-agnostic and requires no changes to the training objective. • Convergence and expressivity. We prove that reasoning with metric-space bias converges to a unique fixed point within a bounded neighborhood of the target (Theorem 1), and that 
+
+N -step reasoning is strictly more expressive than (N −1) -step reasoning (Theorem 2). • Controlled empirical. Through experiments on three geographic datasets and a synthetic CLEVR benchmark, we show that the same reasoning architecture produces opposite outcomes depending on whether metric-space bias is present, establishing metric-space grounding as a necessary condition for effective latent reasoning in spatial prediction. 
+
+## 2 Related Work 
+
+2.1 Spatial prediction 
+
+Sequential models for POI prediction have progressed from RNN-based approaches [Liu et al., 2016] through attention mechanisms [Luo et al., 2021, Kang and McAuley, 2018] to graph-enhanced Transformers. GETNext [Yang et al., 2022] builds a global trajectory flow graph whose features are fused with user, time, and category embeddings in a Transformer encoder. GeoMamba [Qin et al., 2025] extends selective state-space models with geographic domain knowledge, and GTR-Mamba [Li et al., 2025a] combines Mamba with hyperbolic geometry for hierarchical POI modeling. STHGCN [Yan et al., 2023] captures trajectory-level patterns through spatio-temporal hypergraphs. All of these methods encode spatial information within the backbone itself, whereas MeRa introduces spatial awareness at the reasoning stage and is therefore complementary to any of them. 
+
+2.2 Latent reasoning and test-time scaling 
+
+ReaRec [Tang et al., 2025] introduced autoregressive latent reasoning for sequential recommendation, operating entirely in continuous space. LARES [Liu et al., 2025] proposed depth-recurrent reasoning with two-phase training, and Parallel Latent Reasoning [Tang et al., 2026] explored width-level scaling. In the broader context of test-time compute, Geiping et al. [2025] showed that recurrent depth in latent space can scale language model performance via unstructured recurrence. ROS [Lv et al., 2026] applied explicit chain-of-thought reasoning within an LLM for POI recommendation, achieving strong results at substantial computational cost. None of these methods incorporate the metric structure of the prediction space into the reasoning process. MeRa fills this gap by grounding each reasoning step in the pairwise distance structure of the input. 
+
+2.3 Position and distance biases in attention 
+
+Injecting structural priors into attention logits has proven effective in several domains. ALiBi [Press et al., 2022] adds a linear penalty based on token distance to enable length extrapolation, and RoPE [Su et al., 2024] encodes relative position through rotation of query-key vectors. These methods model 
+
+sequential position, which is fundamentally one-dimensional and uniform. Metric-space bias differs 2in that it encodes geographic or Euclidean distance , which is multi-dimensional, non-uniform, and carries domain-specific semantics. To our knowledge, no prior work has applied a distance-derived attention bias within a latent reasoning loop. 
+
+Positioning. Our work lies at the intersection of spatial prediction and latent reasoning. The positioning of MeRa relative to representative methods is summarized in Table 1. Table 1: Positioning of MeRa relative to prior work. MeRa is the first method combining latent reasoning with metric-space structure.                   
+
+> Method GETNext GeoMamba ReaRec LARES ROS MeRa (Ours) Latent Reasoning ✗✗✓✓✓(LLM CoT) ✓
+> Metric-Space Aware ✓(Graph) ✓(SSM) ✗✗✓(Expensive) ✓(Efficient)
+> *GETNext [Yang et al., 2022], GeoMamba [Qin et al., 2025], ReaRec [Tang et al., 2025], LARES [Liu et al., 2025], ROS [Lv et al., 2026].
+
+## 3 Methodology 
+
+3.1 Problem Formulation 
+
+Given a user’s check-in sequence {(v1, t 1), (v2, t 2), . . . , (vL, t L)} where each vi is a POI with geographic coordinates pi = ( lat i, lon i) and ti is the visit time, the task is to predict the next POI 
+
+vL+1 . Each POI vi is also associated with a category ci. MeRa is agnostic to the choice of backbone encoder; given any encoder that produces contextualized representations x(0) ∈ RL×d, our module can be inserted before the prediction heads. 
+
+3.2 Overview 
+
+The overall architecture of MeRa is illustrated in Figure 1. The module takes the encoder output x(0) 
+
+and refines it through N reasoning steps before passing the result to the prediction heads. Within each reasoning step, three operations are applied sequentially: cross-attention over the original encoder output with learned metric-space bias derived from pairwise distances, a feed-forward network that produces a candidate update, and a sigmoid gate that controls the update magnitude. The metric-space bias is computed once from the input coordinates and shared across all reasoning steps. 
+
+3.3 Metric-space Bias Definition 1 (Metric-space bias) . Let (S, ρ ) be a metric space. A metric-space bias is a learnable function B(h)(i, j ) = f (h) 
+
+> θ
+
+(−ρ(si, s j )) that maps the negated pairwise distance between elements 
+
+si, s j ∈ S to a per-head attention bias. The bias is added to the attention logits before the softmax, so that elements closer in the metric space receive higher attention. 
+
+The design of metric-space bias is motivated by a well-established observation in human mobility research: the probability of visiting a location decays with distance from the current position, a pattern known as distance decay [Luo et al., 2021]. Rather than hard-coding a specific decay function (e.g., power-law or exponential), we let a two-layer MLP fθ learn the mapping from distance to attention bias in a data-driven manner. The input to fθ is the negated pairwise distance −ρ(si, s j ),so that closer elements naturally receive larger (less negative) bias values before any learning takes place. Each attention head learns its own projection ( Linear (1 , d/ 4) → SiLU → Linear (d/ 4, H )), allowing different heads to capture distance relationships at different spatial scales. An alternative to the learned MLP would be a fixed decay function such as exp( −αρ ) or ρ−β . We opt for the learned approach for two reasons. Fixed functions impose a single global decay rate, but mobility patterns exhibit multi-scale spatial dependencies: users may visit nearby restaurants within a neighborhood (sub-kilometer) while also commuting across districts (multi-kilometer). A per-head learned MLP naturally accommodates this by allowing each head to specialize in a different spatial scale without manual tuning. Additionally, the optimal distance-to-bias mapping may differ across datasets (e.g., dense urban areas vs. sparse suburban regions), and a learned function adapts automatically during training. 3Figure 1: Overview of MeRa. The module is inserted between the backbone encoder and prediction heads. Each reasoning step performs cross-attention over the encoder output with metric-space bias derived from pairwise distances, followed by a gated residual update. The process repeats for N
+
+steps. In this paper, S is the set of POI locations and ρ = dgeo is the haversine distance for POI experiments, while ρ is the Euclidean distance for the CLEVR experiment (Section 4.5). The same architecture applies without modification; only the distance function changes. 
+
+3.4 Reasoning Module 
+
+We insert MeRa between the encoder output and the prediction heads. Starting from x(0) , we perform 
+
+N reasoning steps. Each step k is defined by 
+
+x(k+1) = x(k) + g(k) ⊙ δ(k), (1) where δ(k) = FFN  CrossAttn  x(k), x(0) ; Bmetric 
+
+ is the candidate update and g(k) =
+
+σ
+
+
+
+Wg
+
+h
+
+x(k); δ(k)i 
+
+∈ (0 , 1) d is a learned sigmoid gate controlling the update magnitude. The full attention computation is 
+
+Attn( Q, K, V ) = softmax 
+
+ QK ⊤
+
+√dk
+
++ Bmetric + Mcausal 
+
+
+
+V, (2) where Bmetric ∈ RH×L×L is the metric-space bias (Definition 1), Mcausal is the standard causal mask, and dk = d/H . The FFN consists of LayerNorm, a two-layer MLP with GELU activation and hidden dimension 4d, and dropout. Concretely, the FFN in Eq. (1) (distinct from the bias MLP fθ above) applies the transformation 
+
+FFN( z) = Dropout( W2 · GELU( W1 · LayerNorm( z))) , where W1 ∈ Rd×4d and W2 ∈ R4d×d.The LayerNorm before the MLP stabilizes the input to each reasoning step, which is important because the iterative updates in Eq. (1) accumulate over N steps and can cause representation drift without normalization. The dropout rate is set to 0.1 for the reasoning module, lower than the 0.3 used in the backbone encoder, since the gated residual already provides implicit regularization by suppressing updates. Three design choices in Eq. (1) deserve explanation. We use cross-attention with the original encoder output x(0) as key-value memory at every step, rather than self-attention over the evolving x(k).This prevents the reasoning process from drifting away from the encoder’s learned representations and ensures that each step re-examines the raw evidence. The gated residual connection allows the module to selectively suppress unhelpful updates. When the gate values approach zero, the module reduces to an identity mapping, making it safe to add even when reasoning provides no benefit. The 4metric-space bias Bmetric is computed once and shared across all N steps, since the geographic distances between positions do not change during reasoning. The complete inference procedure is provided in Algorithm 1. 
+
+Algorithm 1 MeRa inference 
+
+Require: Encoder output x(0) ∈ RL×d, coordinates {pi}Li=1 , steps N
+
+Ensure: Refined representation x(N ) 
+
+> 1:
+
+Compute distance matrix Dij = ρ(pi, pj ) for all i, j  
+
+> 2:
+
+Compute metric-space bias Bmetric = fθ (−D) ▷ Learned MLP  
+
+> 3:
+
+for k = 0 to N −1 do  
+
+> 4:
+
+δ(k) = FFN  CrossAttn( x(k), x(0) ; Bmetric + Mcausal ) 
+
+> 5:
+
+g(k) = σ
+
+
+
+Wg [x(k); δ(k)]
+
+
+
+▷ Sigmoid gate  
+
+> 6:
+
+x(k+1) = x(k) + g(k) ⊙ δ(k) ▷ Gated residual  
+
+> 7:
+
+end for  
+
+> 8:
+
+return x(N ) to prediction heads 
+
+3.5 Theoretical Results 
+
+We establish two results that distinguish MeRa from generic depth expansion. 
+
+Theorem 1 (Convergence) . Let F : Rd → Rd denote one reasoning step as defined in Eq. (1) .Suppose the FFN satisfies ∥δ(x) − δ(y)∥ ≤ Lδ ∥x − y∥ with Lδ < 1 (enforceable via spectral normalization), and the gate satisfies γ ≤ g(k) 
+
+> i
+
+≤ 1 − ϵ for some γ, ϵ > 0. Then (i) F is a contraction with constant κ = (1 − γ)(1 + Lδ ) < 1.(ii) By the Banach fixed-point theorem, F admits a unique fixed point x∗ and the iterates converge geometrically, ∥x(k) − x∗∥ ≤ κk∥x(0) − x∗∥.Proof sketch. Write F (x) = x + g(x) ⊙ δ(x), where g = σ(·) ∈ [γ, 1 − ϵ]d and δ is the FFN output. We have 
+
+∥F (x) − F (y)∥ = ∥x − y + g(x) ⊙ δ(x) − g(y) ⊙ δ(y)∥≤ ∥ (1 − g(x)) ⊙ (x − y)∥ + ∥g(x) ⊙ (x + δ(x) − y − δ(y)) ∥≤ (1 − γ)∥x − y∥ + (1 − ϵ)(1 + Lδ )∥x − y∥. (3) When γ is large enough and Lδ < 1, we obtain a contraction constant κ < 1. A simplified sufficient condition is (1 − γ)(1 + Lδ ) < 1. Banach’s theorem then guarantees existence, uniqueness, and geometric convergence. 
+
+Remark 1. Since the metric-space bias concentrates attention weights on nearby elements, the fixed point x∗ is constrained to lie within a bounded neighborhood of the distance-weighted centroid of history representations. The radius of this neighborhood shrinks as the bias strength increases. 
+
+Beyond convergence, we show that deeper reasoning is strictly more powerful. 
+
+Theorem 2 (Strict expressivity hierarchy) . For every N ≥ 1, there exists a spatial prediction task solvable by N -step MeRa but not by (N −1) -step MeRa. Formally, denoting by F(N ) the function class realized by N -step metric-space reasoning, we have F(N −1) ⊊ F(N ).Proof sketch. We construct a synthetic task family {TN }N ≥1. In task TN , the target is determined by a chain of N +1 hops in the metric space, v1 → v2 → · · · → vN +1 , where each consecutive pair 
+
+(vk, v k+1 ) satisfies ρ(vk, v k+1 ) < r for some radius r, and the target is uniquely determined by the endpoint of the chain. Each reasoning step propagates information across one hop via cross-attention with metric-space bias. After N steps, the information from v1 reaches vN +1 , enabling correct prediction. With only N −1 steps, the chain cannot be fully resolved, since each step’s receptive field extends by one hop in the metric space. Detailed proofs of both theorems see Appendix A. 54 Experiments 
+
+4.1 Settings Datasets. We use three standard POI benchmarks following the GETNext preprocessing proto-col [Yang et al., 2022]. Foursquare NYC contains 4,980 POIs and 48K check-ins, Foursquare 
+
+TKY has 7,832 POIs and 119K check-ins, and Gowalla CA has 9,689 POIs and 153K check-ins. Trajectories shorter than 2 check-ins are removed. The data is split chronologically into 80% training and 20% validation. To evaluate generalization beyond geographic distance, we additionally construct a spatial reasoning benchmark from the CLEVR scene dataset [Johnson et al., 2017] with Euclidean distance. Full statistics for all four datasets are in Table 2. Table 2: Statistics of the four datasets used in this work. 
+
+Statistic NYC TKY CA CLEVR 
+
+# POIs / Objects 4,980 7,832 9,689 96 (per scene) # Users / Scenes 1,083 2,293 3,112 15,000 # Check-ins / Sequences 48,547 119,834 153,462 15,000 # Categories 251 328 387 24 Avg. trajectory length 7.8 8.2 6.9 6.5 Distance metric Haversine Haversine Haversine Euclidean 
+
+Backbones and baselines. We evaluate MeRa on two back-bones. GETNext [Yang et al., 2022] is a graph-enhanced Trans-former with trajectory flow fea-tures, user embeddings, and multi-task learning. LSTM [Liu et al., 2016] is a standard LSTM encoder without graph features, trained with the same multi-task framework as GETNext for fair comparison. We compare against a range of existing methods, including RNN-based methods (PLSPL [Wu et al., 2022]), hyperbolic approaches (HME [Feng et al., 2020], HMamba [Zhang et al., 2025], HMST [Qiao et al., 2025], HVGAE [Li et al., 2025b]), graph-based methods (AGRAN [Wang et al., 2023]), state-space models (GeoMamba [Qin et al., 2025]), and other competitive methods (MCLP [Sun et al., 2024]). 
+
+Metrics. We adopt four ranking-based metrics widely used in spatial prediction. Normalized Discounted Cumulative Gain ( NDCG@ k) measures ranking quality by assigning higher credit to correct predictions at top positions, and we report k ∈ { 1, 5, 10 }. Mean Reciprocal Rank ( MRR )computes the average reciprocal of the rank at which the ground-truth target first appears. All metrics are computed via full ranking over the entire candidate vocabulary. 
+
+Implementation details. MeRa uses N =3 reasoning steps with H=2 attention heads. The metric-space bias MLP has hidden dimension d/ 4 = 32 . All remaining hyperparameters follow GETNext defaults, including embedding dimension d=128 , learning rate 10 −3, batch size 20, Adam optimizer, and weight decay 5 × 10 −4. Experiments are conducted on NVIDIA RTX 4090 GPUs. Full hyperparameter settings are in Appendix B. NYC TKY CA 0.15 
+
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> NDCG@10  0.388
+> 0.301
+> 0.201
+> 0.410
+> 0.350
+> 0.256
+> 0.405
+> 0.330
+> 0.247
+> 0.415
+> 0.372
+> 0.281
+> LSTM
+> LSTM + MeRa
+> GETNext
+> GETNext + MeRa
+
+(a) Backbone comparison. GETNext    
+
+> (baseline)
+> Deeper TF
+> (4 layers)
+> Plain Reasoning
+> (no bias)
+> MeRa
+> (N=3, bias)
+> 0.390
+> 0.395
+> 0.400
+> 0.405
+> 0.410
+> 0.415
+> 0.420
+> NDCG@10
+> 0.4046
+> 0.4095
+> 0.3969
+> 0.4147
+> +0.0049 -0.0077 +0.0101
+
+(b) Ablation study. 0 1 2 3 5 
+
+> Number of Reasoning Steps (N)
+> 0.36
+> 0.38
+> 0.40
+> Metric Value
+> N=3: 0.4147
+> NDCG@10
+> MRR
+> Baseline (N=0)
+
+(c) Reasoning depth. 
+
+Figure 2: Experimental analysis. (a) Adding MeRa improves both backbones, with larger gains on LSTM. (b) Plain reasoning without metric-space bias degrades performance below the baseline, while adding the bias leads to improvement. (c) NDCG@10 and MRR peak at N =3 .
+
+4.2 Comparison 
+
+The comparison results are presented in Table 3. On NYC, GETNext+MeRa achieves the highest NDCG@10 of 0.4147, surpassing GeoMamba (0.4012) and HMST (0.4063). LSTM+MeRa also improves substantially over the LSTM baseline, reaching 0.4105 despite lacking graph features, user embeddings, and positional encoding. On TKY, GETNext+MeRa achieves the highest NDCG@10 (0.3720), surpassing HMST (0.3690) and GeoMamba (0.3686). LSTM+MeRa reaches 0.3505, 6Table 3: Overall performance comparison with baseline models on three datasets. All baseline results are from Li et al. [2025a]. Top-1 , Top-2. ∗Our reproduced results.                                                                                                                                                                                                               
+
+> Method NYC TKY CA ND@1 ND@5 ND@10 MRR ND@1 ND@5 ND@10 MRR ND@1 ND@5 ND@10 MRR
+> PLSPL 0.1601 0.3048 0.3336 0.2849 0.1495 0.2831 0.3143 0.2642 0.1084 0.1759 0.2029 0.1678 HME 0.1619 0.2806 0.3226 0.2787 0.1535 0.2637 0.2924 0.2366 0.1181 0.1886 0.2232 0.1945 AGRAN 0.2202 0.3638 0.3792 0.3343 0.1755 0.2989 0.3261 0.2879 0.1329 0.2121 0.2331 0.2043 MCLP 0.2404 0.3674 0.3973 0.3507 0.1662 0.3110 0.3415 0.3199 0.1324 0.1914 0.2121 0.1895 GeoMamba’24 0.1988 0.3392 0.3506 0.3246 0.1851 0.2953 0.3205 0.2858 0.1256 0.2029 0.2215 0.1962 GeoMamba’25 0.2377 0.3786 0.4012 0.3566 0.2157 0.3402 0.3686 0.3209 0.1388 0.2485 0.2754 0.2373 HMamba full 0.2204 0.3679 0.4031 0.3465 0.1828 0.3341 0.3673 0.3127 0.1366 0.2501 0.2792 0.2421 HMamba half 0.1896 0.3453 0.3767 0.3222 0.1945 0.3295 0.3603 0.3118 0.1423 0.2381 0.2648 0.2317 HMST 0.2138 0.3747 0.4063 0.3482 0.1925 0.3325 0.3690 0.3257 0.1356 0.2325 0.2680 0.2300 HVGAE 0.2271 0.3651 0.3982 0.3470 0.1977 0.3167 0.3455 0.3180 0.1391 0.2325 0.2658 0.2367 LSTM ∗0.2320 0.3580 0.3880 0.3420 0.1715 0.2761 0.3006 0.2637 0.1143 0.1819 0.2005 0.1775 LSTM + MeRa 0.2395 0.3790 0.4105 0.3565 0.1942 0.3198 0.3505 0.3052 0.1460 0.2310 0.2561 0.2247
+> improv. ↑3.2% ↑5.9% ↑5.8% ↑4.2% ↑13.2% ↑15.8% ↑16.6% ↑15.7% ↑27.7% ↑27.0% ↑27.7% ↑26.6%
+> GETNext 0.2244 0.3736 0.4046 0.3472 0.1767 0.3072 0.3297 0.2934 0.1342 0.2188 0.2468 0.2121 GETNext + MeRa 0.2425 0.3825 0.4147 0.3590 0.1980 0.3428 0.3720 0.3268 0.1562 0.2561 0.2810 0.2459
+> improv. ↑8.1% ↑2.4% ↑2.5% ↑3.4% ↑12.1% ↑11.6% ↑12.8% ↑11.4% ↑16.4% ↑17.0% ↑13.9% ↑15.9%
+
+outperforming GETNext (0.3297) and MCLP (0.3415). On CA, GETNext+MeRa achieves 0.2810, the highest across all methods, surpassing HMamba (0.2792) and GeoMamba (0.2754). Across all three datasets, GETNext+MeRa achieves the best NDCG@10 on every benchmark. Two observations are worth noting. The improvement from MeRa is consistent across datasets of different scales and geographic characteristics, ranging from dense urban areas (NYC, TKY) to sparse suburban regions (CA). The gains on the LSTM backbone are particularly large on CA (+27.7%), where the baseline performance is lowest and the need for spatial reasoning is greatest. These results confirm that MeRa is an effective backbone-agnostic module, but the more interesting question is 
+
+why it works. Additional breakdowns are provided in Figure 2a. 
+
+4.3 Ablation Study 
+
+Table 4: Ablation study. Reasoning without metric-space bias consistently degrades performance, while MeRa con-sistently improves it. 
+
+Dataset Configuration ND@1 ND@5 ND@10 MRR 
+
+NYC LSTM (baseline) 0.2320 0.3580 0.3880 0.3420 + Reasoning (w/o bias) 0.2285 0.3526 0.3822 0.3370 + MeRa ( N =3 ) 0.2395 0.3790 0.4105 0.3565 
+
+GETNext (baseline) 0.2244 0.3736 0.4046 0.3472 + Reasoning (w/o bias) 0.2201 0.3665 0.3969 0.3406 + MeRa ( N =3 ) 0.2425 0.3825 0.4147 0.3590 
+
+TKY LSTM (baseline) 0.1715 0.2761 0.3006 0.2637 + Reasoning (w/o bias) 0.1681 0.2706 0.2946 0.2584 + MeRa ( N =3 ) 0.1942 0.3198 0.3505 0.3052 
+
+GETNext (baseline) 0.1767 0.3072 0.3297 0.2934 + Reasoning (w/o bias) 0.1740 0.3026 0.3247 0.2890 + MeRa ( N =3 ) 0.1980 0.3428 0.3720 0.3268 
+
+CA LSTM (baseline) 0.1143 0.1819 0.2005 0.1775 + Reasoning (w/o bias) 0.1114 0.1774 0.1955 0.1731 + MeRa ( N =3 ) 0.1460 0.2310 0.2561 0.2247 
+
+GETNext (baseline) 0.1342 0.2188 0.2468 0.2121 + Reasoning (w/o bias) 0.1315 0.2144 0.2419 0.2079 + MeRa ( N =3 ) 0.1562 0.2561 0.2810 0.2459 
+
+The main comparison table shows that MeRa improves over existing baselines, but the improvement could in princi-ple stem from increased model capacity rather than from the metric-space bias it-self (see Table 4). All configurations use the same training procedure, the same loss function, and the same number of training epochs. The only variable is the module inserted between encoder and de-coder. Three observations emerge from the results. (1) Metric-space bias is the decisive factor. The same cross-attention reasoning module, with identical archi-tecture and parameter count, produces op-posite outcomes depending on whether metric-space bias is present. With the bias, NDCG@10 improves from 0.4046 to 0.4147 (+2.5%) on NYC GETNext. Without it, NDCG@10 drops to 0.3969 (−1.9%). The 4.5% gap between these two configurations (0.3969 vs. 0.4147) is the single most important result of this paper. It establishes that metric-space grounding is not merely helpful but necessary for latent reasoning to work in spatial prediction. This pattern holds across all six dataset-backbone com-binations in Table 4, where reasoning without bias consistently degrades performance below the 7baseline. (2) Reasoning is not simply more capacity. Adding two extra Transformer layers (4 total) yields NDCG@10 of 0.4095 on NYC. This standard capacity control uses more parameters than MeRa (3.15M vs. 1.20M added), yet MeRa outperforms it at 0.4147. The gain therefore comes from the reasoning mechanism and its metric-space grounding, not from model size. (3) The gate prevents harm. The gated residual design in Eq. (1) allows MeRa to suppress updates that would hurt accuracy. This is why MeRa avoids the degradation seen with plain reasoning, where uncontrolled updates override useful encoder representations. The degradation from ungrounded reasoning is more pronounced on weaker baselines (e.g., LSTM on CA drops by 2.5%), reinforcing the finding that metric-space grounding is universally necessary. 
+
+4.4 Effect of Reasoning Depth 
+
+Table 5: Effect of reasoning depth N (NDCG@10).                                          
+
+> Backbone Dataset N=0 N=1 N=2 N=3 N=5
+> LSTM NYC 0.3880 0.3935 0.4015 0.4105 0.4028 TKY 0.3006 0.3148 0.3325 0.3505 0.3390 CA 0.2005 0.2155 0.2358 0.2561 0.2450 GETNext NYC 0.4046 0.4062 0.4048 0.4147 0.4078 TKY 0.3297 0.3405 0.3558 0.3720 0.3598 CA 0.2468 0.2580 0.2695 0.2810 0.2738
+
+On NYC with the GETNext backbone, NDCG@10 increases from 0.4046 ( N =0 ) to 0.4062 ( N =1 ), remains flat at 0.4048 ( N =2 ), peaks at 0.4147 ( N =3 ), and drops to 0.4078 (N =5 ) (see Figure 2c). This non-monotonic pattern is consistent with Theorem 1. While more steps bring the representation closer to the fixed point in principle, excessive depth under a fixed training budget leads to opti-mization difficulties. This behavior generalizes across all datasets and both backbones (see Table 5). 
+
+N =3 achieves the highest NDCG@10 in all six settings. The improvement from N =0 to N =3 is larger on weaker baselines (e.g., LSTM on CA improves from 0.2005 to 0.2561) and smaller on stronger baselines (e.g., GETNext on NYC improves from 0.4046 to 0.4147), consistent with the complementarity principle discussed in Section 4.6. The decline at N =5 is also consistent across all settings, confirming that three reasoning steps provide a robust default. 
+
+4.5 Beyond Geographic Distance: CLEVR Spatial Reasoning 
+
+Table 6: Results on the CLEVR spatial reasoning task.               
+
+> Method NDCG@1 NDCG@5 NDCG@10 MRR
+> Seq Transformer 0.1323 0.4109 0.5093 0.3580 + Reasoning (w/o bias) 0.1284 0.4021 0.5038 0.3497 + MeRa (Euclidean bias) 0.1504 0.4312 0.5319 0.3796
+
+To test whether metric-space bias gener-alizes beyond geographic coordinates, we construct a controlled spatial rea-soning task from the CLEVR scene dataset [Johnson et al., 2017]. Each CLEVR scene contains 3–10 objects with known (x, y ) positions. We convert scenes into sequences by random ordering and define the prediction target as the nearest remaining object to the last observed one, measured by Euclidean distance. This is a pure spatial reasoning task with no sequential or semantic patterns, and only the metric structure matters. Details of the dataset construction are in Appendix C. We compare a Transformer baseline (2 layers, no spatial bias), latent reasoning without metric-space bias, and MeRa with Euclidean metric-space bias. The bias MLP is identical to the POI experiments except that it takes Euclidean instead of haversine distance as input. The results on CLEVR are presented in Table 6. The pattern mirrors the geographic experiments. Latent reasoning without metric-space bias slightly degrades NDCG@10 from 0.5093 to 0.5038, while MeRa with Euclidean bias improves it to 0.5319 (+4.4%). This confirms that the benefit of metric-space bias is not specific to geographic distance or POI recommendation, and extends to Euclidean space and a purely synthetic spatial task. 
+
+4.6 Additional Analysis Why plain reasoning hurts. Without metric-space bias, cross-attention distributes weight over all history positions regardless of geographic distance. For spatial prediction, geographically distant and nearby visits receive similar attention, diluting the distance signal that is critical for location choice. The attention logits end up dominated by semantic similarity rather than geographic relevance. MeRa avoids this pitfall by upweighting nearby locations through the learned bias fθ (−ρgeo ), preserving the distance structure that drives mobility patterns. 
+
+Backbone-dependent gains. The magnitude of improvement from MeRa varies across backbones. GETNext already encodes spatial structure through its trajectory flow graph and GCN-based POI 8embeddings, so the additional gain from metric-space reasoning is moderate. The LSTM backbone, by contrast, processes the sequence purely by temporal order and has no mechanism for modeling inter-POI spatial relationships. MeRa effectively provides the LSTM with its first source of metric-space awareness, producing larger relative improvements on datasets where the baseline is weaker. 
+
+Complementarity principle. These results suggest a practical guideline. The benefit of adding a capability scales inversely with how much already exists in the backbone, analogous to diminishing returns in feature engineering. Practitioners should prioritize adding MeRa to spatially-naive back-bones, where the gains are largest. This also explains why GETNext+MeRa achieves the highest absolute performance despite smaller relative gains than LSTM+MeRa. GETNext starts from a stronger baseline, so even a moderate relative improvement leads to a higher absolute score. The two backbones serve complementary roles in our evaluation. GETNext+MeRa demonstrates that MeRa can push a strong baseline further, while LSTM+MeRa demonstrates that metric-space reasoning can compensate for the absence of sophisticated spatial modeling. Table 7: Computational cost on NYC.                                
+
+> Configuration MeRa Params Time/Epoch Overhead
+> GETNext (baseline) 0142s –+ MeRa ( N=1 )0.40M 147s +3.5% + MeRa ( N=3 )1.20M 153s +7.7% + MeRa ( N=5 )2.00M 161s +13.4% LSTM (baseline) 058s –+ MeRa ( N=1 )0.40M 62s +6.9% + MeRa ( N=3 )1.20M 68s +17.2% + MeRa ( N=5 )2.00M 75s +29.3%
+
+Computational overhead. Each reasoning step adds one cross-attention operation over the sequence length L. The computational cost is summarized in Table 7. With N =3 , MeRa adds 1.20M parameters (about 2.8% of GETNext’s total) and increases wall-clock training time by 7.7% on GETNext and 17.2% on the lighter LSTM backbone. The overhead scales linearly with N and remains modest for the values used in our experiments. The higher relative overhead on LSTM (17.2% vs. 7.7%) is because the LSTM baseline is computationally lighter (58s vs. 142s per epoch), so the fixed cost of the MeRa module constitutes a larger fraction. At inference time, the overhead is even smaller since the distance matrix and metric-space bias can be precomputed and cached. 
+
+## 5 Discussion 
+
+Limitations. While MeRa consistently improves both backbones, the gains on GETNext vary across datasets (+2.5% on NYC, +12.8% on TKY, +13.9% on CA), depending on the strength of the original baseline. The optimal N may vary across datasets, though N =3 works well in all our experiments. Our theoretical analysis relies on assumptions such as Lipschitz continuity and bounded gate values, which are not explicitly enforced during training. While the CLEVR experiment demonstrates that metric-space bias transfers to Euclidean distance, the behavior on richer metric structures and larger-scale data remains open. 
+
+Broader impact. MeRa improves location prediction accuracy, which can benefit navigation, urban planning, and personalized services. At the same time, more accurate location prediction could raise privacy concerns if deployed without appropriate safeguards. We use only publicly available, anonymized check-in datasets in this work and encourage practitioners to implement differential privacy mechanisms and user consent protocols when deploying location recommendation systems. 
+
+## 6 Conclusion 
+
+This paper investigates when latent reasoning benefits spatial prediction and finds that the answer depends on whether reasoning is grounded in the underlying metric space. On the same GET-Next backbone with identical training setup, adding reasoning without metric-space bias reduces NDCG@10 by 1.9%, while adding reasoning with metric-space bias improves it by 2.5%, resulting in a 4.5% performance swing from a single design choice. This finding is validated across three geographic datasets, two backbone architectures, and a synthetic CLEVR benchmark with Euclidean distance. The proposed module, MeRa, is lightweight, backbone-agnostic, and admits provable convergence guarantees, achieving the best NDCG@10 on all three spatial prediction benchmarks among the compared methods. 9References 
+
+Shanshan Feng, Lucas Vinh Tran, Gao Cong, Lisi Chen, Jing Li, and Fan Li. HME: A hyperbolic metric embedding approach for next-POI recommendation. In Proceedings of the 43rd Interna-tional ACM SIGIR Conference on Research and Development in Information Retrieval , pages 1429–1438, 2020. Jonas Geiping, Sean McLeish, Neel Jain, John Kirchenbauer, Siddharth Singh, Brian R. Bartoldson, Bhavya Kailkhura, Abhinav Bhatele, and Tom Goldstein. Scaling up test-time compute with latent reasoning: A recurrent depth approach. In Advances in Neural Information Processing Systems ,2025. Spotlight. Justin Johnson, Bharath Hariharan, Laurens van der Maaten, Li Fei-Fei, C. Lawrence Zitnick, and Ross Girshick. CLEVR: A diagnostic dataset for compositional language and elementary visual reasoning. In IEEE Conference on Computer Vision and Pattern Recognition , pages 2901–2910, 2017. Wang-Cheng Kang and Julian McAuley. Self-attentive sequential recommendation. In Proceedings of the IEEE International Conference on Data Mining (ICDM) , pages 197–206, 2018. Zhuoxuan Li, Jieyuan Pei, Tangwei Ye, Zhongyuan Lai, Zihan Liu, Fengyuan Xu, Qi Zhang, and Liang Hu. GTR-Mamba: Geometry-to-tangent routing Mamba for hyperbolic POI recommendation. 
+
+arXiv preprint arXiv:2510.22942 , 2025a. Zhuoxuan Li, Jieyuan Pei, Tangwei Ye, Zhongyuan Lai, Zihan Liu, Fengyuan Xu, Qi Zhang, and Liang Hu. Hyperbolic variational graph auto-encoder for next POI recommendation. In Proceedings of the ACM Web Conference 2025 , 2025b. Enze Liu, Bowen Zheng, Xiaolei Wang, Wayne Xin Zhao, Jinpeng Wang, Sheng Chen, and Ji-Rong Wen. LARES: Latent reasoning for sequential recommendation. arXiv preprint arXiv:2505.16865 ,2025. Qiang Liu, Shu Wu, Liang Wang, and Tieniu Tan. Predicting the next location: A recurrent model with spatial and temporal contexts. In Proceedings of the AAAI Conference on Artificial Intelligence ,volume 30, 2016. Yingtao Luo, Qiang Liu, and Zhaocheng Liu. STAN: Spatio-temporal attention network for next location recommendation. In Proceedings of the Web Conference 2021 , pages 2177–2185, 2021. Dongyi Lv, Qiuyu Ding, Heng-Da Xu, Zhaoxu Sun, Zhi Wang, Feng Xiong, and Mu Xu. Reasoning over space: Enabling geographic reasoning for LLM-based generative next POI recommendation. 
+
+arXiv preprint arXiv:2601.04562 , 2026. Ofir Press, Noah A. Smith, and Mike Lewis. Train short, test long: Attention with linear biases enables input length extrapolation. In International Conference on Learning Representations ,2022. Hongliang Qiao, Shanshan Feng, Min Zhou, WenTao Li, and Fan Li. Hyperbolic multi-semantic transition for next POI recommendation. In Companion Proceedings of the ACM Web Conference 2025 , 2025. Yifang Qin, Jiaxuan Xie, Zhiping Xiao, and Ming Zhang. GeoMamba: Towards multi-granular POI recommendation with geographical state space model. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, pages 12479–12487, 2025. Jianlin Su, Murtadha Ahmed, Yu Lu, Shengfeng Pan, Wen Bo, and Yunfeng Liu. RoFormer: Enhanced transformer with rotary position embedding. Neurocomputing , 568:127063, 2024. Tianao Sun, Ke Fu, Weiming Huang, Kai Zhao, Yongshun Gong, and Meng Chen. Going where, by whom, and at what time: Next location prediction considering user preference and temporal regularity. In Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining , pages 2784–2793, 2024. 10 Jiakai Tang, Sunhao Dai, Teng Shi, Jun Xu, Xu Chen, Wen Chen, Jian Wu, and Yuning Jiang. Think before recommend: Unleashing the latent reasoning power for sequential recommendation. arXiv preprint arXiv:2503.22675 , 2025. Jiakai Tang, Xu Chen, Wen Chen, Jian Wu, Yuning Jiang, and Bo Zheng. Parallel latent reasoning for sequential recommendation. arXiv preprint arXiv:2601.03153 , 2026. Zhaobo Wang, Yanmin Zhu, Chunyang Wang, Wenze Ma, Bo Li, and Jiadi Yu. Adaptive graph representation learning for next POI recommendation. In Proceedings of the 46th International ACM SIGIR Conference on Research and Development in Information Retrieval , pages 393–402, 2023. Yuxia Wu, Ke Li, Guoshuai Zhao, and Xueming Qian. Personalized long- and short-term preference learning for next POI recommendation. IEEE Transactions on Knowledge and Data Engineering ,34(4):1944–1957, 2022. Xiaodong Yan, Tengwei Song, Yifeng Jiao, Jianshan He, Jiaotuan Wang, Ruopeng Li, and Wei Chu. Spatio-temporal hypergraph learning for next POI recommendation. In Proceedings of the 46th International ACM SIGIR Conference on Research and Development in Information Retrieval ,pages 403–412, 2023. Song Yang, Jiamou Liu, and Kaiqi Zhao. GETNext: Trajectory flow map enhanced transformer for next POI recommendation. In Proceedings of the 45th International ACM SIGIR Conference on Research and Development in Information Retrieval , pages 1144–1153, 2022. Qianru Zhang, Honggang Wen, Wei Yuan, Crystal Chen, Menglin Yang, Siu-Ming Yiu, and Hongzhi Yin. HMamba: Hyperbolic mamba for sequential recommendation. arXiv preprint arXiv:2505.09205 , 2025. 11 Appendix A Detailed Proofs 
+
+A.1 Proof of Theorem 1 
+
+We provide a complete proof of the convergence result. Let F (x) = x + g(x) ⊙ δ(x), where 
+
+g = σ(·) ∈ [γ, 1 − ϵ]d is the sigmoid gate output and δ is the FFN output satisfying ∥δ(x) − δ(y)∥ ≤ 
+
+Lδ ∥x − y∥ with Lδ < 1.
+
+Step 1: Establishing the contraction property. For any x, y ∈ Rd, we decompose the difference as 
+
+F (x) − F (y) = ( x − y) + g(x) ⊙ δ(x) − g(y) ⊙ δ(y). (4) Adding and subtracting g(x) ⊙ δ(y), we obtain 
+
+F (x) − F (y) = ( x − y) + g(x) ⊙ (δ(x) − δ(y)) + ( g(x) − g(y)) ⊙ δ(y). (5) Rearranging the first two terms, 
+
+F (x) − F (y) = (1 − g(x)) ⊙ (x − y) + g(x) ⊙ [( x − y) + ( δ(x) − δ(y))] + ( g(x) − g(y)) ⊙ δ(y).
+
+(6) Taking norms and applying the triangle inequality, 
+
+∥F (x) − F (y)∥ ≤ ∥ (1 − g(x)) ⊙ (x − y)∥ + ∥g(x) ⊙ [( x − y) + ( δ(x) − δ(y))] ∥
+
++ ∥(g(x) − g(y)) ⊙ δ(y)∥. (7) Since g ∈ [γ, 1 − ϵ]d, the first term satisfies ∥(1 − g(x)) ⊙ (x − y)∥ ≤ (1 − γ)∥x − y∥. For the second term, using the Lipschitz condition on δ,
+
+∥g(x) ⊙ [( x − y) + ( δ(x) − δ(y))] ∥ ≤ (1 − ϵ)(1 + Lδ )∥x − y∥. (8) For the third term, the sigmoid function σ is Lipschitz continuous with constant 1/4. Assuming δ is bounded by some constant M , we have ∥(g(x) − g(y)) ⊙ δ(y)∥ ≤ M 
+
+> 4
+
+∥x − y∥. Under the stated assumptions, this term can be absorbed into the contraction constant. Combining the dominant terms yields 
+
+∥F (x) − F (y)∥ ≤ κ∥x − y∥, (9) where κ = (1 − γ)(1 + Lδ ) < 1 when (1 − γ)(1 + Lδ ) < 1.
+
+Step 2: Applying Banach’s fixed-point theorem. Since κ < 1, F is a contraction mapping on Rd. By the Banach fixed-point theorem, F admits a unique fixed point x∗ satisfying F (x∗) = x∗, and the iterates converge geometrically: 
+
+∥x(k) − x∗∥ ≤ κk∥x(0) − x∗∥. (10) 
+
+Step 3: Spatial localization of the fixed point. At the fixed point, x∗ = x∗ + g∗ ⊙ δ∗, which implies 
+
+g∗ ⊙ δ∗ = 0. Since g∗ ∈ [γ, 1 − ϵ]d with γ > 0, we must have δ∗ = 0. The candidate update δ∗
+
+is computed via the FFN applied to the cross-attention output, where the attention weights αij are biased by the metric-space bias Bmetric . Since the bias upweights nearby elements, the attention concentrates on spatially proximate positions, constraining the cross-attention output (and thus δ∗)to be a distance-weighted combination of nearby history representations. The condition δ∗ = 0
+
+therefore constrains x∗ to lie within a bounded neighborhood of the distance-weighted centroid of the encoder outputs x(0) . □
+
+A.2 Proof of Theorem 2 
+
+We prove the strict expressivity hierarchy F(N −1) ⊊ F(N ) by constructing, for each N ≥ 1, a spatial prediction task that is solvable by N -step reasoning but not by (N − 1) -step reasoning. 
+
+Construction. Consider a metric space (S, ρ ) with N +2 points arranged in a chain: v0, v 1, . . . , v N +1 ,where ρ(vk, v k+1 ) < r for consecutive pairs and ρ(vi, v j ) ≫ r for non-consecutive pairs. The task 12 TN is defined as follows: given the sequence (v0, v 1, . . . , v N ), predict vN +1 . The target vN +1 is uniquely determined by the chain structure but cannot be identified from any proper subsequence. 
+
+Information flow analysis. Under metric-space bias with radius r, position i attends primarily to positions j satisfying ρ(vi, v j ) < r . In our construction, this means each position attends only to its immediate neighbors in the chain. At step k = 1 , position N aggregates information from position N − 1 (its nearest neighbor). The receptive field of position N after one step covers {vN −1, v N }.At step k = 2 , position N now has access to information from vN −1, which itself aggregated information from vN −2 in step 1. The effective receptive field expands to {vN −2, v N −1, v N }.Inductively, after k steps, the receptive field of position N covers {vN −k, . . . , v N }.
+
+Sufficiency of N steps. After N steps, the receptive field of position N covers {v0, v 1, . . . , v N },which contains all the information needed to identify the chain structure and predict vN +1 .
+
+Insufficiency of N − 1 steps. After only N − 1 steps, the receptive field covers {v1, . . . , v N }, missing 
+
+v0. Since the chain structure from v0 is essential for uniquely determining vN +1 (by construction, multiple valid vN +1 candidates exist if v0 is unknown), (N − 1) -step reasoning cannot solve TN .This establishes F(N −1) ⊊ F(N ) for all N ≥ 1. □
+
+## B Full Hyperparameter Configuration 
+
+Table A1: Hyperparameters for all experiments.                                 
+
+> Category Parameter Value
+> Shared Embedding dim d128 Learning rate 1×10 −3
+> Batch size 20 Weight decay 5×10 −4
+> Max epochs 200 GETNext Transformer layers 2Transformer heads 2Transformer FFN dim 1024 GCN hidden dims [32, 64] LSTM LSTM layers 2LSTM hidden dim 128 MeRa Reasoning steps N3Attention heads H2Bias MLP hidden dim d/ 4 = 32
+> Bias MLP activation SiLU Training Optimizer Adam LR scheduler ReduceLROnPlateau LR scheduler factor 0.1 Early stopping patience 40 epochs Dropout (GCN, Transformer) 0.3 Dropout (MeRa) 0.1 Random seed 42
+
+## C CLEVR Dataset Construction 
+
+We construct the CLEVR spatial reasoning benchmark from the original CLEVR scene files [Johnson et al., 2017], which contain 3D object positions and attribute annotations for synthetically rendered scenes. 
+
+Task definition. For each scene with M objects, we generate a sequence by randomly permuting the objects. The prediction target at each position i is the nearest remaining object to the object at 13 position i, measured by Euclidean distance in the (x, y ) plane (the z coordinate represents object height and is excluded). This creates a pure spatial reasoning task where the correct answer depends entirely on metric structure, with no temporal or semantic patterns to exploit. 
+
+Object encoding. Each object is characterized by four attributes (color, shape, size, material). We encode the (color × shape) combination into 24 category IDs. The (x, y ) coordinates serve as the spatial features for metric-space bias computation. 
+
+Split. We use 10,500 scenes for training and 4,500 for validation, drawn from the original CLEVR training and validation sets respectively. Scenes with fewer than 3 objects are discarded. 
+
+## D Implementation Details 
+
+Haversine distance computation. Pairwise distances are precomputed for each batch, producing an L × L distance matrix per sequence. We use the numerically stable formulation ρ = 2 R ·
+
+arcsin(min( √a, 1)) where a = sin 2 ∆ϕ
+
+> 2
+
+
+
++ cos ϕ1 cos ϕ2 sin 2  ∆λ
+
+> 2
+
+ and R = 6371 km. The clamping min( √a, 1) prevents NaN values when a ≈ 1 due to floating-point errors. 
+
+Padding and masking. Trajectories within a batch are left-padded to equal length. Padded positions are masked in both the backbone encoder and the MeRa module. For the Transformer backbone, we construct a combined float mask that merges the causal constraint with padding indicators, and zero out the outputs at padded positions after each attention layer to prevent NaN propagation from all-masked softmax rows. 
+
+Multi-task loss. Following GETNext, the training loss is L = Lpoi + Lcat + λtLtime , where Lpoi 
+
+and Lcat are cross-entropy losses over POI and category predictions, and Ltime is the MSE loss on normalized time prediction, weighted by λt = 10 .
+
+Reproducibility. Random seed is fixed at 42 for all experiments. All experiments use the same chronological train/validation splits. Code and data preprocessing scripts will be released upon acceptance. 14
