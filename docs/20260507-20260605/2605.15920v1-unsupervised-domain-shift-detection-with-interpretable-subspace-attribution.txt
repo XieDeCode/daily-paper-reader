@@ -1,0 +1,1117 @@
+Title: Unsupervised Domain Shift Detection with Interpretable Subspace Attribution
+
+URL Source: https://arxiv.org/pdf/2605.15920v1
+
+Published Time: Mon, 18 May 2026 00:59:34 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Unsupervised Domain Shift Detection with Interpretable Subspace Attribution 
+
+Sebastian Springer 
+
+SISSA 
+
+sspringe@sissa.it 
+
+Alessandro Laio 
+
+SISSA 
+
+laio@sissa.it 
+
+Abstract 
+
+We developed a tool for detecting domain shifts, namely subtle differences in the probability distributions of datasets. We identify these shifts using an algorithm designed to detect localised density anomalies in high-dimensional feature spaces. If an anomaly is present, we then identify the feature subspace in which the anomaly is most pronounced. This allows us to trace the domain shift to a small set of features, making the shift interpretable. Moreover, we provide a protocol for compensating domain shifts by extracting, from two unlabelled datasets, subsets of samples with no detectable residual distributional difference. We validate the framework on controlled 20-dimensional benchmarks with known ground truth, recovering both broad and localized shifts together with their supporting feature subspaces. We then apply it to healthy electrocardiogram (ECG) recordings represented by 782 features. In age- and sex-matched cohort comparisons differing in measurement-device composition, the method detects device-induced shifts, extracts representative subsets enriched in the imbalanced device components, and identifies ECG features associated with the acquisition contrast. These results suggest that density-shift detection and subspace attribution provide a practical framework for uncovering hidden cohort biases before downstream modelling. 
+
+1 Introduction 
+
+Comparing two collections of unlabeled samples is a fundamental task in machine learning. It arises in domain adaptation [ 1, 2 ], dataset auditing [ 3], covariate-shift correction [ 4, 5], and the validation of learned representations [ 6 ]. The central statistical question is whether two finite samples are consistent with a common distribution and, when they are not, how the discrepancy is organized across samples and features. In machine-learning pipelines, undetected distributional discrepancies between training and deployment data, or between two reference cohorts, can distort learned representations, invalidate benchmark comparisons, and introduce systematic biases into downstream predictions [ 1, 3]. Identifying such discrepancies before fitting or evaluating downstream models is therefore an important component of reliable data-driven analysis. Global two-sample tests, such as maximum mean discrepancy [ 7 ] and energy-distance tests [ 8], provide evidence of distributional change at the dataset level. Classifier two-sample tests (C2ST) [ 6 ]cast the same problem as binary discrimination and can capture complex differences through flexible decision functions. These methods are powerful tools for testing or quantifying whether two datasets differ, but they do not, by design, return sets of samples associated with the excess mass in each dataset, nor do they identify the feature subspaces that support the discrepancy. In practice, distributional discrepancies often involve a minority subpopulation, a restricted region of the sample space, or a feature subset in which the contrast is most pronounced, while the bulk of both datasets is comparable. In such settings, dataset-level tests may detect a discrepancy but provide limited information about its location or feature-level organization. Nearest-neighbor two-sample tests [ 9, 10 ] exploit local geometry and can provide local evidence of distributional change, but they do not directly produce 
+
+> Preprint.
+> arXiv:2605.15920v1 [stat.ML] 15 May 2026
+
+pruned/equalized subsets or a feature-weighted attribution of the detected discrepancy. Simultaneously localizing the responsible samples, attributing the discrepancy to an active feature support, and constructing equalized subsets therefore requires a more targeted pipeline. We here introduce a framework for unsupervised detection, localization, and feature attribution 
+
+of distributional discrepancies between two unlabeled datasets. The framework does not train a discriminative model to separate the two datasets. It proceeds in three stages. First, we use a recently introduced local two-sample score [ 11 ] as a pointwise discrepancy backbone, assigning to each sample an anomaly score for local over- or under-representation relative to the other dataset. Second, we introduce a bidirectional tail-KS equalization procedure that identifies statistically significant excess-mass samples in each direction and constructs pruned subsets with undetectable discrepancy. Third, we introduce Neighbor-Enriched Subspace Localization, a procedure that identifies the active feature support by maximizing the anomaly score. We validate the framework on controlled 20-dimensional benchmarks with known ground truth. The method reliably recovers global shifts affecting extended subpopulations and, crucially, localized shifts 
+
+affecting structured minority populations. In the localized setting, a standard classifier two-sample baseline is not able to identify the shift. Having established recovery under controlled ground truth, we then apply the framework to healthy electrocardiogram (ECG) recordings from PTB-XL+ [ 12 , 13 ], represented by 782 clinically interpretable features. ECG cohorts provide a clinically relevant stress test for distributional discrepancy analysis because acquisition devices and measurement pipelines can induce systematic variation between nominally comparable cohorts. In age- and sex-matched comparisons constructed to differ primarily in measurement-device composition, our framework detects device-associated distributional shifts, extracts representative subsets enriched in the device components driving the mismatch, and identifies feature supports across controlled comparisons. These results suggest acquisition-related cohort bias rather than clinical distinction, illustrating how the framework can be used to audit dataset composition before downstream modelling. The main contributions of this paper are: • A bidirectional iterative equalization algorithm that prunes excess-mass points from the two datasets (Section 2.2). • A Neighbor-Enriched Subspace Localization procedure that attributes the pruned set to the features which are primarily responsible for the domain shift (Section 2.3). • A complete domain shift detection and attribution pipeline , requiring no class labels or supervised training on the datasets under comparison (Section 2). • Controlled synthetic experiments with known ground truth demonstrating recovery of global and localized shifts and their supporting feature coordinates (Section 3.1). • A real-world ECG application demonstrating detection of device-induced acquisition bias in age- and sex-matched healthy cohorts, with coherent feature attribution across controlled device-composition contrasts (Section 3.2). 
+
+2 Method 
+
+2.1 Backbone: EagleEye local two-sample scoring 
+
+We adopt EagleEye [ 11 ] as a deterministic, unsupervised, training-free two-sample procedure that localizes where two datasets differ in density. Given two samples X = {X 1, . . . , XnX } and Y =
+
+{Y 1, . . . , YnY }, EagleEye aims to identify localized density anomalies : regions of feature space where Y is significantly over- or under-represented relative to X . We present the procedure for identifying anomalous points in Y, but the procedure is run in both directions to capture localized excesses and deficits in each sample. Let U = X ∪ Y be the pooled set. For each test point Yi ∈ Y ,EagleEye computes its nearest neighbours in U up to a maximal neighbourhood rank KM and encodes neighbour memberships as a binary sequence 
+
+bi = ( b1 
+
+> i
+
+, . . . , b KM 
+
+> i
+
+), bki =
+
+0, if the k-th neighbour of Yi lies in X ,
+
+1, if the k-th neighbour of Yi lies in Y.
+
+Under the null hypothesis that the two samples are locally exchangeable , neighbour labels follow the global mixture proportions, so the baseline probability that a neighbour belongs to Y is ˆp = nY  
+
+> nX+nY
+
+.2For K ∈ { 1, . . . , K M }, define the cumulative number of test-sample neighbours among the first K
+
+neighbours as 
+
+B(i, K ) = 
+
+> K
+
+X
+
+> k=1
+
+bki .
+
+In the regime K ≪ nX + nY , we approximate B(i, K ) under the null as Binomial( K, ˆp) and define an evidence score 
+
+Υ( i, K ) := − log(Pr[ B(i, K ) ≥ Bobs (i, K )]) .
+
+The pointwise anomaly score is then obtained by maximizing across spatial scales, 
+
+Υi := max 
+
+> 1≤K≤KM
+
+Υ( i, K ), (1) yielding sensitivity to discrepancies at unknown spatial scales. We flag putative anomalous points in the test sample as 
+
+Y+ := { Y i ∈ Y | Υi ≥ Υ∗ 
+
+> +
+
+},
+
+where the critical threshold Υ∗ 
+
+> +
+
+is calibrated so that the per-point null exceedance probability equals a user-chosen level pext (default 10 −5). Because Υi is a maximum over K ≤ KM , its null distribution is calibrated by Monte Carlo using Bernoulli sequences of length KM . The flagged set Y+ can be interpreted as an anomaly map comprising an anomalous core together with a surrounding “halo” of points whose neighborhoods intersect a true discrepancy region. 
+
+2.2 Tail-Based Bidirectional Equalization 
+
+The next step of the procedure aims at identifying the statistically significant excess mass relative to the corresponding backbone nulls of the observed anomaly-score distributions, and to remove such excesses jointly from the two samples whenever needed. This generalizes the density equalization procedure introduced in Ref. [ 11 ] making the criterion more directly tied to the global tail behavior of the score distributions and better suited to identify domain shift, in which over- and under-densities may occur in nearby regions of space. For a fixed neighborhood depth KM and class proportion 
+
+p = nY /(nX + nY ), the null distributions for over- and under-density scores are estimated by generating a large number of Bernoulli sequences of length KM with parameters p and 1 − p,respectively, and computing the corresponding anomaly scores as in Section 2.1. For each direction, we then define a tail threshold τtail as a high null quantile (by default, the 0.97 quantile) and compare the observed and null score tails above τtail by means of a one-sided two-sample Kolmogorov– Smirnov test. We use a one-sided test because the goal of equalization is to reach a regime in which the empirical score tail is stochastically dominated by the corresponding null tail, meaning that extreme anomaly scores are no more frequent than expected under the backbone null. At each iteration, pruning is therefore activated on a given side only if the corresponding tail test rejects this condition, i.e., only if the observed score tail still exhibits a statistically significant excess relative to the matching null tail. When at least one of the two tail tests rejects the null hypothesis, we perform a bidirectional equalization step. On each active side, it select at both tails the most anomalous points (or, for computational efficiency, a small set of points from the corresponding score tail) and add them to the pruned representative sets ˆY+ and/or ˆX +. The associated excess-mass neighborhoods are then removed from the current equalized samples, stopping at the first point belonging to the opposite sample, as in the implementation in Ref.[ 11 ]. In contrast to the procedure in Ref. [ 11 ], however, this pruning is assessed jointly in the two directions, so that the neighborhood structure is updated while accounting for the total mass already removed from both samples. This is especially useful when over- and under-density modes lie in nearby regions of space. To keep the procedure computationally efficient, it alternates between local pruning and a global score recomputation. During the pruning phase, equalization is carried out only with respect to the tail candidates identified at its start. After each pruning step, anomaly scores are recomputed only for the points belonging to the two tails, since these are the only ones needed to determine the next candidates for pruning. Once both tails have been equalized, anomaly scores are recomputed on the full equalized samples Xeq and Yeq , and the whole procedure is repeated until both KS tests pass. This outer iteration is important because pruning alters the neighborhood structure, so points 3that were initially outside the tails may enter them after the equalization step, while recomputing all scores after every pruning step would be computationally inefficient. Pseudocode for the equalization procedure is provided in the Supplementary Material, Sec. A.1. 
+
+2.3 Neighbor-Enriched Subspace Localization 
+
+In the final stage, the points extracted as described above are used to identify a subset of coordinates which determines the domain shift (if this subset exists). Let U ∈ Rn×d denote the pooled feature matrix, let Q ⊂ U be the query set, consisting of the high-evidence candidates associated with a domain shift identified as described above. Let T ⊂ U be a target set, chosen as either Y (if Q ⊂ Y ) or X (otherwise). We seek a feature weighting under which the K nearest neighbors of the queries are maximally enriched in samples from T . We introduce one nonnegative weight per feature. We distinguish between raw weights, which are the directly learned nonnegative parameters, and effective weights, which define the distance metric. The effective weights are obtained by rescaling the raw weights to scale at a constant d at each iteration to fix their overall magnitude, thereby removing the otherwise irrelevant global scale of the metric and preventing drift toward uniformly large or small weights. Distances are computed as, 
+
+Dweff (ui, u j ) = ∥ weff ⊙ ui − weff ⊙ uj ∥22,
+
+whereas the sparsity-inducing penalty is applied to the raw weights. This decouples scale control from sparsity promotion: normalization fixes the overall weight budget of the metric, while the penalty remains free to favor solutions concentrated on a relatively small number of features. The weights are learned through a differentiable soft KNN construction on stratified mini-batches B ⊂ U , sampled to maintain a fixed proportion of query and non-query samples. For each batch, weighted distances are converted into similarity logits, 
+
+ℓij = − Dweff (ui, u j )
+
+τ ,
+
+and neighbor probabilities are obtained by applying a row-wise softmax restricted to the K largest logits in each row: 
+
+Pij = exp( ℓij )
+
+P 
+
+> j′∈TopK( i)
+
+exp( ℓij ′ ) for j ∈ TopK( i), Pij = 0 otherwise .
+
+For each query i ∈ Q ∩ B , we define the soft target mass mi = P 
+
+> j
+
+Pij 1{j ∈ T ∩ B} .. The weights are then learned by maximizing the average soft target mass over the batch queries together with an 
+
+ℓ1 penalty on the raw weights: 
+
+max 1
+
+|Q ∩ B| 
+
+X
+
+> i∈Q∩B
+
+mi − λ∥wraw ∥1.
+
+After optimization, features are ranked by their effective weights. This yields a compact set of coordinates that most strongly supports the localized discrepancy identified by the procedure in Section 2.2. For further details see Supp. A.2. The overall domain-shift identification protocol proceeds by alternating anomaly localization in the current feature space with feature-subspace refinement around the detected modes. Once a discrepancy has been localized, the associated pruned points are partitioned by mode, and Neighbor-Enriched subspace localization is applied to each mode separately. This mode-wise refinement is crucial because distinct modes may be supported by distinct subsets of coordinates. By isolating them individually, the procedure can reveal lower-dimensional subspaces in which the corresponding shift is sharper, more interpretable, and therefore easier to equalize selectively. The refinement can be iterated until the selected subspaces stabilize or a user-defined maximum number of iterations is reached. 
+
+3 Experiments 
+
+The proposed workflow is broadly applicable across domains in which localized distributional discrepancies and systematic shifts may coexist. Here, we first validate it in a controlled synthetic benchmark and then focus on a medically relevant application based on ECG-derived features. 40 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19                                                                                                                                                                                                                       
+
+> Feature
+> 0.0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5
+> Global domain shift
+> 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.73 0.73 0.36 0.73 0.36 0.64 0.45 0.36 0.64 0.27 0.36 0.36 0.36 0.36 0.36 0.09 0.45 0.45 0.55 0.27
+> 1.00 0.91 0.18 1.00 0.09 0.18 0.09 0.18 0.00 0.09 0.18 0.18 0.09 0.09 0.09 0.09 0.09 0.09 0.18 0.18
+> 1.00 0.82 0.00 1.00 0.00 0.09 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 1.00 0.91 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 1.00 0.91 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 1.00 1.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 1.00 1.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 1.00 1.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 1.00 1.00 0.00 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> A
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Inclusion frequency
+> 0.0 0.1 0.2 0.3 0.4 0.5
+> of global domain shift
+> 0.00
+> 0.02
+> 0.04
+> 0.06
+> 0.08
+> Pruned-to-total ratio
+> B
+> 25th 75th percentile across seeds
+> Mean across seeds
+
+Figure 1: Robustness of the identified shift set across global domain-shift amplitudes and random seeds. (A) Inclusion frequency of each feature in the identified shift set, aggregated across random seeds, as a function of the global domain-shift amplitude σ. (B) Pruned-to-total ratio as a function of σ. The solid line denotes the mean across seeds, and the shaded region denotes the 25th–75th percentile range across seeds. 
+
+3.1 Controlled 20D benchmark for global and local domain-shift recovery 
+
+We evaluate the proposed workflow in a controlled 20-dimensional benchmark with known ground truth. The reference distribution is a four-component Gaussian mixture, and each cohort contains 
+
+50 ,000 background samples. On top of this common background, we consider two complementary types of domain shift. In the first experiment, we introduce a global shift by displacing one Gaussian-mixture component along coordinates (0 , 1, 3) , with amplitude controlled by a parameter σ. In the second experiment, we introduce a localized shift by injecting into one cohort a structured minority population supported on coordinates (2 , 4, 6, 8, 9) . Full construction details are provided in Supp. A.4. This benchmark is designed to test two distinct capabilities of the method: first, whether it can recover a broad domain shift affecting an extended portion of the data and correctly identify the coordinates supporting it; and second, whether it can recover a localized minority shift embedded in a much larger background population and again localize the relevant coordinates. In both experiments, we repeat the analysis across multiple random seeds to assess the stability of both recovery and subspace identification. 
+
+Global domain-shift recovery. The result of the analysis for the global shift is illustrated in Fig. 1. The shift amplitude is varied from σ = 0 to σ = 0 .5 in increments of 0.05 , and each configuration is repeated across 11 random seeds. For σ = 0 and σ = 0 .05 , the identified shift set is empty across seeds, indicating that the procedure does not produce spurious detections in the near-null regime. At σ = 0 .1, the true supporting coordinates (0 , 1, 3) already begin to emerge, although some non-supporting coordinates are still selected intermittently. By σ = 0 .15 , the recovered set becomes visibly cleaner, and from σ = 0 .2 onward the method enters a stable regime: panel A shows that coordinates (0 , 1, 3) dominate the identified shift set with high inclusion frequency, while spurious coordinates are almost entirely eliminated. Consistently, panel B shows that the pruned-to-total ratio increases steadily with σ, indicating that broader global mismatches are increasingly easy to isolate through pruning. Taken together, these results show that the workflow can reliably detect a global 50 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19                                                                                                                                                                                            
+
+> Feature
+> 100 150 200 250 300 350 400 450 500
+> Localized domain shift cardinality
+> 0.64 0.18 0.36 0.64 0.55 0.55 0.64 0.45 0.55 0.45 0.45 0.55 0.27 0.36 0.36 0.36 0.64 0.45 0.36 0.55
+> 0.64 0.45 0.64 0.45 0.91 0.64 0.91 0.55 0.91 0.91 0.55 0.64 0.55 0.55 0.64 0.45 0.64 0.64 0.64 0.36
+> 0.45 0.36 0.82 0.45 1.00 0.18 0.73 0.00 0.91 0.82 0.36 0.18 0.27 0.36 0.36 0.00 0.18 0.36 0.09 0.18
+> 0.00 0.00 0.64 0.09 0.82 0.09 0.73 0.09 0.64 0.64 0.00 0.00 0.09 0.09 0.00 0.09 0.00 0.09 0.09 0.09
+> 0.00 0.00 0.91 0.00 0.91 0.00 0.64 0.00 0.64 1.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.00 0.00 0.82 0.00 0.73 0.00 1.00 0.00 0.82 0.82 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.09 0.00 0.73 0.00 0.82 0.00 1.00 0.00 0.73 0.91 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.09 0.00 0.64 0.00 0.82 0.09 0.82 0.00 1.00 0.91 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.00 0.00 0.73 0.00 0.91 0.00 0.64 0.00 0.91 0.82 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00
+> A
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Inclusion frequency
+> 100 150 200 250 300 350 400 450 500
+> Cardinality of injected domain shift
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Pruned-to-injected ratio
+> B
+> 25th 75th percentile across seeds
+> Mean across seeds
+> Ideal recovery
+> 100 150 200 250 300 350 400 450 500
+> Cardinality of injected domain shift
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> MLP baseline
+> InjectedRecall@K
+> C
+> 25th 75th percentile across seeds
+> MLP, top-K = 400
+> Ideal recovery
+
+Figure 2: Robustness of localized domain-shift recovery across injected shift cardinalities and random seeds. (A) Inclusion frequency of each feature in the identified shift set, aggregated across random seeds, as a function of the localized domain-shift cardinality. (B) Pruned-to-injected domain-shift ratio as a function of the cardinality of the injected localized shift. The solid line denotes the mean across seeds, the shaded region denotes the 25th–75th percentile range across seeds, and the dashed horizontal line marks the ideal recovery level. (C) MLP two-sample classifier baseline in the full 20-dimensional space. Target samples are ranked by the MLP density-ratio score, and the top-400 ranked samples are used as candidate anchors. InjectedRecall@400 reports the fraction of injected localized-shift samples contained among these top-400 candidate anchors. The solid line and shaded region denote the mean and 25th–75th percentile range across seeds, respectively. domain shift and recover its true supporting coordinates once the shift exceeds a minimal detectable amplitude. 
+
+Localized domain-shift recovery We next consider a localized discrepancy supported on a small subset of the data, a condition which would be challenging for other approaches. As shown in Fig. 2, recovery improves sharply as the cardinality of the localized domain shift increases. For small injected populations ( 100 –150 points), both the recovered feature sets and the pruned-to-injected ratio remain variable across random seeds, indicating that the signal is still weak relative to the background. From roughly 250 points onward, however, the method enters a stable regime: panel A shows that the true supporting coordinates (2 , 4, 6, 8, 9) dominate the identified shift set with high inclusion frequency, while spurious coordinates are progressively eliminated. Consistently, panel B shows that the mean pruned-to-injected ratio rises from a low-recovery regime at small cardinalities to about 
+
+0.9 at 250 points and to near-ideal values above 0.95 for cardinalities of 300 and higher. Inter-seed variability follows the same trend, being largest at low cardinalities and markedly reduced once the localized shift is sufficiently represented. As a representative classifier-based baseline, we also train an MLP two-sample discriminator fol-lowing the classifier two-sample testing paradigm [ 6 ]. Target samples are ranked by the resulting MLP density-ratio score, and the top-ranked samples are evaluated as candidate anchors. Panel C reports InjectedRecall@400 , the fraction of injected localized-shift samples contained among the top-400 MLP-ranked target samples. The low recall indicates that the classifier-based ranking does not recover a sufficiently representative anchor set for this localized discrepancy. Together, these results show that, once the shifted population exceeds an initial critical mass, the workflow can stably recover both the feature support of a localized domain shift and a pruned representative set of 6the samples associated with it. In contrast, a standard classifier-based approach does not recover a sufficiently representative candidate-anchor set. 
+
+3.2 ECG dataset: PTB-XL+ with 12SL features 
+
+We next evaluate the proposed workflow in a real clinical feature space, focusing on domain shifts among nominally healthy ECG cohorts. We use PTB-XL+, an extension of the publicly available PTB-XL dataset of 12-lead ECG recordings [ 12 , 13 ]. PTB-XL+ combines ECG-derived feature representations, diagnostic statements, and acquisition metadata, making it well suited for constructing clinically controlled cohorts while auditing non-clinical sources of variation. In this work, we focus on the Marquette 12SL feature set. Each recording is represented by a 782-dimensional vector of clinically interpretable ECG features, including global and lead-specific amplitudes, intervals, and morphology-related measurements. Prior to all analyses, features are standardized to zero mean and unit variance so that differences in physical units and dynamic ranges do not dominate distance computations. We use diagnostic statements and metadata to restrict the analysis to nominally healthy recordings and to construct cohort pairs matched for age and sex composition while varying measurement-device composition. Only the standardized 12SL feature vectors are provided to the method; diagnostic statements and metadata are used exclusively for cohort construction and post hoc interpretation. We use this design to test whether the proposed workflow can detect device-induced domain shifts in healthy ECG cohorts, localize the samples carrying these shifts, and identify active feature subspaces associated with the detected discrepancies. This experiment therefore complements the synthetic benchmark by replacing known feature-level ground truth with a controlled real-world source of variation. We analyzed recordings on patients which are all classified as healthy acquired with three mea-surement devices: AT-6 C 5.5 , CS-12 E , and CS-12 . For readability, we refer to these devices as 
+
+Device 1 , Device 2 , and Device 3 , respectively. We then constructed controlled pairs of cohorts differing in their measurement-device composition. For each comparison, two cohorts X and Y were sampled from these device-specific subsets according to prescribed mixture proportions and then matched for age and sex. Device identity was used only to construct the cohorts and to interpret the results post hoc. We considered four device-composition comparisons (see Figure 3). Cases A–C correspond to distinct primary device-mixture contrasts. In each of these designs, one device is fully assigned to one cohort, a second device is split approximately equally between the two cohorts, and the third device is absent from that cohort but fully assigned to the opposite cohort. Thus, each comparison contains one shared device component and two device-specific components, creating a controlled device-composition contrast while preserving a partially common acquisition background. Case D is a perturbed version of case C, in which the same dominant contrast is preserved but each cohort contains a small fraction of the device that is dominant in the opposite cohort. This design allows us to ask whether the method responds coherently to acquisition-related distributional changes: if the detected discrepancy is device-related, the pruned representative samples should be enriched in the device components that are imbalanced between the two cohorts. Figure 3 summarizes the results. Across comparisons, the pruned representative sets ˆX + and ˆY+
+
+contain roughly 3% –6% of the corresponding healthy cohort, indicating that the detected domain shifts involve a non-negligible subset of recordings in each direction. The pruned sets are systematically enriched in the device components that define the corresponding cohort mismatch. Thus, the procedure does not simply report a generic difference between healthy cohorts, but extracts representative samples associated with the device-induced domain shift. The last column of Fig. 3 reports the size of the active feature support selected in this ˆY+-query subspace. The selected supports are relatively broad, ranging from 120 /782 to 140 /782 features across comparisons. Within this attribution, the discrepancy is therefore represented by a distributed active support rather than by a handful of isolated ECG descriptors. This is an important advantage of our approach: it allows identifying domain shifts when they are supported in very high-dimensional subspaces. To quantify the stability of the selected feature supports, we computed pairwise Jaccard overlaps between the active supports obtained from the ˆY+-query subspaces across the four comparisons. The perturbed case D showed strong overlap with case C ( J = 0 .86 ), consistent with its construction as a moderate perturbation of the same dominant device contrast. Cases A, C, and D also showed substantial overlap ( J = 0 .79 –0.80 ), whereas case B had markedly lower overlap with the other comparisons ( J = 0 .24 –0.26 ). Taken together, these results show that controlled changes in measurement-device composition induce 7Cohort X Cohort Y Pruned X+ Pruned Y+ Active subspace 
+
+A    
+
+> n=1958 n=1958 n=98 n=125 140/782
+> active
+
+B    
+
+> n=1979 n=1979 n=58 n=107 120/782
+> active
+
+C    
+
+> n=2637 n=2637 n=153 n=161 120/782
+> active
+
+D    
+
+> n=2670 n=2670 n=106 n=129 140/782
+> active
+
+E                                  
+
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> FPR
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> TPR
+> ISC_
+> Before (AUC=0.993)
+> After (AUC=0.904)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> FPR
+> 1AVB
+> Before (AUC=0.844)
+> After (AUC=0.883)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> FPR
+> NST_
+> Before (AUC=0.931)
+> After (AUC=0.904)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> FPR
+> IVCD
+> Before (AUC=0.794)
+> After (AUC=0.813)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> FPR
+> ISCAL
+> Before (AUC=0.991)
+> After (AUC=0.997)
+> Device 1 Device 2 Device 3 Active feature support Inactive feature support
+
+Figure 3: Device-induced domain shifts in healthy ECG cohorts. Each row corresponds to one con-trolled comparison between two age- and sex-matched healthy ECG cohorts, X and Y, constructed from three measurement-device-specific subsets. Cases A–C are primary device-composition con-trasts, each with one device specific to X , one device approximately shared between cohorts, and one device specific to Y. Case D is a perturbed version of Case C, preserving the same dominant contrast while introducing a small fraction of the opposite device into each cohort. The first two columns show the device composition of the input cohorts. The next two columns show the device composition of the pruned representative sets ˆX + and ˆY+ extracted by our procedure. The active-subspace column reports the size of the feature support selected by Neighbor-Enriched subspace localization using ˆY+
+
+as query samples. Row E shows AUCROC curves for binary NORM-vs-PATH classification on five illustrative pathologies, evaluated before and after equalization under the Case C device-composition split. The classifier shown in Row E was selected as the one with the largest mean absolute relative AUCROC change across the five tasks; all classifiers and the corresponding confusion matrices are reported in Supp. A.5 and Figures 4–5. detectable, directionally localized domain shifts in healthy ECG cohorts, and that the corresponding feature supports reflect the similarity of the underlying device-composition contrasts. To assess whether device-associated equalization can affect downstream prediction, we performed a diagnostic classification check under the Case C device-composition split. Five PTB-XL+ pathology labels were used as illustrative NORM-vs-PATH tasks: 1AVB, NST_, IVCD, ISC_, and ISCAL. EagleEye equalization was estimated on the healthy cohorts only; pathology-positive recordings were then added a posteriori according to the same device-composition design, with training samples matched to X and test samples matched to Y. Three classifiers spanning linear and nonlinear models were evaluated before and after equalization (LR-L2, LR-EN, HGBT; see Supp. A.5 for details); row E of Figure 3 reports ROC curves for the classifier with the largest mean absolute relative AUCROC change across the five tasks, with all conditions provided in Figures 4–5. The variation in the reference set of healthy subjects bring in some cases to better predictions (1AVB), in other cases to worse predictions (ISC), but in all the cases to different predictions. This indicates, that even a highly curated dataset such as the one considered in this example small domain shifts are present, and those domain shifts affect the classification results. 84 Discussion and limitations 
+
+The experiments presented above show that the proposed framework can detect distributional discrep-ancies between unlabeled datasets, attribute them to interpretable feature subspaces, and construct pruned/equalized subsets, both in controlled benchmarks with known ground truth and in a real clinical feature space. Several limitations should be considered when interpreting these results. The equalized subsets Xeq and Yeq produced by our procedure satisfy a statistical stopping criterion: the one-sided KS test on the anomaly-score tail no longer rejects at the prescribed significance level 
+
+α. This means that the detected excess mass has been reduced under the local scoring backbone, but it does not imply that the two equalized subsets are drawn from identical distributions. Residual discrepancies below the sensitivity threshold may remain. Equalization should therefore be interpreted as reduction of the detected distributional discrepancy, not as a certificate of distributional equivalence. A related limitation is that the pipeline is triggered by the local anomaly score estimated in the initial feature space. If no discrepancy is detected in the full feature space, the Neighbor-Enriched Subspace Localization has no anchor set from which to start. This can occur in very high-dimensional settings when a weak discrepancy is confined to a small feature subset. In such cases, our approach could be used in a hypothesis-driven mode: given a candidate set of data labelled as anomalous, one can attempt to identify the subspace which would make the anomaly statistically relevant (and reject the hypothesis if the subspace cannot be identified). This will be the object of future research. Also the derivation of formal convergence guarantees remain important directions for future work. The MLP two-sample discriminator used in Section 3.1 is a representative classifier-based baseline following the C2ST paradigm [ 6]; through its posterior-odds score, it also provides a classifier-based density-ratio ranking that can be directly evaluated as a candidate-anchor selector. This comparison is not exhaustive. Future work could compare against other pointwise scoring baselines, including direct density-ratio estimators such as KLIEP [ 5 ], after adapting them to the same anchor-recovery evaluation. The ECG cohorts in Section 3.2 are matched for age and sex, but residual confounding may remain from variables not recorded or not controlled in PTB-XL+, such body habitus, electrode placement protocol, or other acquisition-site effects. The detected discrepancies are consistent with device-associated acquisition effects, and the coherence of the feature supports across controlled device-composition contrasts supports this interpretation. However, the results should be read as identifying distributional discrepancies associated with measurement-device composition, not as proving device effect as their unique cause. 
+
+Code Availability 
+
+The code used to generate the results of this study will be made available upon acceptance for publication at the following GitHub repository: https://github.com/sspring137/EagleEye .9References 
+
+[1] Joaquin Quiñonero-Candela, Masashi Sugiyama, Anton Schwaighofer, and Neil D. Lawrence, editors. 
+
+Dataset Shift in Machine Learning . Neural Information Processing Series. MIT Press, Cambridge, MA, 2009. ISBN 9780262170055. [2] Masashi Sugiyama and Motoaki Kawanabe. Machine Learning in Non-Stationary Environments: Intro-duction to Covariate Shift Adaptation . MIT Press, Cambridge, MA, 2012. ISBN 9780262017091. doi: 10.7551/mitpress/9780262017091.001.0001. [3] Stephan Rabanser, Stephan Günnemann, and Zachary C. Lipton. Failing loudly: An empirical study of methods for detecting dataset shift. In Advances in Neural Information Processing Systems , vol-ume 32, pages 1394–1406, 2019. URL https://papers.neurips.cc/paper_files/paper/2019/ hash/846c260d715e5b854ffad5f70a516c88-Abstract.html .[4] Arthur Gretton, Alexander J. Smola, Jiayuan Huang, Marcel Schmittfull, Karsten M. Borgwardt, and Bernhard Schölkopf. Covariate shift by kernel mean matching. In Joaquin Quiñonero-Candela, Masashi Sugiyama, Anton Schwaighofer, and Neil D. Lawrence, editors, Dataset Shift in Machine Learning . MIT Press, Cambridge, MA, 2009. doi: 10.7551/mitpress/9780262170055.003.0008. [5] Masashi Sugiyama, Taiji Suzuki, Shinichi Nakajima, Hisashi Kashima, Paul von Bünau, and Motoaki Kawanabe. Direct importance estimation for covariate shift adaptation. Annals of the Institute of Statistical Mathematics , 60(4):699–746, 2008. doi: 10.1007/s10463-008-0197-x. [6] David Lopez-Paz and Maxime Oquab. Revisiting classifier two-sample tests. In International Conference on Learning Representations , 2017. URL https://openreview.net/forum?id=SJkXfE5xx .[7] Arthur Gretton, Karsten M. Borgwardt, Malte J. Rasch, Bernhard Schölkopf, and Alexander Smola. A kernel two-sample test. Journal of Machine Learning Research , 13:723–773, 2012. URL https: //www.jmlr.org/papers/v13/gretton12a.html .[8] Gábor J. Székely and Maria L. Rizzo. Energy statistics: A class of statistics based on distances. Journal of Statistical Planning and Inference , 143(8):1249–1272, 2013. doi: 10.1016/j.jspi.2013.03.018. [9] Mark F. Schilling. Multivariate two-sample tests based on nearest neighbors. Journal of the American Statistical Association , 81(395):799–806, 1986. doi: 10.1080/01621459.1986.10478337. [10] Jerome H. Friedman and Lawrence C. Rafsky. Multivariate generalizations of the wald-wolfowitz and smirnov two-sample tests. The Annals of Statistics , 7(4):697–717, 1979. doi: 10.1214/aos/1176344722. [11] Sebastian Springer, Andre Scaffidi, Maximilian Autenrieth, Gabriella Contardo, Alessandro Laio, Roberto Trotta, and Heikki Haario. Detecting localized density anomalies in multivariate data via coin-flip statistics, 2025. URL https://arxiv.org/abs/2503.23927 .[12] Patrick Wagner, Nils Strodthoff, Ralf-Dieter Bousseljot, Dieter Kreiseler, Fatima I. Lunze, Wojciech Samek, and Tobias Schaeffter. Ptb-xl, a large publicly available electrocardiography dataset. Scien-tific Data , 7(1):154, 2020. doi: 10.1038/s41597-020-0495-6. URL https://doi.org/10.1038/ s41597-020-0495-6 .[13] Nils Strodthoff, Temesgen Mehari, Claudia Nagel, Philip J. Aston, Ashish Sundar, Claus Graff, Jørgen K. Kanters, Wilhelm Haverkamp, Olaf Dössel, Axel Loewe, Markus Bär, and Tobias Schaeffter. Ptb-xl+, a comprehensive electrocardiographic feature dataset. Scientific Data , 10(1):279, 2023. doi: 10.1038/ s41597-023-02153-8. URL https://doi.org/10.1038/s41597-023-02153-8 .[14] Kalervo Järvelin and Jaana Kekäläinen. Cumulated gain-based evaluation of IR techniques. ACM Transactions on Information Systems , 20(4):422–446, October 2002. doi: 10.1145/582415.582418. [15] Christopher D. Manning, Prabhakar Raghavan, and Hinrich Schütze. Introduction to Information Retrieval .Cambridge University Press, 2008. ISBN 978-0-521-86571-5. 
+
+10 A Supplementary Information 
+
+A.1 Supplement:Tail-Based Bidirectional Equalization Algorithm 1 Tail-Based Bidirectional Equalization 
+
+Require: Samples X , Y, neighborhood depth KM , tail quantile level qtail , KS significance level α 
+
+> 1:
+
+Initialize equalized samples Xeq ← X , Yeq ← Y  
+
+> 2:
+
+Initialize pruned representative sets ˆX + ← ∅ , ˆY+ ← ∅  
+
+> 3:
+
+Estimate the two backbone null score distributions for Y- and X -overdensities  
+
+> 4:
+
+repeat  
+
+> 5:
+
+Compute anomaly scores on all points in Xeq and Yeq as in Section 2.1  
+
+> 6:
+
+Set the tail thresholds τ (Y+)tail and τ (X +)tail from the corresponding null quantiles at level qtail  
+
+> 7:
+
+Define the current tail candidates 
+
+C(Y+) ← {Y i ∈ Y eq : Υ (Y+) 
+
+> i
+
+≥ τ (Y+)tail }, C(X +) ← {X j ∈ X eq : Υ (X +) 
+
+> j
+
+≥ τ (X +)tail } 
+
+> 8:
+
+Run one-sided two-sample KS tests comparing the empirical tails of C(Y+) and C(X +) against the corresponding null tails  
+
+> 9:
+
+while at least one of the two KS tests rejects at level α do  
+
+> 10:
+
+if C(Y+) is active then  
+
+> 11:
+
+Select the most extreme point(s) in C(Y+) 
+
+> 12:
+
+Let N (Y+) ⊂ Y eq denote the selected point(s) together with all neighbors up to the first point belonging to Xeq  
+
+> 13:
+
+Update ˆY+ ← ˆY+ ∪ N (Y+) and Yeq ← Y eq \ N (Y+) 
+
+> 14:
+
+end if  
+
+> 15:
+
+if C(X +) is active then  
+
+> 16:
+
+Select the most extreme point(s) in C(X +) 
+
+> 17:
+
+Let N (X +) ⊂ X eq denote the selected point(s) together with all neighbors up to the first point belonging to Yeq  
+
+> 18:
+
+Update ˆX + ← ˆX + ∪ N (X +) and Xeq ← X eq \ N (X +) 
+
+> 19:
+
+end if  
+
+> 20:
+
+Update C(Y+) ← C (Y+) ∩ Y eq and C(X +) ← C (X +) ∩ X eq  
+
+> 21:
+
+Recompute anomaly scores only for points currently belonging to C(Y+) and C(X +), then re-evaluate the two KS tests on the updated tails  
+
+> 22:
+
+end while  
+
+> 23:
+
+until both KS tests do not reject after global recomputation  
+
+> 24:
+
+return ˆX +, ˆY+, Xeq , Yeq 
+
+A.2 Supplement: Neighbor-Enriched feature selection (implementation details) S1: Inputs, target/query definition, and defaults. C1 operates on a feature matrix U ∈ Rn×d
+
+(rows are samples, columns are features), which in our experiments is obtained by pooling the two cohorts used by EagleEye. We assume U is standardised per feature (zero mean and unit variance) before running feature selection ( in our experiments we perform this preprocessing step once and reuse it throughout ). The neighbour-enrichment objective is defined through two boolean masks of length n:• target_mask ∈ { 0, 1}n: target_mask [j]=1 if sample j is a desired neighbour (a “hit”). • query_mask ∈ { 0, 1}n: query_mask [i]=1 if sample i is a query/anchor whose neighbour-hood we aim to enrich in target samples. In the X /Y setting used throughout the paper, we typically set the target set to the test cohort (T = Y), i.e. target_mask marks the rows of the pooled matrix that belong to Y, and set the query set Q ⊆ Y to the pruned returned by EagleEye (so query_mask marks only those selected Y rows). If query_mask is not provided, the implementation defaults to query_mask =target_mask .Unless stated otherwise we use the following defaults: K = 100 neighbours, β = 0 .2 (rank tie-break strength), T = 3000 epochs, mini-batch size B = 200 , stratified query fraction pos_frac = 0 .5,11 temperature annealing τstart = 1 .0 → τend = 0 .1 (geometric), Adam learning rate lr = 10 −2, ℓ1
+
+penalty l1 = 10 −2, 5-fold cross-validation ( n_splits = 5 ), and random seed 0.Mini-batches are stratified by query_mask : pos_frac is the fraction of query samples included in each batch (default 0.5). 
+
+S2: Nonnegative weights and scale-normalised effective weights. We learn one nonnegative weight per feature via an unconstrained parameter vector ℓ ∈ Rd (stored as logw in the implemen-tation), initialised to zeros. The optimiser updates ℓ; the weights wraw and weff are deterministic functions of ℓ. At each optimisation step we map ℓ to raw nonnegative weights through the Softplus transform, 
+
+wraw ,j = softplus( ℓj ) = log  1 + eℓj  ⇒ wraw ∈ Rd
+
+> ≥0
+
+.
+
+This guarantees nonnegativity at every iteration while remaining smooth for gradient-based optimisa-tion; weights can become arbitrarily small (effectively zero in practice) as ℓj → −∞ .Because multiplying all weights by a common constant does not change neighbour identities up to a global rescaling of distances, unconstrained optimisation can drift toward trivially large (or small) weights. We therefore define effective weights used in the distance metric by fixing the global scale to have sum approximately d:
+
+weff = wraw · d
+
+Pdj=1 wraw ,j 
+
+.
+
+Importantly, the implementation stops gradients through the denominator (i.e., it treats the normalising sum as a constant when computing parameter updates) and adds a small stabiliser: 
+
+weff = wraw · d
+
+stopgrad 
+
+Pdj=1 wraw ,j 
+
+
+
++ 10 −8
+
+.
+
+The resulting weights satisfy P 
+
+> j
+
+weff ,j ≈ d, up to the 10 −8 stabiliser. Stopping gradients through the normalisation prevents the optimiser from compensating the sparsity penalty (by shrinking the denominator) instead of genuinely driving many feature weights toward zero; it also makes the effective weights comparable across runs because their overall “budget” is fixed. Distances and neighbour probabilities are computed using weff , while sparsity is enforced via an ℓ1 penalty on wraw (see S4). 
+
+S3: In-batch soft KNN neighbourhood probabilities. Given a mini-batch feature matrix Zb ∈
+
+RB×d (rows are samples), we compute neighbour probabilities P ∈ [0 , 1] B×B using the current effective weights weff (from S2). We first rescale features elementwise and compute all pairwise squared Euclidean distances within the batch: ˜Zb = Zb ⊙ weff , d2 
+
+> ij
+
+= ∥˜zi − ˜zj ∥22, i, j ∈ { 1, . . . , B }.
+
+We convert distances into similarity logits (unnormalised similarity scores) via 
+
+ℓij = − d2
+
+> ij
+
+max(10 −6, τ ) ,
+
+so larger logits mean “more similar”. The max(10 −6, τ ) guard prevents numerical issues when τ is very small, and self-matches are excluded by subtracting a large constant from the diagonal: 
+
+ℓii ← ℓii − 10 9.
+
+Neighbour probabilities are obtained by applying a row-wise softmax restricted to the K largest logits in each row. Concretely, for each i we keep only the indices of the top-K logits {ℓij }j , set the remaining entries to −∞ , and apply a softmax: 
+
+Pij = exp( ℓij )
+
+P 
+
+> j′∈TopK( i)
+
+exp( ℓij ′ ) for j ∈ TopK( i), Pij = 0 otherwise .
+
+If K ≥ B, we default to a full row-wise softmax over all non-diagonal entries. The resulting matrix P satisfies P 
+
+> j
+
+Pij = 1 for each row i and can be interpreted as a soft assignment distribution over the K nearest neighbours of sample i within the current mini-batch. 12 S4: Training objective and optimisation procedure. We learn feature weights by maximising soft target enrichment of the query samples’ neighbourhoods, using mini-batch stochastic optimisation with Adam. Let query_mask mark the query set Q and let the remaining samples be non-queries . Each mini-batch corresponds to an index set B ⊆ U of size B and is constructed by sampling, without replacement, approximately (B · pos_frac ) query indices and (B − B · pos_frac ) non-query indices, then shuffling the concatenated indices. Across epochs we anneal the softmax temperature τ geometrically 
+
+from τstart to τend .Within a batch, we compute neighbour probabilities P via the soft KNN construction in S3 and define, for each batch sample i, the soft target mass 
+
+mi =
+
+> B
+
+X
+
+> j=1
+
+Pij 1{j ∈ T ∩ B} ,
+
+where the target indicator corresponds to target_mask restricted to the current batch. Only batch samples that are queries contribute to the objective. The batch objective is 
+
+obj = 1
+
+|Q ∩ B| 
+
+X
+
+> i∈Q∩B
+
+mi ,
+
+(with the update skipped if Q ∩ B = ∅). We maximise the objective while promoting sparsity via an 
+
+ℓ1 penalty on raw weights: 
+
+L = − obj + λ
+
+> d
+
+X
+
+> j=1
+
+wraw ,j ,
+
+where λ = 10 −2 and wraw is the Softplus-transformed nonnegative weight vector from S2. We use Adam on the underlying unconstrained parameters with learning rate lr = 10 −2 and default Adam hyperparameters. 
+
+S5: From weights to a discrete feature subset. After training, we use the effective weights weff to rank features and to select the subset size m via a leakage-safe hard KNN cross-validation procedure (with the same K used throughout the paper). For each candidate subset size m, we take the indices of the m largest weights, TopM( weff , m ). To speed up the search, the candidate values of m are restricted to a predefined grid. In the current implementation, the grid starts from d and then sweeps down to 150 in steps of 50 , then continues down to 50 in steps of 5, then down to 16 in steps of 2, and finally considers each integer from 15 
+
+down to 1.To choose m, we evaluate each candidate subset TopM( weff , m ) using K-fold cross-validation. Here, “training” refers to the portion of the pooled dataset used to define neighbourhoods for that fold, while “validation” refers to held-out query samples used only to test how target-enriched their neighbourhoods are under the chosen subset. Concretely, in each fold we split the pooled indices into a training set and a validation set. We then compute hard K nearest neighbours for each validation query sample using distances in the selected feature subset, but we restrict the neighbour search to the training set only (validation samples are never used as neighbours of one another). This avoids optimistic bias when assessing enrichment. We split the data into K folds in a stratified manner that preserves the query/non-query proportion across folds and ensures that each fold contains both groups whenever possible. For a validation query sample i, let ci be the number of target samples among its K nearest neighbours, and let ϕi = ci/K denote the corresponding neighbourhood purity. When several subsets yield similar purity, we prefer the one where the target neighbours tend to appear 
+
+earlier (i.e., at smaller ranks, hence closer). To quantify this, we use a standard rank-discounted score from information retrieval (discounted cumulative gain, DCG, and its normalized variant nDCG; [ 14 , 15 ]): each target neighbour contributes to the score, but contributions are down-weighted as the neighbour rank increases. We normalize by the best possible value given the same hit count ci,yielding a normalized rank-sensitivity qi ∈ [0 , 1] with qi = 1 when the ci target neighbours are the closest ones. 13 We then combine purity and rank sensitivity as 
+
+si = ϕi + β(1 − ϕi)qi,
+
+and define the subset score as the mean of si over validation queries, averaged across folds. In addition to this main score (with the user-specified β), we also report a “purity-only” curve obtained by setting β = 0 , which corresponds to the target fraction among hard KNN neighbours. Finally, we select m⋆ as the value in the grid that maximizes the cross-validated mean score, and return TopM( weff , m ⋆) as the selected feature subset. 
+
+A.3 Default hyperparameters 
+
+Unless otherwise stated, all experiments use the default hyperparameters reported below. These values were kept fixed across the synthetic and ECG experiments, except when a parameter was explicitly varied as part of the experimental design. 
+
+EagleEye local two-sample scoring. 
+
+• Maximum neighbourhood depth: KM = 400 for the synthetic benchmark and KM = 200 
+
+for the ECG experiments. • Null calibration: Monte Carlo calibration using Bernoulli sequences as in [11]. 
+
+Clustering 
+
+• We use Density Peaks Advanced clustering with default parameters as in [11]. 
+
+Bidirectional tail-KS equalization. 
+
+• Tail threshold: qtail = 0 .97 null quantile. • Tail test: one-sided two-sample Kolmogorov–Smirnov test comparing observed and null anomaly-score tails. • KS significance level: α = 0 .05 , unless otherwise stated. • Pruning rule: pruning is activated on a side only when the corresponding one-sided KS tail test rejects at level α.• Pruned neighbourhood: for each selected tail point, samples are removed up to the first neighbour belonging to the opposite dataset. • Recalculation strategy: anomaly scores are updated locally within the active tails during pruning and recomputed globally after both tail tests stop rejecting. • Stopping rule: the procedure stops when both one-sided KS tail tests no longer reject after global recomputation. 
+
+Neighbor-Enriched Subspace Localization. 
+
+• Number of neighbours in the enrichment objective: K = 100 .• Feature weights: one nonnegative raw weight per feature, transformed through a softplus parameterization. • Effective weight normalization: effective weights are rescaled to have total weight approxi-mately equal to the ambient dimension d.• Sparsity penalty: λ = 10 −2 on raw feature weights. • Optimizer: Adam. • Learning rate: 10 −2.• Number of epochs: 3000 .• Mini-batch size: 200 .• Query fraction in stratified mini-batches: 0.5.14 • Temperature schedule: geometric annealing from τstart = 1 .0 to τend = 0 .1.• Model selection: leakage-safe hard-KNN cross-validation over candidate subset sizes. • Number of cross-validation folds: 5.• Rank-discount strength for subset scoring: β = 0 .2.• Random seed: 0, unless otherwise stated. 
+
+MLP two-sample classifier baseline. 
+
+• Task: binary discrimination between samples from X and Y.• Input space: full 20-dimensional feature space for the synthetic localized-shift benchmark. • Architecture: fully connected multilayer perceptron with hidden layers (128 , 64 , 32) .• Activation: ReLU. • Optimizer: Adam. • Learning rate: 10 −3.• L2 regularization parameter: 10 −4.• Batch size: 256 .• Maximum number of training iterations: 300 .• Density-ratio score: target samples are ranked by the classifier posterior-odds score, 
+
+ˆr(x) = ˆp(y = Y | x)1 − ˆp(y = Y | x) .
+
+• Anchor-recovery evaluation: InjectedRecall@400 , defined as the fraction of injected localized-shift samples contained among the top-400 ranked target samples. 
+
+A.4 Controlled 20D benchmark construction 
+
+We constructed a controlled 20-dimensional benchmark to evaluate recovery of both sample-level domain shifts and their supporting feature coordinates under known ground truth. The background distribution is a four-component Gaussian mixture in R20 . Unless otherwise stated, each reference cohort contains 50 ,000 background samples. 
+
+Background Gaussian mixture. The feature space is d = 20 . The reference distribution is 
+
+P0(x) = 
+
+> 4
+
+X
+
+> m=1
+
+πmN (x; μm, Σm),
+
+with mixture weights 
+
+π = (0 .35 , 0.30 , 0.20 , 0.15) .
+
+The component means are 
+
+μ1 = (0 .0, 0.0, 0.5, −0.5, 0.0, 0.3, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) ,μ2 = (2 .5, −1.0, −0.5, 1.0, 0.5, −0.3, 0.0, 0.2, −0.2, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) ,μ3 = ( −2.0, 1.5, 0.0, 0.5, −1.0, 0.0, 0.3, −0.2, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) ,μ4 = (1 .0, 2.0, −1.0, −1.0, 0.0, 0.5, −0.5, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) .
+
+All covariance matrices are diagonal. Their diagonal entries are 
+
+diag(Σ 1) = (1 .2, 1.0, 0.8, 0.9, 0.7, 0.8, 1.0, 1.0, 0.9, 1.0, 1.0, 1.0, 1.0, 0.8, 0.8, 0.8, 0.9, 0.9, 0.9, 0.9) ,
+
+diag(Σ 2) = (0 .9, 1.1, 0.7, 0.8, 0.8, 0.7, 1.0, 0.9, 1.0, 1.0, 1.0, 0.9, 1.0, 0.8, 0.8, 0.8, 1.0, 1.0, 0.9, 0.9) ,
+
+diag(Σ 3) = (1 .0, 0.8, 1.0, 0.9, 0.7, 1.1, 0.8, 0.9, 1.0, 1.0, 0.9, 1.0, 1.0, 0.9, 0.8, 0.8, 0.8, 0.9, 0.9, 1.0) ,
+
+diag(Σ 4) = (1 .1, 0.9, 0.8, 1.0, 0.8, 0.8, 0.9, 1.0, 1.0, 0.9, 1.0, 1.0, 0.9, 0.8, 0.8, 0.8, 0.9, 0.9, 1.0, 1.0) .
+
+15 Global domain-shift experiment. The global domain-shift experiment introduces a systematic perturbation in one background mixture component. Specifically, component m = 2 is shifted in the second cohort along coordinates 
+
+{0, 1, 3}.
+
+The displacement magnitude is controlled by the scalar parameter δ, denoted by σ in the main text. We vary 
+
+σ ∈ { 0, 0.05 , 0.10 , . . . , 0.50 }.
+
+For each value of σ, the analysis is repeated across 11 random seeds. 
+
+Localized domain-shift experiment. The localized domain-shift experiment injects a compact minority population into one cohort. The injected population is associated with component m = 1 
+
+and is supported on the ground-truth feature set 
+
+{2, 4, 6, 8, 9}.
+
+The number of injected samples is varied as 
+
+{100 , 150 , 200 , 250 , 300 , 350 , 400 , 450 , 500 }.
+
+Injected samples are generated around an anchor defined relative to the standard deviations of the selected background component. Along the active dimensions Slocal , the anchor offset in units of component standard deviation is 
+
+(1 .1, −0.4, 0.4, −0.2, 0.3) .
+
+The injected cluster has anisotropic geometry with scales, again expressed in units of the component standard deviations, 
+
+(0 .11 , 0.08 , 0.04 , 0.04 , 0.03) ,
+
+and a random rotation is applied within the active subspace. In ambient inactive dimensions, the injected samples follow the corresponding background component with shrinkage factor 0.7.
+
+A.5 ECG dataset: classification 
+
+To assess whether device-associated equalization can affect downstream prediction, we performed a diagnostic classification check under the same Case C device-composition split used in the ECG equalization experiment. We considered five PTB-XL+ pathology labels, used here as illustrative NORM-vs-PATH classification tasks: first-degree atrioventricular block (1AVB), nonspecific ST changes (NST_), intraventricular conduction disturbance (IVCD), ischemic ST-T changes (ISC_), and ischemic anterolateral ST-T changes (ISCAL). The 782-dimensional Marquette 12SL feature vectors were used as input after the standardization described in Section 3.2 of the main text, with no additional task-specific preprocessing. We evaluated three classifiers. (i) LR-L2 : logistic regression with ℓ2 regularization ( penalty=“l2” ,
+
+C = 0.01 , solver=“lbfgs” , max_iter=2000 ), used as a ridge-regularized linear baseline. 
+
+(ii) LR-EN : logistic regression with ElasticNet regularization ( penalty=“elasticnet” , C =0.01 , ℓ1_ratio=0.5 , solver=“saga” , max_iter=3000 ), providing a sparse linear baseline through the mixed ℓ1/ℓ2 penalty. (iii) HGBT : histogram gradient-boosted trees ( max_depth=3 ,
+
+learning_rate=0.03 , min_samples_leaf=30 , max_iter=500 ), with early stopping on a 15% validation fraction ( n_iter_no_change=20 ). The shallow depth and minimum leaf-size constraint were used to limit overfitting in the imbalanced binary tasks. Class imbalance was handled using inverse-frequency class weights computed on the training set, 
+
+w0 = 1 and w1 = nNORM /n PATH . No oversampling or resampling was applied. EagleEye equalization was first estimated on the healthy cohorts of Case C only. The downstream NORM-vs-PATH tasks were then constructed a posteriori by adding pathology-positive recordings before and after equalization according to the same device-composition design: pathology-positive training samples matched cohort X , pathology-positive test samples matched cohort Y, and samples from the device shared by X and Y were split 50–50. For each of the 5 cases, classifiers were trained on cohort X plus the corresponding pathology-positive training samples and tested on cohort Y plus the corresponding pathology-positive test samples, before and after equalization. Performance is summarized by ROC curves, AUCROC, and confusion matrices at the default 0.5 decision threshold. The full before/after results for all three classifiers are shown in Figure 5, with the corresponding confusion matrices reported in Figure 4. 16 NORM PATH 
+
+> NORM PATH
+> ISC_
+> True
+
+2586 51 
+
+8 129 
+
+Before 
+
+LR L2 
+
+NORM PATH 
+
+> NORM PATH
+
+2557 80 
+
+6 131 
+
+Before 
+
+LR ElasticNet 
+
+NORM PATH 
+
+> NORM PATH
+
+2604 33 
+
+9 128 
+
+Before 
+
+HGB Trees 
+
+NORM PATH 
+
+> NORM PATH
+
+2432 44 
+
+8 129 
+
+After 
+
+LR L2 
+
+NORM PATH 
+
+> NORM PATH
+
+2390 86 
+
+35 102 
+
+After 
+
+LR ElasticNet 
+
+NORM PATH 
+
+> NORM PATH
+
+2451 25 
+
+8 129 
+
+After 
+
+HGB Trees 
+
+NORM PATH 
+
+> NORM PATH
+> 1AVB
+> True
+
+2442 195 
+
+32 66 
+
+NORM PATH 
+
+> NORM PATH
+
+2393 244 
+
+30 68 
+
+NORM PATH 
+
+> NORM PATH
+
+2614 23 
+
+24 74 
+
+NORM PATH 
+
+> NORM PATH
+
+2303 173 
+
+33 65 
+
+NORM PATH 
+
+> NORM PATH
+
+2013 463 
+
+22 76 
+
+NORM PATH 
+
+> NORM PATH
+
+2445 31 
+
+20 78 
+
+NORM PATH 
+
+> NORM PATH
+> NST_
+> True
+
+2409 228 
+
+15 73 
+
+NORM PATH 
+
+> NORM PATH
+
+2149 488 
+
+11 77 
+
+NORM PATH 
+
+> NORM PATH
+
+2429 208 
+
+11 77 
+
+NORM PATH 
+
+> NORM PATH
+
+2271 205 
+
+16 72 
+
+NORM PATH 
+
+> NORM PATH
+
+2044 432 
+
+13 75 
+
+NORM PATH 
+
+> NORM PATH
+
+2328 148 
+
+14 74 
+
+NORM PATH 
+
+> NORM PATH
+> IVCD
+> True
+
+2445 192 
+
+68 77 
+
+NORM PATH 
+
+> NORM PATH
+
+2282 355 
+
+63 82 
+
+NORM PATH 
+
+> NORM PATH
+
+2534 103 
+
+67 78 
+
+NORM PATH 
+
+> NORM PATH
+
+2290 186 
+
+69 76 
+
+NORM PATH 
+
+> NORM PATH
+
+2248 228 
+
+66 79 
+
+NORM PATH 
+
+> NORM PATH
+
+2401 75 
+
+69 76 
+
+NORM PATH 
+
+> NORM PATH
+> ISCAL
+> True
+
+2609 28 
+
+6 74 
+
+NORM PATH 
+
+> NORM PATH
+
+2587 50 
+
+9 71 
+
+NORM PATH 
+
+> NORM PATH
+
+2613 24 
+
+8 72 
+
+NORM PATH 
+
+> NORM PATH
+
+2454 22 
+
+6 74 
+
+NORM PATH 
+
+> NORM PATH
+
+2440 36 
+
+7 73 
+
+NORM PATH 
+
+> NORM PATH
+
+2444 32 
+
+3 77 Figure 4: Confusion matrices for NORM-vs-PATH binary classification before and after Ea-gleEye equalization. Rows correspond to the five illustrative pathology tasks (ISC_, 1AVB, NST_, IVCD, ISCAL); columns correspond to six conditions: three classifiers (LR-L2, LR-EN, HGBT) evaluated before equalization (left block) and after equalization (right block). Each 2×2 matrix reports prediction counts with predicted class on the horizontal axis and true class on the vertical axis, using NORM and PATH labels. Cohorts are constructed under the Case C device-composition split; see Section A.5 for classifier details. 0.0 0.2 0.4 0.6 0.8 1.0 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+AUCROC 
+
+0.995 
+
+0.993 
+
+0.998 
+
+0.995 
+
+0.904 
+
+0.997 
+
+ISC_ 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+AUCROC 
+
+0.879 
+
+0.844 
+
+0.993 
+
+0.884 
+
+0.883 
+
+0.991 
+
+1AVB 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+AUCROC 
+
+0.926 
+
+0.931 
+
+0.955 
+
+0.928 
+
+0.904 
+
+0.958 
+
+NST_ 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+AUCROC 
+
+0.805 
+
+0.794 
+
+0.843 
+
+0.802 
+
+0.813 
+
+0.837 
+
+IVCD 
+
+0.0 0.2 0.4 0.6 0.8 1.0 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+AUCROC 
+
+0.997 
+
+0.991 
+
+0.997 
+
+0.997 
+
+0.997 
+
+0.997 
+
+ISCAL 
+
+False positive rate 
+
+> True positive rate
+
+Before · LR L2 
+
+Before · LR ElasticNet 
+
+Before · HGB Trees 
+
+After · LR L2 
+
+After · LR ElasticNet 
+
+After · HGB Trees 
+
+Figure 5: ROC curves for NORM-vs-PATH binary classification before and after EagleEye equalization. Each panel corresponds to one of the five illustrative pathology tasks. Solid curves show performance before equalization; dashed curves show performance after equalization. Colors distinguish LR-L2, LR-EN, and HGBT, and AUCROC values are reported inside each panel. The classifier shown in row E of Figure 3 of the main text is selected as the one with the largest mean absolute relative AUCROC change across the five pathology tasks; this supplementary figure reports all three classifiers for completeness. Cohorts are constructed under the Case C device-composition split; see Section A.5 for classifier details. 17

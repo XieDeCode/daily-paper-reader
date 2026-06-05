@@ -1,0 +1,1403 @@
+Title: Locality-aware Private Class Identification for Domain Adaptation with Extreme Label Shift
+
+URL Source: https://arxiv.org/pdf/2605.05567v1
+
+Published Time: Fri, 08 May 2026 00:39:34 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 1
+
+# Locality-aware Private Class Identification for Domain Adaptation with Extreme Label Shift 
+
+Chuan-Xian Ren, Cheng-Jun Guo, and Hong Yan Fellow, IEEE 
+
+Abstract —Domain adaptation aims to transfer knowledge from a labeled source domain to an unlabeled target domain with different distributions. In real-world scenarios, the label spaces of the two domains often have an inclusion relationship, where some classes exist only in one domain but not the other. These non-overlapping classes are referred to as private classes. Identifying private class samples and mitigating their adverse effects is critical in the literature. Existing methods rely on the assumption that shifts in private classes are large enough to be considered outliers. However, the variance within a single shared class can be significantly larger than the difference between a private class and another shared class, challenging this assumption. Consequently, private classes substantially increase the difficulty of cross-domain classification. To address these issues, based on local transportation and metric properties of optimal transport (OT), a locality-aware private class identification approach is proposed in the form of a score function on transport mass. The effectiveness of the proposed approach is theoretically proven, highlighting the score function’s strong ability to distinguish between shared and private class samples. Building on this, we introduce a reliable OT-based method (ReOT) for domain adaptation under severe label shift. ReOT minimizes classification risk while learning the separated cluster structure between the identified shared classes and private classes, effectively avoiding mismatch between shared-private sample pairs, thus ensuring that important knowledge is reliably transported intra-class to mitigate class-conditional discrepancy. Furthermore, a generalization upper bound of the target risk is provided for extreme label shift scenarios, which can be minimized by ReOT. Extensive experiments on benchmarks validate the effectiveness of ReOT. 
+
+Index Terms —Open set domain adaptation, partial domain adaptation, optimal transport, generalization error analysis, private class identification. 
+
+✦
+
+1 INTRODUCTION 
+
+# IT is well-known that a model with strong generalization performance requires large-scale datasets with sufficient label annotations. However, data collected from real world are often unlabeled, and labeling large-scale datasets typ-ically involves excessive costs. In particular, the collected datasets may have different data distributions, resulting in a severe degradation of the model performance. To solve these issues, unsupervised domain adaptation (UDA) [1, 2, 3] has recieved wide attention to transfer knowledge from a labeled domain (i.e., source domain) to an unlabeled domain with different data distribution (i.e., target domain), notably saving time and labor consuming to collect labels for target domain. However, most existing UDA works [4, 5, 6] follow a closed set assumption, i.e., the two domains share identical label space. This severely limits their applications to real-world scenarios since the label spaces of source and target domains are usually heterogeneous or extremely shifted. 
+
+• C.X. Ren and C.J. Guo are with the School of Mathematics, Sun Yat-Sen University, Guangzhou 510275, China. Hong Yan is with the Department of Electrical Engineering, City University of Hong Kong, Hong Kong, China. C.X. Ren is the corresponding author (email: rchuanx@mail.sysu.edu.cn). 
+
+• This work is supported in part by National Key R&D Program of China (2024YFA1011900), in part by National Natural Science Foundation of China (Grant No. 62376291), in part by Guangdong Basic and Applied Basic Research Foundation (2023B1515020004), in part by Science and Technology Program of Guangzhou (2024A04J6413), in part by the Fundamental Research Funds for the Central Universities, Sun Yat-sen University (24xkjc013), and in part by the Hong Kong Innovation and Technology Commission (ITC) (InnoHK Project CIMDA) and the Institute of Digital Medicine of City University of Hong Kong (Project 9229503). 
+
+Specifically, the heterogeneous scenarios can be roughly divided into two categories: 1) source label space is a subset of the target label space; 2) source label space includes the target label space. To address these two realistic challenges, open set domain adaptation (OSDA) [7, 8, 9] and partial domain adaptation (PDA) [10, 11, 12] are proposed, re-spectively. These two scenarios can be viewed as cases of extreme label shift DA. Generally, OSDA assumes the private classes exist in the target domain, and it requires the model to recognize them. PDA shows a similar scenario while the private classes exist in the source domain. Therefore, both OSDA and PDA face two primary challenges: 1) Domain gap on shared classes: The data distribution for shared classes differs between the source and target domains, reducing classification accuracy on these classes. 2) Category gap: The absence of private classes in one domain (either source or target) leads to a significant drop in model performance in the target domain, even if the model performs well in the source domain. In these two challenges, the category gap is the core issue. It is not only inherently challenging to be addressed but also complicates the resolution of domain discrepancies using well-studied domain alignment techniques, as the absence of private classes can lead to misalignment between private and shared classes. Therefore, it is crucial to mitigate the adverse effects of the category gap. Most current works [13, 14, 15] addressed these chal-lenges by the following two steps: 1) Identifying and then separating the private class samples to eliminate label shift; 2) Implementing domain alignment approach to alleviate domain discrepancy. Following this strategy, these works   
+
+> arXiv:2605.05567v1 [cs.AI] 7 May 2026 IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 2target private class
+> source shared class
+> target shared class
+> target private class
+> source shared class
+> target shared class
+> Large Shift
+> Small Shift
+> bottle bottle
+> file cabinet
+> file cabinet
+> ring binder
+
+(a) Open Set Domain Adaptation (OSDA) source private class  
+
+> source shared class
+> target shared class
+> source private class
+> source shared class
+> target shared class
+> Large Shift
+> Small Shift
+> paper notebook
+> headphone headphone
+> mug
+> mug
+
+(b) Partial Domain Adaptation (PDA) 
+
+> Fig. 1. Two typical extreme label shifts in unsupervised domain adaptation, i.e., (a) OSDA; (b) PDA. To achieve successful private class identification, existing methods often assume that the semantic shift of the private class is consistently larger than the domain shift of shared classes. However, the variance for a specific shared class can be larger than the gap between a private class and another shared class. Better view in color.
+
+.can recognize some target/source private samples and achieve a degree of domain alignment, thereby obtaining good model performance. While achieving great success, it is worth noting that mainstream methods always focus on only one scenario, ignoring the connection between OSDA and PDA. In fact, OSDA and PDA are symmetric in some sense, as the biggest difference is in which domain the pri-vate classes exist. Although OSDA may be more challenging since the private class data are unlabeled while in PDA the private class data are labeled, we would emphasize that a proper method should be able to address both scenarios. Meanwhile, it is important to recognize that even when considering only one scenario, previous methods have sig-nificant limitations, as they often rely on unrealistic strong assumptions to identify private class samples. Specifically, private class identification in previous works mainly in-cludes importance weighting-based approaches [10, 16] and threshold-based approaches [8, 15, 17]. Importance weighting-based approaches are widely used in PDA. How-ever, they involve assigning very small weights for the private class samples, while learning high-quality weights generally relies on the strong assumption that domain discrepancy is negligible. Threshold-based methods use a metric to determine the likelihood that a sample belongs to a private class. If the metric value exceeds a certain threshold, the sample is classified as private. To ensure effectiveness, these approaches often assume that the gap within a shared class is consistently smaller than the gap between private and shared classes. While this assumption may be less strict than negligible domain discrepancy, it remains difficult to satisfy in practice. As presented in Figure 1, in real-world scenarios, the gap within a single shared class can signifi-cantly exceed the gap between a private class and another shared class. This contradicts the foundational assumptions of many existing methods. Therefore, it is necessary to ex-plore a reliable method, which ensures effectiveness under realistic conditions, for private class identification. In the following, we explore the reliability of the private class identification approach for extreme label shift scenar-ios. We observe that although the shift of shared classes is not always smaller than that of private classes across the entire data manifold, it generally holds true in local regions. Specifically, in a local neighborhood of a shared class cluster, the semantic shift of private class samples is always larger. This observation can be formulated as a local spatial struc-ture. Motivated by this insight, we develop theories to char-acterize local spatial structures using masked OT [18], which offers significant advantages in local correlation character-ization and geometric interpretability. Then, we propose a novel locality-aware private class identification method, and theoretically ensure the effectiveness of this method in distinguishing between shared and private class samples. Leveraging this approach, we derive a reliable OT-based model (ReOT) for reliable transfer in practical applications. Furthermore, we provide a generalization upper bound for the target risk in DA scenarios with heterogeneous label spaces, and show that ReOT significantly reduces this bound, indicating its efficiency in addressing extreme label shift DA. Our contributions can be summarized as follows.  
+
+> •
+
+A locality-aware private class identification method is proposed using a transport mass-based score function. It effectively captures the complex manifold structure of data by MOT’s local transport property and distance-related inequality. MOT’s attributes enable our method to mitigate cross-domain class-conditional discrepancy, thus, it is employed for practical knowledge transfer.  
+
+> •
+
+The effectiveness of the proposed identification method is theoretically proved, highlighting the score function’s strong ability to distinguish between shared and private class samples. This further implies the reliability of the proposed private class identification approach, i.e., the ability to effectively identify private class samples under realistic conditions.  
+
+> •
+
+A theory-guided ReOT method is proposed utilizing locality-aware identification. ReOT minimizes classifi-cation risk while learning separated cluster structure with MOT, avoiding mismatch inter-class, and ensuring reliable transfer intra-class. Further, we give a general-ization upper bound for extreme label shift scenarios, showing that ReOT effectively minimizes this bound.  
+
+> •
+
+Extensive experiments are conducted on several bench-mark image datasets, in both OSDA and PDA settings, to validate the empirical effectiveness of ReOT. The results show that ReOT generally outperforms the state-IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 3
+
+of-the-art methods, demonstrating the stable and supe-rior performance of the learned model. The rest of this paper is organized as follows. In Section 2, we provide a brief review of open-set domain adaptation, partial domain adaptation, and the OT-based domain adap-tation methods. In Section 3, we present the locality-aware private class identification approach and the ReOT method, following which a generalization error analysis is also pro-vided to show the efficiency of ReOT in addressing extreme label shift DA. Extensive experiments and analysis under standard OSDA/PDA settings are presented in Section 4. Finally, Section 5 concludes this paper. 
+
+2 RELATED WORK 
+
+In this section, several related works on OSDA, PDA and OT-based DA methods are briefly reviewed. 
+
+2.1 Open Set Domain Adaptation 
+
+OSDA addresses a realistic challenge where the target do-main may include private classes. It is difficult for a source pre-trained model to recognize target samples correctly due to the lack of private classes in the source domain. Saito et al. [7] raise the OSDA setting for practical ap-plication, where private class samples appear only in the target domain. Recent works generally follow the pipeline to identify private class samples and then align cross-domain shared distributions. Liu et al. [13] propose sep-arate to align (STA), which trains a binary classifier to separate shared and private samples, and implement do-main alignment by adversarial learning. Fang et al. [19] provide a theoretical bound for open set domain adaptation, and propose a theory-guided method called distribution alignment with open difference (DAOD). Bucci et al. [8] focus on the effectiveness of image rotation for open set domain adaptation, and propose rotation-based open set (ROS), which use the rotation-invariance as a metric to identify the private class samples. Jang et al. [20] propose unknown-aware domain adversarial learning (UADAL) to align the source and the target-shared distribution while segregating the target-private distribution. Both progressive graph learning (PGL) [21] and manifold regularized joint transfer (MRJT) [17] essentially set empirical thresholds to assign pseudo-labels to confidence samples from the target domain. Huang et al. [22] propose a correlation metric-based graph framework which employs Hilbert-Schmidt in-dependence criterion to characterize the separation between unknown and known classes. Adjustment and alignment (ANNA) [9] aims to improve the two-step pipeline using causality-based debiasing. However, its applicability is lim-ited to OSDA scenarios and does not extend to PDA. By contrast, we view OSDA and PDA as cases of extreme label shift and address both scenarios. 
+
+2.2 Partial Domain Adaptation 
+
+PDA assumes that the label space of the target domain is a subset of the source domain, thus, it needs to identify the private class in the source domain and then mitigate the effect of negative transfer. Pioneering PDA works are devoted to reweighing sam-ples based on adversarial networks. Cao et al. propose partial adversarial domain adaptation (PADA) [10] which adds class-level weights to the source domain classifier. Technically, it weights both the classification loss and the adversarial loss on the source domain samples. Zhang et al. [23] propose the importance weighted adversarial nets (IWAN), which have separate feature extractors for each domain, and then view the domain discrimination as a bi-class problem. Subsequently, Cao et al. [24] propose the example transfer network (ETN) which introduces an addi-tional classifier and a progressive weighting scheme based on the transferability of source domain samples. Chen et al. [25] introduce domain adversarial learning to learn the shared feature subspace of selected source domain instances and target domain instances. Sahoo et al. [14] introduce a selector network and make instance-level binary predictions to select the source shared class samples for subsequent adversarial domain alignment. Unlike methods based on adversarial learning to solve partial domain adaptation problems, Li et al. [26] propose the deep residual correction network (DRCN) to address optimization difficulties and cross-domain differences using MMD. Thopalli et al. [27] propose deep orthogonal Pro-crustes alignment (DeepOPA), which combines deep fea-tures with orthogonal Procrustes alignment to achieve effec-tive subspace alignment for domain adaptation. Note that the accuracy of target domain prediction plays an impor-tant role in estimating the class-wise weights in the source domain. Liang et al. [28] use samples in the source domain to make data augment for the target domain. Yang et al. [29] propose a new reweighing scheme by incorporating the weights generated by the target domain information. Tian et al. [15] follow the alignment and separation assumptions to train an SVM for pseudo-labeling the target samples for private class identification. As mentioned above, these methods often rely on unrealistic assumptions for successful private class identification, limiting their applicability in real-world scenarios. 
+
+2.3 Optimal Transport for Domain Adaptation 
+
+Optimal transport (OT) has achieved great success in domain alignment to learn invariant representation [30]. Courty et al. [31] introduce OT for domain adaptation to align the source and target marginal distributions. Li et al. [32] further incorporate the label information into the cost matrix to gain more precise transport. Since marginal alignment may fail to learn invariant representation space when domain discrepancy is large, joint distribution opti-mal transport (JDOT) [33] is proposed for joint distribution alignment. To improve JDOT and estimate an unbiased transport plan when using mini-batches, OT with relaxed marginal constraints [34, 35] are proposed. Another effi-cient way to learn invariant representation is conditional distribution alignment. To achieve conditional alignment, Ren et al. [36] extend the optimal transport to the repro-ducing kernel Hilbert space. Wang et al. [37] propose a probability-polarized optimal transport for conditional dis-tribution alignment. Recently, OT with mask [38] is proposed for knowl-edge transfer to achieve intra-class alignment, implicitly IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 4
+
+aligning the conditional distribution. Gu et al. [39] further incorporate the mask mechanism into Gromov-Wasserstein. Note that the strict marginal constraints severely limit their applications in more realistic scenarios such as PDA. In light of this, masked optimal transport (MOT) [18] has been pro-posed by relaxing the strict marginal constraints. However, in more challenging OSDA scenarios, the theoretical under-standing of masked OT has not yet been developed. Thus, it remains necessary to explore the theoretical foundation of masked OT for successful OSDA. 
+
+3 METHODOLOGY 
+
+Under the settings of extreme label shift in domain adap-tation, there is a labeled source domain Ds = {xsi , y si }ns
+
+> i=1
+
+and an unlabeled target domain Dt = {xtj }nt 
+
+> j=1
+
+drawn from different distributions P̸ = Q. Notably, for any xtj , its true label ytj is also deterministic though unavailable. Moreover, let Ys and Yt represent their label spaces, respectively. Then 
+
+Ys and Yt are heterogeneous, e.g.,  
+
+> •
+
+In OSDA, Dt contains private class data, i.e., Ys ⊊ Yt. 
+
+> •
+
+In PDA, Ds contains private class data, i.e., Ys ⊋ Yt.Our final goal is to learn a classification model that classifies target samples as correct as possible, where target private classes not in Ys ∩ Y t will be uniformly considered as one private class. A model h ◦ g consists of a feature transformation g and a classifier h. The transformation g
+
+outputs a feature vector z = g(x) as the representation of x.Classifier h receives the representation as input and outputs the predicted label ˆy = h ◦ g(x).
+
+3.1 Preliminary 
+
+Optimal transport focuses on finding an optimal solution for moving mass from one distribution to another under constraints. We will first provide a brief introduction to OT. We denote by Sn the set of histograms with n bins: 
+
+Sn = S ∈ Rn
+
+> +
+
+, S ⊤1n = 1 , where 1n denotes the all-ones vector in Rn. Let PX ∈ S n and PX′ ∈ S m be two empirical distributions over two sample sets {xi}ni=1 and {x′ 
+
+> j
+
+}mj=1 ,i.e., PX = 1
+
+> n
+
+P 
+
+> i
+
+δxi and PX′ = 1
+
+> m
+
+P 
+
+> j
+
+δx′ 
+
+> j
+
+. Then the set of all possible couplings between PX and PX′ is given by 
+
+Π( PX , P X′ ) = 
+
+n
+
+Γ ∈ Rn×m 
+
+> +
+
+| Γ1 m = PX , Γ⊤1n = PX′
+
+o
+
+,
+
+where Γ is a transport plan with the entry Γij that de-scribes the amount of mass transported from xi to x′ 
+
+> j
+
+.Now given a cost matrix C ∈ Rn×m that measures the distance between {xi}ni=1 and {x′ 
+
+> j
+
+}mj=1 . With the entropy regularization H(Γ) = P 
+
+> i,j
+
+Γij ln Γ ij , the classical entropy regularized OT between PX and PX′ is written as [31, 40] 
+
+OT λ(PX , P X′ , C) = argmin   
+
+> Γ∈Π( PX,P X′)
+
+⟨Γ, C⟩F + λH (Γ),
+
+where λ > 0 is the parameter of sparsity penalty, and 
+
+⟨Γ, C⟩F = P 
+
+> ij
+
+Γij Cij is the Frobenius inner product. Such an optimization objective seeks an sample-level matching which usually ignores and even degrades the discriminability of the transport plan. It is also limited in handling category shift challenges due to the hard con-straints. By replacing the strict constraints with relaxed penalty terms and introducing the mask mechanism, Luo et al. [18] propose masked optimal transport to address the problems above. Suppose labels {yi}ni=1 and {y′ 
+
+> j
+
+}mj=1 are known 1, the mask matrix M ∈ Rn×m is defined as 
+
+Mij := 
+
+( 1, if yi = y′ 
+
+> j
+
+,
+
+∞, if yi̸ = y′ 
+
+> j
+
+.
+
+Then the masked cost matrix is defined as ¯C = C ⊙ M , and the masked OT is formulated as 
+
+MOT λβ1,β 2 (P X , P X′ , ¯C) = argmin 
+
+> Γ∈Rn×m
+> +
+
+⟨Γ, ¯C⟩F + λH (Γ)+ β1DKL (Γ1 n∥PX ) + β2DKL (Γ⊤1m∥PX′ ),
+
+where DKL is the Kullback-Leibler Divergence, β1 and β2
+
+are non-negative penalty parameters. As aforementioned, on the whole data manifold, the variance within a single shared class can be significantly larger than the difference between a private class and an-other shared class. However, in a local neighborhood of a shared class cluster, the distance between two samples with shared class is always smaller than that between shared and private class samples. We will formulate this key ob-servation as the local spatial structure of data. Then MOT is used to leverage this local structure and establish a general method for identifying the private class. 
+
+3.2 Locality-aware Private Class identification 
+
+The private class identification problems in extreme label shift can be uniformly described as follows. Given two sample sets X1 = {xi}ni=1 and X2 = {x′ 
+
+> j
+
+}mj=1 , they share 
+
+K classes while X2 contains extra private class samples 2.We aim to identify the private class samples in X2.In our method, the magnitude relationship between shared and private shifts is formulated as the local spatial structure, which is further characterized by masked OT. The identification is finally achieved through the magnitude re-lationship between transported mass. As shown in Figure 2, the method relaxes the strong assumptions on the whole data manifold structure, achieving more reliable identifica-tion than previous methods in practical applications. Specifically, we will formulate the local spatial structure as the magnitude relationship of the expected distances between instances with the same label. Given labels {¯yi}ni=1 
+
+and {¯y′ 
+
+> j
+
+}mj=1 corresponding to X1 and X2, respectively. We divide the representations g(X2) = {g(x′ 
+
+> j
+
+)}mj=1 into small subsets Fk = {z′ 
+
+> j
+
+∈ g(X2) | ¯y′ 
+
+> j
+
+= k}. Within each subset 
+
+Fk, the representations corresponding to the private and shared classes are denoted by Fprv k = {z′ 
+
+> j
+
+∈ F k | y′ 
+
+> j
+
+=
+
+K + 1 } and Fk\F prv k , respectively. Here y′ 
+
+> j
+
+is the true label of z′ 
+
+> j
+
+and K + 1 represents the private . Essentially, 
+
+Fprv k denotes a set of private class representations with label ¯y′ 
+
+> j
+
+= k, and Fk\F prv k represents a set of shared class representations with label ¯y′ 
+
+> j
+
+= k. In addition, let 
+
+PZprv k and PZshr k denote two empirical distributions over 
+
+Fprv k and Fk\F prv k , respectively. Then, given a non-negative function f as the distance metric, the local spatial structure    
+
+> 1. The labels may be not completely known in the unsupervised domain adaptation tasks, thus, they are estimated by pseudo labels. 2. For simplicity, we do not distinguish which is the source domain and which is the target domain here. IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 5Unreliable
+> Detection
+> Reliable
+> Detection
+> Local
+> Transport
+> Private
+> Classes
+> Private
+> Classes
+> private class
+> shared class
+> private class
+> shared class
+> Fail
+> Case
+> Fail
+> Case
+> Large
+> Transport
+> Mass
+> Mask
+> Operator Small
+> Transport
+> Mass
+> Large
+> Transport
+> Mass
+> Mask
+> Operator Small
+> Transport
+> Mass
+
+Fig. 2. Illustration of most existing private class identification methods (top), and our OT-based reliable private class identification method (down). Better view in color. 
+
+is reformulated as the magnitude relationship between the distances, i.e., 
+
+EPZshr k
+
+[f (z, z′)] < EPZprv k
+
+[f (z, z′)] , (1) where k ∈ [[ K]] , and z is any representation belongs to 
+
+{zi ∈ g(X1) | ¯yi = k}. In other words, when consider-ing representations that share the same label, the expected distance between two such shared class representations is always smaller than that between a shared class representa-tion and one from a private class. 
+
+3.2.1 OT-based Local Spatial Structure Characterization 
+
+Masked OT will be built, and the formulated local structure in Eq. (1) will be converted to the magnitude relationship of entries in the transport plan. Let CZ ∈ Rn×m denote the transport cost be-tween g(X1) and g(X2), with entries given by CZij =
+
+c(g(xi), g (x′ 
+
+> j
+
+)) for a given cost function c(·, ·) (e.g., the squared Euclidean distance). Let M ∈ Rn×m be the mask matrix estimated with labels {¯yi}ni=1 and {¯y′ 
+
+> j
+
+}mj=1 , ¯CZ =
+
+CZ ⊙ M be the masked cost matrix, and (PZ , P Z′ ) ∈ Sn ×
+
+Sm represent two empirical distributions over g(X1) and 
+
+g(X2), respectively. The optimal transport plan Γ∗ ∈ Rn×m
+
+is 
+
+Γ∗ = MOT λ 
+
+> ∞,β 2
+
+(PZ ,P Z′ , ¯CZ ). (2) Here β1 is set to ∞, which means a unilateral strict marginal constraint on Γ∗, i.e., Γ∗1m = PZ = 1
+
+> n
+
+P 
+
+> i
+
+δzi . The con-straint ensures that Pmj=1 Γ∗ 
+
+> ij
+
+= 1 
+
+> n
+
+, i.e., each representation in g(X1) transports an equal amount of mass 1 
+
+> n
+
+. This im-plies each representation within g(X1) is equally important in the transportation. An intuitive explanation is that all representations in g(X1) originate from the shared classes, and successful private class identification only relies on the information from the shared class instances. Accordingly, every representation within g(X1) wields considerable in-fluence on the process of private class identification. It is necessary to acknowledge that each representation plays an equally important role. It can be proved that the optimal transport plan Γ∗ has the following properties. 
+
+Proposition 1 (distance-related inequality). Given zi ∈
+
+g(X1) with ¯yi = k, and z′ 
+
+> j
+
+, z′ 
+
+> l
+
+∈ F k ⊂ g(X2). If the cost function c(·, ·) satisfies c(zi, z′ 
+
+> j
+
+) < c (zi, z′
+
+> l
+
+), then ∃ λ > 0
+
+and sufficiently small β2 > 0, s.t., Γ∗ satisfies 
+
+Γ∗ 
+
+> ij
+
+> Γ∗
+
+> il
+
+.
+
+The proof is placed on the supplementary material. Proposition 1 tells us that Γ∗ tends to assign larger values to representation pairs with smaller distances. Intuitively, if the local spatial structure holds, then for z′ 
+
+> j
+
+∈ F k\F prv k and 
+
+z′ 
+
+> l
+
+∈ F prv k , the amount of mass transported from those zi
+
+with ¯yi = k to z′ 
+
+> j
+
+is expected to be larger than that to z′
+
+> l
+
+, i.e., 
+
+X
+
+> ¯yi=k
+
+Γ∗ 
+
+> ij
+
+> X
+
+> ¯yi=k
+
+Γ∗
+
+> il
+
+.
+
+According to the local transport property of masked OT [18], Γ∗ 
+
+> ij
+
+= 0 if ¯yi̸ = ¯ yj , thus the above inequality is equivalent to 
+
+> n
+
+X
+
+> i=1
+
+Γ∗ 
+
+> ij
+
+>
+
+> n
+
+X
+
+> i=1
+
+Γ∗
+
+> il
+
+, (3) i.e., the local spatial structure can be described by the magnitude relationship between the total mass transported to shared and private class samples. 
+
+3.2.2 Private Class Identification through Transport Mass 
+
+Inspired by the above discussion, a private class identifica-tion method can be naturally induced utilizing the transport mass. Equation (3) indicates that the mass transported to a private class representation tends to be small due to the local structure. In other words, by reversing the sign of transport mass, an identification score s(z′ 
+
+> j
+
+) for measuring the likelihood that z′ 
+
+> j
+
+belongs to private can be defined as 
+
+s(z′ 
+
+> j
+
+) := 1
+
+m −
+
+> n
+
+X
+
+> i=1
+
+Γ∗ 
+
+> ij
+
+. (4) It is obvious that the mean of the scores over g(X2)
+
+equals to zero. So intuitively, if z′ 
+
+> j
+
+belongs to private class, then s(z′ 
+
+> j
+
+) > 0; otherwise s(z′ 
+
+> j
+
+) < 0. Let Fprv =
+
+> K+1
+
+S
+
+> k=1
+
+Fprv k ⊂ g(X2) denote all private class representations within g(X2), and Fshr = K+1 S
+
+> k=1
+
+(Fk\F prv k ) ⊂ g(X2) denote all shared class representations in g(X2). PZprv and PZshr 
+
+represent the empirical distributions over Fprv and Fshr ,respectively. Then we have the following theoretical result. 
+
+Theorem 1 If the inequality (1) holds for f (z, z′) =exp( c(z, z′)) and ∀ k ∈ [[ K]] , then ∃ λ > 0 and sufficiently small β2 > 0, s.t., 
+
+EPZshr [s(z′)] < 0 < EPZprv [s(z′)] .
+
+The proof is placed on the supplementary material. Theorem 1 highlights the score function’s strong ability to distinguish between shared and private class samples. IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 61 2
+
+# 0
+
+# 0
+
+# 0
+
+# 0       
+
+> 56
+> 11
+> 33
+> 22
+> 456123
+> Column
+> Projection
+> 3
+> 1
+> 5
+> 423
+> 6
+> 1
+> 2
+
+# (a) Local Transport 
+
+# (b) Private Detection 
+
+> Small
+> Mass
+> Large
+> Mass
+> OT
+> Plan
+> Private
+> Classes
+> Shared
+> Classes
+> Theoretical
+> Property
+> 55
+> 44
+> 665
+> 4
+> 6
+> 11
+> 22
+> 33
+> 1
+> 2
+> 3
+> Thm. 1
+
+## 0    
+
+> 564123
+> S > 0 S < 0
+> Detection Score
+> Shared Classes Private Classes
+
+## 0    
+
+> 564123
+> S > 0 S < 0
+> Detection Score
+> Shared Classes Private Classes
+
+## < 0 <      
+
+> Fig. 3. Illustration of Theorem 1 on guiding the identification of private samples. The local spatial structure is characterized by Γ∗, then iden-tification score function sacts on columns of Γ∗and we can identify shared and private samples based on the values of s.
+
+Specifically, it ensures that under the local spatial structure assumption, the expectation scores of shared and private class representations are strictly separated by 0. This further implies that zero can serve as an effective threshold for private class identification, i.e., we classify representations with s > 0 into private as presented in Figure 3. Although zero can serve as a threshold for identification, its application is contingent upon certain assumptions as described in Theorem 1. To broaden the applicability of our method in various practical scenarios, we would relax these assumptions by introducing a margin. This margin would ensure that only samples with significant scores are considered private. To induce an appropriate margin, we rethink Γ∗ from the insight of joint distribution and consider the following probability matrix Γ′ ∈ RK×m, i.e., 
+
+Γ′ := 
+
+P 
+
+> yi=1
+
+Γ∗ 
+
+> i1
+
+· · · P 
+
+> yi=1
+
+Γ∗
+
+> im
+
+... . . . ...P 
+
+> yi=K
+
+Γ∗ 
+
+> i1
+
+· · · P 
+
+> yi=K
+
+Γ∗
+
+> im
+
+ .
+
+Let PY be the empirical label distribution determined by 
+
+X1, i.e., PY = 1
+
+> n
+
+P 
+
+> i
+
+δyi , where yi ∈ [[ K]] is the true label of 
+
+xi. Then Γ′ satisfies Γ′1m = PY and Γ′⊤ 1K ≈ PZ′ , so it can be viewed as an approximate probability coupling between 
+
+PY and PZ′ . Although Γ′ 
+
+> kj
+
+is not an exact joint probability, it provides a meaningful characterization of the co-occurrence at (Y = k, Z ′ = z′ 
+
+> j
+
+) in the sense of optimal transport. Larger values indicate stronger correspondence between z′
+
+> j
+
+and class k, Thus, Γ′ 
+
+> kj
+
+can be intuitively understood as an analog of the probability that z′ 
+
+> j
+
+corresponds to class k.Since [[ K]] consists of shared classes, we further interpret 
+
+PKk=1 Γ′ 
+
+> kj
+
+= Pni=1 Γ∗ 
+
+> ij
+
+as an analog of the probability that 
+
+z′ 
+
+> j
+
+corresponds to shared classes. Recall that s(z′ 
+
+> j
+
+) measures the likelihood that z′ 
+
+> j
+
+belongs to the private class. Intuitively, for a private class sample, its score s should exceed its prob-ability of belonging to the shared classes. This leads to the inequality s(z′ 
+
+> j
+
+) = 1 
+
+> m
+
+− Pni=1 Γ∗ 
+
+> ij
+
+> PKk=1 Γ′ 
+
+> kj
+
+= Pni=1 Γ∗
+
+> ij
+
+by the definition of s in Eq. (4), which yields s(z′ 
+
+> j
+
+) > 12m for a private class sample z′ 
+
+> j
+
+.Consequently, we can obtain the set of potential shared class samples Dshr ⊂ X2 with s < 0, and the set of potential private class samples Dprv ⊂ X2 with s > 12m , i.e., 
+
+Dshr = x′ 
+
+> j
+
+∈ X2 | s(g(x′ 
+
+> j
+
+)) < 0 ,
+
+Dprv = x′ 
+
+> j
+
+∈ X2 | s(g(x′ 
+
+> j
+
+)) > 1/2m . (5) The private class identification is finally achieved by obtain-ing these two sets. We summarize the entire process of private class iden-tification in extreme label shift scenarios as follows. For practical DA tasks with extreme label shift, it is essential to have prior knowledge to ascertain which set, either {xsi }ns
+
+> i=1
+
+or {xtj }nt
+
+> j=1
+
+, contains the private class samples. We will des-ignate the set containing the private class samples as X2 and assign the remaining set to X1. The corresponding labels 
+
+{¯yi}ni=1 and {¯y′ 
+
+> j
+
+}mj=1 will be determined by true/predicted labels, depending on the availability of the true labels; if the true labels are not available, the predicted labels will be used. Subsequently, we will built masked OT from X1 to 
+
+X2 and calculate the optimal transport plan Γ∗ by Eq. (2). Leveraging Γ∗, we can then identify the shared class sam-ples Dshr and the private class samples Dprv using Eq. (5). 
+
+3.3 Algorithm and Applications for Extreme Label Shift 
+
+Based on the locality-aware private class identification method, we now present the numerical algorithm for solv-ing DA under two extreme label shift scenarios, i.e., open set domain adaptation and partial domain adaptation. The algorithm can be roughly divided into two steps. First, the private and shared class samples will be identified. Then, knowledge transfer will be implemented. For convenience, w.l.o.g., we consider the case Ys ⊊ Yt,i.e., OSDA. The results can be easily extended to Ys ⊋ Yt,i.e., PDA. The condition Ys ⊊ Yt signifies that target domain {xtj }nt 
+
+> j=1
+
+contains private class samples. Therefore, as mentioned in Sec. 3.2, we substitute sets X1 and X2
+
+with {xsi }ns 
+
+> i=1
+
+and {xtj }nt
+
+> j=1
+
+, respectively. The corresponding labels {¯yi}ni=1 and {¯y′ 
+
+> j
+
+}mj=1 are given by true labels {ysi }ns
+
+> i=1
+
+and predicted labels {ˆyti }nt
+
+> j=1
+
+, respectively. The default cost function c is given by the squared Euclidean distance. The optimal transport plan Γ∗ is then computed by Eq. (2), and we obtain the identified target shared class samples 
+
+Dshr and the identified target private class samples Dprv 
+
+by Eq. (5). These identified samples form the foundation for constructing a reliable transfer model in subsequent steps. 
+
+3.3.1 Reliable Transfer Across Domains 
+
+To ensure correct classification of these samples, we need to consider aligning the shared class-conditional distribu-tions across domains through the cross-domain intra-class alignment on shared classes, which can be achieved by utilizing the local transport property of masked OT. Specifically, we approximate the labels of target samples by the predicted labels, and then build a masked OT from source domain to target domain by using samples in the shared classes with their labels. The cost function c is given by the squared Euclidean distance. Notably, in the case where Ys ⊊ Yt, the Γ∗ computed during private class identification is served as a masked optimal transport plan from the source to the target domain. By setting the mass IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 7
+
+transported between shared and private classes in Γ∗ to zero, we obtain the desired transport plan Γshr ij from the source shared to target shared classes, i.e., 
+
+Γshr ij := 
+
+( 0, both xsi and xtj /∈ D shr ,
+
+Γ∗ 
+
+> ij
+
+, others .
+
+Then, the alignment term seeks g to minimize the cross-domain intra-class distances, formulated as 
+
+min  
+
+> g
+
+⟨Γshr , CZ ⟩F ,
+
+where CZ measure the square Euclidean distance between 
+
+{zsi }ns 
+
+> i=1
+
+and {ztj }nt
+
+> j=1
+
+.In addition, to enhance the model discrimination ability and avoid mismatching between the shared and private class samples, we also consider enlarging the discrepancy between the shared and private classes in the representation space. First, similar to Γshr , a transport plan Γprv between shared class samples and private class samples is defined by 
+
+Γprv ij := 
+
+( 0, both xsi and xtj /∈ D prv ,
+
+Γ∗ 
+
+> ij
+
+, others .
+
+Similarly, we use CZ to denote the square Euclidean distance between {zsi }ns 
+
+> i=1
+
+and {ztj }nt
+
+> j=1
+
+, then the separa-tion term is induced by maximizing the distances between shared and private class samples, which can be equivalently reformulated as the following objective, i.e., 
+
+min  
+
+> g
+
+−⟨ Γprv , CZ ⟩F .
+
+Finally, the reliable transfer loss Lrt is obtained by com-bining alignment term and separation term: 
+
+min  
+
+> g
+
+Lrt = ⟨Γshr , CZ ⟩F − ⟨ Γprv , CZ ⟩F . (6) 
+
+3.3.2 Risk Minimization 
+
+To ensure basic model performance, the empirical clas-sification risk Lcls is minimized. Specifically, it minimizes the risk not only for shared classes but also for the private. In fact, if the model can precisely recognize the private samples, it can also determine which samples belong to the shared classes. Therefore, the model performance on shared classes can benefit from the risk minimization on the private. Let ℓ(·, ·) represent a given loss function, Lcls is written as 
+
+min  
+
+> g,h
+
+Lcls = 1
+
+|D s ∪ D prv |
+
+# X
+
+> x∈D s∪D prv
+
+ℓ(h ◦ g(x), y ), (7) where pseudo label y = |Y s ∩Y t|+1 is used for all x ∈ D prv ,since Dprv ⊂ D t and the true labels are unavailable. Additionally, we propose to learn risk on the transported source domain, which is also called barycenter reconstruc-tion loss. Specifically, we map the target representations back to the source domain based on the transport plan Γ∗
+
+and then minimize the reconstruction loss. The mapping is established via the barycenter map problem: 
+
+ˆzsi = argmin 
+
+> znt
+
+X
+
+> j=1
+
+Γ∗ 
+
+> ij
+
+c(z, ztj ).
+
+Algorithm 1 ReOT for extreme label shift DA 
+
+Input: source domain data {xsi , y si }ns
+
+> i=1
+
+, target domain data 
+
+{xtj }nt
+
+> j=1
+
+, parameters λ, β2, η1 and η2, number of itera-tions T ;
+
+Output: classifier h(·) and feature transformation g(·); 
+
+> 1:
+
+Initialize h(·) and g(·); 
+
+> 2:
+
+for i = 1 to T do  
+
+> 3:
+
+Forward propagate {xtj }nt 
+
+> j=1
+
+to obtain {ˆytj }nt
+
+> j=1
+
+; 
+
+> 4:
+
+case Ys ⊊ Yt: 
+
+> 5:
+
+Substitution: X1 ← { xsi }ns
+
+> i=1
+
+, X2 ← { xtj }nt
+
+> j=1
+
+; and 
+
+{¯yi}ni=1 ← { ysi }ns
+
+> i=1
+
+, {¯y′ 
+
+> j
+
+}mj=1 ← { ˆytj }nt
+
+> j=1
+
+; 
+
+> 6:
+
+Compute Γ∗ by Eq. (2);  
+
+> 7:
+
+Implement private class identification by Eq. (5);  
+
+> 8:
+
+case Ys ⊋ Yt: 
+
+> 9:
+
+Substitution: X1 ← { xtj }nt
+
+> j=1
+
+, X2 ← { xsi }ns
+
+> i=1
+
+; and 
+
+{¯yi}ni=1 ← { ˆytj }nt
+
+> j=1
+
+, {¯y′ 
+
+> j
+
+}mj=1 ← { ysi }ns
+
+> i=1
+
+; 
+
+> 10:
+
+Compute Γ∗ by Eq. (2);  
+
+> 11:
+
+Implement private class identification by Eq. (5);  
+
+> 12:
+
+Γ∗ = ( Γ∗)T ; % Γ∗ is a transport plan from target to source domain  
+
+> 13:
+
+Compute Lrt , Lcls , Lbr by Eqs. (6), (7), (8), respec-tively;  
+
+> 14:
+
+Update h(·) and g(·) by Eq. (9).  
+
+> 15:
+
+end for 
+
+As demonstrated by Courty et al. [31], an analytic solution for this problem can be written as 
+
+ˆzsi = nsntX
+
+> j=1
+
+Γ∗ 
+
+> ij
+
+ztj .
+
+The barycenter reconstruction loss is then formulated as 
+
+min  
+
+> g,h
+
+Lbr = 1
+
+nsnsX
+
+> i=1
+
+ℓ(h( ˆ zsi ), y si ). (8) The barycenter mapping leverages target samples in the representation space to reconstruct the source sample zs
+
+with minimal cost. By minimizing Lbr , each target sample receives soft supervision proportional to its contribution to the reconstruction. The target samples that belong to the same class as zs will contribute more significantly. Con-sequently, this soft supervision will focus on pushing the target samples close to their corresponding class prototypes, implicitly lowering their classification risk. Additionally, this process enhances the representation space and accen-tuates the local spatial structure, thereby improving the accuracy of private class identification. Let η1, η 2 > 0 be trade-off parameters, our final training objective is written as 
+
+min  
+
+> g,h
+
+L = Lcls + η1Lrt + η2Lbr . (9) For OSDA, it satisfies Ys ⊊ Yt, so the above discussion can be directly applied. Besides, as neural network (NN) generally gains better learning capacity, we parameterize the classifier h(·) and feature transformation g(·) using NNs. The NN-based model can be updated with batch gradient descent. The overall training algorithm for OSDA is summarized in Algorithm 1, corresponding to case Ys ⊊ Yt.For PDA, since Ys ⊋ Yt and {xsi }ns 
+
+> i=1
+
+contains pri-vate class samples, we just need to substitute X1 and IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 8
+
+X2 with {xtj }nt 
+
+> j=1
+
+and {xsi }ns
+
+> i=1
+
+, while substituting {¯yi}ni=1 
+
+and {¯yj }mj=1 with {ˆytj }nt 
+
+> j=1
+
+and {ysi }ns
+
+> i=1
+
+, respectively, for computing Γ∗ in Eq. (2). Then the private class identifi-cation is also implemented by Eq. (5). Now, Γ∗ transports probability mass from the target to the source domain, thus the subsequently reliable transfer cannot directly proceed. Fortunately, since optimal transport is symmetric, we can directly transpose matrix Γ∗ to obtain the transport plan from source to target. Using the transposed Γ∗, Lrt , Lcls ,and Lbr can also be computed by Eqs. (6), (7), and (8), re-spectively. Notably, Ys ⊋ Yt implies that private class sam-ples belong to the labeled source domain, i.e., Dprv ⊂ D s.Consequently, there is no need to use the pseudo label for 
+
+Lcls computation. By instantiating h(·) and g(·) as NNs, the overall training algorithm for PDA is also summarized in Algorithm 1, corresponding to case Ys ⊋ Yt.
+
+3.4 Generalization Error Analysis 
+
+In this section, we study the interpretability and transfer-ability of the model learned by ReOT from theoretical per-spective. By decomposing the error gap between the source and target domains, theoretical bounds will be provided for the severe label shift scenarioes. The theoretical bounds for OSDA have been given by Fang et al. [19, 41], but it is not applicable for addressing PDA tasks. Zhao et al. [42, 43] give sufficient upper bounds for domain adaptation, but handling the bounds in the extreme label shift scenario is challenging. Combes et al. [44] provide the theoretical bounds for generalized label shift domain adaptation. However, the conclusions are formu-lated under the closed set scenario, i.e., the source domain and target domain have identical label space. Therefore, it is necessary to extend the conclusions to the extreme label shift scenarioes where label spaces are heterogeneous, including both OSDA and PDA. Let p(Y ) and q(Y ) defined on Y := Ys ∪ Y t represent the probability mass of the true label distribution of P and 
+
+Q, respectively. For convenience, w.l.o.g, the source/target private classes not in Ys ∩ Y t are uniformly denoted by 
+
+Ks/K t, i.e., Y = ( Ys ∩ Y t) ∪ Ks ∪ Kt and p(Y = Kt) = 
+
+q(Y = Ks) = 0 . Now let P ( ˆY | Y ) represent the conditional predict distribution given P and a predictor ˆY := h ◦ g(X).Then the error of model h ◦ g on source domain can be de-fined as εs(h ◦ g) := P 
+
+> i̸=j∈Y
+
+p( ˆY = i, Y = j). The error on target domain εt(h◦g) is defined similarly. Before presenting the main results, we first introduce two important concepts for theoretical analysis as Combes et al. [44]. 
+
+Definition 1 (Maximal Prediction Error). The maximal error of predictor ˆY on source distribution P is 
+
+∆MPE (P )( ˆY ∥Y ) := max 
+
+> j∈Y s∩Y t
+
+p( ˆY̸ = j | Y = j).
+
+Intuitively, maximal prediction error implies the max-imum gap between true label Y and predicted label ˆY .Moreover, it can also be viewed as the degree of error for the prediction. If the predictor can correctly classify shared class samples drawn from the distribution P , then the maximal prediction error ∆MPE (P )( ˆY ∥Y ) will be zero. 
+
+Definition 2 (Shared Conditional Gap). Given source distri-bution P and target distribution Q, the conditional gap of predictor ˆY on shared classes is 
+
+∆SCG ( ˆY ) := X
+
+> j∈Y s∩Y t
+
+q(Y = j)D(P ( ˆY |Y = j), Q ( ˆY |Y = j)) ,
+
+where 
+
+D(P ( ˆY |Y = j), Q ( ˆY |Y = j)) := max  
+
+> i̸=j,i ∈Y
+
+|p( ˆY = i|Y = j)
+
+− q( ˆY = i|Y = j)|.
+
+The shared conditional gap measures the cross-domain conditional discrepancy on shared classes. A smaller shared conditional gap implies a smaller conditional discrepancy across domains. In fact, as demonstrated by Combes et al. [44], if the following process is a Markov chain: 
+
+X g
+
+−→ Z h
+
+−→ ˆY , 
+
+where Z = g(X) and ˆY = h ◦ g(X), then P (g(X)|Y = j) = 
+
+Q(g(X)|Y = j) for any j ∈ Y s ∩ Y t implies the shared conditional gap ∆SCG ( ˆY ) is zero. In other words, when the cross-domain class-conditional distributions on shared classes are aligned and ˆY depends only on g(X), the shared conditional gap ∆SCG ( ˆY ) will be zero. Based on these two concepts, we present our result on the generalization error in the following theorem. 
+
+Theorem 2 Given source distribution P and target distribu-tion Q, then for any predictor ˆY = h ◦ g(X),
+
+|εt(h ◦ g) − εs(h ◦ g)| ≤ ∥p(Y ) − q(Y )∥1 · ∆MPE (P )( ˆY ∥Y ) + ( |Y| − 1)∆ SCG ( ˆY )+ p( ˆY̸ = Y, Y = Ks) + q( ˆY̸ = Y, Y = Kt),
+
+where 
+
+∥p(Y ) − q(Y )∥1 = X
+
+> i∈Y s∩Y t
+
+|p(Y = i) − q(Y = i)| .
+
+The proof is placed on the supplementary material. The upper bound in Theorem 2 provides a new way to decom-pose the error gap between source and target domains for the heterogeneous label space scenario, and it can also be directly used to obtain a generalization upper bound of the target risk εt, i.e., 
+
+εt ≤ εs + p( ˆY̸ = Y, Y = Ks)+ ∥p(Y ) − q(Y )∥1 · ∆MPE (P )( ˆY ∥Y )+ ( |Y| − 1)∆ SCG ( ˆY )+ q( ˆY̸ = Y, Y = Kt).
+
+Note that p( ˆY̸ = Y, Y = Ks) ≤ εs, thus it can be simplified as 
+
+εt ≤ 2εs + ∥p(Y ) − q(Y )∥1 · ∆MPE (P )( ˆY ∥Y )+ ( |Y| − 1)∆ SCG ( ˆY ) + q( ˆY̸ = Y, Y = Kt). (10) This generalization upper bound, shown by the right-hand-side of inequality (10), consists of four terms. The first term measures the classification error of model h ◦ g on the source domain and can be sufficiently minimized by ReOT, as Lcls reduces the risk on the source domain. IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 9
+
+The second term contains ∆MPE (P )( ˆY ∥Y ) and ∥p(Y ) −
+
+q(Y )∥1. As mentioned, ∆MPE (P )( ˆY ∥Y ) will decrease to 
+
+0 as the model achieves correct classification on source shared classes. Meanwhile, ∥p(Y ) − q(Y )∥1 measures the discrepancy between the true label distributions and is a constant. Therefore, the second term can also be minimized by ReOT through risk minimization on the source domain. The third term involves constant |Y| − 1 and the shared conditional gap ∆SCG ( ˆY ). By optimizing Lrt , ReOT de-creases the intra-class distances on shared classes, and thus mitigates the cross-domain class-conditional discrepancy on shared classes. Our experiments will show that Lrt is indeed effective in alleviating class-conditional discrepancy. Thus, the third term can be also reduced by ReOT. The fourth term measures the classification error on tar-get private class samples. In PDA, it is naturally 0 since there is no target private class. In OSDA, this term can be reduced by the risk minimization on target private class samples. Although the target private class samples are unlabeled in OSDA, most of them can be recognized by the proposed private class identification method. Consequently, ReOT can decrease this term by using Lcls for risk minimization on the private class samples. In conclusion, our ReOT can sufficiently decrease the upper bound of the target risk, thus achieving a small generalization error on the target domain. This ensures the effectiveness of ReOT from theoretical perspective. 
+
+4 EXPERIMENTS 
+
+4.1 Datasets and Setup 
+
+Datasets. We evaluate ReOT on four benchmark datasets, i.e., Image-CLEF [45], Office-31 [46], Office-Home [47], and VisDA-2017 [48]. We follow the standard protocols [9, 10, 16, 17] to generate adaptation tasks. Details for datasets and settings are summarized as follows.  
+
+> •
+
+Image-CLEF consists of 12 categories from 4 domains, i.e., Caltech(C), ImageNet (I), Pascal (P), and Bing (B), that are collected from existing public datasets. Each domain contains 600 images. For the OSDA setting, the first 6 categories in alphabetical order are selected as shared classes and the remaining 6 are selected as target private classes. For the PDA setting, the target domain consists of the first 6 categories (in alphabetical order).  
+
+> •
+
+Office-31 contains 4652 images of 31 categories. The images are collected from 3 different domains, i.e., Amazon (A), DSLR (D), and Webcom (W). For the OSDA setting, the first 10 categories in alphabetical order are regarded as the shared class and the last 11 categories are considered target private classes. Follow-ing the protocols in [10, 16], the target domain consists of 10 categories in the PDA setting.  
+
+> •
+
+Office-Home contains 15500 images from 4 domains, including Art (Ar), Clipart (Cl), Product (Pr), and Real-World (Rw), each domain contains 65 categories. For the OSDA setting, the first 25 categories (in alphabetical order) are selected as shared classes, while the rest are selected as target private classes. For the PDA setting, the first 25 classes (in alphabetical order) are selected as the target domains.  
+
+> •
+
+VisDA-2017 contains about 200k images of 12 cate-gories from 2 domains, i.e., Synthetic (S) and Real (R). The first 6 classes (in alphabetical order) are taken as the target domain in the PDA setting. The PDA task is considered as the knowledge transfer from S to R. 
+
+Evaluation Metrics. In the OSDA setting, we use three evaluation metrics following the mainstream OSDA works [9, 17], i.e., OS*, UNK, and H. OS* is the average classification accuracy over shared classes and UNK is the classification accuracy of the private class. H = 2 × OS ∗×UNK OS ∗+UNK 
+
+is the harmonic mean accuracy of OS* and UNK, and it is the core metric since a high H appears only if the model performs well on both OS* and UNK. In the PDA setting, we use the standard classification accuracy as evaluation metrics following the mainstream PDA works [10, 16]. 
+
+Implementation. We employ ResNet-50 [49] pre-trained on ImageNet [50] as the backbone, which has been widely used in OSDA and PDA, then we fix it to extract the 2048-dimensional feature vectors as input for all datasets. The feature transformation g(·) consists of two fully-connected-layers and the setting for dimensions is R2048 → R1024 →
+
+R256 . The classifier h(·) consists of a single fully-connected-layer with |Y s| + 1 -dimensional output and SoftMax activa-tion. The loss function ℓ(·, ·) is defined as the cross-entropy between the classifier’s output and the one-hot encoded form of the true label. The final predicted label is determined by the index of the maximum component value. g(·) and 
+
+h(·) are initially fine-tuned with the empirical risk on the source domain. Then the whole model h ◦ g is optimized by Algorithm 1. More details about the training implementa-tions are provided in the supplementary material. 
+
+4.2 Comparative Experiments Under OSDA Setting 
+
+We focus more on H in performance evaluation, since the harmonic mean H is a composite metric of OS* and UNK. The results on Image-CLEF are presented in Table 1. From the view of OS*, we see some methods perform very well. For example, STA achieves the best OS* on 5 out of all 12 tasks and outperforms the ReOT method by 1.6 % on average OS*. However, STA relies heavily on the empirical threshold to achieve private class identification, which lacks reliability and precision. As a result, it fails to identify the private samples effectively and gets significantly low UNK and H values. In contrast, ReOT utilizes a reliable private class identification approach, which ensures the precision of the identification. Consequently, the trained model can successfully recognize the private samples while not de-generating the performance over the shared classes. We see that ReOT achieves the best UNK on 7 out of all 12 tasks and outperforms the best baseline by 2.7 % on average UNK (90.9 %), while maintaining a second-highest average of 79.7 % OS*. There are several methods that also perform well on both OS* and UNK, e.g., MRJT and ANNA, which results in good performance in the view of H. Compared with these methods, ReOT achieves the best H on 10 out of all 12 tasks. Moreover, it gains the best average of 84.4 %
+
+H over 12 OSDA tasks. It outperforms the state-of-the-art (SOTA) method ANNA by 1.5 %, 5.3 % and 3.0 % on average OS*, UNK and H, respectively. Table 3 presents the results on Office-31. The perfor-mance of ReOT on the Office-31 dataset also shows similar IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 10 
+
+> TABLE 1 Classification accuracies (%) in the OSDA setting on Image-CLEF dataset. Bold fonts indicate the best results, and the rest are the same.
+
+Image-CLEF B→C B→I B→P C→B C→I C→POS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK HOSBP [7] 87.0 81.0 83.9 85.3 65.7 74.3 66.3 66.7 66.5 62.0 58.0 59.9 89.0 80.0 84.3 87.7 53.7 66.7 STA [13] 93.3 51.7 66.5 86.0 60.7 71.2 77.7 48.7 59.8 61.3 69.7 65.2 91.7 66.7 77.2 84.0 54.0 65.7 ROS [8] 78.3 90.0 83.8 73.0 76.3 74.6 59.0 67.3 62.9 59.0 68.3 63.3 78.3 83.0 80.6 68.7 78.7 73.3 DAOD [19] 79.4 82.0 80.7 78.4 90.9 84.3 72.1 80.8 76.3 51.3 47.1 49.1 79.0 88.6 83.6 74.5 78.9 76.7 MRJT [17] 90.7 99.0 94.7 74.7 95.3 83.7 63.3 92.7 75.2 58.0 85.3 69.1 87.0 93.3 90.1 69.7 85.7 76.8 ANNA [9] 95.3 98.3 96.8 81.3 84.7 83.0 74.0 75.0 74.5 58.0 83.0 68.3 87.0 93.0 89.9 78.7 84.0 81.2 
+
+ReOT 93.2 95.8 94.5 90.0 93.9 91.9 77.2 82.1 79.6 56.6 90.0 69.4 88.9 97.0 92.8 78.1 87.4 82.5 
+
+- I→B I→C I→P P→B P→C P→I Mean 
+
+OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK HOSBP 55.7 60.7 58.1 80.7 92.7 86.3 66.3 74.3 70.1 52.3 61.0 56.3 94.0 68.0 78.9 66.0 80.7 72.6 74.4 70.2 71.5 STA 62.3 54.0 57.9 94.0 53.7 68.4 80.7 59.0 68.2 61.3 43.7 51.0 93.7 47.7 63.2 90.0 51.0 65.1 81.3 55.1 65.0 ROS 58.0 59.7 58.8 88.7 92.7 90.6 78.0 76.0 77.0 47.3 59.3 52.7 71.3 90.3 79.7 79.7 81.3 80.5 69.9 76.9 73.1 DAOD 54.5 56.9 55.7 80.3 82.0 81.2 73.3 80.8 76.9 51.7 51.0 51.3 79.0 82.0 80.5 79.6 86.6 83.9 71.1 75.8 73.3 MRJT 56.7 83.3 67.5 97.3 81.3 88.6 79.0 88.7 83.5 52.0 86.3 64.9 93.7 80.0 86.3 87.3 87.7 87.5 75.7 88.2 80.7 ANNA 56.0 78.0 65.2 94.3 97.7 96.0 80.7 82.7 81.7 54.0 73.7 62.3 94.0 93.7 93.8 85.0 83.3 84.2 78.2 85.6 81.4 
+
+ReOT 58.4 87.6 70.1 93.2 98.4 95.8 81.7 86.4 83.9 55.1 80.6 65.4 94.8 95.7 95.2 89.0 95.4 92.1 79.7 90.9 84.4 
+
+> TABLE 2 Ablation study results ( %) on different modules.
+
+Modules Image-CLEF Office-31 Office-Home Mean 
+
+Lcls Lrt Lbr OSDA PDA OSDA PDA OSDA PDA OSDA PDA 
+
+✓ ✗ ✗ 80.9 84.1 88.5 87.1 63.6 61.4 77.7 77.5 
+
+✓ ✓ ✗ 83.2 92.2 91.1 95.9 65.8 69.3 80.0 85.8 
+
+✓ ✗ ✓ 82.1 86.9 90.6 92.3 66.4 68.8 79.7 82.7 
+
+✓ ✓ ✓ 84.4 93.4 93.4 98.4 70.3 78.7 82.7 90.2 
+
+> TABLE 3 Classification accuracies ( %) in the OSDA setting on Office-31 dataset.
+
+Office-31 A→W A→D D→A D→W W→A W→D Mean 
+
+OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK HOSBP [7] 86.8 79.2 82.7 90.5 75.5 82.4 76.1 72.3 75.1 97.7 96.7 97.2 73.0 74.4 73.7 99.1 84.2 91.1 87.2 80.4 83.7 STA [13] 92.1 58.0 71.0 95.4 45.5 61.6 94.1 55.0 69.4 97.1 49.7 65.5 92.1 46.2 60.9 96.6 48.5 64.4 94.6 50.5 65.5 ROS [8] 88.4 76.7 82.1 87.5 77.8 82.4 74.8 81.2 77.9 99.3 93.0 96.0 69.7 86.6 77.2 100 99.4 99.7 86.6 85.8 85.9 cUADAL [20] 85.5 95.1 90.1 85.6 90.4 87.9 74.2 87.8 80.5 98.7 97.7 98.2 65.6 87.8 75.1 99.3 99.4 99.4 84.8 93.0 88.5 MRJT [17] 90.4 89.6 90.0 90.2 89.7 90.0 92.1 90.0 91.0 98.3 100 99.1 91.0 94.7 92.9 100 93.1 96.4 93.7 92.9 93.3 ANNA [9] 82.8 88.4 85.5 93.2 76.1 83.8 75.4 91.1 82.5 99.4 99.6 99.5 76.0 87.9 81.6 100 96.8 98.4 87.8 90.0 88.6 
+
+ReOT 93.4 98.5 95.9 94.6 95.9 95.2 79.7 93.1 85.9 99.1 96.4 97.7 78.7 95.7 86.3 98.7 100 99.3 90.7 96.6 93.4 
+
+trends to the CLEF dataset. Specifically, ReOT achieves the best UNK on 5 out of all 6 tasks on Office-31 and outperforms the best baseline by 3.6% on average UNK (96.6%), while maintaining a high average of 90.7% OS* value. Compared with other SOTA methods that cannot identify the private samples precisely, ReOT also gains the highest H value of 93.4%. These results significantly verify the effectiveness of the proposed private class identification approach in helping the model correctly recognize the target private samples and improving model performance. Table 4 presents the results on Office-Home dataset. ReOT achieves an average H-value of 70.3%, which is only lower than the causality-driven method ANNA by 0.4% and outperforms all the other methods. Compared with related OSDA methods, such as MRJT which uses manifold regularization, ReOT improves the average OS*, UNK, and H values by 1.7%, 2.5%, and 2.3%, respectively. All the above results demonstrate that our ReOT reaches a better balance in identifying the private samples and classifying the shared samples than SOTA methods. It outperforms SOTA models by an average of 2.0% ∼2.5% per dataset, significantly vali-dating the stability and effectiveness in dealing with domain adaptation tasks with extreme label shift. IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 11 
+
+> TABLE 4 Classification accuracies ( %) in the OSDA setting on Office-Home dataset.
+
+Office-Home Ar →Cl Ar →Pr Ar →Rw Cl →Ar Cl →Pr Cl →Rw OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK HOSBP [7] 50.2 61.1 55.1 71.8 59.8 65.2 79.3 67.5 72.9 59.4 70.3 64.3 67.0 62.7 64.7 72.0 69.2 70.6 STA [13] 50.8 63.4 56.3 68.7 59.7 63.7 81.1 50.5 62.1 53.0 63.9 57.9 61.4 63.5 62.5 69.8 63.2 66.3 ROS [8] 50.6 74.1 60.1 68.4 70.3 69.3 75.8 77.2 76.5 53.6 65.5 58.9 59.8 71.6 65.2 65.3 72.2 68.6 DAOD [19] 72.6 51.8 60.5 55.3 57.9 56.6 78.2 62.6 69.5 59.1 61.7 60.4 70.8 52.6 60.4 77.8 57.0 65.8 PGL [21] 63.3 19.1 29.3 78.9 32.1 45.6 87.7 40.9 55.8 85.9 5.3 10.0 73.9 24.5 36.8 70.2 33.8 45.6 cUADAL [20] 55.0 75.6 63.6 69.4 73.9 71.6 82.2 73.3 77.5 53.8 82.0 65.0 61.1 77.4 68.3 69.3 76.3 72.6 MRJT [17] 49.7 75.3 59.9 69.3 77.1 73.0 78.2 73.4 76.1 52.3 82.6 64.1 59.0 76.1 66.5 67.4 79.5 73.0 
+
+ANNA [9] 61.4 78.7 69.0 68.3 79.9 73.7 74.1 79.7 76.8 58.0 73.1 64.7 64.2 73.6 68.6 66.9 80.2 73.0 ReOT 57.1 78.9 66.3 72.7 76.0 74.3 77.4 81.8 79.5 59.0 69.6 63.9 64.1 75.4 69.3 70.2 75.2 72.6 - Pr →Ar Pr →Cl Pr →Rw Rw →Ar Rw →Cl Rw →Pr Mean 
+
+OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK H OS* UNK HOSBP 59.1 68.1 63.2 44.5 66.3 53.2 76.2 71.7 73.9 66.1 67.3 66.7 48.0 63.0 54.5 76.3 68.6 72.3 64.1 66.3 64.7 STA 55.4 73.7 63.1 44.7 71.5 55.0 78.1 63.3 69.7 67.9 62.3 65.0 51.4 57.9 54.2 77.9 58.0 66.4 63.4 62.6 61.9 ROS 57.3 64.3 60.6 46.5 71.2 56.3 70.8 78.4 74.4 67.0 70.8 68.8 51.5 73.0 60.4 72.0 80.0 75.7 61.6 72.4 66.2 DAOD 71.3 50.5 59.1 58.4 42.8 49.4 81.8 50.6 62.5 66.7 43.3 52.5 60.0 36.6 45.5 84.1 34.7 49.1 69.6 50.2 57.6 PGL 73.7 34.7 47.2 59.2 38.4 46.6 84.8 27.6 41.6 81.5 6.1 11.4 68.8 0.0 0.0 84.8 38.0 52.5 76.1 25.0 35.2 cUADAL 50.9 82.4 62.9 41.2 80.7 54.6 71.2 83.4 76.8 66.8 79.6 72.6 51.8 71.1 59.9 77.8 75.6 76.7 62.5 77.6 68.5 MRJT 60.3 73.2 66.1 51.0 72.2 59.7 76.4 69.0 72.5 66.9 66.1 66.5 55.1 71.1 62.1 77.0 75.6 76.3 63.5 74.3 68.0 ANNA 63.0 70.3 66.5 54.6 74.8 63.1 74.3 78.9 76.6 66.1 77.3 71.3 59.7 73.1 65.7 76.4 81.0 78.7 65.6 76.7 70.7 ReOT 61.8 74.8 67.7 53.6 73.5 62.0 73.9 77.7 75.7 60.9 80.7 69.4 54.8 77.1 64.1 75.4 84.7 79.7 65.1 77.1 70.4 
+
+4.3 Comparative Experiments Under PDA Setting 
+
+Table 6 presents the results on Image-CLEF. In the sense of mean accuracy, ReOT significantly outperforms the SOTA methods. Specifically, by precise local structure characteri-zation, ReOT improves the global manifold structure-based method DMP. It can be also observed that PLSC suffers a se-rious performance degradation on C →P task, as it relies on the alignment and separation assumptions to train an SVM for private class identification. With relaxed assumptions, ReOT generally achieves the level of PLSC on all adaptation tasks while improving PLSC by 10 % on the C →P task. Table 7 presents the results on Office-31 dataset. In the PDA setting, tasks on Office-31 are relatively simple, i.e., the domain gap on shared classes is relatively small. There-fore, methods that rely on strong assumptions generally achieve high performance (close to 100 %). Compared with these methods, ReOT’s mean accuracy is only slightly lower (0.3 %) than that of PLSC, yet it still ensures top performance among the other methods. This validates again the stability of ReOT facing different environments. The results on Office-Home dataset are presented in Table 5. From the view of average accuracy, ReOT achieves the most advanced performance (78.7 %). Specifically, our ReOT achieves the best accuracy on 6 out of all 12 tasks. Compared with recent PDA methods that similarly imple-ment private class identification (e.g., SLM and PLSC) under strong assumptions, ReOT improves them by an average of 2.4 %, demonstrating the reliability of the proposed method. The results on VisDA-2017 dataset are also presented in Table 5. VisDA-2017 is a more challenging dataset, con-taining larger-scale data and a more complicated cluster structure. It can be observed from the results that most existing methods have experienced serious performance degradation. For example, PLSC delivers the best perfor-mance on Office-31, but its results on VisDA-2017 are poor; MUL gains the second-best performance on Image-CLEF and comparable results on Office-Home, but it also suffers severe performance degradation on VisDA-2017. By con-trast, ReOT still provides the most advanced performance on VisDA-2017. The overall results demonstrate that ReOT effectively maintains superior performance on challenging datasets, further validating the reliability and transferability of the model learned by ReOT. 
+
+4.4 Other Analysis 
+
+Ablation Study. To evaluate the effectiveness of differ-ent modules, we conduct ablation experiments on three datasets. We present the harmonic accuracy (H) for OSDA and the standard accuracy (ACC) for PDA in Table 2. It can be observed that, compared with the baseline model (Row 1), introducing the transfer module Lrt (Row 2) and the re-construction module Lbr (Row 3) both improve the H/ACC across all three datasets. Specifically, Lrt improves the mean H-value and ACC by 2.3 % and 8.3 %, respectively, while Lbr 
+
+improves the mean H-value and ACC by 2.0 % and 5.2 %,respectively. This highlights the benefit of each module in OSDA and PDA scenarios. Besides, introducing the transfer module shows a higher improvement on H-value and ACC over these datasets, indicating that the invariant representa-tion learning via class-conditional alignment plays a crucial role in both OSDA and PDA. Furthermore, ReOT (Row 4) consistently achieves the best performance on all datasets, which implies that the two modules can supplement each other and significantly benefit the full model. In conclusion, IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 12 
+
+> TABLE 5 Classification accuracies ( %) in the PDA setting on Office-Home and VisDA-2017 datasets.
+
+Methods Office-Home VisDA-2017 
+
+Ar →Cl Ar →Pr Ar →Rw Cl →Ar Cl →Pr Cl →Rw Pr →Ar Pr →Cl Pr →Rw Rw →Ar Rw →Cl Rw →Pr Mean S→RDANN [5] 43.8 67.9 77.5 63.7 59.0 67.6 56.8 37.1 76.4 69.2 44.3 77.5 61.7 51.0 PADA [10] 52.0 67.0 78.7 52.2 53.8 59.0 52.6 43.2 78.8 73.7 56.6 77.1 62.1 53.5 IWAN [23] 53.9 54.5 78.1 61.3 48.0 63.3 54.2 52.0 81.3 76.5 56.8 82.9 63.6 -ETN [24] 59.2 77.0 79.5 62.9 65.7 75.0 68.3 55.4 84.4 75.7 57.7 84.5 70.5 -HAFN [51] 53.4 72.7 80.8 64.2 65.3 71.1 66.1 51.6 78.3 72.5 55.3 79.0 67.5 65.1 SAFN [51] 58.9 76.3 81.4 70.4 73.0 77.8 72.4 55.3 80.4 75.8 60.4 79.9 71.8 67.7 BA 3US [28] 60.6 83.2 88.4 71.8 72.8 83.4 75.5 61.6 86.5 79.3 62.8 86.1 76.0 -DRCN [26] 54.0 76.4 83.0 62.1 64.5 71.0 70.8 49.8 80.5 77.5 59.1 79.9 69.0 58.2 DMP [52] 59.0 81.2 86.3 68.1 72.8 78.8 71.2 57.6 84.9 77.3 61.5 82.9 73.5 72.7 AR [16] 67.4 85.3 90.0 77.3 70.6 85.2 79.0 64.8 89.5 80.4 66.2 86.4 78.3 88.7 m-POT [35] 64.6 80.6 87.2 76.4 77.6 83.6 77.1 63.7 87.6 81.4 68.5 87.4 78.0 87.0 IDSP [53] 60.8 80.8 87.3 69.3 76.0 80.2 74.7 59.2 85.3 77.8 61.3 85.7 74.9 -SAN++ [54] 61.3 81.6 88.6 72.8 76.4 81.9 74.5 57.7 87.2 79.7 63.8 86.1 76.0 63.1 RAN [55] 63.3 83.1 89.0 75.0 74.5 82.9 78.0 61.2 86.7 79.9 63.5 85.0 76.8 75.1 MUL [11] 57.4 88.7 90.8 71.0 80.4 82.1 77.9 59.8 91.2 83.5 58.1 87.7 77.4 77.5 DeepOPA [27] 51.1 65.9 76.4 65 65.76 72.8 64.2 49.3 74.6 70.4 54.9 77.3 65.6 -SLM [14] 61.1 84.0 91.4 76.5 75.0 81.8 74.6 55.6 87.8 82.3 57.8 83.5 76.0 91.7 PLSC [15] 63.2 85.7 91.6 72.1 80.2 82.7 78.7 56.1 86.0 76.6 58.9 87.6 76.6 74.9 
+
+ReOT 63.7 87.4 92.3 74.2 81.4 87.1 79.2 60.8 88.0 79.2 62.8 88.5 78.7 91.8 
+
+(a) W →A (OSDA) (b) W →A (PDA)  
+
+> Fig. 4. Comparison of cross-domain class-conditional discrepancies including A-distance and H/ACC-value of different models. (a) OSDA. (b) PDA. TABLE 6 Classification accuracies ( %) in the PDA setting on Image-CLEF dataset.
+
+Image-CLEF I→P P→I I→C C→I C→P P→C Mean 
+
+DANN [5] 78.1 86.3 91.3 84.0 72.1 90.3 83.7 PADA [10] 81.7 92.1 94.6 89.8 77.7 94.1 88.3 HAFN [51] 79.1 87.7 93.7 90.3 77.8 94.7 87.2 SAFN [51] 79.5 90.7 93.0 90.3 77.8 94.0 87.5 DMP [52] 82.4 94.5 96.7 94.3 78.7 96.4 90.5 MUL [11] 87.5 92.2 98.1 94.6 87.6 98.5 93.1 PLSC [15] 85.0 97.3 98.3 96.3 78.0 99.0 92.3 
+
+ReOT 88.1 94.3 98.1 93.8 88.0 97.9 93.4 
+
+the experimental results verify the general effectiveness of 
+
+Lrt and Lbr on different datasets. 
+
+Class-conditional Discrepancy. To validate the effec-tiveness of ReOT with the alignment term Lrt for cross-domain class-conditional alignment on shared classes, we conduct experiments to analyze the conditional discrepan-cies of different models, i.e., ReOT (w/o Lrt ), ANNA, and ReOT. Here, ReOT (w/o Lrt ) represent the ReOT with-out the distribution alignment term Lrt . For discrepancy measure, the A-distance [56] is applied to the class-wise data to estimate the conditional discrepancy on shared classes. The experiment results on Office-31 task W →Aare presented in Figure 4, where the class-conditional Ac-distance is computed as the mean of A-distances on all class-wise data. From the results, we can observe in both OSDA and PDA, the domain discrepancy is large without alignment, and ReOT significantly mitigates the discrepancy by minimizing Lrt . Specifically, as shown in Figure 4a, in the OSDA setting, ANNA shows better capacity than ReOT (w/o Lrt ) in mitigating the domain discrepancy; however, by introducing Lrt , ReOT gains a smaller Ac-distance with higher H-value, which implies that ReOT with Lrt learns a better invariant representation without degenerating the discriminative ability. A similar trend appears in the PDA setting as shown in Figure 4b. Overall, the results above IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 13 
+
+(a) W →A (OSDA) (b) Cl →Pr (OSDA) (c) W →A (PDA) (d) Cl →Pr (PDA)    
+
+> Fig. 5. Sensitivity analysis on hyper-parameters η1and η2. (a)-(b) OSDA. (c)-(d) PDA. TABLE 7 Classification accuracies ( %) in the PDA setting on Office-31 dataset.
+
+Office-31 A→W D →W W →D A →D D →A W →A Mean 
+
+DANN [5] 73.6 96.3 98.7 81.5 82.8 86.1 86.5 PADA [10] 86.5 99.3 100 82.2 92.7 95.4 92.7 IWAN [23] 89.2 99.3 99.4 90.5 95.6 94.3 94.7 ETN [24] 94.5 100 100 95.0 96.2 94.6 96.7 HAFN [51] 87.5 96.7 99.2 87.3 89.2 90.7 91.7 SAFN [51] 87.5 96.6 99.4 89.8 92.6 92.7 93.1 BA 3US [28] 99.0 100 98.7 99.4 94.8 95.0 97.8 DRCN [26] 90.8 100 100 94.3 95.2 94.8 95.9 DMP [52] 96.6 100 100 96.4 95.1 95.4 97.2 AR [16] 93.5 100 99.7 96.8 95.5 96.0 96.9 IDSP [53] 99.7 99.7 100 99.4 95.1 95.7 98.3 SAN++ [54] 99.7 100 100 98.1 94.1 95.5 97.9 RAN [55] 99.0 100 100 97.7 96.3 96.2 98.2 MUL [11] 94.2 100 100 98.5 95.6 96.3 97.5 SLM [14] 99.8 100 99.8 98.7 96.1 95.9 98.4 PLSC [15] 99.3 100 100 100 96.0 96.6 98.7 ReOT 99.3 99.9 100 98.5 96.1 96.5 98.4 
+
+validate that the proposed ReOT effectively decreases con-ditional discrepancy by optimizing Lalign .
+
+Effectiveness of the Private Class Identification. To verify the high efficiency of the proposed private class identification method—namely, that a majority of private class samples can be successfully identified—we conduct experiments on three benchmark datasets. To measure the efficiency, we calculate the average ratio of identified private class samples to all private class samples across all transfer tasks for each dataset. The experiment results are presented in Table 8. We observe that the proposed private class iden-tification approach identifies nearly all private class samples on the Image-CLEF dataset, achieving a 90.7 % identification ratio in OSDA and 95.1 % in PDA. Similarly, on the Office-31 dataset, it achieves a 94.5 % identification ratio in OSDA and 99.4 % in PDA. On the Office-Home dataset, although the identification performance is slightly reduced, the pro-posed approach still recognizes most private class samples, achieving a 79.5 % identification ratio in OSDA and 92.2 %
+
+in PDA. Overall, our method successfully identifies the majority of private class samples across all three datasets, with an average identification ratio of 88.2 % in OSDA and 95.6 % in PDA, thereby validating its high efficiency. To further assess the reliability of the private class iden-
+
+> TABLE 8 The ratio ( %) of identified private class samples to all private class samples using the proposed private class identification method.
+
+Setting Image-CLEF Office-31 Office-Home Mean 
+
+OSDA 90.7 94.5 79.5 88.2 PDA 95.1 99.4 92.2 95.6 
+
+tification, we also investigate the behavior of ReOT when there are no private classes. Specifically, on the Office-Home dataset, we remove all private classes and train the model using only the remaining 25 shared classes. The model is then evaluated on the target domain in terms of classifica-tion accuracy and false positive rate. The latter is obtained with our private class identification method and measures the proportion of shared class samples mistakenly identified as private. Fig. 6 shows the result on task Cl →Pr, ReOT achieves a high accuracy of about 82 % while keeping the false positive rate consistently low throughout training. This behavior can be explained by the fact that, without private classes, shared samples naturally cluster around their class centers. Consequently, the transport mass within local re-gions becomes approximately uniform, resulting in consis-tently low identification scores and thus preventing false identification as private. These results indicate that even in the absence of private classes, ReOT rarely misidentifies shared class samples as private, validating the reliability of the proposed method. 
+
+Hyper-parameter Analysis. To investigate the sensitivity of the model w.r.t. hyper-parameters η1 and η2, we conduct experiments on Office-31 and Office-Home datasets. For the OSDA setting, both the values of η1 and η2 are selected from 
+
+{0.5, 0.75, 1, 1.25, 1.5 }. For the PDA setting, the values of 
+
+η1 and η2 are searched from {0.1, 0.2, 0.3, 0.4, 0.5 } and {3, 3.25, 3.5, 3.75, 4 }, respectively. The 3-D grid visualizations for the results are presented in Figure 5, where Office-31 task W →A and Office-Home task Cl →Pr are tested. It can be observed that ReOT is generally stable for dif-ferent choices of parameters η1 and η2. Besides, the best performance is typically achieved with a larger value of η1,further indicating the crucial role of invariant representation learning in both OSDA and PDA. In conclusion, the results above demonstrate that ReOT is generally robust to different settings of hyper-parameters. IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 14 0 50 100 150 200 250 300 
+
+Epoch       
+
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> 050 100 150 200 250 300
+
+Epoch 
+
+> 0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Classification Accuracy
+> False Positive Rate
+> Classification Accuracy
+> False Positive Rate
+> Fig. 6. Model performance evolution across epochs on the Office-Home task Cl →Pr. False positive rate denotes the proportion of shared-class samples that are mistakenly identified as private class samples.
+
+Feature Visualization. As shown in Figures 7 and 8, we conduct t-SNE feature visulization and comparison for both OSDA and PDA. In the OSDA setting, as shown in Figure 7a, the target private class in gray is mixed with the shared classes before adaptation. Though STA and ANNA improve the discrimination of features, there is still a large overlap between private and shared classes, and the intra-class distance is not sufficiently small as shown in Figures 7b and 7c. Compared with these methods, ReOT separates the private and shared classes more completely and ensures well-aligned cluster structures as shown in Figure 7d. Simi-larly, in the PDA setting, although AR (Figure 8b) and SLM (Figure 8c) learn improved representation compared with Source-only (Figure 8a), ReOT achieves better intra-class compactness and inter-class separability as shown in Fig-ure 8d. These results demonstrate that ReOT ensures a better representation space, and further indicate the effectiveness of ReOT in mitigating the cross-domain class-conditional distribution discrepancy. 
+
+Impact of the Cost Function. To examine the robustness of ReOT with respect to the choice of the cost function in OT, we conduct additional ablation studies on the Office-31 and Office-Home datasets. Throughout our experiments, the default cost function c is the squared Euclidean distance. Here, we compare it with a discriminator-based cost func-tion cdis . The discriminator dis (·) is a network that outputs a probability, indicating the likelihood that z belongs to the source domain. It is pre-trained using a binary cross-entropy on both source and target domain samples, and its parameters are frozen during the subsequent ReOT training. Intuitively, a source feature z and a target feature z′ that are easily confused by the discriminator should have a low transport cost. Based on this, we define cdis as Based on this, we define cdis as: 
+
+cdis (z, z′) = |dis (z) − 0.5| + |dis (z′) − 0.5|.
+
+Fig. 9 presents the results for the Office-31 task W →Aand the Office-Home task Cl →Pr under both OSDA and PDA settings. The results show that ReOT with the default squared Euclidean cost consistently achieves superior per-formance across all settings. For example, on the W →A task under the OSDA setting, ReOT outperforms ReOT(w/ cdis )by approximately 1.7 % on H. A similar trend is observed in the PDA setting, where ReOT also demonstrates better per-formance. Despite these performance differences, ReOT(w/ 
+
+cdis ) still delivers competitive results. This indicates that the proposed method is robust and not sensitive to the selection of the cost function. 
+
+5 CONCLUSION 
+
+In this paper, we addressed the challenge of extreme label shift in domain adaptation by proposing a novel locality-aware private class identification method, which is achieved by defining a score function on masked optimal transport mass. This method relaxes the strong assumptions on which existing methods are based, and its effectiveness is demon-strated from theoretical perspective, highlighting its strong ability to distinguish between shared and private class samples. Building upon this foundation, we introduce the reliable OT-based (ReOT) method for practical applications. ReOT integrates risk minimization and employs masked transport to learn invariant representation with separated cluster structures. In addition, we provide a generalization bound of the target risk for the severe label shift scenario. This upper bound is shown to be tight and can be minimized by ReOT. Extensive experiments on benchmark datasets validated the effectiveness of ReOT, indicating its reliable and superior performance in extreme label shift scenarios. While ReOT demonstrates strong performance in both OSDA and PDA, the current method focuses on the single-source single-target scenario and assumes access to labeled source data. A promising direction for future work is to extend ReOT to multi-source [58] and multi-target scenar-ios [59], as well as to the source-free setting [60]. Potential strategies include generalizing the transport plan to a multi-marginal formulation [61] for multiple domains, or using source class prototypes distilled from a pre-trained source model in source-free scenario [60], while carefully address-ing the associated computational and theoretical challenges. 
+
+REFERENCES                                        
+
+> [1] Y. Liu, Z. Zhou, and B. Sun, “COT: Unsupervised domain adap-tation with clustering and optimal transport,” in CVPR , 2023, pp. 19 998–20 007. [2] Y. E. Kim, Y. W. Lee, and S. W. Lee, “LC-MSM: Language-conditioned masked segmentation model for unsupervised do-main adaptation,” Pattern Recognition , vol. 148, p. 110201, 2024. [3] H. Wang, L. Zheng, H. Zhao et al. , “Unsupervised domain adap-tation with class-aware memory alignment,” IEEE TNNLS , 2024, preprint. [4] M. Long, H. Zhu, J. Wang et al. , “Unsupervised domain adaptation with residual transfer networks,” in NeurIPS , vol. 29, 2016. [5] Y. Ganin, E. Ustinova, H. Ajakan et al. , “Domain-adversarial train-ing of neural networks,” JMLR , vol. 17, pp. 2096–2030, 2016. [6] M. Long, Z. Cao, J. Wang et al. , “Conditional adversarial domain adaptation,” in NeurIPS , vol. 31, 2018. [7] K. Saito, S. Yamamoto, Y. Ushiku et al. , “Open set domain adapta-tion by backpropagation,” in ECCV , 2018, pp. 153–168. [8] S. Bucci, M. R. Loghmani, and T. Tommasi, “On the effectiveness of image rotation for open set domain adaptation,” in ECCV , 2020, pp. 422–438. [9] W. Li, J. Liu, B. Han et al. , “Adjustment and alignment for unbiased open set domain adaptation,” in CVPR , 2023, pp. 24 110–24 119. [10] Z. Cao, L. Ma, M. Long et al. , “Partial adversarial domain adapta-tion,” in ECCV , 2018, pp. 135–150. [11] Y. W. Luo and C. X. Ren, “Generalized label shift correction via minimum uncertainty principle: Theory and algorithm,” arXiv preprint arXiv:2202.13043 , 2022. IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 15
+
+(a) Source-only  (b) STA  (c) ANNA  (d) ReOT 
+
+Fig. 7. t-SNE [57] visualizations of the representations learned by different OSDA methods on the Office-31 task W →A. In the diagrams, “ ◦” means source domain, and “+” means target domain; different colors represent different classes, and gray represents the private class. 
+
+(a) Source-only  (b) AR  (c) SLM  (d) ReOT 
+
+Fig. 8. t-SNE [57] visualizations of the representations learned by different PDA methods on the Office-31 task W →A. In the diagrams, “ ◦” means source domain, and “+” means target domain; different colors represent different classes, and gray represents the private class. 
+
+(a) OSDA (b) PDA 
+
+Fig. 9. Impact of cost function selection in optimal transport on model performance. “ ReOT (w/ cdis ) ” indicates using a discriminator-based cost function, while “ ReOT ” uses the default squared Euclidean cost. (a) OSDA setting. (b) PDA setting. 
+
+[12] C. J. Guo, C. X. Ren, Y. W. Luo et al. , “Partial domain adaptation via importance sampling-based shift correction,” IEEE TIP , vol. 34, pp. 5009–5022, 2025. [13] H. Liu, Z. Cao, M. Long et al. , “Separate to adapt: Open set domain adaptation via progressive separation,” in CVPR , 2019, pp. 2927– 2936. [14] A. Sahoo, R. Panda, R. Feris et al. , “Select, label, and mix: Learning discriminative invariant feature representations for partial domain adaptation,” in WACV , 2023, pp. 4210–4219. [15] L. Tian, Y. Tang, and W. Zhang, “Partial domain adaptation by progressive sample learning of shared classes,” NPL , vol. 55, 2023. [16] X. Gu, X. Yu, J. Sun et al. , “Adversarial reweighting for partial domain adaptation,” in NeurIPS , vol. 34, 2021, pp. 14 860–14 872. [17] J. Liu, H. He, M. Liu et al. , “Manifold regularized joint transfer for open set domain adaptation,” IEEE TMM , 2023. [18] Y. W. Luo and C. X. Ren, “MOT: Masked optimal transport for partial domain adaptation,” in CVPR , 2023, pp. 3531–3540. [19] Z. Fang, J. Lu, F. Liu et al. , “Open set domain adaptation: Theo-retical bound and algorithm,” IEEE TNNLS , vol. 32, no. 10, pp. 4309–4322, 2020. [20] J. Jang, B. Na, D. H. Shin et al. , “Unknown-aware domain adversar-ial learning for open-set domain adaptation,” in NeurIPS , vol. 35, 2022, pp. 16 755–16 767. [21] Y. Luo, Z. Wang, Z. Huang et al. , “Progressive graph learning for open-set domain adaptation,” in ICML , 2020, pp. 6468–6478. [22] Z. X. Huang and C. X. Ren, “Rethinking correlation learning via label prior for open set domain adaptation,” in IJCAI , 2024. [23] J. Zhang, Z. Ding, W. Li et al. , “Importance weighted adversarial nets for partial domain adaptation,” in CVPR , 2018, pp. 8156–8164. [24] Z. Cao, K. You, M. Long et al. , “Learning to transfer examples for partial domain adaptation,” in CVPR , 2019, pp. 2985–2994. [25] J. Chen, X. Wu, L. Duan et al. , “Domain adversarial reinforcement learning for partial domain adaptation,” IEEE TNNLS , vol. 33, no. 2, pp. 539–553, 2022. [26] S. Li, C. H. Liu, Q. Lin et al. , “Deep residual correction network for partial domain adaptation,” IEEE TPAMI , vol. 43, no. 7, pp. 2329–2344, 2020. [27] K. Thopalli, R. Anirudh, P. Turaga et al. , “The surprising effec-tiveness of deep orthogonal procrustes alignment in unsupervised domain adaptation,” IEEE Access , vol. 11, pp. 12 858–12 869, 2023. [28] J. Liang, Y. Wang, D. Hu et al. , “A balanced and uncertainty-aware approach for partial domain adaptation,” in ECCV , 2020, pp. 123– 140. [29] C. Yang, Y. M. Cheung, J. Ding et al. , “Contrastive learning assisted-alignment for partial domain adaptation,” IEEE TNNLS ,vol. 34, no. 10, pp. 7621–7634, 2023. [30] Y. W. Luo and C. X. Ren, “Conditional bures metric for domain adaptation,” in CVPR , 2021, pp. 13 989–13 998. [31] N. Courty, R. Flamary, D. Tuia, and A. Rakotomamonjy, “Optimal transport for domain adaptation,” IEEE TPAMI , vol. 39, no. 9, pp. IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE 16 
+
+1853–1865, September 2017. [32] M. Li, Y. M. Zhai, Y. W. Luo et al. , “Enhanced transport distance for unsupervised domain adaptation,” in CVPR , 2020, pp. 13 936– 13 944. [33] N. Courty, R. Flamary, A. Habrard et al. , “Joint distribution optimal transportation for domain adaptation,” in NeurIPS , vol. 30, 2017. [34] K. Fatras, T. S´ ejourn´ e, R. Flamary et al. , “Unbalanced minibatch optimal transport; applications to domain adaptation,” in ICML ,2021, pp. 3186–3197. [35] K. Nguyen, D. Nguyen, T. Pham et al. , “Improving mini-batch optimal transport via partial transportation,” in ICML , 2022, pp. 16 656–16 690. [36] C. X. Ren, Y. W. Luo, and D. Q. Dai, “Buresnet: Conditional bures metric for transferable representation learning,” IEEE TPAMI ,vol. 45, no. 4, pp. 4198–4213, 2023. [37] Y. Wang, C. X. Ren, Y. M. Zhai et al. , “Probability-polarized optimal transport for unsupervised domain adaptation,” in AAAI , vol. 38, no. 14, 2024, pp. 15 653–15 661. [38] J. Zhang, X. Xiao, L.-K. Huang et al. , “Fine-tuning graph neural networks via graph topology induced optimal transport,” in IJCAI ,2022, pp. 3730–3736. [39] X. Gu, Y. Yang, W. Zeng, J. Sun, and Z. Xu, “Keypoint-guided optimal transport with applications in heterogeneous domain adaptation,” in NeurIPS , vol. 35, 2022, pp. 14 972–14 985. [40] M. Cuturi, “Sinkhorn distances: Lightspeed computation of opti-mal transport,” in NeurIPS , 2013, pp. 2292–2300. [41] L. Zhong, Z. Fang, F. Liu et al. , “Bridging the theoretical bound and deep algorithms for open set domain adaptation,” IEEE TNNLS ,vol. 34, no. 8, pp. 3859–3873, 2021. [42] H. Zhao, R. T. Des Combes, K. Zhang et al. , “On learning invariant representations for domain adaptation,” in ICML , 2019, pp. 7523– 7532. [43] B. Li, Y. Wang, S. Zhang et al. , “Learning invariant representations and risks for semi-supervised domain adaptation,” in CVPR , 2021, pp. 1104–1113. [44] R. Tachet des Combes, H. Zhao, Y.-X. Wang et al. , “Domain adapta-tion with conditional distribution matching and generalized label shift,” in NeurIPS , vol. 33, 2020, pp. 19 276–19 289. [45] B. Caputo, H. M ¨ uller, J. Martinez Gomez et al. , “ImageCLEF 2014: Overview and analysis of the results,” in International Conference of the Cross-Language Evaluation Forum for European Languages , 2014, pp. 192–211. [46] K. Saenko, B. Kulis, M. Fritz et al. , “Adapting visual category models to new domains,” in ECCV , 2010, pp. 213–226. [47] H. Venkateswara, J. Eusebio, S. Chakraborty et al. , “Deep hashing network for unsupervised domain adaptation,” in CVPR , 2017, pp. 5018–5027. [48] X. Peng, B. Usman, N. Kaushik et al. , “VisDA: The visual domain adaptation challenge,” arXiv preprint arXiv:1710.06924 , 2017. [49] K. He, X. Zhang, S. Ren et al. , “Deep residual learning for image recognition,” in CVPR , 2016, pp. 770–778. [50] J. Deng, W. Dong, R. Socher et al. , “ImageNet: A large-scale hierarchical image database,” in CVPR , 2009, pp. 248–255. [51] R. Xu, G. Li, J. Yang et al. , “Larger norm more transferable: An adaptive feature norm approach for unsupervised domain adaptation,” in ICCV , 2019, pp. 1426–1435. [52] Y. W. Luo, C. X. Ren, D. Q. Dai et al. , “Unsupervised domain adap-tation via discriminative manifold propagation,” IEEE TPAMI ,vol. 44, no. 3, pp. 1653–1669, 2020. [53] W. Li and S. Chen, “Partial domain adaptation without domain alignment,” IEEE TPAMI , 2022. [54] Z. Cao, K. You, Z. Zhang et al. , “From big to small: Adaptive learning to partial-set domains,” IEEE TPAMI , vol. 45, no. 2, pp. 1766–1780, 2022. [55] K. Wu, M. Wu, Z. Chen et al. , “Reinforced adaptation network for partial domain adaptation,” IEEE TCSVT , 2022. [56] S. Ben-David, J. Blitzer, K. Crammer et al. , “A theory of learning from different domains,” Machine Learning , vol. 79, pp. 151–175, 2010. [57] L. Van der Maaten and G. Hinton, “Visualizing data using t-sne.” 
+
+JMLR , vol. 9, no. 11, 2008. [58] S. Zhao, B. Li, P. Xu et al. , “Multi-source domain adaptation in the deep learning era: A systematic survey,” arXiv preprint arXiv:2002.12169 , 2020. [59] T. Isobe, X. Jia, S. Chen et al. , “Multi-target domain adaptation with collaborative consistency learning,” in CVPR , 2021, pp. 8187–8196. [60] J. Liang, D. Hu, and J. Feng, “Do we really need to access the source data? source hypothesis transfer for unsupervised domain adaptation,” in ICLR , 2020, pp. 6028–6039. [61] F. Beier, J. von Lindheim, S. Neumayer et al. , “Unbalanced multi-marginal optimal transport,” Journal of Mathematical Imaging and Vision , vol. 65, no. 3, pp. 394–413, 2023.

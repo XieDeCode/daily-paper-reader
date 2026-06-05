@@ -1,0 +1,461 @@
+Title: Domain Generalization through Spatial Relation Induction over Visual Primitives
+
+URL Source: https://arxiv.org/pdf/2605.06043v1
+
+Published Time: Fri, 08 May 2026 01:16:43 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Domain Generalization through Spatial Relation Induction over Visual Primitives 
+
+Dat Nguyen 
+
+Harvard University Basis Research Institute 
+
+datnguyen@seas.harvard.edu 
+
+Duy Nguyen 
+
+Hanoi University of Science and Technology 
+
+duy.nd223435@sis.hust.edu.vn 
+
+# Abstract 
+
+Domain generalization requires identifying stable representations that support reliable classification across domains. Most existing methods seek such stability through improving the training process, for example, through model selection strategies, data augmentation, or feature-alignment objectives. Although these strategies can be effective, they leave the representation learning of structural composition implicit, which may limit performance on compositional domain generalization benchmarks. In this work, we propose Primitive-Aware Relational Structure for domain gEneralization(PARSE), an image classification framework that factors visual recognition into visual primitives and their relational composition. We represent these compositions using soft binary, ternary, and quaternary predicates over prim-itive locations, yielding differentiable measures of spatial alignment that can be learned end-to-end. To learn primitives and relational structures jointly, we design an end-to-end architecture with three components: (1) a convolutional neural net-work (CNN) backbone that extracts general visual features, (2) a concept bottleneck layer that maps these features to primitive heatmaps with differentiable spatial coor-dinates, and (3) a structural scoring layer that evaluates candidate spatial relations among the detected primitives. We then compute class probability from the joint evidence of its class-specific relational compositions. Across CUB-DG and the DomainBed benchmark suite, PARSE improves accuracy by over 4.5 percentage points on CUB-DG and remains competitive with existing DG methods on DomainBed. 
+
+# 1 Introduction 
+
+A central goal in image classification is to learn classifiers that remain accurate beyond the domains on which they are trained. In practice, however, even small changes in camera, lighting, viewpoint, or style can cause a classifier’s performance to degrade [Venkateswara et al., 2017, Saenko et al., 2010, Nguyen and Nguyen, 2025, Zhang et al., 2022]. Such failures suggest that classifiers often exploit cues that are predictive in the training domain but unstable under distribution shift. Domain Generalization (DG) has emerged as one of the most promising approaches to this problem, in which a model is trained on multiple labeled source datasets and evaluated on an unlabeled target dataset. Since the target domain is unavailable during learning, a DG method must determine which aspects of the image-to-label mapping are stable enough to transfer. Relying on strong pretrained backbones [He et al., 2016, Krizhevsky et al., 2012], existing DG methods answer this question by modifying the training objective or optimization procedure. Specifi-cally, this includes aligning feature distributions across domains [Sun and Saenko, 2016, Li et al., 2018], perturbing or mixing samples and feature statistics [Zhang et al., 2018, Zhou et al., 2021, 
+
+> Preprint.
+> arXiv:2605.06043v1 [cs.CV] 7 May 2026
+
+Nam et al., 2021], selecting or regularizing solutions that generalize better across domains [Cha et al., 2021, 2022], and exploiting pretrained semantic representations [Shu et al., 2021]. Indeed, strong empirical studies show that even carefully tuned ERM remains competitive in standard DG benchmarks [Teterwak et al., 2024]. Although these strategies can be effective, they largely preserve the standard recognition pipeline and rely on backbone representations to capture layout, part structure, and spatial relations implicitly. This leaves structural composition under-specified, despite longstanding evidence of its role in recog-nition [Biederman, 1987, Felzenszwalb et al., 2009], and may limit performance on compositional domain generalization settings. As a motivating example, consider images of the same bird species from two domains, Photo and Cartoon. Across these domains, local parts such as the eyes, beak, and wings may change in appearance. For example, they may be rendered with flattened colors, simplified textures, or missing specular highlights. Nevertheless, their coarse spatial organization often remains recognizable: the beak typically lies near the eyes and along the head, while the wings appear in characteristic positions relative to the body. This suggests that a classifier can benefit from distributing evidence between local primitive appearance and compositional structure, rather than forcing primitive detectors alone to absorb domain-specific variation. In this work, we introduce Primitive-Aware Relational Structure for domain g Eneralization(PARSE), which encourages structural invariance by representing visual categories through spatial relations among learned, localized visual primitives. To express these relations, PARSE uses soft, differentiable spatial predicates: binary predicates capture pairwise constraints, while ternary and quaternary predicates approximate layout cues such as triangular arrangements, angular constraints, and ratios between pairwise primitive distances. Given these relational predicates, we then represent each class as a sparse set of class-specific spatial compositions, and its score is computed by marginalizing over possible assignments of detected primitives to these compositions. Although related predicates have been used in neuro-symbolic visual reasoning as grounded scene representations [Johnson et al., 2017, Liu et al., 2019, Hsu et al., 2023], our goal is different: we use these predicates not as semantic reasoning targets, but as a differentiable structural inductive bias for domain-generalized classification. This formulation creates an architectural challenge: PARSE must learn primitive detectors and classification-relevant spatial predicates jointly from image-level supervision. We address this chal-lenge with an end-to-end architecture that learns primitive detectors, structural predicate parameters, and class-specific compositions in a single model. The architecture comprises three components: a CNN backbone that extracts visual features, a concept bottleneck layer [Koh et al., 2020] that maps these features to primitive heatmaps with differentiable spatial coordinates, and a structural scoring layer that evaluates candidate spatial relations among the detected primitives. The structural scoring layer encodes the space of possible relational compositions in a differentiable manner, enabling joint optimization of primitive detectors and structural weights via standard gradient descent. The resulting relation scores are aggregated by a final classifier, producing predictions grounded in interpretable compositions of visual primitives and their spatial arrangements. We evaluate PARSE on CUB-DG [Min et al., 2022], a benchmark for compositional domain generalization, where it achieves 65.6% mean accuracy across four generalization tasks, compared to 61.1% for the prior best method, ERM++ [Teterwak et al., 2024]. On the widely used DomainBed benchmark [Gulrajani and Lopez-Paz, 2020], PARSE achieves 66.7% mean accuracy across five datasets, outperforming MIRO [Cha et al., 2022] and GVRT [Min et al., 2022]. We summarize our contributions as follows: • We propose a structure-aware framework for domain generalization that treats visual cate-gories as compositions of learned primitives and spatial relations, improving performance on compositional recognition under domain shift. • We introduce an end-to-end differentiable architecture that realizes this framework by learning primitive heatmaps, extracting differentiable spatial coordinates, and scoring class-specific compositions over primitive locations. • We evaluate PARSE on CUB-DG and the DomainBed benchmark suite, showing that it improves over the prior state of the art on CUB-DG by 4.5% while remaining competitive 2on DomainBed; our ablation studies further show that the proposed structural scoring layer consistently improves performance across domains and datasets. The remainder of the paper is organized as follows. Section 2 reviews related work on domain generalization, spatial predicates, and concept learning. Section 3 presents PARSE. Section 4 reports the experimental setup and results. Section 5 concludes with limitations and future directions. 
+
+# 2 Related Work 
+
+This section reviews three lines of work most relevant to PARSE: domain generalization, spatial relations and predicates for visual recognition, and concept bottleneck learning. 
+
+Domain generalization and adaptation. Domain adaptation and domain generalization both address distribution shift, but differ in target-domain access. Unsupervised domain adaptation assumes unlabeled target samples are available during training, and commonly reduces source-target discrepancy through distribution matching or adversarial objectives [Long et al., 2015, Sun and Saenko, 2016, Ganin et al., 2016, Long et al., 2018]. Recent extensions further improve adaptation with transformer architectures, parameter-efficient modules, or vision-language prompting [Sun et al., 2022, Xu et al., 2022, Nguyen and Nguyen, 2025, Bai et al., 2024, Khattak et al., 2023]. Domain generalization is stricter: target domains are unseen during training. Existing DG methods seek transferable representations or training procedures through invariant feature learning, risk or optimization-based regularization, and style or feature perturbation [Muandet et al., 2013, Arjovsky et al., 2019, Krueger et al., 2021, Cha et al., 2021, 2022, Zhou et al., 2021, Nam et al., 2021]. While carefully tuned ERM remains a strong baseline on standard DG benchmarks [Gulrajani and Lopez-Paz, 2020], CUB-DG highlights compositional shifts in both appearance and visual structure [Min et al., 2022]. PARSE complements these feature-centric approaches by explicitly scoring compositions of learned primitives and differentiable spatial predicates. 
+
+Spatial relations and predicates for visual recognition. Spatial structure has long been central to recognition, from classical part-relation theories [Biederman, 1987] and deformable part mod-els [Felzenszwalb et al., 2009] to neural relation modules over objects or regions [Hu et al., 2018]. Predicates provide a compact way to express such structure and are widely used in neuro-symbolic visual reasoning for relations such as position, proximity, and containment [Johnson et al., 2017, Mao et al., 2019]. Recently, NeSyCoCo studies differentiable composition of predicate scores for compositional generalization in vision-language reasoning [Kamali et al., 2025]. In contrast to these works, PARSE uses differentiable spatial predicates not as grounded semantic reasoning targets or language-conditioned programs, but as an inductive bias for domain-generalized classification, providing a vocabulary for scoring spatial compositions among learned visual primitives. 
+
+Concept bottleneck learning. Concept bottleneck models predict through intermediate concept representations, often using predefined human-interpretable concepts with concept-level supervi-sion [Koh et al., 2020]. Another thread studies concept discovery and concept-based explanations under weaker supervision [Chen et al., 2020]. PARSE adopts the bottleneck idea for spatial prim-itive learning: it learns localized primitive heatmaps from image-level supervision and derives differentiable spatial descriptors from them. Unlike standard concept bottlenecks that classify from attribute-like concept vectors, PARSE uses these descriptors as localized evidence for differentiable relational compositions in the structural scoring layer. 
+
+# 3 Methodology 
+
+In this section, we describe the methodology of PARSE. We consider the standard domain general-ization setting, in which we are given a training set D = {(Xi, Y i, d i)}Ni=1 , where Xi ∈ R3×H×W is an image, Yi ∈ C is its class label, and di ∈ S indicates its source domain. At test time, the model is evaluated on samples from an unseen target domain t̸ ∈ S , which shares the same label space C as the source domains but is not observed during training. As in prior DG work, our goal is to train a classifier that generalizes to unseen target domains. Furthermore, instead of relying solely on backbone representations, we explicitly model visual 3Figure 1: The overall pipeline of PARSE. primitives and their spatial relations, while learning both end-to-end from image-level supervision. We first describe the primitive-and-structure component of PARSE in Section 3.1, where we formally define visual primitives and the spatial predicates over their locations. Then, we describe our network architecture that allows jointly learning both these structures and primitives in Section 3.2. In the same section, we also describe how primitive heatmaps are extracted from backbone features, how spatial predicates are computed over primitive locations in this network, and how the resulting structural scores are used for classification. 
+
+3.1 Representing Primitives and Structure Visual primitives. To represent visual primitives, we assume that there exists a set of K learned visual primitives P = {p1, . . . , p K }. Each primitive pk : X 7 → zk(X) is a mapping from any input image X to the corresponding image-dependent descriptor zk(X) = ⟨ck(X), σ k(X), δ k(X) , with associated spatial location ck(X) ∈ R2, a presence score σk(X) ∈ [0 , 1] , and the corresponding spatial extent δk(X) ∈ R2. The primitives should be learned from image-level supervision and should not require manual annotations, which we leave for Section 3.2 to describe how pk and zk(X)
+
+are parameterized and optimized in the full network. Below, we define spatial predicates over these image-dependent primitive descriptors, which are used to form class-specific structural compositions. 
+
+Differentiable spatial predicates. Given the set of primitives P, we model their spatial relations as a collection of soft spatial predicates R with varying arity. Each predicate would take as input a tuple of primitives ⟨p1, . . . , p r ⟩ (where r is the arity of the predicate) along with an input image X
+
+and output a soft satisfaction score in the range of [0 , 1] :
+
+R : ⟨p1, . . . , p r ⟩ × X 7 → score R ∈ [0 , 1] 
+
+Implementation-wise, all predicates operate over the image-dependent description zi(X) for each primitive pi. Thus, for simplicity, in the rest of this section, we omit the dependence on X: We use zi = ⟨ci, σ i, δ i⟩ in place of zi(X). Furthermore, we expand ci = ⟨cxi , c yi ⟩ and δi = ⟨δxi , δ yi ⟩,respectively. For predicates that require box corners, we derive a soft bounding box bi from the primitive location ci and extent δi:
+
+bi = ⟨bx1 
+
+> i
+
+, b y1 
+
+> i
+
+, b x2 
+
+> i
+
+, b y2 
+
+> i
+
+⟩ = ⟨cxi − δxi , c yi − δyi , c xi + δxi , c yi + δyi ⟩.
+
+Finally, before defining the predicates, we make two remarks about the parameterization of these pred-icates. Firstly, all predicate parameters we describe below, including κ(... ), m(... ), τ(... ), ρ, β, η, γ, θ 
+
+and ϕ are all learnable. Secondly, we parameterize each predicate by its family, for example, the above predicate Rabove ’s parameter will be shared across different combinations of input primitives, and thus, the set of learnable parameters for all these predicates is fixed with respect to the number of primitives and the number of classes. We now describe each spatial predicate in detail below. 4Primitive presence. We use a dedicated unary predicate Rhas (pk; xi) = σi,k to describe the presence of a primitive. While this neither composes any other primitive nor has any learnable parameters, it allows class compositions to depend on whether a primitive is present. 
+
+Binary predicates. We use binary predicates to encode pairwise spatial relations between two primitives pi and pj . They correspond to common spatial relations used in predicate-based visual reasoning, such as relative position, alignment, proximity, and containment Johnson et al. [2017], Yi et al. [2018], Mao et al. [2019]. We give their detailed formula below: 
+
+Rabove (pi, p j ) = sigmoid  κ↑(cyj − cyi − m↑) Rleft (pi, p j ) = sigmoid  κ←(cxj − cxi − m←)
+
+Rh-align (pi, p j ) = exp − (cyi − cyj )2
+
+2τ 2
+
+> h
+
+!
+
+Rv-align (pi, p j ) = exp − (cxi − cxj )2
+
+2τ 2
+
+> v
+
+!
+
+Rnear (pi, p j ) = exp − (cxi − cxj )2 + ( cyi − cyj )2
+
+2ρ2
+
+!
+
+Rcontains (pi, p j ) = sigmoid  κ⊃ min bx1 
+
+> j
+
+− bx1 
+
+> i
+
+, b y1 
+
+> j
+
+− by1 
+
+> i
+
+, b x2 
+
+> i
+
+− bx2 
+
+> j
+
+, b y2 
+
+> i
+
+− by2
+
+> j
+
+ .
+
+Here, Rabove and Rleft score directional relations, indicating whether pi is above or to the left of 
+
+pj in the image, respectively. The alignment predicates, Rh−align and Rv−align score whether two primitives share approximately the same vertical or horizontal position, while Rnear scores spatial proximity. The containment predicate scores whether the soft bounding box of pi encloses that of pj .The learnable parameters κ control predicate sharpness, m denotes directional margins, and τh, τ v , ρ 
+
+control tolerance for alignment and proximity. While binary predicates capture local spatial relations, object and part configurations often depend on geometric patterns involving multiple parts, such as angles, triangular arrangements, and relative distances between relations themselves (i.e., higher-order relations) [Biederman, 1987, Felzenszwalb et al., 2009]. While it is desirable to model these relations, modeling higher-order relations and predicates exactly is difficult to learn and is also difficult to optimize directly. Thus, we express such patterns through enumerable ternary and quaternary predicates. This keeps the structural layer differentiable and tractable, while allowing it to approximate higher-order layout cues over triples of primitives and pairs of primitive pairs. We describe this in detail below. 
+
+Ternary predicates. We model three-primitive geometric cues with two ternary predicates, Rtri 
+
+and Rturn . Specifically, let For primitives pi, p j , p k, let αijk denote the interior angle at pi, and let 
+
+θturn  
+
+> ijk
+
+= arccos(ˆ vij · ˆvjk ) denote the turning angle along the ordered chain pi → pj → pk. We define 
+
+R(n)tri (pi, p j , p k) = exp 
+
+
+
+− (αijk − ψn)2
+
+2β2
+
+> n
+
+
+
+R(ℓ)turn (pi, p j , p k) = exp − (θturn  
+
+> ijk
+
+− ϕℓ)2
+
+2η2
+
+> ℓ
+
+!
+
+.
+
+Here, R(n)tri scores triangular configurations with target angle ψn, while R(ℓ)turn scores ordered chain turns with learnable target angle ϕℓ; βn and ηℓ control the corresponding tolerances. 
+
+Quaternary predicates. Finally, we use quaternary predicates to compare spatial relations between two primitive pairs, expressing whether the two spatial relations between the two pairs would form a desired angle or whether their length would be relatively similar. Specifically, for primitives 
+
+pi, p j , p k, p ℓ, let vij = cj − ci and vkℓ = cℓ − ck denote the directed edges induced by the two pairs, with unit vectors ˆvij and ˆvkℓ . We define two quaternary predicates: 
+
+R(m)orient (pi, p j , p k, p ℓ) = exp 
+
+
+
+− (ˆ vij · ˆvkℓ − cos φm)2
+
+2γ2
+
+> m
+
+
+
+,Reqdist (pi, p j , p k, p ℓ) = exp 
+
+
+
+− 12τ 2
+
+> d
+
+log 2
+
+ ∥vij ∥∥vkℓ ∥
+
+ 
+
+.
+
+Here, R(m)orient compares the relative orientation of two primitive-pair edges against a target orientation 
+
+φm, while Reqdist scores whether the two edges have similar Euclidean length. The log-ratio form makes the distance comparison symmetric with respect to which edge is placed in the numerator. 5Class-specific structural compositions. Together, these predicates define a differentiable vocabu-lary for spatial structure. While predicate parameters are shared globally, each class learns a sparse weighting over the enumerated predicate–primitive assignments. Given an image, PARSE evaluates these assignments on the detected primitives and aggregates their weighted scores into class evidence. Thus, classification depends jointly on primitive presence and on whether the detected primitives satisfy class-specific spatial patterns. 
+
+3.2 Network Architecture 
+
+In this section, we describe the network architecture that allows modeling and learning both the aforementioned primitives and structures. We give an overview of this architecture in Figure 1. This architecture consists of three main components: a visual backbone that allows extracting general visual features, a concept bottleneck layer that maps these features to the corresponding primitive, along with their heatmaps and differential spatial coordinates as required by Section 3.1, and a structure scoring layer that models both predicting and learning with the proposed predicates. We describe each of these components in turn below. 
+
+Visual backbone. Given an image X ∈ R3×H×W , we first use a visual backbone fθ to extract a spatial feature map F = fθ (X) ∈ RC×HF ×WF , where C, H F , W F denote the channel, height, and width dimensions of the feature map. 
+
+Primitive concept bottleneck. This module instantiates the primitive descriptors defined in Sec-tion 3.1. Inspired by concept bottleneck models [Koh et al., 2020] and differentiable heatmap-based localization [Nibali et al., 2018], we project the feature map F into K primitive heatmaps, 
+
+H = gcb (F ) ∈ RK×HF ×WF ,
+
+where gcb is implemented as a lightweight convolutional projection. For image X, the heatmap 
+
+Hk provides spatial evidence for primitive pk and is converted into the descriptor zk(X) =
+
+⟨ck(X), σ k(X), δ k(X)⟩. Following differentiable heatmap-to-coordinate transforms [Nibali et al., 2018], we form a temperature-normalized heatmap 
+
+eHk,h,w = exp( Hk,h,w /T )
+
+P 
+
+> h′,w ′
+
+exp( Hk,h ′,w ′ /T ) , ck(X) = X
+
+> h,w
+
+eHk,h,w gh,w ,
+
+where T is a learnable temperature and gh,w =
+
+D 2wWF −1 − 1, 2hHF −1 − 1
+
+E
+
+∈ [−1, 1] 2 is the normal-ized grid coordinate. We compute the presence confidence as σk(X) = sigmoid(max h,w Hk,h,w ),and define δk(X) as twice the coordinate-wise standard deviation under eHk. These descriptors provide the locations, confidences, and extents used by the structural scoring layer. 
+
+Structural scoring layer. The structural scoring layer converts the structural vocabulary from Section 3.1 into class-level evidence. Given primitive descriptors {zk(X)}Kk=1 , it evaluates unary presence scores and enumerates spatial predicate applications over valid primitive assignments: 
+
+aR, i(X) = R(pi1 , . . . , p ir ; X), R ∈ R r , i = ⟨i1, . . . , i r ⟩ ∈ A r .
+
+Where Ar ⊆ { 1, . . . , K }r is the set of all ordered tuples of primitive indices that an r-ary predicate can be applied to. Collecting these terms gives a(X) ∈ [0 , 1] M , where M is the total number of enumerated relations. For ordered assignments without repeated primitives, the dominant cost comes from quaternary predicates, yielding worst-case complexity O(|R 4|K4). In practice, this cost remains tractable because K is small ( K = 16 ), the predicate vocabulary is compact, and predicate-shape parameters are shared globally across classes and assignments. Additionally, we can further improve inference efficiency by pruning predicate applications with zero class-specific weights after training. We parameterize class-specific structural compositions with 
+
+Λ = [ λ1; λ2; . . . ; λ|C| ] ∈ R|C|× M ,
+
+where λc ∈ RM gives the unnormalized weights over the M enumerated activations for class c.Unlike the globally shared predicate-shape parameters, these structural weights are class-specific. We normalize them with sparsemax [Martins and Astudillo, 2016] and compute the class score sc(X) as 
+
+wc = sparsemax( λc) ∈ ∆M −1, sc(X) = ( wc)⊤a(X).
+
+6Table 1: Accuracy on CUB-DG and DomainBed. Best in bold ; second-best underlined.                                                                                                                                         
+
+> (a) CUB-DG
+> Method Photo Cartoon Art Paint Avg. DANN 67.5 57.0 42.8 30.6 49.5 CDANN 65.3 55.2 43.2 30.5 48.6 GroupDRO 60.9 54.8 36.5 27.0 44.8 MixUp 67.1 55.9 51.1 27.2 50.3 SagNet 67.4 60.7 44.0 34.2 51.6 CORAL 72.2 63.5 50.3 35.8 55.5 GVRT 74.6 64.2 52.2 37.0 57.0 ERM++ 60.3 61.6 56.8 65.8 61.1 MIRO 60.1 49.9 51.5 34.9 49.1 SWAD 64.0 54.7 52.1 37.9 52.2 PARSE 75.7 69.1 68.2 49.3 65.6
+> ±0.4 ±0.6 ±0.7 ±0.9 ±0.4
+> (b) DomainBed
+> Method PACS VLCS OH Terra DN Avg. DANN 83.6 78.6 65.9 46.7 38.3 62.6 CDANN 82.6 77.5 65.8 45.8 38.3 62.0 GroupDRO 84.4 76.7 66.0 43.2 33.3 60.7 MixUp 85.2 77.9 60.4 44.0 34.0 60.3 SagNet 86.3 77.8 68.1 48.6 40.3 64.2 CORAL 86.2 78.8 68.7 47.7 41.5 64.6 GVRT 85.1 79.0 70.1 48.0 44.1 65.3 ERM++ 89.8 78.0 74.7 51.2 50.8 68.9
+> MIRO 85.4 79.0 70.5 50.4 44.3 65.9 SWAD 88.1 79.1 70.6 50.0 46.5 66.9 PARSE 86.7 76.9 70.5 54.8 44.4 66.7
+
+Thus, each class selects a sparse subset of primitive-presence and spatial-predicate activations as its structural composition. Because these activations are differentiable, gradients from the classification loss propagate through the structural scoring layer to the primitive bottleneck and visual backbone. 
+
+Learning Objective. Finally, let s(X) = [ s1(X), . . . , s |C| (X)] denote the vector formed by the individual structural class scores. We train PARSE end-to-end with 
+
+L = LCE (s(X), y ) + Lreg , (1) where LCE is cross-entropy over structural scores, and Lreg stabilizes predicate learning and struc-tural selection. As the architecture is fully differentiable, this objective jointly optimizes all the aforementioned components We defines Lreg in details in Appendix B. 
+
+# 4 Experiments 
+
+We employ the widely used DomainBed [Gulrajani and Lopez-Paz, 2020, Cha et al., 2021] protocols and the challenging new CUB-DG dataset [Min et al., 2022] for evaluating our method. The rest of the dataset description and the implementation details can be found in our Appendix A. In the next sections, we describe our experimental results. 
+
+4.1 Overall Results Results on CUB-DG. Table 1(a) reports results on CUB-DG. For recent baselines, including ERM++, MIRO, and SWAD, we use the released code of the respective methods; other baseline results are taken from GVRT [Min et al., 2022]. We evaluate PARSE over three seeds and report per-target mean and standard deviation. PARSE achieves the best mean accuracy of 65.6%, outperforming the strongest prior result, ERM++ by 4.5 points, and obtains the best accuracy on three of the four target domains. These results suggest that explicitly modeling spatial compositions is particularly effective on CUB-DG, where fine-grained bird categories share coarse part layouts while appearance varies substantially across domains. 
+
+Results on DomainBed. Table 1(b) reports single-run results on DomainBed, following the same evaluation protocol. We report single-run accuracy since DomainBed is substantially larger and more computationally expensive, covering five datasets and 22 leave-one-domain-out evaluations. PARSE achieves 66.7% mean accuracy, outperforming GVRT and MIRO by 1.4 and 0.8 points, respectively, and remains within 0.2 points of SWAD. Notably, PARSE achieves the best result on TerraIncognita, improving over the strongest prior result by 3.6 points. 
+
+4.2 Ablation Studies 
+
+We pose the following research questions (RQ)s as ablation studies for PARSE: 7Figure 2: Error analysis on 2 correct and 2 false classification samples of the target (Photo) domain. Error happens due to the misidentification of the crucial primitive region P13 .
+
+Figure 3: Primitive 0 visualization over different classes of source domains. 
+
+Figure 4: Results of PARSE with different num-bers of primitives on DomainNet/Sketch dataset. 
+
+RQ1: What do the learned primitives capture? As illustrated in Fig. 3, PARSE’s learned primitive 0 localizes class-relevant bird regions across source domains, such as the wing-chest region for class 4, the neck region for class 6, and the wing-only region for class 17. These localized primitives provide the building blocks for PARSE to model class-specific spatial relations. Furthermore, their localization patterns remain relatively consistent across changes in texture and pose, suggesting that the learned primitives capture spatially meaningful evidence that is robust to domain shift. 
+
+RQ2: What failure modes does PARSE exhibit? Fig. 2 shows that primitive localization is a key bottleneck for PARSE. In correctly classified samples, primitives localize informative regions: for example, P15 and P10 focus on the neck–head region, while P13 captures the feet. In misclassified samples, several primitives collapse around the torso and fail to anchor to class-discriminative extremities, including the region typically captured by P13 . This weakens the geometric evidence available to the structural scoring layer, making the final prediction more error-prone. 
+
+RQ3: How does the number of primitives affect performance? We study the effect of the number of primitives on the DomainNet task with Sketch as the target domain, as shown in Fig. 4. 8Table 2: Ablation study on predicate sets and structural compaction results.                                                   
+
+> (a) Predicate-family ablation
+> Photo Cartoon Art Paint Avg. No Rel. 72.3 66.4 65.5 47.4 62.9 Binary 76.2 68.6 65.3 48.1 64.6 Binary + Ternary 76.7 67.2 66.9 48.2 64.8 Binary + Quaternary 76.4 68.7 67.4 46.9 64.9 All 75.7 69.1 68.2 49.3 65.6 (b) Structural compaction
+> Dataset #Params #PParams Red. Active GFLOPs DomainNet 44.91M 0.306M 99.3% 888 4.201 →4.112 CUB-DG 26.04M 0.191M 99.3% 956 4.164 →4.112 OfficeHome 8.46M 0.078M 99.1% 1,197 4.128 →4.112 TerraInc 1.30M 0.004M 99.7% 438 4.114 →4.112 PACS 0.91M 0.002M 99.8% 295 4.113 →4.112 VLCS 0.65M 0.001M 99.8% 243 4.113 →4.112
+
+Increasing the number of primitives from the default setting to K = 24 improves accuracy by 0.5 points, suggesting that additional primitives can provide finer spatial evidence. However, because the number of enumerated predicate applications grows with K, larger primitive sets increase the computational cost of the structural scoring layer. We therefore use the smaller default configuration for the DomainBed experiments as a trade-off between accuracy and efficiency. 
+
+RQ4: Does explicit relational structure improve generalization? Table 2(a) ablates predicate families on CUB-DG. The No Relations baseline passes primitive descriptors from the concept bottleneck directly to a linear classifier. Adding binary predicates improves average accuracy from 62.9% to 64.6%, showing that pairwise constraints provide useful spatial evidence. Adding ternary or quaternary predicates further improves the average to 64.8% and 64.9%, respectively, indicating that triplet layouts and relations between primitive pairs provide complementary cues. Using all predicate families gives the best average accuracy of 65.4%, with the largest gains on the more stylized Art and Paint domains. These results show that explicit relational structure improves over primitive-only classification, especially under stronger appearance shift. 
+
+RQ5: How efficient is PARSE? We evaluate the practical efficiency of PARSE in Table 2(b), reporting structural-layer parameters and GFLOPs. The #Params column shows the additional parameters introduced by the structural scoring layer. Compared with a ResNet-50 backbone with roughly 25.6M parameters, the unpruned structural layer is smaller on most datasets, but can become comparable to or larger than the backbone on high-class datasets such as DomainNet and CUB-DG. Its computational overhead, however, remains small: a standard ResNet-50 forward pass costs about 
+
+4.1 GFLOPs at 224 × 224 resolution, so total computation is dominated by the backbone. The number of enumerated predicates M stays constant at 130 , 176 . The training time in practice remains stable at under 440 seconds in our settings in Appendix A. After training, we observe that sparsemax drives most class-relation weights to exact zero, enabling structural compaction by pruning inactive predicate applications. Appendix C details this procedure. We report the compacted parameter count (#PParams), reduction ratio (#Red.), and GFLOPs before and after pruning in Table 2(b) and show that compaction reduces structural parameters by over 99% 
+
+while preserving predictions, making the inference-time structural layer lightweight. 
+
+# 5 Conclusion 
+
+We presented PARSE, a structure-aware DG framework that models visual categories as composi-tions of learned primitives and differentiable spatial predicates. PARSE learns primitive heatmaps, derives spatial descriptors, and scores class-specific compositions with binary, ternary, and quaternary predicates, providing an explicit structural inductive bias while remaining end-to-end differentiable. On CUB-DG, PARSE achieves 65.6% mean accuracy, ranks best on three of four target domains, and improves over the strongest prior mean by 4.5 points. On DomainBed, it remains competitive, achieving 66.7% mean accuracy and the best result on TerraIncognita. Ablations show that rela-tional predicates improve over a no-relation primitive baseline, while structural compaction reduces inference-time cost effectively by pruning inactive relations. 
+
+Limitations. PARSE is most effective when primitives can be localized reliably and spatial structure remains informative across domains. Although the structural layer has an O(K4) worst-case cost from quaternary predicates, its computational overhead is small relative to modern visual backbones, and our experiments show that sparsemax-based compaction can prune inactive relations after training for efficient inference. In future work, we are interested in finding better primitive representations and localization, reducing training-time enumeration cost, and learning adaptive predicate vocabularies. 9References 
+
+Martin Arjovsky, Léon Bottou, Ishaan Gulrajani, and David Lopez-Paz. Invariant risk minimization. 
+
+arXiv preprint arXiv:1907.02893 , 2019. Shuanghao Bai, Min Zhang, Wanqi Zhou, Siteng Huang, Zhirong Luan, Donglin Wang, and Badong Chen. Prompt-based distribution alignment for unsupervised domain adaptation. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, pages 729–737, 2024. Sara Beery, Grant Van Horn, and Pietro Perona. Recognition in terra incognita. In Proceedings of the European conference on computer vision (ECCV) , pages 456–473, 2018. Irving Biederman. Recognition-by-components: a theory of human image understanding. Psycholog-ical review , 94(2):115, 1987. Junbum Cha, Sanghyuk Chun, Kyungjae Lee, Han-Cheol Cho, Seunghyun Park, Yunsung Lee, and Sungrae Park. Swad: Domain generalization by seeking flat minima. Advances in Neural Information Processing Systems , 34:22405–22418, 2021. Junbum Cha, Kyungjae Lee, Sungrae Park, and Sanghyuk Chun. Domain generalization by mutual-information regularization with pre-trained models. In European Conference on Computer Vision (ECCV) , pages 440–457. Springer, 2022. doi: 10.1007/978-3-031-20050-2_26. Zhi Chen, Yijie Bei, and Cynthia Rudin. Concept whitening for interpretable image recognition. 
+
+Nature Machine Intelligence , 2(12):772–782, 2020. Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition ,pages 248–255. Ieee, 2009. Chen Fang, Ye Xu, and Daniel N Rockmore. Unbiased metric learning: On the utilization of multiple datasets and web images for softening bias. In Proceedings of the IEEE international conference on computer vision , pages 1657–1664, 2013. Pedro F Felzenszwalb, Ross B Girshick, David McAllester, and Deva Ramanan. Object detection with discriminatively trained part-based models. IEEE transactions on pattern analysis and machine intelligence , 32(9):1627–1645, 2009. Yaroslav Ganin, Evgeniya Ustinova, Hana Ajakan, Pascal Germain, Hugo Larochelle, François Laviolette, Mario Marchand, and Victor Lempitsky. Domain-adversarial training of neural networks. 
+
+Journal of Machine Learning Research , 17(59):1–35, 2016. URL http://jmlr.org/papers/ v17/15-239.html .Ishaan Gulrajani and David Lopez-Paz. In search of lost domain generalization. In International Conference on Learning Representations , 2020. Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE conference on computer vision and pattern recognition ,pages 770–778, 2016. Joy Hsu, Jiayuan Mao, Josh Tenenbaum, and Jiajun Wu. What’s left? concept grounding with logic-enhanced foundation models. Advances in Neural Information Processing Systems , 36: 38798–38814, 2023. Han Hu, Jiayuan Gu, Zheng Zhang, Jifeng Dai, and Yichen Wei. Relation networks for object detection. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , June 2018. Justin Johnson, Bharath Hariharan, Laurens Van Der Maaten, Li Fei-Fei, C Lawrence Zitnick, and Ross Girshick. Clevr: A diagnostic dataset for compositional language and elementary visual reasoning. In Proceedings of the IEEE conference on computer vision and pattern recognition ,pages 2901–2910, 2017. 10 Danial Kamali, Elham J. Barezi, and Parisa Kordjamshidi. Nesycoco: A neuro-symbolic concept composer for compositional generalization. Proceedings of the AAAI Conference on Artificial Intelligence , 39(4):4184–4193, Apr. 2025. doi: 10.1609/aaai.v39i4.32439. URL https://ojs. aaai.org/index.php/AAAI/article/view/32439 .Muhammad Uzair Khattak, Hanoona Rasheed, Muhammad Maaz, Salman Khan, and Fahad Shahbaz Khan. Maple: Multi-modal prompt learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 19113–19122, June 2023. Diederik P Kingma and Jimmy Ba. Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980 , 2014. Pang Wei Koh, Thao Nguyen, Yew Siang Tang, Stephen Mussmann, Emma Pierson, Been Kim, and Percy Liang. Concept bottleneck models. In Hal Daumé III and Aarti Singh, editors, Proceedings of the 37th International Conference on Machine Learning , volume 119 of Proceedings of Machine Learning Research , pages 5338–5348. PMLR, 13–18 Jul 2020. URL https://proceedings. mlr.press/v119/koh20a.html .Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep convolu-tional neural networks. Advances in neural information processing systems , 25, 2012. David Krueger, Ethan Caballero, Joern-Henrik Jacobsen, Amy Zhang, Jonathan Binas, Dinghuai Zhang, Remi Le Priol, and Aaron Courville. Out-of-distribution generalization via risk extrapola-tion (rex). In International conference on machine learning , pages 5815–5826. PMLR, 2021. Da Li, Yongxin Yang, Yi-Zhe Song, and Timothy M Hospedales. Deeper, broader and artier domain generalization. In Proceedings of the IEEE international conference on computer vision , pages 5542–5550, 2017. Haoliang Li, Sinno Jialin Pan, Shiqi Wang, and Alex C. Kot. Domain generalization with adver-sarial feature learning. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , June 2018. Runtao Liu, Chenxi Liu, Yutong Bai, and Alan L Yuille. Clevr-ref+: Diagnosing visual reasoning with referring expressions. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 4185–4194, 2019. Mingsheng Long, Yue Cao, Jianmin Wang, and Michael Jordan. Learning transferable features with deep adaptation networks. In International conference on machine learning , pages 97–105. PMLR, 2015. Mingsheng Long, Zhangjie Cao, Jianmin Wang, and Michael I Jordan. Conditional adversarial domain adaptation. In Advances in Neural Information Processing Systems (NeurIPS) , volume 31, 2018. doi: 10.48550/arxiv.1705.10667. Jiayuan Mao, Chuang Gan, Pushmeet Kohli, Joshua B Tenenbaum, and Jiajun Wu. The neuro-symbolic concept learner: Interpreting scenes, words, and sentences from natural supervision. 
+
+arXiv preprint arXiv:1904.12584 , 2019. Andre Martins and Ramon Astudillo. From softmax to sparsemax: A sparse model of attention and multi-label classification. In International conference on machine learning , pages 1614–1623. PMLR, 2016. Seonwoo Min, Nokyung Park, Siwon Kim, Seunghyun Park, and Jinkyu Kim. Grounding visual representations with texts for domain generalization. In European Conference on Computer Vision (ECCV) , pages 37–53. Springer, 2022. doi: 10.1007/978-3-031-19836-6_3. Krikamol Muandet, David Balduzzi, and Bernhard Schölkopf. Domain generalization via invariant feature representation. In ICML (1) , pages 10–18, 2013. Hyeonseob Nam, HyunJae Lee, JongChan Park, Wonjun Cho, and Kwanyoung Kim. Reducing domain gap by reducing style bias. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 8690–8699, 2021. doi: 10.1109/CVPR46437.2021.00858. 11 Duc-Duy Nguyen and Dat Nguyen. VirDA: Reusing backbone for unsupervised domain adaptation with visual reprogramming. Transactions on Machine Learning Research , 2025. ISSN 2835-8856. URL https://openreview.net/forum?id=Qh7or7JRFI .Aiden Nibali, Zhen He, Stuart Morgan, and Luke Prendergast. Numerical coordinate regression with convolutional neural networks. arXiv preprint arXiv:1801.07372 , 2018. Xingchao Peng, Qinxun Bai, Xide Xia, Zijun Huang, Kate Saenko, and Bo Wang. Moment matching for multi-source domain adaptation. In Proceedings of the IEEE/CVF international conference on computer vision , pages 1406–1415, 2019. Kate Saenko, Brian Kulis, Mario Fritz, and Trevor Darrell. Adapting visual category models to new domains. In European conference on computer vision , pages 213–226. Springer, 2010. Shiori Sagawa, Pang Wei Koh, Tatsunori B Hashimoto, and Percy Liang. Distributionally ro-bust neural networks for group shifts: On the importance of regularization for worst-case gen-eralization. In International Conference on Learning Representations (ICLR) , 2020. URL 
+
+https://openreview.net/forum?id=ryxGuAnKwH .Yang Shu, Zhangjie Cao, Chenyu Wang, Jianmin Wang, and Mingsheng Long. Open domain generalization with domain-augmented meta-learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 9624–9633, 2021. Baochen Sun and Kate Saenko. Deep coral: Correlation alignment for deep domain adaptation. In European Conference on Computer Vision (ECCV) , pages 443–450. Springer, 2016. doi: 10.1007/978-3-319-49409-8_35. Tao Sun, Cheng Lu, Tianshuo Zhang, and Haibin Ling. Safe self-refinement for transformer-based domain adaptation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2022. Piotr Teterwak, Kuniaki Saito, Theodoros Tsiligkaridis, Kate Saenko, and Bryan A Plummer. Erm++: An improved baseline for domain generalization. In IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , 2024. doi: 10.48550/arxiv.2304.01973. Hemanth Venkateswara, Jose Eusebio, Shayok Chakraborty, and Sethuraman Panchanathan. Deep hashing network for unsupervised domain adaptation. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 5018–5027, 2017. Tongkun Xu, Weihua Chen, Pichao Wang, Fan Wang, Hao Li, and Rong Jin. Cdtrans: Cross-domain transformer for unsupervised domain adaptation. In Proceedings of the Interna-tional Conference on Learning Representations (ICLR) , 2022. ICLR 2022 (poster). URL: https://openreview.net/forum?id=XGzk5OKWFFc. Kexin Yi, Jiajun Wu, Chuang Gan, Antonio Torralba, Pushmeet Kohli, and Joshua B. Tenenbaum. Neural-symbolic vqa: disentangling reasoning from vision and language understanding. In 
+
+Proceedings of the 32nd International Conference on Neural Information Processing Systems ,NIPS’18, page 1039–1050, Red Hook, NY, USA, 2018. Curran Associates Inc. Hanlin Zhang, Yi-Fan Zhang, Weiyang Liu, Adrian Weller, Bernhard Schölkopf, and Eric P Xing. Towards principled disentanglement for domain generalization. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 8024–8034, 2022. Hongyi Zhang, Moustapha Cisse, Yann N Dauphin, and David Lopez-Paz. mixup: Beyond empirical risk minimization. In International Conference on Learning Representations (ICLR) , 2018. doi: 10.48550/arxiv.1710.09412. Kaiyang Zhou, Yongxin Yang, Yu Qiao, and Tao Xiang. Domain generalization with mixstyle. arXiv preprint arXiv:2104.02008 , 2021. 12 Appendix A Dataset and Implementation details 
+
+The DomainBed consists of 5 datasets: PACS [Li et al., 2017] (4 domains, 7 classes, and 9,991 images), VLCS [Fang et al., 2013] (4 domains, 5 classes, and 10,729 images), Office-Home [Venkateswara et al., 2017] (4 domains, 65 classes, and 15,588 images), TerraIncognita [Beery et al., 2018] (4 domains, 10 classes, and 24, 788 images), and DomainNet [Peng et al., 2019] (6 domains, 345 classes, and 586,575 images). The CUB-DG dataset comprises 4 domains, with 47,152 images across 200 classes of North American bird species. All performance scores are evaluated by 
+
+leave-one-out cross-validation, where averaging all cases that use a single domain as the target (test) domain and the others as the source (training) domains. We hold out 20% of the source domain data for validation and select the best validation model for testing on the held-out target domain. Since we use ResNet-50 [He et al., 2016] backbone pretrained on ImageNet [Deng et al., 2009] as backbone, we benchmark against prior methods that utilize the same backbone architecture for fair comparison, which are: DANN [Ganin et al., 2016], CDANN [Long et al., 2018], GroupDRO [Sagawa et al., 2020], MixUp [Zhang et al., 2018], SagNet [Nam et al., 2021], CORAL [Sun and Saenko, 2016], ERM++ [Teterwak et al., 2024], MIRO [Cha et al., 2022], and SWAD [Cha et al., 2021]. We also include GVRT [Min et al., 2022] as the current benchmark due to the remarkable SoTA performance on the CUB-DG dataset. 
+
+Implementation details. The model is optimized using the Adam [Kingma and Ba, 2014] optimizer with a default learning rate of 0.001 . We set the number of primitives to K = 16 for all domains in the DomainBed and CUB-DG settings, while keeping the same batch size N = 32 to be consistent with prior methods. The number of target angles n, turning angles ℓ of ternary predicates, and orientation angles m of quaternary predicates are set to 3, 1, and 4, respectively. Following prior DG work, we apply feature-level style mixing [Zhou et al., 2021] during training to reduce sensitivity to domain-specific texture statistics. We achieve these hyperparameters via grid search, which is reproducible via the source code. All of the experiments were conducted on a single RunPod cloud instance equipped with 9 vCPUs, 50 GB system RAM, and 60 GB of storage, and an NVIDIA RTX 4000 Ada Generation GPU with 20 GB GDDR6 VRAM. For the training time, it takes 0.8 seconds per step, resulting in approximately 440s per epoch on the CUB-DG dataset. 
+
+# B Regularization Loss 
+
+This section provides the full definition of the regularization term used in Eq. 1. The full training objective is 
+
+L = LCE (s(X), y ) + Lreg 
+
+where 
+
+Lreg = λsparse ∥Λ∥1 + λbn Lbn + λang Lang ,
+
+where LCE is the standard cross-entropy loss over structural class scores, and the remaining terms are described below. The predicate parameters receive no direct supervision beyond LCE ; they are optimized entirely through the gradient path from class scores through grammar weights to relation scores. 
+
+Sparsity regularization. The class-weight matrix Λ ∈ R|C|× M holds class-specific log-weights over the M enumerated predicate applications. We apply a mean ℓ1 penalty, 
+
+∥Λ∥1 = 1
+
+|C| M
+
+> |C|
+
+X
+
+> c=1
+> M
+
+X
+
+> m=1
+
+|Λc,m |,
+
+which complements sparsemax normalization by penalizing log-weight magnitude before the activa-tion, encouraging each class to rely on a compact subset of predicate applications. 
+
+Bottleneck regularization. To encourage the concept bottleneck to learn spatially meaningful and non-redundant primitive detectors, we regularize the normalized primitive heatmaps { eHk}. We define 
+
+Lbn = Ldiv + λconc Lconc ,
+
+13 where Ldiv discourages different primitives from attending to the same spatial regions, and Lconc en-courages each primitive heatmap to be spatially concentrated. Concretely, flattening each normalized heatmap eHk into a vector in ∆HF WF −1, we compute 
+
+Ldiv = 1
+
+K(K − 1) 
+
+X 
+
+> k̸=k′
+
+eH⊤ 
+
+> k
+
+eHk′
+
+∥ eHk∥2 ∥ eHk′ ∥2
+
+, Lconc = − 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+X
+
+> h,w
+
+eHk,h,w log( eHk,h,w + ϵ).
+
+Where ϵ = 0 .01 is the normalization term. This bottleneck regularizer is used in every training run and helps reduce primitive collapse. 
+
+Angle diversity regularization. For quaternary predicates, we encourage the Nφ learnable target orientation angles {φm}Nφ 
+
+> m=1
+
+(the targets in R(m)orient ) to remain spread across configuration space rather than collapsing to the same value. We use an inverse-distance repulsion in cosine space: 
+
+Lang = 1
+
+ Nφ
+
+> 2
+
+ X
+
+> 1≤m<m ′≤Nφ
+
+1(cos φm − cos φm′ )2 + ε ,
+
+where ε = 0 .01 again prevents division by zero when two angles coincide. Note that this diversity loss applies only to the orientation angles {φm} in R(m)orient ; the triplet target angles {ψn} in R(n)tri and the chain turning angles {ϕℓ} in R(ℓ)turn are not covered by this term. 
+
+# C Structural Layer Compaction 
+
+The structural scoring layer enumerates a large set of predicate applications, but after training each class typically uses only a small subset of them. We exploit the sparsity induced by sparsemax-normalized class-relation weights to compact the trained structural layer without changing predictions. Recall that the structural layer computes predicate activations a(X) ∈ [0 , 1] M and uses a class-relation matrix Λ ∈ R|C|× M . For class c, the normalized weights are 
+
+wc = sparsemax( λc) ∈ ∆M −1,
+
+where λc is the c-th row of Λ. Unlike softmax, sparsemax can assign exact zero weight to predicate applications. Thus, a predicate application m is globally inactive if wcm = 0 for all c ∈ C . After training, we identify the active index set 
+
+Iactive = {m ∈ { 1, . . . , M } : max  
+
+> c∈C
+
+wcm > τ },
+
+where τ is a pruning threshold. We then restrict the structural layer to Iactive by slicing the activation vector a(X) and the class-relation matrix Λ accordingly. With τ = 0 , this compaction is lossless: every removed predicate application has zero sparsemax weight for every class and therefore con-tributes zero to all structural scores. Consequently, the logits sc(X) = ( wc)⊤a(X) are preserved exactly. For efficiency, we apply this compaction after training and before inference. It reduces the number of active predicate applications and the size of the class-relation matrix without requiring retraining or fine-tuning. Table 3 reports the effect on DomainNet target domains. Compaction reduces the structural layer from roughly 115 K predicate applications to fewer than 1K active applications per domain, and reduces structural parameters by over 99% . The total GFLOP reduction is modest because the backbone dominates computation, but the structural scoring layer becomes negligible in both parameter count and inference cost. In all cases, the pruned structural layer contains fewer than 1,001 active predicate applications and less than 0.35 M parameters. The argmax predictions are unchanged after pruning, confirming that the removed predicate applications do not affect the final classification decisions. 14 Table 3: Structural layer compaction across all benchmarks and target domains. “Pred. Params” refers to the predicate-application component of the structural scoring layer. Pruning removes globally-dead productions (sparsemax exact zeros) and near-uniform second-order productions, with 100% top-1 prediction preservation across all verified checkpoints. 
+
+Full Pred. Params Active GFLOPs Dataset Target Params Before After Preds. (Before → After) DOMAIN NET  Clipart 68.50M 44.91M 0.333M 130,176 → 964 4.201 → 4.112 Infograph 68.50M 44.91M 0.288M 130,176 → 835 4.201 → 4.112 Painting 68.50M 44.91M 0.273M 130,176 → 792 4.201 → 4.112 Quickdraw 68.50M 44.91M 0.336M 130,176 → 975 4.201 → 4.112 Real 68.50M 44.91M 0.345M 130,176 → 1,001 4.201 → 4.112 Sketch 68.50M 44.91M 0.263M 130,176 → 763 4.201 → 4.112 CUB-DG  Art 49.63M 26.04M 0.200M 130,176 → 998 4.164 → 4.112 Cartoon 49.63M 26.04M 0.189M 130,176 → 944 4.164 → 4.112 Paint 49.63M 26.04M 0.192M 130,176 → 959 4.164 → 4.112 Photo 49.63M 26.04M 0.184M 130,176 → 922 4.164 → 4.112 OFFICE  Art 32.06M 8.46M 0.078M 130,176 → 1,194 4.128 → 4.112 Clipart 32.06M 8.46M 0.077M 130,176 → 1,186 4.128 → 4.112 Product 32.06M 8.46M 0.079M 130,176 → 1,213 4.128 → 4.112 Real World 32.06M 8.46M 0.078M 130,176 → 1,196 4.128 → 4.112 TERRA  L100 24.90M 1.30M 0.004M 130,176 → 419 4.114 → 4.112 L38 24.90M 1.30M 0.004M 130,176 → 448 4.114 → 4.112 L43 24.90M 1.30M 0.004M 130,176 → 423 4.114 → 4.112 L46 24.90M 1.30M 0.005M 130,176 → 462 4.114 → 4.112 PACS  Art 24.51M 0.91M 0.002M 130,176 → 272 4.113 → 4.112 Cartoon 24.51M 0.91M 0.002M 130,176 → 307 4.113 → 4.112 Photo 24.51M 0.91M 0.002M 130,176 → 253 4.113 → 4.112 Sketch 24.51M 0.91M 0.002M 130,176 → 349 4.113 → 4.112 VLCS  Caltech 24.24M 0.65M 0.001M 130,176 → 221 4.113 → 4.112 LabelMe 24.24M 0.65M 0.001M 130,176 → 238 4.113 → 4.112 Pascal 24.24M 0.65M 0.001M 130,176 → 258 4.113 → 4.112 SUN 24.24M 0.65M 0.001M 130,176 → 254 4.113 → 4.112 
+
+15
