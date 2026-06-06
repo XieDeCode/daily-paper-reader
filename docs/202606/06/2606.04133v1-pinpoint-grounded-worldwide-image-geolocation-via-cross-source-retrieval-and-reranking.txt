@@ -1,0 +1,276 @@
+Title: Pinpoint: Grounded Worldwide Image Geolocation via Cross-Source Retrieval and Reranking
+
+URL Source: https://arxiv.org/pdf/2606.04133v1
+
+Published Time: Thu, 04 Jun 2026 00:10:42 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# Pinpoint: Grounded Worldwide Image Geolocation via Cross-Source Retrieval and Reranking 
+
+Nika Chuzhoy ∗ Brian Hu ∗ Amit A. Arora Jae Ro Sarthak S. Sahu 
+
+Virtualitics 
+
+# Abstract 
+
+Image geolocation aims to estimate where a photograph was taken from its visual content. At worldwide scale, this remains challenging because visual evidence is often ambiguous, diverse, and unevenly distributed. Prior work has typically treated geolocation of ordinary internet photos and street-view imagery as separate tasks, despite their complementary strengths: internet photos better match the appearance distribution of user-captured queries, while street-view imagery provides denser, geographically grounded coverage. We present Pinpoint, a retrieve-and-rerank architecture that combines both sources in a coarse-to-fine pipeline. A contrastive image–GPS embedder is trained on both user-uploaded Flickr photos and street-view imagery, learning a shared image–GPS embedding space that is used to retrieve candidate locations. An attention-based reranker then rescores retrieved candidates by combining candidate-level visual and GPS features with cross-source evidence from nearby locations to ground the prediction. Unlike recent prior work, Pinpoint does not rely on multimodal large-language models, making inference faster and more reproducible. Pinpoint achieves state-of-the-art results across all metrics on standard benchmarks for internet photos (IM2GPS3k and YFCC4k) and street-view imagery (OSV-5M). 
+
+# 1 Introduction 
+
+Worldwide image geolocation is the task of determining exactly where on Earth a photograph was taken. Reliable geolocation is valuable for a variety of applications such as navigation, disaster response, and open-source intelligence. However, worldwide geolocation is inherently challenging: the search space spans the entire globe, and many images lack distinctive landmarks or come from regions with sparse reference coverage. Recent state-of-the-art approaches rely on the strong world knowledge of multimodal large-language models (MLLMs) to resolve this ambiguity [ 8– 10 , 28 ]. This strategy is powerful, but it imposes costs in latency and reproducibility, particularly for proprietary, externally hosted MLLMs. Further, it makes geolocation more dependent on latent knowledge acquired during internet-scale training, where benchmark contamination becomes a concern. We demonstrate with Pinpoint that MLLMs are not required for state-of-the-art performance. Prior work has often separated the geolocation of ordinary internet photos and street-view imagery into distinct tasks, with each task served by models trained exclusively on data from its own regime. Internet-photo geolocation models target unconstrained images from sources such as Flickr, Wikime-dia, or landmark collections [ 6 , 8, 9, 21 ], where viewpoints and subjects vary widely. Street-view geolocation models instead focus on road-level panoramas or navigation datasets, where signs, road markings, infrastructure, and driving context provide more standardized cues [ 1 , 4 – 6]. This split has shaped both training data and evaluation: systems learn from a single source and are evaluated on benchmarks drawn from that same source, even though the two regimes contain complementary 
+
+> ∗Equal contribution. Preprint.
+> arXiv:2606.04133v1 [cs.CV] 2 Jun 2026
+
+information. Ordinary internet photos expose models to diverse objects and scenes, while street-view imagery provides denser, more consistent geographic coverage. We present Pinpoint, a retrieve-and-rerank architecture that implements cross-source training. Follow-ing prior work, we train Pinpoint separately for each evaluation setting—one instance targeting the internet-photo benchmarks and another targeting the street-view benchmark—but, unlike prior work, both instances draw on both data sources during training and exploit their complementary strengths. During the retrieval stage, Pinpoint uses an image tower based on a SigLIP 2 [ 19 ] backbone to embed Flickr photos and OSV-5M street-view images [ 1 ] into a shared space. The Flickr images contribute diversity to the embedding space, while the street-view images contribute regularity. Street-view images are geographically denser and more homogeneous in appearance with respect to location, while Flickr images are more representative of in-the-wild photography. During the reranking stage, Pinpoint uses an attention-based reranker trained specifically for candidate selection. For each retrieved top-k location candidate, the reranker jointly attends to the query image representation, candidate embeddings, and a support token that summarizes nearby visual evidence around each candidate anchor location. Notably, neither the retrieval nor reranking stage uses MLLMs to generate or evaluate candidate locations. As a result, our model is readily reproducible, low-latency, and can be deployed privately. We evaluate Pinpoint on the standard internet-photo benchmarks IM2GPS3k and YFCC4k, achieving state-of-the-art performance at every distance threshold on each, and we further set a new state of the art on the OSV-5M test set for street-view geolocation. 
+
+# 2 Related Work 
+
+Worldwide Image Geolocation. Many prior works have tackled the problem of global image geolocation, in three main ways. Classification-based methods [ 3 , 6, 12 , 15 , 25 ] treat geolocation as discrete prediction by partitioning the Earth into discrete regions or geocells and predicting the cell containing the query image. Retrieval-based methods cast geolocation as a search over geotagged reference data [ 7, 9 , 21 , 26 ]. Early systems used hand-crafted features and nearest-neighbor aggregation [ 7 ], while later methods adopted learned visual embeddings, contrastive objectives, and image–GPS alignment [ 8 , 9 , 21 ]. While avoiding fixed geocells, retrieval methods can confuse visually similar but geographically distant places. Pinpoint retains retrieval’s scalability to diverse data while addressing this visual ambiguity by introducing a reranking model that learns to finely distinguish between similar photos. MLLM-based methods augment retrieval with generative vision-language models that leverage broad visual and world knowledge from internet-scale pretraining [ 8, 9, 28 ]. These systems prompt MLLMs with retrieved geographic, textual, or visual evidence to generate or refine location predictions [ 8 , 9, 28 ]. As a result, MLLM-based approaches are often slower and non-deterministic at inference, and their reliance on proprietary models can make data contamination and reproducibility difficult to assess. In contrast, Pinpoint achieves stronger performance while keeping predictions grounded in a fixed retrieval database, making inference faster and deterministic. 
+
+Internet Photos and Street-View Imagery. Worldwide image geolocation has often treated ordinary internet photos and street-view imagery as separate settings. Internet-photo geolocation systems such as PlaNet [ 25 ], GeoCLIP [ 21 ], and PIGEOTTO [ 6] target unconstrained web images from sources such as Flickr, Wikimedia, or landmark collections. Street-view geolocation systems instead exploit standardized road-level imagery [ 1, 2, 4 , 5 ], where signs, lane markings, vegetation, architecture, and infrastructure provide dense geographic cues. Pinpoint combines these regimes: MP16-Pro, a dataset of images from Flickr [ 8 ], supplies the inference-time retrieval index, while OSV-5M supplies dense auxiliary supervision during contrastive training. We show that using street-view coverage improves geolocation of ordinary internet photos. 
+
+Reranking for Retrieval. Retrieve-and-rerank pipelines are well-established in information retrieval, where a fast first-stage retriever produces candidates that a slower, more expressive model rescores [11 , 17 ]. However, reranking is far from ubiquitous in geolocation models. The most closely related geolocation system to our reranking approach is GeoRanker, which fine-tunes an MLLM with a learned distance-ranking objective to rescore retrieved candidates [ 9]. Pinpoint implements reranking without an MLLM, using a lightweight attention-based reranker trained specifically for geolocation. 2Figure 1: Overview of the Pinpoint inference pipeline. The query image is encoded by a frozen contrastive image tower and used to retrieve a top-k shortlist from the retrieval index, which is then rescored by an attention-based reranker that selects the final predicted geolocation. 
+
+# 3 Method 
+
+Pinpoint follows a two-stage retrieve-and-rerank pipeline, illustrated in Figure 1. First, a contrastive image–GPS embedder maps images and GPS coordinates into a shared embedding space. Given a query image, this embedder retrieves a shortlist of candidate locations from a fixed retrieval index based on cosine similarity. During retrieval training, the model embeds images from both the street-view and internet-photo sources, learning to coarsely distinguish between a large number of diverse locations across the globe. Second, an attention-based reranker rescores each candidate by applying self-attention over a short sequence containing the query image embedding, the candidate’s image embedding, SigLIP embedding, and GPS embedding along with a support token summarizing neighboring reference images from the complementary image source. This reranker model learns to finely distinguish between similar photos taken closer together. The final prediction is the GPS coordinate of the highest-scoring retrieved candidate. 
+
+3.1 Contrastive Embedder 
+
+The contrastive image–GPS embedder maps images and GPS coordinates into a shared d-dimensional latent space (Figure 2). Let (ximg , x gps ) denote an image and its GPS coordinate. The image and location towers produce ℓ2-normalized embeddings zimg , z gps ∈ Rd, trained so that each image’s embedding has high cosine similarity to its true location embedding and low similarity to other location embeddings in the batch. 
+
+Location tower. GPS coordinates given as (latitude, longitude) pairs are converted to 3D unit-sphere coordinates (x, y, z ) = (cos ϕ cos θ, cos ϕ sin θ, sin ϕ) to remove discontinuities at the poles and international date line, where ϕ is latitude and θ is longitude. The unit-vector representation is then passed through a multi-scale learned Fourier feature bank with S scales. Each scale s produces features cos(2 πW su + bs), sin(2 πW su + bs) where u is the unit vector and Ws, b s are learned parameters initialized from Random Fourier Features [ 14 ]. The intuition is that low-frequency blocks encode global geographic structure while high-frequency blocks encode local variation. For each scale, the unit-vector input is concatenated with that scale’s Fourier features and passed through a residual MLP sub-tower. The per-scale outputs are combined with a softmax gate g(u) ∈
+
+∆S−1 whose weights are conditioned on the unit-vector position, allowing different regions of the sphere to weight scales differently: 
+
+h(u) = 
+
+> S
+
+X
+
+> s=1
+
+gs(u) · Tower s
+
+ u, ϕ s(u), (1) where ϕs is the s-th Fourier feature block. A final linear projection produces zgps ∈ Rd.
+
+Image tower. We use SigLIP 2 (g-opt) as a frozen visual backbone [ 19 ] and train only a projection tower on top of its cached image features. Because MP16-Pro and OSV-5M have different visual 3Figure 2: Cross-source image–GPS embedder. Image and GPS inputs are encoded by separate towers into a shared latent space and trained with a SigLIP contrastive objective over image–GPS pairs. The image tower consists of a frozen SigLIP backbone, source-specific input adapters, and a shared trunk. Total loss is a weighted sum of the source-specific contrastive losses. distributions, the projection tower uses source-specific input adapters followed by a shared trunk. Concretely, each training source s ∈ { mp16 , osv5m } is associated with its own input adapter 
+
+As : RDsiglip → RHimg , implemented as a small MLP. Both adapters feed into the same trunk and output projection. The adapters capture source-specific shifts between Flickr photos and street-view imagery, while the shared trunk learns a single geographically grounded representation common to both domains. At training time, each batch is source-tagged and routed through the appropriate adapter; the SigLIP image–GPS loss is computed separately for each source subset and then combined as a weighted sum. At inference time, the retrieval index contains task-specific images only (MP16-Pro or OSV-5M). Intuitively, the OSV-5M images in the training dataset help regularize the shared embedding space to be more continuous and dense, while the MP16-Pro images help with diversity. Street-view images are all taken outside and are more homogeneous with respect to location; street-view images that are close geographically tend to look similar and have similar embeddings. Meanwhile, the distribution of internet photos is irregular with respect to location: a photo taken inside versus outside the same building can have very different embeddings. 
+
+Training objective. We train both towers jointly with the standard SigLIP sigmoid loss [ 27 ], which pulls matched image–GPS pairs together and pushes mismatched pairs apart. For a batch of B
+
+matched image–GPS pairs, we form pairwise logits ℓij = α z ⊤
+
+> img ,i
+
+zgps ,j + β from image–location similarity, where α and β are learnable scale and bias parameters, and set yij = +1 for matched pairs (i = j) and yij = −1 otherwise. The loss is 
+
+LSigLIP = 1
+
+B
+
+> B
+
+X
+
+> i=1
+> B
+
+X
+
+> j=1
+
+log  1 + exp( −yij ℓij ). (2) The total embedder loss becomes the per-source weighted sum: 
+
+Ltotal = (1 − λ) LSigLIP 
+
+ z(mp16 ) 
+
+> img
+
+, z (mp16 )
+
+> gps
+
+ + λ LSigLIP 
+
+ z(osv5m ) 
+
+> img
+
+, z (osv5m )
+
+> gps
+
+, (3) where λ controls the contribution of the OSV-5M distribution relative to the MP16-Pro distribution. 
+
+3.2 Attention Reranker 
+
+Pure embedding-space retrieval can confuse locations that look similar at a coarse level but differ in the fine details needed for precise geolocation. To address this, we add an attention-based reranker that revisits each retrieved candidate together with the query and produces a refined score (Figure 3). The reranker scores candidates independently: for each candidate, the transformer attends over a small set of candidate-specific evidence rather than over the full shortlist. 4Figure 3: Attention-based reranker. Candidates from three retrieval channels are merged and de-duplicated. For each candidate, the reranker builds a short token sequence from the query repre-sentation, candidate embeddings, and local support token, then uses the final [CLS] representation to predict a rerank score. Modality-aligned retrieval metadata is included in each candidate token. 
+
+Candidate shortlist construction. Given a query image, we retrieve candidate locations from a fixed retrieval index using three complementary channels with budgets kimg , kgps , and ksiglip ,respectively. The first channel retrieves candidate locations whose corresponding image embeddings are nearest to the query image embedding in the learned geographic image embedding space. The second retrieves candidate locations whose GPS embeddings are nearest to the same query image embedding. The third retrieves locations with the most visually similar reference images using frozen pre-projection SigLIP 2 embeddings. The first two channels emphasize geolocation-aware similarity, while the third preserves raw visual similarity from the backbone. We take the union of these retrieval results, merge duplicates, and keep the resulting candidate set C. During training, because the query image comes from the same dataset used for retrieval, we mask out its indexed copy before selecting candidates. This simulates the inference setting, in which the query image is not present in the reference dataset. 
+
+Per-candidate token sequence. For each shortlisted candidate c ∈ C , we construct the token sequence  CLS , t query , t c, img , t c, gps , t c, siglip , t c, supp 
+
+. (4) Here tquery is the projected query image embedding from the contrastive image tower. The remaining tokens are candidate-specific. We use three candidate embeddings: the learned geographic image embedding zc, img , the GPS embedding zc, gps , and the frozen SigLIP visual embedding zc, siglip ,. For each modality we also compute three scalar retrieval features: the retrieval similarity σ(·), the normalized rank feature ρ(·), and a binary indicator m(·) for whether the candidate appeared in that modality’s top-k list. We concatenate each modality’s metadata directly to its corresponding embedding before projection: 
+
+tc, img = Pimg 
+
+ [ zc, img ; σimg (c), ρ img (c), m img (c) ] , (5) 
+
+tc, siglip = Psiglip 
+
+ [ zc, siglip ; σsiglip (c), ρ siglip (c), m siglip (c) ] , (6) 
+
+tc, gps = Pgps 
+
+ [ zc, gps ; σgps (c), ρ gps (c), m gps (c) ] , (7) where [·; ·] denotes concatenation and each P (·) is a modality-specific MLP projection to the reranker hidden dimension Hrerank . This construction allows each token to capture a specific modality’s embedding content along with its retrieval cues. 
+
+Support token construction. We also add a support token that summarizes nearby evidence around each candidate anchor. The support token uses the complementary source to the query image and candidates; for the internet-photo task, the support token is constructed from street-view samples, and vice versa for the street-view task. For a candidate location c, we find up to ksupp nearby images within radius rsupp , encode those support images with the cross-source image tower, and compare them to the query embedding. Let zq denote the query embedding and let Jc denote the valid support neighbors retrieved around candidate c, with embeddings {uc,j : j ∈ J c}. We pool these support 5embeddings with softmax-normalized query–supp embedding similarity weights: 
+
+αc,j = exp( z⊤ 
+
+> q
+
+uc,j )
+
+P 
+
+> ℓ∈J c
+
+exp( z⊤ 
+
+> q
+
+uc,ℓ ) , ¯uc = X
+
+> j∈J c
+
+αc,j uc,j . (8) This gives higher weight to nearby street-view images whose content best matches the query. We append four summary statistics to ¯uc: best and mean query–supp similarity, normalized nearest-neighbor distance, and the fraction of support neighbors within rsupp . The resulting vector is projected to form tc, supp .Intuitively, on the internet-photo task, this token lets the reranker mimic how a human geolocation expert might geolocate an image using Google Street View. After identifying a candidate location, the reranker considers whether the surrounding street-level views are consistent with the query. 
+
+Reranker architecture. The reranker is a pre-norm Transformer encoder with multi-head self-attention [ 20 ] and hidden dimension Hrerank . It scores candidates independently: for each candidate c,the encoder attends only over that candidate’s sequence [CLS , t query , t c, img , t c, gps , t c, siglip , t c, supp ]. The final [CLS] representation is passed through a small MLP head to produce a scalar rerank score sc.At inference time, we output the GPS coordinates of the highest-scoring candidate anchor. 
+
+Training objective. We train the reranker with a pairwise margin ranking loss with margin m. For each query, we define the positive candidate as the shortlist candidate closest to the ground-truth location y, using Haversine distance: c⋆ = arg min c∈C dH (c, y ). We then encourage its score to exceed those of all other candidates: 
+
+Lrerank = 1
+
+|C| − 1
+
+X 
+
+> c∈ C\{ c⋆}
+
+max  0, m − (sc⋆ − sc). (9) 
+
+# 4 Experiments 
+
+Datasets. We train Pinpoint on MP16-Pro [ 8], a curated subset of YFCC100M [ 18 ] containing 4.12M geotagged Flickr images, and OpenStreetView-5M [ 1], a collection of 5.1M street-view captures distributed according to global spatial population density. We evaluate on two standard internet-image benchmarks, IM2GPS3k and YFCC4k [22], as well as the OSV-5M test set. A 1 km separation is enforced between the OSV-5M train and test sets, which prevents memorization. 
+
+Implementation details. We train Pinpoint separately for evaluation on the internet-image bench-marks (IM2GPS3k and YFCC4k) and the street-view benchmark (OSV-5M test set). In both cases, the retrieval model is essentially the same; the contrastive embedder still trains on both MP16-Pro and OSV-5M, with the only difference being the final weighting of the MP16-Pro- and OSV-5M-specific contrastive losses. During inference and reranking, the retrieval index stays limited to MP16-Pro samples in the internet-image version and OSV-5M samples in the street-view version. The reranker support token is constructed from OSV-5M samples when training on MP16-Pro, and vice versa when training on OSV-5M. Since the SigLIP 2 backbone is frozen, we precompute image embed-dings for both training datasets and stream them from memory-mapped binaries during contrastive training. After the contrastive image–GPS embedder converges, its weights are frozen and a fixed retrieval index is built for reranker training. The index stores candidate coordinates together with the representations needed for multi-channel retrieval and as inputs to the reranker. All experiments were done on an NVIDIA RTX 5090 GPU. 
+
+4.1 Comparison with State-of-the-Art 
+
+Table 1 compares Pinpoint with prior worldwide image geolocation methods on IM2GPS3k and YFCC4k, using the standard metric of the percentage of queries localized within fixed distance thresh-olds. Pinpoint achieves the best results across all thresholds on both benchmarks. On IM2GPS3k, it improves over the previous best method, GeoRanker, by 0.9–2.7 percentage points across thresholds, with similar gains (0.1–3.2) on YFCC4k. Among the methods compared, the three most recent methods that reported state-of-the-art results, Img2Loc, G3, and GeoRanker, all rely on prompting proprietary MLLMs. In contrast, Pinpoint does not depend on an external API and can be deployed privately, which is important for use cases involving sensitive or confidential data. 6Methods IM2GPS3k (%) ↑ YFCC4k (%) ↑                                                                                                                                          
+
+> Street City Region Country Continent Street City Region Country Continent 1km 25km 200km 750km 2500km 1km 25km 200km 750km 2500km PlaNet [25] 8.5 24.8 34.3 48.4 64.6 5.6 14.3 22.2 36.4 55.8 CPlaNet [15] 10.2 26.5 34.6 48.6 64.6 7.9 14.8 21.9 36.4 55.5 Translocator [12] 11.8 31.1 46.7 58.9 80.1 8.4 18.6 27.0 41.1 60.4 GeoDecoder [3] 12.8 33.5 45.9 61.0 76.1 10.3 24.4 33.9 50.0 68.7 GeoCLIP [21] 14.1 34.5 50.7 69.7 83.8 9.6 19.3 32.6 55.0 74.7 PIGEOTTO [6] 11.3 36.7 53.8 72.4 85.3 10.4 23.7 40.6 62.2 77.7 Img2Loc [28] 15.3 39.8 53.6 69.7 82.8 19.8 30.7 41.4 58.1 74.1 G3 [8] 16.7 40.9 55.6 71.2 84.7 24.0 35.9 47.0 64.3 78.2 GLOBE [10] 9.9 40.2 56.2 71.5 82.4 -----GeoRanker [9] 18.8 45.0 61.5 76.3 89.3 32.9 43.5 54.3 69.8 82.5 HierLoc [5] 11.3 43.8 58.4 74.1 85.1 8.4 30.2 43.3 61.7 75.8
+> Pinpoint 20.5 47.4 63.5 79.0 90.2 33.0 44.4 57.5 71.8 84.5
+
+Table 1: Comparison of our method against state-of-the-art geolocation approaches. Results are reported as the percentage of correctly localized images within the given distance thresholds. 
+
+Inference time comparison. Compared to generative MLLM-based approaches, Pinpoint is substantially faster and more practical for large-scale image geolocation. Compared to purely retrieval-based approaches like GeoCLIP, Pinpoint only adds an additional 90 ms of latency while offering higher accuracy. For Pinpoint and GeoCLIP, latency is measured end-to-end, includ-ing image encoding, retrieval, and reranking for Pinpoint. The measured GeoRanker latency         
+
+> Model Latency / Image Speedup GeoRanker 288 s 1.0 ×
+> Pinpoint 0.098 s 3000 ×
+> GeoCLIP 0.008 s 36000 ×
+
+Table 2: Average inference speed comparison. Pinpoint and GeoCLIP are measured end-to-end, while GeoRanker is only measured on the final-stage reranking. covers only the final reranking stage because its full reported inference pipeline cannot be recreated without the now-deprecated GPT-4V model, which is used to generate additional location candidates before ranking [ 9]. These results demonstrate the efficiency and reproducibility advantages of deter-ministic retrieval-based architectures over MLLM-based pipelines. All inference times are measured on IM2GPS3k. Pinpoint and GeoCLIP are evaluated with batch size of 256 and GeoRanker is evaluated with batch size of 2 to fit in GPU memory. 
+
+4.2 Evaluation on street-view images 
+
+Although Pinpoint achieves state-of-the-art performance on standard internet-image benchmarks, we note that these benchmarks may not fully measure generalization to unseen data. MP16-Pro, IM2GPS3k, and YFCC4k are all derived from Flickr [ 8, 22 ], a U.S.-based photo-sharing platform, which introduces geographic and cultural biases toward English-speaking, densely populated regions. Moreover, IM2GPS3k and YFCC4k were both introduced in 2017 [ 22 ], making it likely that these benchmarks appear in the internet-scale pretraining corpora used by CLIP [ 13 ], SigLIP [ 27 ], and large MLLMs used in prior work. To evaluate generalization on a more recent and geographically diverse benchmark, we evaluate Pinpoint on the OSV-5M test split. This test split uses grid-cell sampling, which divides the map into spatial cells and samples at most one image from each cell to reduce overrepresentation of densely photographed areas [ 1]. It also ensures that no evaluation images are within 1 km of training samples, providing a stronger measure of generalization to unseen data. As shown in Table 3, Pinpoint achieves state-of-the-art performance on OSV-5M across both sets of reported metrics: some prior work evaluates distance-threshold accuracy, while others evaluate administrative-level accuracy by reverse-geocoding predicted coordinates and comparing the resulting country, region, and city labels to ground truth. For administrative-level accuracy, Pinpoint improves over the previous best method, HierLoc [ 5], by 1.9–4.1 percentage points across country, region, and city accuracy. For distance-based evaluation, it reduces mean Haversine error by 118 km, with 2.1–15.4 percentage point improvements on the distance-threshold metrics. 7Method GeoScore ↑ Mean Error (km) ↓ Classification Accuracy (%) ↑
+
+City Region Country OSV-5M Baseline [1] 3361 1814 5.9 39.4 68.0 RFM S2 [4] 3767 1069 5.4 44.2 76.2 HierLoc (DINOv3) [5, 16] 3963 861 23.3 55.0 82.9 
+
+Pinpoint (full model) 4114 743 26.0 59.1 84.8 
+
+Pinpoint (retrieval only) 4035 784 23.2 57.0 83.8 Method Mean Error (km) ↓ Distance-Threshold Accuracy (%) ↑
+
+25 km 200 km 750 km 2500 km LocDiff [24] – 11.0 46.3 77.0 88.2 GRE [23] 1192 9.7 35.6 72.5 91.1 Semivariogram GeoCLIP [2] – 21.5 52.1 72.1 –
+
+Pinpoint (full model) 743 35.6 67.5 83.7 93.2 
+
+Pinpoint (retrieval only) 784 32.1 65.6 82.8 92.8 
+
+Table 3: Comparison on the OSV-5M benchmark. Top block reports the official OSV-5M metric fam-ily: GeoScore, mean Haversine error, and administrative-level accuracy based on reverse-geocoded predictions. Bottom block reports distance-threshold accuracy, the same metric used in Table 1. 
+
+4.3 Ablation Study 
+
+To isolate the contribution of each component in Pinpoint, we report ablations on YFCC4k in Table 4. Removing the OSV-5M support token from the reranker input consistently reduces accuracy, with drops of 0.7–1.7 percentage points across distance thresholds. This aligns with our intuition that local street-view context helps in determining whether a candidate location is visually consistent with the query image. We next evaluate the importance of the reranking stage by using only the contrastive retrieval embeddings and selecting the database location with the highest image–GPS embedding similarity. This retrieval-only variant performs substantially worse across all metrics, with the largest degradation at fine-grained thresholds: at 1 km, reranking improves accuracy by 23.9 percentage points. These results indicate that reranking is especially important for resolving visually similar nearby locations that are difficult to separate in the retrieval embedding space alone. We also ablate OSV-5M supervision during contrastive training by training the retrieval model only on MP16-Pro. Removing OSV-5M images reduces retrieval accuracy by 0.3–2.0 percentage points at four of the five distance thresholds, demonstrating that street-view supervision improves the quality of the learned embeddings for MP16-Pro retrieval. Finally, we replace the SigLIP 2-g-opt backbone with CLIP ViT-L/14 [ 13 ] for a fairer comparison with earlier MLLM-free CLIP-based methods such as PIGEON [ 6] and GeoCLIP [ 21 ]. At each distance threshold, we compare against the stronger result reported by either method. Even with the older CLIP backbone, Pinpoint improves accuracy by 18.0, 15.2, 9.6, 4.1, and 2.1 percentage points across the 1 km, 25 km, 200 km, 750 km, and 2500 km thresholds, respectively. These results indicate that Pinpoint’s gains are driven by the overall retrieval and reranking pipeline, rather than by the stronger pretrained backbone alone. Compared to MLLM-based approaches, this CLIP-based variant remains competitive, performing between G3 and GeoRanker.                                            
+
+> Ablation Median Error (km) ↓
+> YFCC4k Accuracy (%) ↑
+> 1 km 25 km 200 km 750 km 2500 km
+> Pinpoint (full model) 84.9 33.0 44.4 57.5 71.8 84.5
+> Pinpoint without OSV-5M support token 95.6 31.8 43.3 55.8 71.1 83.7 Retrieval only (without reranker) 262.9 9.1 29.0 46.9 65.8 80.8 Retrieval without OSV-5M images 287.4 9.7 28.4 44.9 65.1 80.5 Pinpoint using CLIP ViT-L/14 backbone 195.3 28.4 38.9 50.2 66.3 79.8 Retrieval using CLIP ViT-L/14 backbone 497.8 7.7 22.3 36.3 57.0 74.5
+
+Table 4: Ablation study on YFCC4k comparing Pinpoint with variants that remove support, reranking, OSV-5M supervision, or the SigLIP 2 backbone. 8Figure 4: Hyperparameter sweeps on IM2GPS. Left: median error of retrieval-only model vs OSV-5M mixing weight λ. Right: median and oracle error under different reranker candidate budgets. Candidate-budget sweeps vary one retrieval channel at a time while keeping the other channels fixed. 
+
+4.4 Hyperparameter Analysis 
+
+We sweep several key hyperparameters in the Pinpoint pipeline to better understand their impact. Specifically, we vary the cross-source loss weight λ and the number of retrieval candidates selected from each of the three shortlist channels: learned image, GPS, and SigLIP retrieval. Unless otherwise specified, we use our model’s default configuration: λ = 1 /3, kimg = 8 , ksiglip = 2 , and kgps = 2 .To avoid tuning on the test benchmarks used in our main evaluation, we conduct these sweeps on a separate benchmark, IM2GPS [7]. Figure 4 shows that adding OSV-5M supervision substantially reduces median error, with the best performance at λ = 1 /3. Median error increases when the two sources are weighted equally at 
+
+λ = 0 .5, suggesting that cross-source training is beneficial up to a point, after which over-weighting OSV-5M can hurt target-domain performance. We also study the candidate budgets used to form the reranker shortlist, varying one channel at a time while keeping the others fixed. Increasing the number of candidates in each channel monotonically reduces oracle error, but does not always reduce median error after reranking. This is because larger shortlists improve candidate recall while making selection more difficult. We observe diminishing returns as candidate budgets increase, especially for 
+
+ksiglip and kgps , where median error changes by less than 1 km across the sweep. Overall, our default setting provides a good trade-off between candidate recall and reranking accuracy. 
+
+# 5 Conclusion 
+
+We presented Pinpoint, a retrieve-and-rerank architecture for worldwide image geolocation that incorporates both ordinary internet photos and street-view imagery within a single coarse-to-fine pipeline. Pinpoint achieves state-of-the-art results across all distance thresholds on IM2GPS3k, YFCC4k, and the OSV-5M test set. We showed that cross-source training and reranking each contribute substantially to final performance, and that strong worldwide geolocation does not require prompting a multimodal large-language model at inference time. 
+
+Limitations. Although Pinpoint is low-latency at inference, its frozen SigLIP 2 backbone requires a one-time precomputation of image embeddings for every training and reference entry, which must be stored persistently. The retrieval index also introduces two structural limitations: predictions are constrained to indexed locations, and the index is temporally static, which means visual changes such as new construction are not reflected until it is rebuilt. The coverage limitation can be mitigated with a large, comprehensive index, and temporal accuracy can be maintained by periodically updating it with new images. 
+
+Broader Impact. Image geolocation has clear beneficial applications, including disaster response, navigation, biodiversity and ecological monitoring, and open-source investigative work. However, there are also potential ethical concerns inherent to image geolocation, such as misuse for surveillance, stalking, or doxxing. For this reason, we release our code for academic analysis, but chose not to publicly release trained model weights. 9References 
+
+[1] Guillaume Astruc, Nicolas Dufour, Ioannis Siglidis, Constantin Aronssohn, Nacim Bouia, Stephanie Fu, Romain Loiseau, Van Nguyen Nguyen, Charles Raude, Elliot Vincent, Lintao Xu, Hongyu Zhou, and Loïc Landrieu. Openstreetview-5m: The many roads to global visual geolocation. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2024, Seattle, WA, USA, June 16-22, 2024 , pages 21967–21977. IEEE, 2024. doi: 10.1109/ CVPR52733.2024.02074. URL https://doi.org/10.1109/CVPR52733.2024.02074 .[2] Boyi Chen, Zhangyu Wang, Fabian Deuser, Johann Maximilian Zollner, and Martin Werner. Enhancing contrastive learning for geolocalization by discovering hard negatives on semivari-ograms. In Mohamed F. Mokbel, Shashi Shekar, Andreas Züfle, Yao-Yi Chiang, Maria Luisa Damiani, and Moustafa A. Youssef, editors, Proceedings of the 33rd ACM International Confer-ence on Advances in Geographic Information Systems, SIGSPATIAL 2025, The Graduate Hotel Minneapolis, Minneapolis, MN, USA, November 3-6, 2025 , pages 1162–1165. ACM, 2025. doi: 10.1145/3748636.3763220. URL https://doi.org/10.1145/3748636.3763220 .[3] Brandon Clark, Alec Kerrigan, Parth Parag Kulkarni, Vicente Vivanco Cepeda, and Mubarak Shah. Where we are and what we’re looking at: Query based worldwide image geo-localization using hierarchies and scenes. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2023, Vancouver, BC, Canada, June 17-24, 2023 , pages 23182–23190. IEEE, 2023. doi: 10.1109/CVPR52729.2023.02220. URL https://doi.org/10.1109/ CVPR52729.2023.02220 .[4] Nicolas Dufour, Vicky Kalogeiton, David Picard, and Loïc Landrieu. Around the world in 80 timesteps: A generative approach to global visual geolocation. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2025, Nashville, TN, USA, June 11-15, 2025 , pages 23016–23026. Computer Vi-sion Foundation / IEEE, 2025. doi: 10.1109/CVPR52734.2025.02143. URL 
+
+https://openaccess.thecvf.com/content/CVPR2025/html/Dufour_Around_the_ World_in_80_Timesteps_A_Generative_Approach_to_CVPR_2025_paper.html .[5] Hari Krishna Gadi, Daniel Matos, Hongyi Luo, Lu Liu, Yongliang Wang, Yanfeng Zhang, and Liqiu Meng. Hierloc: Hyperbolic entity embeddings for hierarchical visual geolocation. In 
+
+The Fourteenth International Conference on Learning Representations , 2026. URL https: //openreview.net/forum?id=d5GmZP2qrd .[6] Lukas Haas, Michal Skreta, Silas Alberti, and Chelsea Finn. PIGEON: predicting image geolocations. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR 2024, Seattle, WA, USA, June 16-22, 2024 , pages 12893–12902. IEEE, 2024. doi: 10.1109/ CVPR52733.2024.01225. URL https://doi.org/10.1109/CVPR52733.2024.01225 .[7] James Hays and Alexei A. Efros. IM2GPS: estimating geographic information from a single image. In 2008 IEEE Computer Society Conference on Computer Vision and Pattern Recognition (CVPR 2008), 24-26 June 2008, Anchorage, Alaska, USA . IEEE Computer Society, 2008. doi: 10.1109/CVPR.2008.4587784. URL https://doi.org/10.1109/CVPR.2008.4587784 .[8] Pengyue Jia, Yiding Liu, Xiaopeng Li, Yuhao Wang, Yantong Du, Xiao Han, Xuetao Wei, Shuaiqiang Wang, Dawei Yin, and Xiangyu Zhao. G3: An effective and adaptive framework for worldwide geolocalization using large multi-modality models. In A. Globerson, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang, editors, Advances in Neural Information Processing Systems , volume 37, pages 53198–53221. Curran Associates, Inc., 2024. doi: 10.52202/079017-1685. URL https://proceedings.neurips.cc/paper_files/ paper/2024/file/5f2f5882d6166d814629ada0cd95f9a0-Paper-Conference.pdf .[9] Pengyue Jia, Seongheon Park, Song Gao, Xiangyu Zhao, and Sharon Li. Georanker: Distance-aware ranking for worldwide image geolocalization. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. URL https://openreview.net/forum?id= Zjq1CkKDGt .[10] Ling Li, Yao Zhou, Yuxuan Liang, Fugee Tsung, and Jiaheng Wei. Recognition through reasoning: Reinforcing image geo-localization with large vision-language models. In The 
+
+10 Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. URL https: //openreview.net/forum?id=wuMdBGMe3y .[11] Rodrigo Nogueira and Kyunghyun Cho. Passage re-ranking with BERT. CoRR , abs/1901.04085, 2019. URL http://arxiv.org/abs/1901.04085 .[12] Shraman Pramanick, Ewa Magdalena Nowara, Joshua Gleason, Carlos Domingo Castillo, and Rama Chellappa. Where in the world is this image? transformer-based geo-localization in the wild. In Shai Avidan, Gabriel J. Brostow, Moustapha Cissé, Giovanni Maria Farinella, and Tal Hassner, editors, Computer Vision - ECCV 2022 - 17th European Conference, Tel Aviv, Israel, October 23-27, 2022, Proceedings, Part XXXVIII , Lecture Notes in Computer Science, pages 196–215. Springer, 2022. doi: 10.1007/978-3-031-19839-7\_12. URL https: //doi.org/10.1007/978-3-031-19839-7_12 .[13] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agar-wal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. Learning transferable visual models from natural language supervision. In Marina Meila and Tong Zhang, editors, Proceedings of the 38th International Conference on Machine Learning, ICML 2021, 18-24 July 2021, Virtual Event , Proceedings of Machine Learning Research, pages 8748–8763. PMLR, 2021. URL http://proceedings.mlr.press/v139/ radford21a.html .[14] Ali Rahimi and Benjamin Recht. Random features for large-scale kernel machines. In John C. Platt, Daphne Koller, Yoram Singer, and Sam T. Roweis, editors, Advances in Neural Infor-mation Processing Systems 20, Proceedings of the Twenty-First Annual Conference on Neural Information Processing Systems, Vancouver, British Columbia, Canada, December 3-6, 2007 ,pages 1177–1184. Curran Associates, Inc., 2007. URL https://proceedings.neurips. cc/paper/2007/hash/013a006f03dbc5392effeb8f18fda755-Abstract.html .[15] Paul Hongsuck Seo, Tobias Weyand, Jack Sim, and Bohyung Han. Cplanet: Enhancing image geolocalization by combinatorial partitioning of maps. In Vittorio Ferrari, Martial Hebert, Cristian Sminchisescu, and Yair Weiss, editors, Computer Vision - ECCV 2018 - 15th European Conference, Munich, Germany, September 8-14, 2018, Proceedings, Part X , Lecture Notes in Computer Science, pages 544–560. Springer, 2018. doi: 10.1007/978-3-030-01249-6\_33. URL https://doi.org/10.1007/978-3-030-01249-6_33 .[16] Oriane Siméoni, Huy V. Vo, Maximilian Seitzer, Federico Baldassarre, Maxime Oquab, Cijo Jose, Vasil Khalidov, Marc Szafraniec, Seungeun Yi, Michaël Ramamonjisoa, Francisco Massa, Daniel Haziza, Luca Wehrstedt, Jianyuan Wang, Timothée Darcet, Théo Moutakanni, Leonel Sentana, Claire Roberts, Andrea Vedaldi, Jamie Tolan, John Brandt, Camille Couprie, Julien Mairal, Hervé Jégou, Patrick Labatut, and Piotr Bojanowski. Dinov3, 2025. URL https: //arxiv.org/abs/2508.10104 .[17] Fuwen Tan, Jiangbo Yuan, and Vicente Ordonez. Instance-level image retrieval using reranking transformers. In 2021 IEEE/CVF International Conference on Computer Vision, ICCV 2021, Montreal, QC, Canada, October 10-17, 2021 , pages 12085–12095. IEEE, 2021. doi: 10.1109/ ICCV48922.2021.01189. URL https://doi.org/10.1109/ICCV48922.2021.01189 .[18] Bart Thomee, David A. Shamma, Gerald Friedland, Benjamin Elizalde, Karl Ni, Douglas Poland, Damian Borth, and Li-Jia Li. YFCC100M: the new data in multimedia research. Commun. ACM ,59(2):64–73, 2016. doi: 10.1145/2812802. URL https://doi.org/10.1145/2812802 .[19] Michael Tschannen, Alexey A. Gritsenko, Xiao Wang, Muhammad Ferjad Naeem, Ibrahim Alabdulmohsin, Nikhil Parthasarathy, Talfan Evans, Lucas Beyer, Ye Xia, Basil Mustafa, Olivier J. Hénaff, Jeremiah Harmsen, Andreas Steiner, and Xiaohua Zhai. Siglip 2: Multi-lingual vision-language encoders with improved semantic understanding, localization, and dense features. CoRR , abs/2502.14786, 2025. doi: 10.48550/ARXIV.2502.14786. URL 
+
+https://doi.org/10.48550/arXiv.2502.14786 .[20] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, and Illia Polosukhin. Attention is all you need. In Isabelle Guyon, Ulrike von Luxburg, Samy Bengio, Hanna M. Wallach, Rob Fergus, S. V. N. Vishwanathan, and Roman 11 Garnett, editors, Advances in Neural Information Processing Systems 30: Annual Conference on Neural Information Processing Systems 2017, December 4-9, 2017, Long Beach, CA, USA ,pages 5998–6008, 2017. URL https://proceedings.neurips.cc/paper/2017/hash/ 3f5ee243547dee91fbd053c1c4a845aa-Abstract.html .[21] Vicente Vivanco Cepeda, Gaurav Kumar Nayak, and Mubarak Shah. Geoclip: Clip-inspired alignment between locations and images for effective worldwide geo-localization. In A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine, editors, Advances in Neural Information Processing Systems , volume 36, pages 8690–8701. Curran Associates, Inc., 2023. URL https://proceedings.neurips.cc/paper_files/paper/2023/file/ 1b57aaddf85ab01a2445a79c9edc1f4b-Paper-Conference.pdf .[22] Nam N. Vo, Nathan Jacobs, and James Hays. Revisiting IM2GPS in the deep learning era. In 
+
+IEEE International Conference on Computer Vision, ICCV 2017, Venice, Italy, October 22-29, 2017 , pages 2640–2649. IEEE Computer Society, 2017. doi: 10.1109/ICCV.2017.286. URL 
+
+https://doi.org/10.1109/ICCV.2017.286 .[23] Chun Wang, Xiaojun Ye, Xiaoran Pan, Zihao Pan, Haofan Wang, and Yiren Song. GRE suite: Geo-localization inference via fine-tuned vision-language models and enhanced reasoning chains. In The Thirty-ninth Annual Conference on Neural Information Processing Systems ,2026. URL https://openreview.net/forum?id=4H3xG3aDS1 .[24] Zhangyu Wang, Zeping Liu, Jielu Zhang, Zhongliang Zhou, Qian Cao, Nemin Wu, Lan Mu, Yang Song, Yiqun Xie, Ni Lao, and Gengchen Mai. Locdiff: Identifying locations on earth by diffusing in the hilbert space. In The Thirty-ninth Annual Conference on Neural Information Processing Systems , 2026. URL https://openreview.net/forum?id=ghybX0Qlls .[25] Tobias Weyand, Ilya Kostrikov, and James Philbin. Planet - photo geolocation with con-volutional neural networks. In Bastian Leibe, Jiri Matas, Nicu Sebe, and Max Welling, editors, Computer Vision - ECCV 2016 - 14th European Conference, Amsterdam, The Netherlands, October 11-14, 2016, Proceedings, Part VIII , Lecture Notes in Computer Sci-ence, pages 37–55. Springer, 2016. doi: 10.1007/978-3-319-46484-8\_3. URL https: //doi.org/10.1007/978-3-319-46484-8_3 .[26] Scott Workman, Richard Souvenir, and Nathan Jacobs. Wide-area image geolocalization with aerial reference imagery. In 2015 IEEE International Conference on Computer Vision, ICCV 2015, Santiago, Chile, December 7-13, 2015 , pages 3961–3969. IEEE Computer Society, 2015. doi: 10.1109/ICCV.2015.451. URL https://doi.org/10.1109/ICCV.2015.451 .[27] Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. Sigmoid loss for language image pre-training. In IEEE/CVF International Conference on Computer Vision, ICCV 2023, Paris, France, October 1-6, 2023 , pages 11941–11952. IEEE, 2023. doi: 10.1109/ ICCV51070.2023.01100. URL https://doi.org/10.1109/ICCV51070.2023.01100 .[28] Zhongliang Zhou, Jielu Zhang, Zihan Guan, Mengxuan Hu, Ni Lao, Lan Mu, Sheng Li, and Gengchen Mai. Img2loc: Revisiting image geolocalization using multi-modality foundation models and image-based retrieval-augmented generation. In Grace Hui Yang, Hongning Wang, Sam Han, Claudia Hauff, Guido Zuccon, and Yi Zhang, editors, Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval, SIGIR 2024, Washington DC, USA, July 14-18, 2024 , pages 2749–2754. ACM, 2024. doi: 10.1145/3626772.3657673. URL https://doi.org/10.1145/3626772.3657673 .12 A Implementation Details 
+
+Table 5 reports the optimization settings used in the main experiments. The remaining implementation parameters are grouped by component below.                  
+
+> Embedder Reranker
+> Steps 50,000 50,000 Warmup steps 1,000 1,000 Batch size 4,096 512 Peak learning rate 1e −31e −4
+> Weight decay 1e −41e −4
+> LR schedule Cosine Cosine Optimizer AdamW AdamW Mixed precision bf16 bf16
+
+Table 5: Optimization hyperparameters for the contrastive embedder and attention reranker. Both stages use linear warmup to peak learning rate followed by cosine decay over the remaining steps. Note that we train the street view model for double the number of steps; 100k instead of 50k. 
+
+Backbone and embedder. The frozen visual encoder is SigLIP 2 giant-opt patch16 384. The shared embedding dimension is d = 256 . Image adapters use 2 residual blocks, hidden width 1024, dropout 0.15, and expansion factor 2. The shared image trunk uses 4 residual blocks, hidden width 1024, dropout 0.15, and expansion factor 2. The location tower uses 6 residual blocks per scale, hidden width 1024, dropout 0.15, and expansion factor 2. The learned Fourier feature bank uses 
+
+S = 3 scales with 128 features per scale and initialization scales 1.0, 16.0, and 256.0. In the main text, λ denotes the OSV-5M mixing weight in the contrastive loss; the value is λ = 1 /3 for the internet-photo model and λ = 0 .8 for the street-view model. 
+
+Candidate retrieval and support. The reranker shortlist uses kimg = 8 , ksiglip = 2 , and kgps = 2 ,with a candidate-pool multiplier of 2 and at most 12 merged candidates. The retrieval index is built from the training split with batch size 65,536 and bfloat16 embeddings. For each candidate, the support token uses up to ksupp = 4 nearby images within radius rsupp = 1 .0 km. Its summary statistics are best query–supp similarity, mean query–supp similarity, normalized nearest-neighbor distance, and support fraction. 
+
+Reranker. The reranker Transformer encoder has 4 layers, 8 attention heads, hidden dimension 
+
+Hrerank = 512 , feed-forward dimension 2048, and dropout 0.2. Reranker sequence chunk size is 16,384. The ranking objective is a pairwise margin loss with margin m = 0 .2.
+
+# B Example Results C Existing Assets 
+
+We use MP16-Pro [ 8], YFCC100M [ 18 ], OSV-5M [ 1], SigLIP 2 giant-opt patch16 384 [ 19 ], and OpenAI CLIP ViT-L/14 [ 13 ]. We do not redistribute dataset images. Users should obtain each dataset from its original source and follow the corresponding terms; MP16-Pro and other Flickr-derived datasets are governed by original Flickr media licenses or dataset terms at the item level. YFCC100M uses item-level Creative Commons licenses, OSV-5M is listed as CC-BY-SA-4.0, SigLIP 2 is listed as Apache-2.0, and OpenAI CLIP is released under the MIT license. 13 Figure 5: Pinpoint’s distance errors across example images from IM2GPS3k and YFCC4k. Each image caption represents how far the prediction was from the ground truth. Examples are selected from each distance threshold used for evaluation. 
+
+Figure 6: Example images from the OSV-5M test set for which Pinpoint correctly identified the city, sub-region, region, country, and for which Pinpoint mislabeled the country. 14

@@ -1,0 +1,816 @@
+Title: BMCR: Adaptive Backbone Module Composition via Reinforcement Learning for Remote Sensing Object Detection
+
+URL Source: https://arxiv.org/pdf/2606.05586v1
+
+Published Time: Fri, 05 Jun 2026 00:43:34 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# BMCR: Adaptive Backbone Module Composition via Reinforcement Learning for Remote Sensing Object Detection 
+
+Wenlin Liu, Xikun Hu, and Ping Zhong, Senior Member, IEEE 
+
+Abstract —In remote sensing object detection, Convolutional Neural Networks (CNNs) excel at capturing local details while Vision Transformers (ViTs) are better at global context modeling. However, existing detectors typically rely on a single fixed backbone or a manually designed hybrid architecture, and thus fail to adaptively exploit these complementary strengths across inputs of diverse complexity. To address this limitation, we propose Backbone Module Composition via Reinforcement Learning (BMCR). BMCR dynamically assembles input-adaptive inference paths from reusable modules decomposed from off-the-shelf CNN and ViT backbones. To enable such cross-family composition, we first construct an extensible module toolbox. Specifically, we decompose representative CNN and ViT backbones into reusable functional modules and encapsulate each module with explicit structural, semantic, and computational metadata for compatibility-aware assembly. To bridge the gap between grid-based CNN features and token-based ViT representations, we design a lightweight Optimal Transport (OT) based transi-tion interface that ensures distribution-aware alignment while respecting spatial consistency. The backbone composition process is then formulated as a sequential decision problem, in which a policy network progressively selects task-relevant modules according to intermediate multi-scale observations. To stabilize the joint optimization of reusable modules and the routing policy, we further develop an Adaptive Module Cooperative Optimization (AMCO) strategy that coordinates module updating, routing exploration, and reward assignment during training. On DOTA-v1.0, DOTA-v1.5 and DIOR-R, BMCR achieves 79.31%, 73.41% and 71.86% mAP, respectively, surpassing strong static and dynamic baselines by up to 2.5 points while maintaining competitive efficiency. 
+
+Index Terms —Dynamic backbone composition, adaptive routing, reinforcement learning, remote sensing object detection. 
+
+I. I NTRODUCTION 
+
+Recent advances in satellite imaging have produced remote sensing images with broader coverage and finer resolution [1]. Unlike natural images, remote sensing scenes often exhibit strong spatial heterogeneity, where vast homogeneous regions coexist with dense small objects and complex man-made structures [2]. This poses a dual requirement for visual backbones: capturing fine-grained local details and long-range contextual dependencies while adapting their representational 
+
+Wenlin Liu, Xikun Hu, and Ping Zhong are with the College of Elec-tronic Science and Technology, National University of Defense Technology, Changsha 410073, China (e-mail: wenlinliu@nudt.edu.cn; xikun@nudt.edu.cn; zhongping@nudt.edu.cn). This work was supported by the National Natural Science Foundation of China under Grant 62301574. ( Corresponding authors: Xikun Hu and Ping Zhong )
+
+capacity to different input contents. Although high-capacity remote sensing foundation models have demonstrated strong representation ability [3], [4], uniformly applying a large backbone to all inputs is computationally expensive and often redundant for simple scenes. At the architecture level, CNNs [5] and ViTs [6] provide complementary properties: CNNs are effective at modeling local spatial patterns, whereas ViTs are better suited for capturing global contextual dependencies [7], [8]. However, their relative importance varies significantly across remote sensing scenes. Most existing detectors instantiate these ar-chitectures as complete and fixed backbones, either as a single monolithic backbone or as a manually designed static hybrid architecture [9]–[11]. Such input-independent designs impose the same computational path on all inputs, leading to redundant computation in simple scenes and limited adaptability in complex ones. Dynamic architectures have been explored to reduce the rigidity of fixed backbones by adapting computation to input contents [12], [13]. Existing methods usually adjust the execution of a predefined architecture, such as skipping layers, selecting branches, pruning tokens, or activating different subnetworks. Although these strategies improve computational flexibility, most of them operate under a homogeneous assump-tion: candidate operations belong to the same backbone family and share compatible feature formats. Consequently, the routing decision mainly determines how much of a fixed architecture to execute, rather than which heterogeneous architectural primitives to compose. This limitation is particularly restrictive for remote sensing object detection, where large-scale aerial images contain highly heterogeneous regions, ranging from homogeneous backgrounds to dense small-object clusters and complex man-made structures [2], [14]. Such diversity makes no single archi-tectural style uniformly optimal. However, reusing CNN and ViT modules as extensible architectural resources introduces mismatches in feature formats, spatial resolutions, channel dimensions, and semantic stages. As a result, existing dynamic networks cannot directly support heterogeneous, cross-family backbone composition, limiting their ability to exploit the complementary strengths of off-the-shelf architectures. To address these limitations, we propose Backbone Module Composition via Reinforcement Learning (BMCR), an adaptive backbone composition framework for remote sensing object 
+
+0000–0000/00$00.00 © 2021 IEEE         
+
+> arXiv:2606.05586v1 [cs.CV] 4 Jun 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2CNN Detector
+> (a) Fixed backbone paradigm
+> Predict
+> Agent
+> Observe
+> Input ...
+> (b) Dynamic backbone paradigm
+> combine
+> CNN -1ViT -1Interface
+> CNN CNN
+> Detector
+> Predict
+> ...
+> Toolbox
+> Select
+> Fig. 1. Comparison of backbone design paradigms. (a) Fixed backbone: applies a static, uniform sequence of network layers to all inputs regardless of content. (b) Dynamic backbone (BMCR): routes images through sample-adaptive execution paths composed of CNN and ViT modules on the fly.
+
+detection. Rather than designing another fixed backbone or searching within a homogeneous architecture, BMCR treats off-the-shelf CNN and ViT components as reusable modules and dynamically composes them into input-specific inference paths. This process involves discrete, sequential, and compatibility-constrained decisions, since each selected module changes the intermediate representation and determines the feasible choices and computational cost of subsequent steps. We therefore formulate backbone composition as a reinforcement learning problem, where a policy network progressively selects task-relevant modules according to intermediate observations. To support heterogeneous composition and stable training, BMCR further introduces an OT-based transition interface and an Adaptive Module Cooperative Optimization (AMCO) strategy. The main contributions of this work are as follows:  
+
+> •
+
+We propose BMCR, an input-adaptive backbone com-position framework for remote sensing object detection. Different from fixed or manually hybridized backbones, BMCR decomposes existing backbones into reusable mod-ules and dynamically constructs sample-specific inference paths according to input contents.  
+
+> •
+
+We build an extensible heterogeneous module toolbox with explicit structural, semantic, and computational metadata, and introduce an OT-based transition interface to support compatibility-aware composition between grid-based CNN features and token-based ViT representations across different spatial granularities.  
+
+> •
+
+We formulate backbone composition as a sequential deci-sion problem and develop AMCO to coordinate module updating, routing exploration, and reward assignment. II. R ELATED WORK 
+
+A. Dynamic Inference and Neural Routing 
+
+Dynamic neural networks adapt inference to individual samples to improve the trade-off between task performance and computational cost. Existing methods adjust network depth through early exiting [15], [16] or layer skipping [17]–[19], modulate local operators according to input content [20]– [23], or select input-dependent paths from predefined layers, branches, and operations [10], [11]. Although effective, these methods mainly adapt the execution of a predefined architecture, rather than composing new inference paths from independently developed backbone modules. Therefore, they provide limited support for reusing heterogeneous modules from off-the-shelf CNN and ViT backbones. This limitation is particularly relevant to remote sensing object detection, where different scenes may require different combinations of local spatial modeling, multi-scale representation, and global context reasoning. In contrast, BMCR targets cross-architecture backbone module composition and constructs input-adaptive paths from reusable components. 
+
+B. Heterogeneous Architecture Fusion 
+
+The complementary properties of CNNs and ViTs have motivated extensive studies on heterogeneous architecture fu-sion [24]. Existing hybrid architectures combine convolutional and Transformer-based representations through fixed designs, such as parallel pathways [25], [26], cascaded stacking [9], [27], and interleaved block embedding [28], [29]. Although effective, these methods are usually architecture-specific and rely on manually designed connectors between predetermined compo-nents. Such connectors are tailored to fixed hybrid backbones, rather than general transition interfaces for reusable modules from different pretrained architectures, limiting flexible module reuse and dynamic cross-architecture recombination. BMCR is designed to handle this issue with an OT-based interface for distribution-aware alignment between grids and tokens. 
+
+C. Reinforcement Learning for Adaptive Remote Sensing 
+
+Reinforcement learning (RL) provides a natural framework for adaptive decision-making with discrete, sequential, and task-dependent actions. In remote sensing, RL has been applied to sample selection [30], hyperspectral band selection [31], and content-aware receptive field adjustment [32], [33]. However, these methods operate at the data, spectral, or local operator level; backbone-level architectural routing remains underex-plored. Unlike RL-based neural architecture search (NAS) [34], which produces a fixed architecture after training, BMCR performs input-dependent routing at inference time. This setting is more challenging: each decision alters the intermediate representation and constrains subsequent feasible choices. BMCR addresses this by formulating backbone composition as a compatibility-constrained sequential decision process, where metadata-driven action masking restricts the agent to structurally valid modules at each step, keeping exploration tractable in the large heterogeneous action space. To jointly optimize the policy, the modules, and the detection head without divergence, BMCR introduces the AMCO strategy, which stabilizes training through random-path warm-up, auxiliary supervision, and progressive prior annealing. III. M ETHODOLOGY 
+
+The objective of BMCR is to generate input-adaptive back-bone representations for remote sensing object detection under highly variable scene conditions. Given an input image I, a stem module first produces the initial feature x0 = S(I). BMCR then constructs the backbone as a sequential decision-making process, in which a routing agent selects feature-extraction JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3Current 
+
+Feature 
+
+Toolbox    
+
+> ResNet -
+> 50 -Block1 Swin -
+> Block1
+> Swin2 -
+> Block1
+> ViT -
+> Block2
+> Up -
+> Sampling OT -Based
+> Copy
+> Channel
+> Down -
+> Sampling
+> Feature -Extraction Interface
+
+. . .    
+
+> Step 1 Step 2 Step 3 Step 4
+
+Backbone 
+
+> Step 5
+
+Select 
+
+> Step...
+
+Agent  
+
+> Value Critic History MSO
+
+(a)  Module Selection and Execution 
+
+Observe 
+
+Auxiliary 
+
+Head 
+
+> State
+
+. . . 
+
+Execute 
+
+(b)  Dynamic Backbone  Composition     
+
+> Scale 1
+> Scale 2
+> Scale 3
+> Scale 4
+> Scale...
+> Input
+
+FPN 
+
+> P 1
+> P 2
+> P 3
+> P 4
+> P 5
+
+Input 
+
+Image Stem  
+
+> Fig. 2. Overview of the proposed BMCR framework. (a) The routing agent observes intermediate features, selects task-relevant feature-extraction modules from the toolbox, and executes them with automatically determined transition interfaces. (b) BMCR constructs dynamic backbone paths across different feature granularities and feeds channel-aligned routed features into an FPN-based detection neck.
+
+modules from a heterogeneous toolbox based on the current feature state. As shown in Fig. 2, the framework contains two key procedures: input-adaptive module composition and dynamic pyramid aggregation. The former builds a sample-specific backbone path, while the latter aligns and aggregates the routed multi-resolution features into a channel-aligned dynamic feature pyramid for FPN-based detection. The component selection and execution process in Fig. 2(a) is formulated as an “observe–select–execute” Markov decision process (MDP). At the t-th step, the agent observes the state 
+
+st = [ xt, ht, pt], where xt is the current intermediate feature, 
+
+ht records the routing history, and pt is the task-specific spatial prior predicted by the auxiliary head. Based on st,the policy network samples a valid action at ∼ πθ (· | st)
+
+from the masked action set Avalid  
+
+> t
+
+. The action at selects the next feature-extraction module, while the transition interface is deterministically selected by metadata rather than treated as an action. Specifically, It = Ired is used for same-representation transitions such as CNN-to-CNN or ViT-to-ViT, and It = IOT 
+
+is used for CNN-to-ViT or ViT-to-CNN transitions. The feature is then updated by xt+1 = fat (It(xt)) , where fat (·) denotes the selected module. This closed-loop process constructs the backbone path x0 → a0 → x1 → a1 → · · · → xT until the termination action aend is selected or the number of executed steps reaches Tmax . Each input image therefore induces a sample-specific inference trajectory τ (I) = {at}T −1 
+
+> t=0
+
+.After routing, the selected modules form a dynamic backbone path tailored to the input sample. As shown in Fig. 2(b), the trajectory can be represented on a scale-step grid, where columns denote routing steps and rows denote feature granular-ity levels induced by spatial-size changes during routing. Unlike conventional static backbones with predefined downsampling stages, BMCR does not rely on fixed backbone stages or a predefined set of output levels. Instead, it records the routed features exported at different spatial granularities, denoted as X (I) = {(xi, η i)}Nr
+
+> i=1
+
+, where Nr is sample-dependent and ηi contains the corresponding channel and representation metadata. Since the channel dimensions of routed features may differ, BMCR uses a metadata-indexed adapter bank to project each feature into a unified FPN width, i.e., ˜xi = Aηi (xi).The adapted features are sorted according to their spatial granularity and fed into an FPN-based neck, yielding {Pi}Nr
+
+> i=1
+
+.The detection head applies shared prediction layers across the resulting pyramid levels and predicts oriented object instances as ˆY = Head det ({Pi}Nr
+
+> i=1
+
+). In this way, BMCR preserves a sample-adaptive backbone topology while producing channel-aligned multi-scale features for FPN-based detection. 
+
+A. Feature-Extraction Toolbox 
+
+The feature-extraction toolbox is constructed by decom-posing representative backbone architectures into reusable functional modules. For hierarchical architectures, we extract core computational units from different stages that correspond to different feature granularities, such as residual blocks in ResNet [5]. For isotropic architectures such as ViT, consecutive transformer blocks are grouped into reusable block-level primitives according to their depth positions. Each decomposed module preserves its original internal structure, including normalization layers, activation functions, and residual con-nections, so that its architectural inductive biases and feature transformation capacity are retained during composition. To provide a heterogeneous routing space, the toolbox includes six backbone-derived modules and two lightweight refinement modules. The backbone modules are derived from ResNet [5], ViT [6], Swin Transformer [35], SwinV2 [36], ViTAE [37], and ViTAE-RVSA [38], while SELayer [39] and CALayer [40] provide cost-effective feature recalibration. Each module type is instantiated with three pretrained variants, which are registered as separate toolbox entries and optimized during BMCR training. This design expands representation diversity while keeping routing organized by module metadata. 
+
+B. Interface Toolbox 
+
+To support dynamic composition among heterogeneous modules, BMCR introduces an interface toolbox that is JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4
+
+automatically invoked during routing. Given the current rep-resentation and the target module selected by the agent, the required interface is determined by their metadata rather than being selected as an additional action. The interface toolbox addresses two common compatibility issues: (i) structural mismatch , caused by differences in spatial resolution and channel dimension between modules; and (ii) representational mismatch , arising from the discrepancy between grid-based feature maps and sequence-based tokens. 
+
+1) Reduction Interface: The reduction interface handles structural mismatch between modules with the same represen-tation format, such as CNN-to-CNN or ViT-to-ViT transitions. To keep routing efficient, it adopts parameter-free dimensional adaptation. Spatial mismatch is resolved by bilinear interpo-lation, and channel mismatch is handled by simple channel resampling through expansion or truncation. This provides a lightweight transition mechanism for non-adjacent or cross-stage modules. Since the reduction interface does not explicitly model cross-representation alignment, CNN–ViT transitions are delegated to the OT-based interface. 
+
+2) OT-Based Interface: The OT-based interface handles cross-representation transitions between grid-structured CNN feature maps and sequence-structured ViT tokens. Given the current representation and the target module, it first performs lightweight channel adaptation and then uses an optimal transport plan to remap source spatial locations to target tokens. A spatially regularized transport cost is used to preserve geometric consistency and discourage excessive long-range assignments. We describe the CNN-to-ViT case below, and the reverse ViT-to-CNN transition is obtained analogously. 
+
+a) Distribution Modeling.: Given a CNN feature map 
+
+Fs ∈ RHs×Ws×Cs , we flatten it into Xs ∈ RM ×Cs with 
+
+M = HsWs, and apply a parameter-free channel adapter to match the target embedding dimension: 
+
+bXs = Ach (Xs) ∈ RM ×Dt . (1) Here, Dt is the embedding dimension required by the target ViT module. For the target module, we define module-specific token anchors Et = [ et
+
+> 1
+
+, et
+
+> 2
+
+, . . . , etN ]⊤ ∈ RN ×Dt , where N is deter-mined by the target token budget. In our implementation, these anchors are learnable prototypes initialized from positional embeddings. Each source location and target token is assigned a normalized coordinate, denoted by psi and ptj , respectively. The source and target are then modeled as empirical measures: 
+
+μs =
+
+> M
+
+X
+
+> i=1
+
+wsi δ(bxsi ,psi ), μt =
+
+> N
+
+X
+
+> j=1
+
+wtj δ(etj ,ptj ), (2) where uniform weights wsi = 1 /M and wtj = 1 /N are used. 
+
+b) Cost Matrix and Transport Plan.: The transport cost between source location i and target token j combines feature dissimilarity and spatial displacement: 
+
+Cij = α 1 − bxsi · etj
+
+∥bxsi ∥2∥etj ∥2 + η
+
+!
+
++ (1 − α) ∥psi − ptj ∥22
+
+2σ2 , (3) where α balances semantic and spatial terms, σ controls the spatial constraint, and η ensures numerical stability. The entropy-regularized OT plan is obtained by 
+
+T∗ = arg min 
+
+> T∈U (ws,wt)
+
+⟨T, C⟩ + ε
+
+> M
+
+X
+
+> i=1
+> N
+
+X
+
+> j=1
+
+Tij (log Tij − 1) , (4) where U(ws, wt) denotes the transport polytope. This is solved using a fixed number of Sinkhorn iterations, and the target token budget is bounded to maintain a tractable cost matrix. 
+
+c) Feature Remapping.: The adapted CNN features are remapped to target ViT tokens using barycentric projection: 
+
+Xs→t = diag( wt)−1(T∗)⊤ bXs ∈ RN ×Dt . (5) The resulting Xs→t matches the token length and embedding dimension required by the target ViT module. The reverse ViT-to-CNN transition follows the same formulation by treating spatial ViT tokens as the source and CNN grid locations as the target, followed by reshaping the remapped sequence into a grid feature map. 
+
+C. State Space 
+
+At the t-th routing step, the agent observes a compact state representation composed of the current intermediate feature, routing history, and spatial objectness prior. To handle heterogeneous routed features, the current feature Ft is resized to a common spatial resolution and projected to a unified channel dimension before state encoding. To capture spatial context at multiple granularities, we construct a Multi-Scale Pyramid (MSP) observation. The adapted feature is resized to several predefined resolutions 
+
+R, processed by lightweight convolutional blocks, and then resized back to a common spatial size H ×W for concatenation: 
+
+Fcat  
+
+> t
+
+= Concat r∈R [Resize H,W (Conv r (Resize r (Ft)))] .
+
+(6) Here, Concat r∈R [·] denotes concatenation over all predefined resolutions. The concatenated feature is projected into a unified state dimension: 
+
+FMSP  
+
+> t
+
+= Conv 1×1
+
+ Fcat 
+
+> t
+
+ ∈ RH×W ×Cstate , (7) where Cstate is the state feature dimension. The predefined resolutions in R are used only for state observation and do not constrain the dynamic pyramid outputs. To encode routing history, the most recent D actions are embedded into a history vector ht = Embed( at−D , . . . , a t−1)
+
+and broadcast to the state resolution: 
+
+Fhist  
+
+> t
+
+= Broadcast H,W (ht) ∈ RH×W ×Ch . (8) Missing entries at early routing steps are zero-padded. In addition, an auxiliary objectness head predicts a spatial prior from the current feature: 
+
+Fobj  
+
+> t
+
+= Resize H,W (σ(gaux (Ft))) ∈ RH×W ×1. (9) Ground-truth box masks supervise only the auxiliary head and are not fed into the routing policy. The predicted prior is gradually annealed in the agent state. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5
+
+The final state observation is obtained by concatenation: 
+
+st = Concat 
+
+
+
+FMSP  
+
+> t
+
+, Fhist  
+
+> t
+
+, Fobj 
+
+> t
+
+
+
+. (10) After global pooling, the state observation is fed into lightweight policy and value heads for action prediction and value estimation. 
+
+D. Action Space 
+
+The action space consists of K candidate feature-extraction modules and one termination action: 
+
+A = {a1, a 2, . . . , a K , a end }. (11) Here, ak selects the k-th feature-extraction module, and aend 
+
+terminates the current path construction. The transition interface is not included in the action space. Once a target module is selected, BMCR automatically determines the required interface according to the source and target metadata: the reduction interface is used for transitions within the same representation type, whereas the OT-based interface is used for CNN–ViT transitions. At each step, structurally invalid actions are masked out, and the agent samples from the masked policy: 
+
+at ∼ πmask  
+
+> θ
+
+(· | st), at ∈ A valid  
+
+> t
+
+. (12) This prevents the agent from selecting modules that violate transition constraints or routing validity. 
+
+E. Reward Function 
+
+The reward function is designed to encourage feature-quality improvement while penalizing high computation cost, redundant routing, and frequent CNN–ViT switches. At each routing step, the intermediate feature is fed into the auxiliary detection head to estimate a normalized feature-quality score: 
+
+qt = Qaux (Ft), (13) where Qaux (·) maps the auxiliary predictions of Ft to a scalar detection-quality score. For a non-termination action, the quality improvement is defined as 
+
+∆qt = qt+1 − qt. (14) When at = aend , no feature transformation is executed and 
+
+∆qt is set to zero. The computation cost includes the FLOPs of the selected module and the required transition interface: 
+
+ct = FLOPs( fat ) + FLOPs int (t, a t)
+
+Cref 
+
+, at̸ = aend . (15) For the termination action, we set ct = 0 . Here, fat denotes the module selected by action at, FLOPs int (t, a t) denotes the cost of the transition interface required at step t, and Cref is the FLOPs of a reference static backbone. To reduce unnecessary use of the OT interface, we penalize cross-family transitions as 
+
+St = 1[at̸ = aend ]1[OT( t, a t) = 1] , (16) where OT( t, a t) = 1 indicates that the transition required by action at at step t invokes the OT-based interface. Agent          
+
+> Actor
+> Critic MSP
+> Select
+> Hi story
+> State
+> Auxiliary
+> Head
+> Observe Anchors
+> Proposal
+> Au xiliary Detector
+> EXIT
+> Stage1: Random Path (n < N rand )
+> Dynamic Backbone FPN & Head
+> Optimization
+> 1) Task Loss
+> 2) Value Supervision
+> Policy Network: Frozen
+> Value Network: Supervised by auxiliary quality
+> . . .
+> Stage2: Agent Optimization (n > N rand )
+> sg (· ): Stop gradient
+> EXIT
+> Dynamic Backbone FPN & Head
+> . . .
+> Random Composation
+> Optimization
+> 2) Agent Update
+> 1) Task Loss
+> stat
+> PPO loss + entropy + value loss
+> executed modules + heads
+
+Fig. 3. Illustration of the proposed AMCO algorithm. Stage 1 warms up the toolbox with random valid paths, while Stage 2 performs PPO-based routing optimization with decoupled agent and task updates. 
+
+The termination reward is computed from the detection result obtained after the current path is terminated. Let 
+
+dt = mAP 
+
+ ˆYt, Y
+
+
+
+, (17) where ˆYt is the detection output of the terminated path Pt, Y
+
+denotes the ground-truth annotations, and mAP( ·) is computed on the current sample and detached as a scalar terminal reward. 
+
+Et = 1[at = aend ]1[Valid( Pt)] dt. (18) Here, Valid( Pt) ensures that the terminated path satisfies the transition constraints and produces routed features that can be processed by the FPN-based neck. The immediate reward is finally formulated as 
+
+rt = λacc ∆qt − λcost ct − λsw St + λend Et. (19) 
+
+F. Adaptive Module Cooperative Optimization Algorithm 
+
+The proposed AMCO algorithm is designed to stabilize the joint training of the module combination agent, heterogeneous toolbox, and detection heads. Although the routing policy is optimized with PPO [41], directly applying PPO to BMCR is challenging because the agent operates in a large discrete module space, and detector-level feedback is delayed and sparse for step-wise routing optimization. To address these issues, AMCO introduces a two-phase cooperative optimization scheme that combines random-path warm-up, auxiliary feature-quality supervision, progressive objectness-prior annealing, and PPO-based policy refinement. The overall training procedure is shown in Fig. 3. 
+
+1) Random-Path Warm-up Phase ( n ≤ Nrand ): During early training, the routing policy is not updated, and actions are uniformly sampled from the structurally valid action set: 
+
+at ∼ Uniform ( Avalid (st)) , (20) where Avalid (st) denotes the masked valid action set. The termination action is disabled until the current path satisfies the minimum requirements for FPN-based detection. This warm-up JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6
+
+exposes the toolbox modules and detection heads to diverse valid paths and reduces early routing bias. During this phase, the executed modules, invoked transition interfaces, FPN neck, and main detection head are optimized by the detection loss Ldet . The auxiliary head is trained with auxiliary objectness and quality targets to estimate the dense feature-quality score qt defined in Eq. (13) , which provides step-wise supervision for value learning. The value network is supervised by the auxiliary quality score: 
+
+Lsup = Et
+
+h
+
+(Vϕ(st) − sg( qt)) 2i
+
+, (21) where Vϕ(·) is the value network and sg( ·) denotes stop-gradient. This supervision provides dense value targets before reliable policy gradients are available. The auxiliary head also predicts the objectness prior map 
+
+Fobj  
+
+> t
+
+used in the agent state. Ground-truth box masks supervise only the auxiliary head and are not directly fed into the routing policy. During PPO training, the predicted prior is gradually annealed in the agent state. 
+
+2) PPO Routing Optimization Phase (n > Nrand ): 
+
+After random-path warm-up, AMCO switches to PPO-based routing optimization while continuing task-level training of the executed modules and detection heads. At each iteration, trajectories are collected using the old masked policy πmask 
+
+> θold
+
+and the current toolbox parameters. The collected state features are detached when updating the routing agent, so that PPO gradients only optimize the policy and value networks rather than directly modifying the feature-extraction modules. To bridge auxiliary-guided value learning and reward-driven policy optimization, we introduce a transition coefficient 
+
+λtr (n) = max 
+
+
+
+0, 1 − n − Nrand 
+
+Ntr 
+
+
+
+, (22) where Ntr controls the transition duration. When n is close to 
+
+Nrand , the value network relies more on the auxiliary quality target; as training proceeds, the value target gradually shifts toward RL returns. The auxiliary objectness prior is also annealed during PPO training: 
+
+μ(n) = max 
+
+
+
+0, 1 − n − Nrand 
+
+Nprior 
+
+
+
+, (23) where Nprior controls the decay duration. The state input is constructed as 
+
+s(n) 
+
+> t
+
+= Concat 
+
+
+
+FMSP  
+
+> t
+
+, Fhist  
+
+> t
+
+, μ (n)Fobj 
+
+> t
+
+
+
+. (24) For notational simplicity, the superscript (n) is omitted below. Given the collected trajectory, the temporal-difference resid-ual and generalized advantage estimate are computed as 
+
+δt = rt + γV ϕ(st+1 ) − Vϕ(st), (25) 
+
+ˆAt = 
+
+> T−t−1
+
+X
+
+> l=0
+
+(γλ GAE )lδt+l, (26) where γ is the discount factor, λGAE controls the bias–variance trade-off, and the next-state value is set to zero at the terminal step. The return target is 
+
+ˆRt = ˆAt + Vϕ(st). (27) The policy is optimized using the clipped PPO objective: 
+
+Lpolicy = −Et
+
+h
+
+min 
+
+
+
+ρt ˆAt, ¯ρt ˆAt
+
+i 
+
+, (28) where ρt(θ) = πmask  
+
+> θ
+
+(at|st)/π mask  
+
+> θold
+
+(at|st), ¯ρt = clip( ρt, 1 −
+
+ϵ, 1 + ϵ), and ϵ is the clipping threshold. The value target combines the auxiliary quality score and the RL return: 
+
+yt = λtr (n)sg( qt) + (1 − λtr (n)) sg( ˆRt), (29) 
+
+Lvalue = Et
+
+h
+
+(Vϕ(st) − yt)2i
+
+, (30) where sg( ·) denotes stop-gradient. The overall agent loss is 
+
+Lagent = Lpolicy + cv Lvalue − ceH  πmask 
+
+> θ
+
+ , (31) where H(·) is the entropy term over the valid action set, and 
+
+cv and ce balance value regression and exploration. After the agent update, the executed feature-extraction modules, invoked transition interfaces, auxiliary head, FPN neck, and detection head are optimized by task-level losses: 
+
+Ltask = Ldet + λaux Laux . (32) Here, Ldet is the standard oriented detection loss, and Laux 
+
+supervises the auxiliary objectness and feature-quality predic-tions. The sampled module indices are treated as discrete routing decisions during this task update. Therefore, task gradients update only the executed modules and detection-related heads, while PPO gradients update only the routing agent. This decoupled optimization avoids unstable gradient interference between discrete policy learning and continuous feature representation learning. IV. E XPERIMENTAL DETAILS 
+
+A. Datasets and Implementation Details 
+
+To evaluate the effectiveness of BMCR across diverse remote sensing scenarios, we conduct experiments on three widely used oriented object detection benchmarks: DOTA, DIOR-R, and FAIR1M. These datasets cover different imaging conditions, object scales, category distributions, and scene complexities, providing a challenging testbed for adaptive backbone composition.  
+
+> •
+
+DOTA-v1.0 [14] and DOTA-v1.5 [42] are used for large-scale oriented object detection. Following common practice, large images are cropped into 1024 × 1024 
+
+patches with a 200-pixel overlap. BMCR is evaluated under single-scale and multi-scale settings, with scales of 0.5, 1.0, and 1.5 for the latter.  
+
+> •
+
+DIOR-R [43] is used to evaluate oriented object detection under diverse scene contexts and large intra-class varia-tions. Following common settings, we use an input size of 800 × 800 for both training and testing. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7 
+
+> •
+
+FAIR1M-v1.0 [44] is used to evaluate fine-grained ori-ented object detection in large-scale aerial imagery. The dataset contains dense object instances, subtle category differences, and substantial scale variations, making it suitable for assessing the adaptability of dynamic back-bone composition. BMCR follows the same multi-scale configuration as DOTA for training and testing. We compare BMCR with representative oriented object detectors, including EMO2-DETR [45], Oriented R-CNN [46], OrientedFormer [47], and other recent methods covering CNN-based, Transformer-based, and hybrid architectures. We follow the reported training and evaluation protocols whenever available. Unless otherwise specified, BMCR uses ImageNet-pretrained backbone modules [48], whereas some baselines adopt remote-sensing pretraining or task-specific initializa-tion [38]. Results are summarized in Table I. All experiments are conducted on six NVIDIA RTX 6000 Ada GPUs. The maximum number of routing steps is set to Tmax = 12 , providing sufficient routing flexibility while keeping the inference cost comparable to common backbone-level baselines. BMCR is trained using the proposed two-stage AMCO protocol. In the random-path warm-up phase, the policy network is frozen and the model is trained for 50 epochs by uniformly sampling actions from the masked valid action set. This stage warms up the heterogeneous toolbox, invoked transition interfaces, detection heads, and the value network. The auxiliary feature-quality score qt is computed from normalized localization, classification, and objectness terms, with relative weights of 0.6, 0.4, and 0.2, respectively, followed by score normalization. In the PPO routing optimization phase, the model is further trained for 100 epochs. Trajectories are collected with the old policy and current toolbox parameters, after which the policy and value networks are updated using the agent loss, including the clipped PPO objective, value regression, and entropy regularization. The clipping threshold is set to ϵ = 0 .2,the discount factor to γ = 0 .99 , and the GAE coefficient to λGAE = 0 .95 . The value-loss and entropy weights are set to cv = 0 .5 and ce = 0 .01 , respectively. The transition coefficient λtr (n) and objectness-prior coefficient μ(n) are linearly decayed during the first 20 epochs of the PPO phase, where Ntr = Nprior = 20 .Both stages use the AdamW optimizer with a weight decay of 5 × 10 −4. The initial learning rate is set to 1 × 10 −4 and decayed to 1×10 −5 at the 120th epoch. For the reward function, the coefficients are set to λacc = 1 .0, λcost = 0 .3, λsw = 0 .2,and λend = 5 .0. Unless otherwise stated, the same optimization hyperparameters are used across datasets, while dataset-specific data processing and training schedules follow the corresponding benchmark protocols. 
+
+a) Overall Comparison: Table I compares BMCR with representative oriented object detection methods covering CNN-based, Transformer-based, hybrid, and DETR-style architec-tures. Overall, BMCR achieves the best accuracy on all reported benchmark columns, including DOTA-v1.0, DOTA-v1.5, DIOR-R, and FAIR1M-v1.0, while maintaining competitive inference speed. Compared with static backbone variants under Oriented R-CNN, BMCR consistently improves accuracy across datasets, indicating that adaptive backbone composition provides benefits beyond simply increasing backbone capacity. Compared with specialized detectors and heavy Transformer backbones, BMCR also achieves a more favorable accuracy–efficiency balance, suggesting that input-adaptive routing can allocate computation more effectively across heterogeneous remote sensing scenes with diverse object scales and spatial layouts. 
+
+b) Results on DOTA: Table I reports the comparison results on DOTA-v1.0 and DOTA-v1.5 under single-scale (SS) and multi-scale (MS) testing settings. DOTA is particularly challenging due to its large image size, dense object layouts, arbitrary object orientations, and substantial scale variations. These characteristics require detectors to capture fine-grained local structures for dense small objects while maintaining sufficient context for complex aerial scenes. BMCR achieves the best performance on both DOTA versions. On DOTA-v1.0, BMCR obtains 79.31% and 82.13% mAP 50 under SS and MS settings, respectively, outperforming strong Oriented R-CNN variants with advanced backbones such as LSK-S and ViTAE-B+RVSA. On DOTA-v1.5, which contains more challenging small-object instances, BMCR achieves 73.41% and 79.40% mAP 50 under SS and MS settings, improving over the best competing results by 1.14 and 0.89 percentage points. These gains show that adaptive module composition is effective for dense small objects and large scale variations, enabling BMCR to construct inference paths that better fit complex aerial scenes. 
+
+c) Results on DIOR-R: As shown in Table I, BMCR achieves 71.86% mAP 50 under the single-scale setting, ob-taining the best result among all compared methods. DIOR-R contains diverse scene contexts and large intra-class variations, making it necessary to balance local detail extraction and semantic discrimination. BMCR outperforms representative CNN- and Transformer-based baselines, including Oriented-Former with Swin-T and RoI Trans. with ViT-G, indicating that adaptive composition of reusable modules provides stronger feature flexibility than a single static backbone. The qualitative results in Fig. 4 further support this observation. In the first image, 11863.jpg, several compared methods produce false alarms on confusing dam- and bridge-like structures, whereas BMCR suppresses these erroneous detections. In the second image, 11872.jpg, BMCR detects more small vehicles in dense and cluttered layouts, showing its advantage in preserving fine-grained object cues. These results demonstrate that BMCR generalizes well to diverse oriented detection scenarios beyond DOTA-style benchmarks. 
+
+d) Results on FAIR1M-v1.0: FAIR1M-v1.0 is a large-scale fine-grained oriented object detection benchmark with dense annotations and subtle category differences. Under the multi-scale testing setting, BMCR achieves 49.15% mAP F ,outperforming the strongest compared baseline by 0.89 per-centage points. The improvement over strong backbones such as StripNet-S and ViTAE-B+RVSA indicates that BMCR is effective for fine-grained category discrimination under dense instance distributions. This advantage is consistent with the design motivation of dynamic module composition: different scenes and categories may require different combinations of local detail modeling, long-range context aggregation, and JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8            
+
+> TABLE I COMPARISON WITH REPRESENTATIVE STATE -OF -THE -ART ORIENTED OBJECT DETECTION METHODS ON DOTA-V1.0, DOTA-V1.5, DIOR-R, AND
+> FAIR1M-V1.0 UNDER SINGLE -SCALE (SS) AND MULTI -SCALE (MS) SETTINGS . B EST RESULTS IN EACH COLUMN ARE HIGHLIGHTED IN BOLD . FPS 1024
+> DENOTES THE INFERENCE SPEED MEASURED WITH 1024 ×1024 INPUTS .
+
+Method Backbone DOTA-v1.0 DOTA-v1.5 DIOR-R FAIR1M-v1.0 Speed 
+
+SS MS SS MS SS MS Size 1024 
+
+mAP ↑ mAP ↑ mAP ↑ mAP ↑ mAP ↑ mAP F ↑ FPS ↑
+
+EMO2-DETR [45] ResNet-50 [5] 70.91 76.23 61.67 71.79 - - -Swin-T [35] 72.32 78.46 - - - - -Oriented R-CNN [46] ResNet-50 [5] 73.50 80.87 66.86 72.20 67.87 41.60 68.5 
+
+ResNet-101 [5] 75.82 80.52 67.50 73.67 67.92 42.32 52.4 Swin-T [35] 75.95 80.37 66.45 75.24 68.03 45.54 46.5 LSK-T [23] 77.60 81.37 66.71 75.52 68.42 46.50 49.5 LSK-S [23] 78.02 81.64 70.26 75.58 66.88 47.85 44.8 PKINet-S [49] 78.39 81.06 70.69 76.61 68.47 45.27 51.4 ViTAEv2 [38] 77.72 81.24 70.17 75.52 67.37 45.80 24.3 ViTAE-B+RVSA [50] 78.99 81.18 70.39 75.37 71.06 46.13 20.5 ARC-R50 [51] 77.35 80.93 71.42 77.33 69.70 45.94 55.2 ARC-R101 [51] 77.71 81.11 71.68 78.51 69.87 45.24 51.3 OrientedFormer [47] ResNet-50 [5] 75.37 79.06 67.06 73.41 67.28 40.17 61.3 ResNet-101 [5] 75.91 79.36 69.24 74.48 68.84 39.80 51.2 Swin-T [35] 75.88 78.86 70.12 76.08 71.09 40.07 48.6 LSK-T [23] 77.13 79.61 71.57 77.61 65.05 42.56 47.8 RoI Trans. [52] Swin-T [35] 74.61 79.05 70.27 75.57 66.78 35.29 56.4 ViT-G [53] 77.10 81.94 - - 69.43 - 21.3 RoI-Trans.-KFIoU [54] Swin-T [35] 76.94 80.93 70.46 74.28 68.92 46.15 50.0 R3Det-KFIoU [54] ResNet-152 [5] 77.07 81.03 71.89 75.25 69.75 46.47 41.6 RQFormer [55] ResNet-50 [5] 75.04 80.92 67.43 71.58 67.31 41.28 66.3 UniconDet [56] ResNet-50 [5] 78.40 - - - - - -ResNet-101 [5] 78.45 - - - - - -ResNet-152 [5] 78.67 - - - - - -ARS-DETR [57] ResNet-50 [5] 74.16 78.17 68.81 74.29 66.12 45.08 61.4 Swin-T [35] 75.47 78.09 68.29 73.97 68.13 46.13 55.1 Strip R-CNN [58] StripNet-S [58] 78.37 81.58 72.27 76.15 70.07 48.26 66.3 Oriented R-CNN [46] BMCR (Ours) 79.31 82.13 73.41 79.40 71.86 49.15 63.9 
+
+feature recalibration. 
+
+e) Inference Efficiency: In addition to detection accuracy, we report inference speed to evaluate practical efficiency. FPS is measured on a single NVIDIA RTX 6000 Ada GPU using 
+
+1024 × 1024 input images, as shown in Table I. BMCR achieves 63.9 FPS, which is slightly lower than the fastest lightweight baselines, such as Oriented R-CNN with ResNet-50 and RQFormer with ResNet-50, but remains competitive among high-accuracy methods. Compared with the heavy ViT-G based RoI Trans. baseline, BMCR improves the speed from 21.3 FPS to 63.9 FPS while achieving higher accuracy on the commonly reported benchmarks. These results indicate that BMCR provides a favorable accuracy–efficiency trade-off: although dynamic routing introduces additional decision overhead, the overall inference speed remains competitive due to adaptive module composition. 
+
+B. Comparative Study 
+
+We further conduct a controlled study on DIOR-R to evaluate the proposed RL-driven module combination strategy. Unlike the main comparison in Table I, all methods use the same Oriented R-CNN head and ImageNet-pretrained backbone initialization [48]. This setting reduces the influence of external factors and enables a direct comparison of backbone composition mechanisms. We compare BMCR with both static backbone baselines and alternative decision strategies. The static baselines include representative CNN, Transformer, and hybrid backbones under the same detection head. To evaluate the role of RL-based routing, we further introduce three decision-strategy baselines using the same module toolbox and interface design as BMCR:  
+
+> •
+
+Step-wise Greedy : This baseline selects the locally best module at each routing step according to the auxiliary feature-quality score. Unlike BMCR, it does not perform long-horizon policy learning and therefore ignores the delayed effect of current module choices on subsequent routing decisions.  
+
+> •
+
+Random Strategy : This baseline samples 10,000 struc-turally valid 12-step paths from the module toolbox. The best path is selected on the validation set and then JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 9 
+
+> Fig. 4. Qualitative comparison of oriented object detection results on large remote sensing images. Compared with representative static backbones, BMCR yields more accurate detections under dense object distributions, sparse layouts, and complex background clutter.
+
+evaluated on the test set. This setting evaluates whether simple random exploration can approximate effective module composition in the large discrete search space.  
+
+> •
+
+Dynamic Routing : This baseline replaces the PPO-based policy with a differentiable soft-routing strategy based on Top-K Gumbel-Softmax [59]. During training, the top-K
+
+high-weight modules are aggregated at each step with 
+
+K = 8 , while at inference the module with the maximum routing probability is selected at each of the 12 steps. As reported in Table II, fixed backbones provide stable but limited performance under the controlled Oriented R-CNN setting. Stronger Transformer-based and hybrid backbones, including Swin-B, SwinV2-B, ViTAEv2-B, and ViT-RVSA-B, improve over ResNet variants, showing the benefit of stronger feature representations for DIOR-R. However, these static architectures apply the same computation path to all images, which limits their adaptability to heterogeneous remote sensing scenes with diverse object layouts. The adaptive decision strategies exhibit different behaviors. Step-wise Greedy achieves 68.82% mAP 50 , but its locally optimal decisions ignore the delayed influence of early module choices. Random Strategy obtains 60.90% mAP 50 , suggesting that random search is inefficient in the large discrete routing space. Dynamic Routing reaches 68.95% mAP 50 , indicating that differentiable soft routing can learn useful module pref-erences. However, its mismatch between soft multi-module aggregation during training and hard single-path selection during inference limits the final detection performance. BMCR achieves the best accuracy, reaching 71.86% mAP 50 
+
+while maintaining 70.4 FPS. Although ResNet-50 remains the fastest static baseline, BMCR achieves the highest inference speed among adaptive decision strategies and substantially improves their detection accuracy. These results confirm that PPO-based long-horizon routing is more effective than greedy selection, random search, and soft differentiable routing for learning sample-specific backbone composition.          
+
+> TABLE II CONTROLLED COMPARATIVE STUDY ON THE DIOR-R DATASET . A LL METHODS USE THE SAME ORIENTED R-CNN DETECTION HEAD AND
+> IMAGE NET -PRETRAINED INITIALIZATION . FPS IS MEASURED WITH
+> 800 ×800 INPUT IMAGES .
+
+Method / Backbone FPS ↑ mAP 50 (%) ↑
+
+ResNet-50 78.9 67.87 ResNet-101 71.4 67.92 Swin-T 66.4 68.03 Swin-S 60.7 68.61 Swin-B 55.2 69.21 SwinV2-T 56.2 67.93 SwinV2-S 59.8 68.21 SwinV2-B 55.6 69.33 ViT-B 28.6 67.34 ViTAEv2-B 25.7 69.37 ViT-RVSA-B 24.6 71.06 DynamicViT 56.9 63.01 Step-wise Greedy 51.4 68.82 Random Strategy 53.9 60.90 Dynamic Routing 55.1 68.95 BMCR (Ours) 70.4 71.86 
+
+C. Ablation Study 
+
+Table III reports the ablation results on DIOR-R. The full BMCR model achieves 71.86% mAP 50 , and each variant is described below. We first examine the composition of the module toolbox. In the CNN-only variant, the action space is restricted to modules derived from ResNet backbones and the termination action, while the ViT-only variant retains only modules from ViT, Swin, SwinV2, ViTAE, and ViTAE-RVSA. Both keep the same total number of module entries and maximum routing steps, and follow the same AMCO training protocol. The CNN-only and ViT-only toolboxes obtain 68.20% and 64.27% mAP 50 ,dropping by 3.66 and 7.59 points, respectively, confirming that heterogeneous modules provide complementary local and global representations crucial for diverse remote sensing scenes. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10       
+
+> TABLE III ABLATION STUDY OF BMCR’ S KEY COMPONENTS ON THE DIOR-R
+> DATASET .∆DENOTES THE M AP 50 DIFFERENCE RELATIVE TO THE FULL
+> BMCR MODEL .
+
+Configuration mAP 50 (%) ↑ ∆
+
+CNN-only Toolbox 68.20 -3.66 ViT-only Toolbox 64.27 -7.59 BMCR (Full Model) 71.86 0.00 w/o OT-based Interface 67.15 -4.71 w/o MSP Encoder 69.31 -2.55 w/o Random-Path Warm-up 65.25 -6.61 w/o Auxiliary Spatial Prior 70.58 -1.28 w/o Auxiliary Detection Head 69.83 -2.03 
+
+The remaining ablations evaluate the transition interface, state encoder, and training strategy. When the OT-based interface is removed (w/o OT-based Interface), all cross-family transitions are handled by the reduction interface using bilinear interpolation and channel resampling. This causes a 4.71-point drop to 67.15%, indicating that simple spatial resampling is insufficient to align CNN grids and ViT tokens. Replacing the multi-scale pyramid state encoder with a single-scale feature (w/o MSP Encoder) reduces mAP 50 to 69.31%, showing the benefit of multi-scale observations for handling large scale variations. In terms of training, removing the random-path warm-up phase and starting directly with PPO optimization (w/o Random-Path Warm-up) leads to a sharp decline to 65.25% mAP 50 , a 6.61-point loss that underscores the importance of the warm-up stage in stabilizing early joint optimization. Excluding the auxiliary spatial prior from the agent state (w/o Auxiliary Spatial Prior) yields 70.58%, demonstrating that the predicted objectness map provides useful localization guidance. Removing the auxiliary detection head entirely (w/o Auxiliary Detection Head) further reduces performance to 69.83%, since the value network then relies solely on sparse RL returns without dense auxiliary supervision. Collectively, these results validate the contributions of heterogeneous module composition, the OT-based interface, multi-scale state encoding, and the AMCO training components. 
+
+D. Trade-off between Efficiency and Accuracy 
+
+To evaluate the flexibility of BMCR in balancing detection accuracy and inference efficiency, we conduct a trade-off analysis by varying the computational penalty coefficient λcost 
+
+in Eq. (19) . A larger λcost encourages the routing agent to select shorter or less expensive module paths, whereas a smaller value allows the agent to allocate more computation for higher detection accuracy. In this experiment, all training schedules and evaluation protocols are kept unchanged, and only λcost is adjusted to analyze its impact on inference latency and mAP 50 .As shown in Fig. 5, BMCR provides a smooth accuracy– efficiency trade-off under different computational penalty settings. When λcost is small, the agent tends to select more expressive routing paths, achieving the highest mAP 50 of approximately 73.5%, but at the cost of higher inference latency. As λcost increases, the agent progressively favors more efficient paths, reducing the inference time to 42.3 ms while maintaining a competitive mAP 50 of 71.4%. This result indicates that 20 30 40 50 60 70 80    
+
+> FPS
+> 66
+> 68
+> 70
+> 72
+> 74
+> mAP50 (%)
+> ResNet-50
+> ResNet-101 Swin-T
+> Swin-S
+> Swin-B
+> SwinV2-T
+> SwinV2-S
+> SwinV2-B
+> ViT-B
+> ViTAE-B
+> ViT-RVSA-B
+> 0.7
+> 0.6
+> 0.5
+> 0.4
+> 0.3
+> 0.2
+> 0.1
+> Fig. 5. Accuracy–efficiency trade-off of BMCR under different computational penalty coefficients λcost . By increasing λcost , the routing agent is encouraged to select more efficient inference paths, leading to lower latency with moderate accuracy degradation.
+
+BMCR can adapt its average active computation according to deployment requirements, providing flexible operating points for scenarios with different accuracy and latency constraints. V. A NALYSIS AND DISCUSSION 
+
+A. Influence of Maximum Decision Steps 
+
+We study the effect of the maximum routing horizon Tmax on the accuracy–efficiency trade-off of BMCR. All other settings are kept unchanged. Fig. 7 reports the mAP 50 and FPS on the DIOR-R validation set. Increasing Tmax from 6 to 12 improves mAP 50 from 70.56% to 71.86%, showing that a longer horizon allows the agent to compose more informative paths. However, larger horizons bring little extra gain but reduce inference speed. When Tmax 
+
+increases from 12 to 14, mAP 50 improves by only 0.04 points, while FPS drops from 70.4 to 67.4. Further increasing Tmax 
+
+to 16 slightly decreases accuracy, suggesting that overly long paths may introduce redundant transformations. Therefore, we use Tmax = 12 as the default setting for a better accuracy– efficiency balance. 
+
+B. Analysis on Large-Scale Imagery 
+
+A key advantage of BMCR is its ability to allocate computation adaptively during large-scale remote sensing inference. Very-high-resolution aerial and satellite images are commonly processed by sliding windows, where each image is decomposed into many local patches. However, the semantic complexity of these patches is highly uneven. Many patches contain homogeneous backgrounds such as water, farmland, bare land, or runways, while only a subset contains dense targets, complex structures, or high-frequency details. Static backbones apply the same full computation to all patches, leading to considerable redundancy in simple regions. BMCR addresses this issue through patch-level dynamic routing. Instead of assigning an identical computation budget to every patch, BMCR determines the routing depth according to local visual complexity. As shown in Fig. 6, easy patches JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 11 DOTA -P1429  FAIR1M -1679  
+
+> Fig. 6. Visualization of BMCR’s dynamic routing behavior on large-scale remote sensing imagery. Cold colors indicate shallow routing in simple regions, while warm colors denote deeper computation in complex or target-dense areas.
+
+dominated by homogeneous backgrounds are assigned shallow routes, such as Patch A with a routing depth of 3. Medium-complexity regions, such as Patch B, receive moderate compu-tation, while hard regions containing dense targets or complex structures, such as Patch C, activate deeper routes with depths of 8 or 9. Rather than reducing computation uniformly, BMCR reallocates it toward regions requiring stronger representations. The quantitative comparison in Fig. 8 further verifies this advantage. Compared with the static Swin backbone, BMCR reduces the average inference time from 2105 ms to 1148 ms in complex scenes, from 1634 ms to 893 ms in average scenes, and from 1547 ms to 508 ms in sparse scenes. These correspond to relative reductions of 45.5%, 45.3%, and 67.2%, respectively. The largest gain appears in sparse scenes, where many patches can be processed with shorter paths because they contain limited object-related information. These results demonstrate that BMCR is particularly suitable for large-image remote sensing applications. By allocating deeper computation to complex regions and reducing unneces-sary processing in homogeneous areas, BMCR better matches the intrinsic spatial heterogeneity of remote sensing imagery. This property enables efficient large-scale inference while preserving the representation capacity required for dense targets and complex geographic structures. 
+
+C. Component-Level Inference Latency 
+
+To further analyze the runtime cost of BMCR, we decompose inference latency into backbone computation, agent decision, and interface transformation. As shown in Fig. 9, the overall latency increases from 10.5 ms for easy samples to 24.5 ms for JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 12 65 70 75 80 
+
+FPS 
+
+70.5 
+
+71.0 
+
+71.5 
+
+72.0 
+
+> mAP 50  (%)
+
+6
+
+8
+
+10 
+
+12 14 
+
+16 
+
+Default Tmax = 12       
+
+> Fig. 7. Accuracy–efficiency trade-off under different maximum routing horizons Tmax . Each point denotes one setting on the DIOR-R validation set.
+> Tmax = 12 is used as the default setting due to its better balance between accuracy and speed. Complex
+> Scene
+> Average
+> Scene
+> Sparse
+> Scene
+> 0
+> 500
+> 1000
+> 1500
+> 2000
+> 2500
+> Average Inference Time per Patch (ms)
+> 2,105
+> 1,634 1,547
+> 1,148
+> 893
+> 508
+> -45.5%
+> -45.3%
+> -67.2%
+> Swin-T (Static)
+> BMCR (Ours)
+> Fig. 8. Average inference time for large-image inference. BMCR reduces the inference time across complex, average, and sparse scenes, with the largest gain in sparse scenes.
+
+hard samples, since harder samples require more routing steps and execute more backbone modules. Backbone computation remains the dominant cost, accounting for 6.4 ms, 10.4 ms, and 17.3 ms on easy, medium, and hard samples, respectively. By contrast, the agent decision cost is limited to 1.9–3.3 ms, and the interface transformation cost is limited to 2.3–3.9 ms. On average, BMCR requires 16.4 ms per patch, with 10.2 ms spent on backbone computation and only 3.1 ms each on agent decision and interface transformation. This indicates that the dynamic routing mechanism and heterogeneous transition interface introduce moderate overhead, while most latency is still dominated by actual feature extraction. Therefore, BMCR can achieve adaptive computation allocation without making routing or feature alignment the runtime bottleneck. 
+
+D. Training Overhead and Memory Analysis 
+
+Table IV reports the training wall-clock time and peak GPU memory of BMCR and two representative static backbones Easy     
+
+> (Steps<=6)
+> Medium
+> (Steps 7-10)
+> Hard
+> (Steps>10)
+> Average
+> (All)
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Inference Latency (ms)
+> 6.4
+> 1.9
+> 2.3
+> 10.5 ms
+> 10.4
+> 2.7
+> 3.3
+> 16.4 ms
+> 17.3
+> 3.3
+> 3.9
+> 24.5 ms
+> 10.2
+> 3.1
+> 3.1
+> 16.4 ms
+> Backbone Compute
+> Agent Decision
+> Interface
+> Fig. 9. Inference latency breakdown of BMCR under different routing complexities. Latency is decomposed into backbone computation, agent decision, and interface overhead. Backbone computation remains the dominant cost, while the routing agent and interface introduce limited additional latency, yielding an average inference latency of 16.4 ms. TABLE IV TRAINING COST COMPARISON ON DIOR-R. A LL METHODS USE THE
+> ORIENTED R-CNN HEAD .
+
+Method Time (h) Mem. (GB) 
+
+ResNet-50 6.2 16.1 Swin-T 8.8 17.7 BMCR (AMCO) 48.5 46.2 Stage 1 13.2 –Stage 2 35.3 –BMCR (Fine-tune) 12.1 45.8 
+
+on DIOR-R. All measurements use NVIDIA RTX 6000 Ada GPUs with a total batch size of 12 and a 150-epoch schedule. BMCR’s full AMCO protocol requires approximately 48.5 hours and 46.2 GB peak memory, compared with 6.2 h / 16.1 GB for ResNet-50 and 8.8 h / 17.7 GB for Swin-T. The overhead arises from two sources: (i) the random-path warm-up ( 13.2 h) executes diverse valid paths to initialize the heterogeneous toolbox under a frozen policy; (ii) the PPO stage ( 35.3 h) collects on-policy trajectories and stores intermediate features for policy-gradient updates, a cost inherent to RL-based optimization. Notably, the trained toolbox and transition interfaces are transferable across datasets. When fine-tuning a DOTA-pretrained BMCR on DIOR-R, the warm-up stage is skipped entirely because the modules are already well-initialized, reducing training time from 48.5 h to 12.1 h (75% reduction). This demonstrates that the initial cost is a one-time investment amortizable across downstream tasks. The elevated peak memory stems from jointly maintaining multiple backbone families in the toolbox during training. This cost is confined to the training phase: at inference, only the modules along the selected path are activated, so per-sample memory is comparable to a single static backbone. The overall training cost is comparable to other RL-based dynamic networks requiring on-policy rollouts and substantially lower than large-scale NAS methods. Further reduction via off-policy algorithms and efficient toolbox sharing is left as future work. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 13 
+
+VI. C ONCLUSION AND FUTURE WORK 
+
+This paper presented BMCR, an RL-driven adaptive back-bone composition framework for remote sensing oriented object detection. BMCR decomposes representative CNN and ViT backbones into reusable modules and assembles sample-specific inference paths through a module combination agent, while an OT-based interface supports CNN–ViT feature transitions and AMCO stabilizes the joint optimization of routing policies, heterogeneous modules, and detection heads. Extensive experiments on DOTA, DIOR-R, and FAIR1M demonstrate that BMCR improves detection performance over representative fixed-backbone and dynamic-routing baselines while maintaining a favorable accuracy–efficiency trade-off. Ablation studies further verify the effectiveness of the heteroge-neous toolbox, OT-based interface, multi-scale state observation, auxiliary detection head, and random-path warm-up. Despite these advantages, BMCR still relies on a selected toolbox and involves more complex joint optimization than static backbones. Future work will explore more efficient toolbox expansion, in-cremental module registration, and runtime-controllable routing for deployment scenarios with varying latency, memory, and energy constraints. REFERENCES [1] D. Tuia, K. Schindler, B. Demir, X. X. Zhu, M. Kochupillai, S. D ˇzeroski, J. N. van Rijn, H. H. Hoos, F. Del Frate, M. Datcu et al. , “Artificial intelligence to advance earth observation: A review of models, recent trends, and pathways forward,” IEEE Geoscience and Remote Sensing Magazine , 2024. [2] J. Cornebise, I. Or ˇsoli ´c, and F. Kalaitzis, “Open high-resolution satellite imagery: The worldstrat dataset–with application to super-resolution,” in 
+
+Advances in Neural Information Processing Systems , vol. 35, 2022, pp. 25 979–25 991. [3] X. Guo, J. Lao, B. Dang, Y. Zhang, L. Yu, L. Ru, L. Zhong, Z. Huang, K. Wu, D. Hu, H. He, J. Wang, J. Chen, M. Yang, Y. Zhang, and Y. Li, “Skysense: A multi-modal remote sensing foundation model towards universal interpretation for earth observation imagery,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,June 2024, pp. 27 672–27 683. [4] X. Sun, P. Wang, W. Lu, Z. Zhu, X. Lu, Q. He, J. Li, X. Rong, Z. Yang, H. Chang, Q. He, G. Yang, R. Wang, J. Lu, and K. Fu, “Ringmo: A remote sensing foundation model with masked image modeling,” IEEE Transactions on Geoscience and Remote Sensing , vol. 61, pp. 1–22, 2023. [5] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2016, pp. 770–778. [6] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly, J. Uszkoreit, and N. Houlsby, “An image is worth 16x16 words: Transformers for image recognition at scale,” in International Conference on Learning Representations , 2021. [7] Y. Zhao, G. Wang, C. Tang, C. Luo, W. Zeng, and Z.-J. Zha, “A battle of network structures: An empirical study of CNN, transformer, and MLP,” 
+
+arXiv preprint arXiv:2108.13002 , 2021. [8] K. Chen, C. Liu, B. Chen, W. Li, Z. Zou, and Z. Shi, “Dynamicvis: An efficient and general visual foundation model for remote sensing image understanding,” arXiv preprint arXiv:2503.16426 , 2025. [9] A. Hatamizadeh, G. Heinrich, H. Yin, A. Tao, J. M. Alvarez, J. Kautz, and P. Molchanov, “Fastervit: Fast vision transformers with hierarchical attention,” in International Conference on Learning Representations ,B. Kim, Y. Yue, S. Chaudhuri, K. Fragkiadaki, M. Khan, and Y. Sun, Eds., vol. 2024, 2024, pp. 29 368–29 391. [10] K. Yu, X. Wang, C. Dong, X. Tang, and C. C. Loy, “Path-restore: Learning network path selection for image restoration,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 44, no. 10, pp. 7078–7092, 2022. [11] Z. Wei, H. Chen, L. Nan, J. Wang, J. Qin, and M. Wei, “Pathnet: Path-selective point cloud denoising,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 46, no. 6, pp. 4426–4442, 2024. [12] J. Li, D. Hong, L. Gao, J. Yao, K. Zheng, B. Zhang, and J. Chanussot, “Deep learning in multimodal remote sensing data fusion: A comprehen-sive review,” International Journal of Applied Earth Observation and Geoinformation , vol. 112, p. 102926, 2022. [13] S. Hao, S. Liu, X. Jia, H. Lu, and Y. He, “Efficient adaptive feature fusion network for remote-sensing image super-resolution,” IEEE Signal Processing Letters , 2024. [14] G.-S. Xia, X. Bai, J. Ding, Z. Zhu, S. Belongie, J. Luo, M. Datcu, M. Pelillo, and L. Zhang, “DOTA: A large-scale dataset for object detection in aerial images,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2018, pp. 3974–3983. [15] S. Teerapittayanon, B. McDanel, and H.-T. Kung, “Branchynet: Fast inference via early exiting from deep neural networks,” in International Conference on Pattern Recognition . IEEE, 2016, pp. 2464–2469. [16] D. J. Bajpai and M. K. Hanawal, “Beem: Boosting performance of early exit dnns using multi-exit classifiers as experts,” in International Conference on Learning Representations , Y. Yue, A. Garg, N. Peng, F. Sha, and R. Yu, Eds., vol. 2025, 2025, pp. 62 520–62 535. [17] X. Wang, F. Yu, Z.-Y. Dou, T. Darrell, and J. E. Gonzalez, “Skipnet: Learning dynamic routing in convolutional networks,” in Proceedings of the European Conference on Computer Vision , 2018, pp. 409–424. [18] S. Fan, X. Jiang, X. Li, X. Meng, P. Han, S. Shang, A. Sun, Y. Wang, and Z. Wang, “Not all layers of llms are necessary during inference,” 
+
+arXiv preprint arXiv:2403.02181 , 2024. [19] X. Luo, Y. Xie, Y. Qu, and Y. Fu, “Skipdiff: Adaptive skip diffusion model for high-fidelity perceptual image super-resolution,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 38, no. 5, 2024, pp. 4017–4025. [20] Y. Chen, X. Dai, M. Liu, D. Chen, L. Yuan, and Z. Liu, “Dynamic convolution: Attention over convolution kernels,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2020, pp. 11 030–11 039. [21] J. Dai, H. Qi, Y. Xiong, Y. Li, G. Zhang, H. Hu, and Y. Wei, “Deformable convolutional networks,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2017, pp. 764–773. [22] W. Wang, J. Dai, Z. Chen, Z. Huang, Z. Li, X. Zhu, X. Hu, T. Lu, L. Lu, H. Li et al. , “Internimage: Exploring large-scale vision foundation models with deformable convolutions,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 14 408–14 419. [23] Y. Li, Q. Hou, and Z. Zheng, “Lsknet: Large selective kernel network for remote sensing object detection,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 4–6. [24] M. Lou, S. Zhang, H.-Y. Zhou, S. Yang, C. Wu, and Y. Yu, “Transxnet: learning both global and local dynamics with a dual dynamic token mixer for visual recognition,” IEEE Transactions on Neural Networks and Learning Systems , 2025. [25] Z. Chen, Y. Duan, W. Wang, J. He, T. Lu, J. Dai, and Y. Qiao, “Vision transformer adapter for dense predictions,” in International Conference on Learning Representations , 2023. [26] Z. Peng, W. Huang, S. Gu, L. Xie, Y. Wang, J. Jiao, and Q. Ye, “Conformer: Local features coupling global representations for visual recognition,” arXiv preprint arXiv:2105.03889 , 2021. [27] Z. Dai, H. Liu, Q. V. Le, and M. Tan, “Coatnet: Marrying convolution and attention for all data sizes,” Advances in Neural Information Processing Systems , vol. 34, pp. 3965–3977, 2021. [28] J. Li, X. Xia, W. Li, H. Li, X. Wang, X. Xiao, R. Wang, M. Zheng, and X. Pan, “Next-ViT: Next generation vision transformer for efficient deployment in realistic industrial scenarios,” CoRR , 2022. [29] C. Meng, J. Yang, W. Lin, B. Liu, H. Zhang, Z. Gan et al. , “Cta-net: A CNN-transformer aggregation network for improving multi-scale feature extraction,” arXiv preprint arXiv:2410.11428 , 2024. [30] B. Uzkent and S. Ermon, “Learning when and where to zoom with deep reinforcement learning,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 12 345–12 354. [31] L. Mou, S. Saha, Y. Hua, F. Bovolo, L. Bruzzone, and X. X. Zhu, “Deep reinforcement learning for band selection in hyperspectral image classification,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 60, pp. 1–14, 2021. [32] Y. Liu, S. Shi, J. Wang, and Y. Zhong, “Seeing beyond the patch: Scale-adaptive semantic segmentation of high-resolution remote sensing imagery based on reinforcement learning,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 16 868–16 878. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 14 
+
+[33] Y. Liu, Y. Zhong, S. Shi, and L. Zhang, “Scale-aware deep reinforcement learning for high resolution remote sensing imagery classification,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 209, pp. 296–311, 2024. [34] Z. Zheng, J. Oh, and S. Singh, “On learning intrinsic rewards for policy gradient methods,” in Advances in Neural Information Processing Systems ,2018, pp. 4649–4659. [35] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and B. Guo, “Swin transformer: Hierarchical vision transformer using shifted windows,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2021, pp. 10 012–10 022. [36] Z. Liu, H. Hu, Y. Lin, Z. Yao, Z. Xie, Y. Wei, J. Ning, Y. Cao, Z. Zhang, L. Dong et al. , “Swin transformer v2: Scaling up capacity and resolution,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2022, pp. 12 009–12 019. [37] Y. Xu, Q. Zhang, J. Zhang, and D. Tao, “Vitae: Vision transformer advanced by exploring intrinsic inductive bias,” Advances in Neural Information Processing Systems , vol. 34, pp. 28 522–28 535, 2021. [38] D. Wang, J. Zhang, B. Du, G.-S. Xia, and D. Tao, “An empirical study of remote sensing pretraining,” IEEE Transactions on Geoscience and Remote Sensing , vol. 61, 2022. [39] J. Hu, L. Shen, and G. Sun, “Squeeze-and-excitation networks,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2018, pp. 7132–7141. [40] Q. Hou, C. Wang, D. Cheng, X. Cai, G. Xu, and Y. Wang, “Coordinate attention for efficient mobile network design,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2021, pp. 14 310–14 320. [41] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov, “Prox-imal policy optimization algorithms,” arXiv preprint arXiv:1707.06347 ,2017. [42] J. Ding, N. Xue, G.-S. Xia, X. Bai, W. Yang, M. Y. Yang, S. Belongie, J. Luo, M. Datcu, M. Pelillo, and L. Zhang, “Object detection in aerial images: A large-scale benchmark and challenges,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 44, no. 11, pp. 7778–7796, 2022. [43] K. Li, G. Wan, G. Cheng, L. Meng, and J. Han, “Object detection in optical remote sensing images: A survey and a new benchmark,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 159, pp. 296–307, 2020. [44] X. Sun, P. Wang, Z. Yan, F. Xu, R. Wang, W. Diao, J. Chen, J. Li, Y. Feng, T. Xu et al. , “FAIR1M: A benchmark dataset for fine-grained object recognition in high-resolution remote sensing imagery,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 184, pp. 116–130, 2022. [45] Z. Hu, K. Gao, X. Zhang, J. Wang, H. Wang, Z. Yang, C. Li, and W. Li, “Emo2-DETR: Efficient-matching oriented object detection with transformers,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 61, pp. 1–14, 2023. [46] X. Xie, G. Cheng, J. Wang, X. Yao, and J. Han, “Oriented R-CNN for object detection,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , October 2021, pp. 3520–3529. [47] J. Zhao, Z. Ding, Y. Zhou, H. Zhu, W.-L. Du, R. Yao, and A. El Sad-dik, “Orientedformer: An end-to-end transformer-based oriented object detector in remote sensing images,” IEEE Transactions on Geoscience and Remote Sensing , 2024. [48] O. Russakovsky, J. Deng, H. Su, J. Krause, S. Satheesh, S. Ma, Z. Huang, A. Karpathy, A. Khosla, M. Bernstein et al. , “Imagenet large scale visual recognition challenge,” International Journal of Computer Vision , vol. 115, no. 3, pp. 211–252, 2015. [49] X. Cai, Q. Lai, Y. Wang, W. Wang, Z. Sun, and Y. Yao, “Poly kernel inception network for remote sensing detection,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2024, pp. 27 706–27 716. [50] D. Wang, Q. Zhang, Y. Xu, J. Zhang, B. Du, D. Tao, and L. Zhang, “Advancing plain vision transformer toward remote sensing foundation model,” IEEE Transactions on Geoscience and Remote Sensing , vol. 61, pp. 1–15, 2022. [51] Y. Pu, Y. Wang, Z. Xia, Y. Han, Y. Wang, W. Gan, Z. Wang, S. Song, and G. Huang, “Adaptive rotated convolution for rotated object detection,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 6589–6600. [52] J. Ding, N. Xue, Y. Long, G.-S. Xia, and Q. Lu, “Learning roi transformer for oriented object detection in aerial images,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2019, pp. 2844–2853. [53] K. Cha, J. Seo, and T. Lee, “A billion-scale foundation model for remote sensing images,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , 2024. [54] X. Yang, Y. Zhou, G. Zhang, J. Yang, W. Wang, J. Yan, X. Zhang, and Q. Tian, “The kfiou loss for rotated object detection,” arXiv preprint arXiv:2201.12558 , 2022. [55] J. Zhao, Z. Ding, Y. Zhou, H. Zhu, W.-L. Du, R. Yao, and A. El Saddik, “Rqformer: Rotated query transformer for end-to-end oriented object detection,” Expert Systems with Applications , vol. 266, p. 126034, 2025. [56] T. Zhang, Y. Zhuang, G. Wang, H. Chen, L. Li, and J. Li, “A unified remote sensing object detector based on fourier contour parametric learning,” IEEE Transactions on Geoscience and Remote Sensing , vol. 63, pp. 1–25, 2025. [57] Y. Zeng, Y. Chen, X. Yang, Q. Li, and J. Yan, “Ars-DETR: Aspect ratio-sensitive detection transformer for aerial oriented object detection,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–15, 2024. [58] X. Yuan, Z. Zheng, Y. Li, X. Liu, L. Liu, X. Li, Q. Hou, and M.-M. Cheng, “Strip r-CNN: Large strip convolution for remote sensing object detection,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 40, no. 15, 2026, pp. 12 259–12 267. [59] W. Kool, H. Van Hoof, and M. Welling, “Stochastic beams and where to find them: The gumbel-top-k trick for sampling sequences without replacement,” in Proceedings of the International Conference on Machine Learning . PMLR, 2019, pp. 3499–3508. 
+
+Wenlin Liu received his BS degree from the Nanjing University of Aeronautics and Astronautics in 2021, and he is currently pursuing a doctoral degree at the National University of Defense Technology. His research interests include computer vision, reinforce-ment learning, and remote sensing object detection. 
+
+Xikun Hu (Member, IEEE) is an associate professor at College of Electronic Science and Technology, National University of Defense Technology, Chang-sha, China, and a postdoctoral research fellow at the Department of Geography, The University of Hong Kong, Hong Kong, China. He received a B.S. degree in electronic engineering and an M.S. degree in information and communication engineering from the National University of Defense Technology, Changsha, China, in 2015 and 2017, respectively, and a Ph.D. degree in geoinformatics from the KTH Royal Institute of Technology, Stockholm, Sweden, in 2022. His research interests include multimodal remote sensing image processing and wildfire detection and monitoring. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 15 
+
+Ping Zhong (Senior Member, IEEE) received the M.S. degree in applied mathematics and the Ph.D. degree in information and communication engi-neering from the National University of Defense Technology (NUDT), Changsha, China, in 2003 and 2008, respectively. From 2015 to 2016, he was a Visiting Scholar with the Department of Applied Mathematics and Theo-retical Physics, University of Cambridge, Cambridge, U.K. He is currently a Professor with the National Key Laboratory of Science and Technology on ATR, NUDT. He has authored more than 50 peer-reviewed papers in international journals, including TNNLS, TIP, TGRS, JSTSP, and JSTARS. His research interests include computer vision, machine learning, and pattern recognition. Prof. Zhong received the National Excellent Doctoral Dissertation Award of China in 2011 and was selected for the New Century Excellent Talents in University Program of China in 2013. He currently serves as an Associate Editor for JSTARS.

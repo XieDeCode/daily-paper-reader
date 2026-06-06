@@ -1,0 +1,415 @@
+Title: A Retrospective Benchmark of Spatiotemporal Covariates for Daily Active-Fire Detection in Cerrado Conservation Units
+
+URL Source: https://arxiv.org/pdf/2606.04170v1
+
+Published Time: Thu, 04 Jun 2026 00:14:29 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# A R ETROSPECTIVE BENCHMARK OF SPATIOTEMPORAL 
+
+# COVARIATES FOR DAILY ACTIVE -F IRE DETECTION IN CERRADO 
+
+# CONSERVATION UNITS 
+
+Juliano Eleno Silva Pádua ∗
+
+, Alexandre Luis Magalhães Levada †
+
+, Fredy Joao Valente ‡
+
+Computing Department Federal University of São Carlos 13565-905, São Carlos-SP, Brazil June 4, 2026 
+
+# ABSTRACT 
+
+Wildfires threaten biodiversity, carbon stocks, and management capacity in the Brazilian Cerrado, where Conservation Units (CUs) and their official buffer zones (Zonas de Amortecimento) must allocate prevention resources under a strong dry-season fire regime. Operational systems published by the Instituto Nacional de Pesquisas Espaciais (INPE) issue continental dryness indices and reactive hotspot alerts, but neither output provides a CU-scale benchmark for ranking daily active-fire detections. This work develops a retrospective daily active-fire detection benchmark for the Cerrado portion of Minas Gerais, Brazil, using INPE BDQueimadas reference satellite labels (AQUA_M-T), rule-bound pseudo absences sampled inside the Cerrado-MG mask with same-year MapBiomas Collection 9 land-cover filtering, and a four-stage progressive feature ablation extracted through Google Earth Engine. A model triad, Logistic Regression, Random Forest, and XGBoost, is evaluated under five-fold time series cross validation on a global training base and on an independent imbalanced test set spatially held out to Parque Estadual do Pau Furado and Parque Estadual da Serra do Cabral with their official buffer zones. AUC-PR is the primary metric, with AUC-ROC, threshold precision and recall, Shapley Additive Explanations (SHAP), and retrospective score maps used as complementary diagnostics. Temporal cross-validation in the Cerrado-MG training domain showed the highest mean AUC-PR at the complete temporal-memory stage for all three model families. Held-out AOI tests were weaker: absolute AUC-PR decreased under the stricter 1:100 prevalence design, Random Forest peaked at Stage 3 in both AOIs, and XGBoost maps exposed high-recall, high-warning-volume behavior. The resulting baseline provides a reproducible reference for comparing atmospheric, surface, static spatial, and short-term memory covariates in daily CU-scale active-fire detection ranking. Because Stages 1 to 3 use same-day covariates, it is not a prospective forecast; that extension requires predictors available before the decision time. 
+
+# 1 Introduction 
+
+The Cerrado is a fire dependent savanna biome that has coevolved with seasonal burning, and where ecological fire history, dry season fuel curing, anthropogenic ignition, and accelerating land use pressure converge [Hardesty et al., 2005, Pivello, 2011, Diele-Viegas et al., 2022]. According to the Cadastro Nacional de Unidades de Conservação (CNUC), the Cerrado biome currently shelters about 177,719 km 2 of protected area distributed across 438 Conservation Units (CUs), of which 142 are under integral protection [Hoffmann et al., 2020]. Inside those CUs, fire management is a daily allocation problem in which managers must decide when and where patrols, prevention activities, and suppression readiness should be intensified. Hoffmann et al. [2020] document that the percentage of burned area inside Cerrado 
+
+> ∗
+
+julianopadua@estudante.ufscar.br 
+
+> †
+
+alexandre.levada@ufscar.br 
+
+> ‡
+
+fredy@ufscar.br 
+
+> arXiv:2606.04170v1 [stat.AP] 2 Jun 2026
+
+PREPRINT - J UNE 4, 2026 CUs and their official buffer zones varies sharply with adjacent land cover and dry season rainfall anomalies, which makes the inside versus buffer distinction operationally consequential. The Brazilian operational baseline for fire hazard is the Risco de Fogo (RF) index, issued daily on a continental 10 km grid by the Instituto Nacional de Pesquisas Espaciais (INPE) Programa Queimadas [Setzer et al., 2019]. The RF index folds 120 days of accumulated rainfall, a sinusoidal vegetation specific dryness ramp, a humidity factor, a temperature factor, and a latitude and elevation correction into a dimensionless score; it explicitly omits wind, soil moisture, and statistical uncertainty quantification [Setzer et al., 2019]. At CU scale, where the typical Cerrado state park is much smaller than a single 10 km RF pixel, the index can only describe the regional envelope, not an AOI-specific active-fire detection score with quantified uncertainty. The complementary operational tool, INPE BDQueimadas, reports active fire detections after thermal anomalies have been observed by the reference satellite AQUA_M-T [INPE, 2024]. What remains missing is a CU-scale benchmark that tests whether environmental and spatial covariates can rank daily BDQueimadas active-fire detection occurrence under realistic class imbalance, while also identifying what would still be needed for future prospective forecasting. Machine learning has repeatedly achieved competitive accuracy for regional wildfire occurrence and susceptibility modeling, with reported area under the receiver operating characteristic curve (AUC-ROC) values commonly between 0.80 and 0.95 [Jain et al., 2020, Cilli et al., 2022, Yang et al., 2026, Bian et al., 2024, Freitas et al., 2025]. Recent studies increasingly pair those models with explainable artificial intelligence (XAI), especially Shapley Additive Explanations (SHAP), to inspect fitted behavior in terms of physically interpretable drivers [Gunning et al., 2019, Guidotti et al., 2018, Lundberg and Lee, 2017]. Yang et al. [2026] combine XGBoost and SHAP on a kilometer grid in Yunnan, China; Cilli et al. [2022] combine Random Forest, SHAP, and hotspot statistics for decade aggregated Mediterranean fire occurrence; Bian et al. [2024] compare Logistic Regression, Random Forest, and XGBoost on Chinese provincial fire data; and Freitas et al. [2025] provide the closest Brazilian protected-area precedent, using Random Forest, XGBoost, SHAP, BDQueimadas, MapBiomas, CHIRPS, SRTM, and MODIS products in the Triunfo do Xingu Amazonian Environmental Protection Area. These studies establish the usefulness of machine-learning and XAI tools for fire susceptibility, but they do not provide a daily CU-scale Cerrado benchmark with rare-class AOI hold-out testing and row-aligned feature ablation. Phelps and Woolford [2021] further caution that balanced datasets and AUC-ROC-centered validation can mask the false positive cost that dominates operational deployment under severe class imbalance. This paper evaluates spatiotemporal covariates for daily active-fire detection occurrence inside the Cerrado portion of Minas Gerais, Brazil, and quantifies the marginal value of four progressively richer feature families for retrospective classification and ranking. We compare a model triad of Logistic Regression as a linear reference, Random Forest as a bagging baseline, and XGBoost as a boosting baseline, under time series cross validation on a global training base, plus an independent imbalanced area of interest (AOI) test set held out to two state CUs and their buffer zones: Parque Estadual do Pau Furado in Uberlândia, Minas Gerais (CNUC 0000.31.1770) and Parque Estadual da Serra do Cabral in Augusto de Lima, Minas Gerais (CNUC 0000.31.0890). The four feature stages, each a strict superset of the previous one, are: Stage 1 atmospheric reanalysis from the European Centre for Medium Range Weather Forecasts (ECMWF) Reanalysis v5 Land (ERA5-Land); Stage 2 optical and thermal surface state from MODIS; Stage 3 static topography and built environment proximity; Stage 4 light causal exponentially weighted memory over selected Stage 1 and Stage 2 inputs. AUC-PR is the primary metric, with AUC-ROC, precision, and recall retained as complementary diagnostics for the explicitly imbalanced AOI test set [Phelps and Woolford, 2021]. To support external reproduction, a public companion repository with the pipeline scaffold is available online. 4
+
+The paper makes three contributions: 1. It builds a retrospective daily active-fire detection baseline for the Cerrado portion of Minas Gerais using BDQueimadas positives, constrained pseudo absences, and an independent AOI test protocol for two held-out CUs and their buffer zones. 2. It compares Logistic Regression, Random Forest, and XGBoost under identical row-aligned feature matrices across four nested spatiotemporal ablation stages. 3. It quantifies the marginal value of atmospheric, surface, static spatial, and short-term temporal memory covariates with AUC-PR-centered validation, SHAP diagnostics, and retrospective operational-style score maps. Section 2 defines the modeling background. Section 3 describes the data sources, label processing, pseudo absences, AOI tests, and covariate stages. Section 4 presents ablation, tuning, validation, AOI testing, and retrospective mapping. The Results and Discussion sections report and interpret the evaluation. 
+
+> 4https://github.com/julianopadua/cerrado-wildfire-prediction-reproducibility
+
+2PREPRINT - J UNE 4, 2026 
+
+# 2 Theoretical background 
+
+This section defines the modeling elements used in the daily active-fire detection study: rare-event classification, pseudo absence design, the three classifier families, the covariate stages, temporal memory features, evaluation metrics, and SHAP explanations. 
+
+2.1 Daily fire occurrence as a rare event problem 
+
+For each sampled point-date tuple i, the response variable is 
+
+yi =
+
+1, if a retained BDQueimadas active fire detection is observed, 
+
+0, if the tuple is sampled as a constrained pseudo absence. (1) The modeling objective is to estimate a score for p(yi = 1 | xi), where xi contains atmospheric, surface, static spatial, seasonal, and temporal memory covariates extracted for the same point and date. Because true non fire events are not directly observed, negative samples are pseudo absences rather than confirmed absence records. The pseudo absence design defines which background point-dates are treated as plausible non-fire examples under the same observation process. Barbet-Massin et al. [2012] describe pseudo absence design through three questions: how background samples are generated, where they are allowed, and how many are drawn relative to presences. Naive background points can make fire classification artificially easy by drawing non-fire samples from irrelevant land covers, seasons, or held-out evaluation geographies. Our design constrains background samples through the Cerrado within Minas Gerais mask, dynamic MapBiomas land cover, same-day distance from positives, dry-season timing, and the spatial hold-out of target CUs and buffer zones. This differs from density-regression studies such as Freitas et al. [2025], where the response is a smoothed fire-density surface and the pseudo absence question is replaced by a smoothing-radius question. Under deployment-like daily prevalence, active-fire detection ranking is severely imbalanced. Phelps and Woolford [2021] show that wildfire occurrence models can appear similar under balanced evaluation but diverge sharply when tested at deployment-like prevalence, especially when AUC-ROC is treated as the main metric. The design therefore separates the training prevalence, controlled through pseudo absence ratios, from the independent area of interest (AOI) test prevalence, which is intentionally rarer and closer to the protected-area decision setting. 
+
+2.2 Classifier families 
+
+Logistic Regression is used as the linear reference model. For covariates xi ∈ Rp, it models the log odds of active-fire detection occurrence as 
+
+log 
+
+ pi
+
+1 − pi
+
+
+
+= β0 + x⊤ 
+
+> i
+
+β, pi = 11 + exp[ −(β0 + x⊤ 
+
+> i
+
+β)] . (2) Its coefficient signs and magnitudes provide a transparent baseline for whether the feature stages contain a mostly linear fire signal [Hosmer et al., 2013]. Random Forest is the bagging baseline [Breiman, 2001]. It trains an ensemble of decision trees on bootstrap samples and random subsets of candidate predictors. For classification, the estimated probability score is the average vote across trees, 
+
+ˆpi = 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+ht(xi), (3) where ht is the probability output or vote returned by tree t. Random Forest is widely used in wildfire mapping because it handles nonlinear interactions, mixed feature scales, and threshold effects without strong parametric assumptions [Cilli et al., 2022, Jain et al., 2020]. XGBoost is the boosting baseline and the highest-capacity member of the triad [Chen and Guestrin, 2016]. It represents the prediction as an additive tree ensemble, 
+
+ˆyi =
+
+> K
+
+X
+
+> k=1
+
+fk(xi), fk ∈ F , (4) and minimizes a regularized objective, 
+
+L = X
+
+> i
+
+ℓ(yi, ˆyi) + 
+
+> K
+
+X
+
+> k=1
+
+Ω( fk), (5) 3PREPRINT - J UNE 4, 2026 where ℓ is the classification loss and Ω penalizes tree complexity. Recent wildfire susceptibility studies report strong XGBoost performance with climate, vegetation, terrain, and anthropogenic predictors [Yang et al., 2026, Bian et al., 2024, Freitas et al., 2025]. Here, XGBoost is tested against a linear reference and a bagged-tree baseline under the same row-aligned feature stages. 
+
+2.3 Spatiotemporal covariates and environmental memory 
+
+The covariate design represents four fire-risk dimensions: atmospheric dryness, surface condition and fuel water stress, terrain and built-environment context, and recent environmental history [Jain et al., 2020, Setzer et al., 2019, Yang et al., 2026, Bian et al., 2024]. Relative humidity is derived from air temperature and dewpoint temperature using the Tetens form also reported in Yang et al. [2026]. Let T be two meter air temperature and Td be two meter dewpoint temperature in degrees Celsius. The saturation and actual vapor pressures are 
+
+es(T ) = 0 .6108 exp 
+
+ 17 .27 TT + 237 .3
+
+
+
+, e(Td) = 0 .6108 exp 
+
+ 17 .27 Td
+
+Td + 237 .3
+
+
+
+, (6) and relative humidity is 
+
+RH = 100 e(Td)
+
+es(T ) . (7) Wind is represented through speed and circular direction components derived from the ERA5-Land zonal and meridional wind bands, avoiding a discontinuity at 0 and 360 degrees. Temporal memory is represented with causal exponentially weighted moving averages (EWMAs). For a variable zt and smoothing factor α, the recursive form is 
+
+mt = αz t + (1 − α)mt−1, (8) with α = 1 − 2−1/h for half life h days. The construction is causal because only observations at or before the target date enter the average. This choice follows antecedent-rainfall logic, where previous rainfall is summarized with temporally decaying weights that emphasize recent precipitation and serve as proxies for antecedent wetness or soil moisture. Fire-danger systems also encode environmental memory through multiple fuel-moisture response times: the Canadian Fire Weather Index System combines fast fine-fuel, intermediate duff, and slower drought components, while the Brazilian Risco de Fogo index carries a weighted rainfall history up to 120 days [Van Wagner, 1987, Setzer et al., 2019]. Here, the EWMA design extends this rainfall-history principle to heat, humidity, precipitation, greenness, water stress, and land surface temperature without tuning the lag structure separately for each classifier. 
+
+2.4 Evaluation and explanation 
+
+Temporal validation is required because random splits can leak nearby dates from the same dry season into both training and validation. Ordered time-series folds are used for training evaluation, and the two target CUs with their official buffer zones are reserved for an independent AOI test. The AOI test reuses the same point set across all feature stages, so differences across stages measure marginal feature value rather than a changing test composition. Precision and recall are defined as 
+
+precision = T P T P + F P , recall = T P T P + F N . (9) These definitions underlie the AUC-PR, AUC-ROC, and threshold diagnostics reported later. The metric hierarchy is specified in Section 4, where AUC-PR is used as the primary rare-event ranking metric and AUC-ROC remains a secondary discrimination check [Davis and Goadrich, 2006, Saito and Rehmsmeier, 2015, Phelps and Woolford, 2021]. Precision and recall at a fixed threshold expose the decision balance between false alarms and missed detections. F1 score, confusion matrices, and calibration scores such as the Brier score are better reserved for a threshold-selection and calibration analysis once an operational decision rule is specified. Finally, the explanation layer uses Shapley Additive Explanations (SHAP) to decompose model predictions into additive feature contributions [Lundberg and Lee, 2017, Gunning et al., 2019, Guidotti et al., 2018]. For an instance x, SHAP writes the model output as 
+
+g(x) = ϕ0 +
+
+> p
+
+X
+
+> j=1
+
+ϕj , (10) where ϕ0 is the expected prediction and ϕj is the contribution assigned to feature j. The explanation layer makes the learned daily active-fire scores inspectable and comparable with the physical assumptions embedded in operational indices and previous wildfire susceptibility studies [Cilli et al., 2022, Yang et al., 2026, Freitas et al., 2025]. 4PREPRINT - J UNE 4, 2026 
+
+# 3 Data and pre-processing 
+
+The dataset combines INPE BDQueimadas active fire detections, Cerrado and administrative boundaries, annual land-cover rasters, reanalysis weather fields, MODIS optical and thermal products, elevation, and built-environment proximity layers. Each data family is described by its source, filtering operation, spatial or temporal support, and role in the modeling table. 
+
+3.1 Study area 
+
+The modeling footprint is the Cerrado biome restricted to Minas Gerais, Brazil. It was obtained by intersecting the IBGE Minas Gerais state polygon with the IBGE Cerrado biome polygon under the South American Geocentric Reference Frame (SIRGAS) 2000 datum, using boundaries retrieved through the geobr package [Pereira and Barbosa, 2026]. This Cerrado-MG mask defines the spatial extent for the global training base, the land-cover diagnostics, and the raster extractions. Figure 1 summarizes this hierarchical spatial context, from Brazil to Minas Gerais and then to the Cerrado-MG extraction mask. 
+
+Figure 1: Cerrado-MG study area. Panel ( a) shows Minas Gerais in Brazil; panel ( b) shows the Cerrado footprint inside Minas Gerais; panel ( c) shows Copernicus DEM clipped to the extraction mask. Two state CUs define the independent AOI test geography: Parque Estadual do Pau Furado, in Uberlândia, Minas Gerais, and Parque Estadual da Serra do Cabral, in Augusto de Lima, Minas Gerais. Each CU is paired with its official buffer zone polygon distributed by the Infraestrutura de Dados Espaciais do Sistema Estadual de Meio Ambiente (IDE-Sisema). The global training base excludes the union of these CU and buffer-zone polygons, while the AOI test set is sampled inside them. Figure 2 locates each AOI within Cerrado-MG and zooms to the CU plus buffer-zone elevation surface used to describe local terrain context. 5PREPRINT - J UNE 4, 2026 
+
+(a) Parque Estadual do Pau Furado 
+
+(b) Parque Estadual da Serra do Cabral Figure 2: Held-out AOIs. Each panel locates the AOI inside Cerrado-MG and shows Copernicus DEM over the CU and official buffer zone. 6PREPRINT - J UNE 4, 2026 
+
+3.2 Fire labels and study period 
+
+Positive labels come from the INPE Programa Queimadas BDQueimadas yearly comma separated files of reference-satellite active fire detections [INPE, 2024]. The selected reference satellite is AQUA_M-T, the early afternoon MODIS overpass on Aqua, whose 1 km contextual thermal-anomaly algorithm has recorded daily global active fire detections since 2002 and remains a widely used resource for fire research at regional and global scales [Giglio et al., 2003, 2016]. Active fire products carry sensor-specific commission and omission behavior [Libonati et al., 2015, Rodrigues et al., 2019] so using one reference family avoids mixing distinct detection kernels. The initial study period is 2019-01-01 to 2025-12-31, covering seven complete Cerrado dry seasons. The raw archive was filtered to records whose biome and state fields identify Cerrado and Minas Gerais, then constrained to the study period and normalized to unique (date, latitude, longitude) tuples. Each surviving point was spatially joined to the Cerrado-MG mask in a metric equal-area coordinate reference system so that all distance operations are computed in meters. This first spatial screen removes records that match the tabular state and biome fields but fall outside the final polygonal footprint used by raster extraction. Land-cover filtering uses MapBiomas Collection 9 as an annual dynamic mask rather than a single static land-cover year. For each fire point, the MapBiomas band corresponding to the fire year is sampled in Google Earth Engine, with the most recent available band used for later years when necessary [Gorelick et al., 2017]. Anthropogenic, mining, urban, aquaculture, and water classes are excluded before modeling. The purpose is to keep the positive class aligned with natural Cerrado fire dynamics and to avoid temporal leakage: a 2019 fire is evaluated against the 2019 land-cover band, not against a later land-cover state. Figure 3 shows the excluded land-cover footprint by year, and Figure 4 shows the corresponding retained and dropped fire detections. 
+
+Figure 3: Dynamic MapBiomas Collection 9 exclusion mask by year. Excluded pixels are removed from same-year positives and pseudo-absence candidates. 7PREPRINT - J UNE 4, 2026 
+
+Figure 4: Positive-label screening after land-cover filtering. Red points are retained; blue points intersect excluded same-year MapBiomas classes. Multiple satellite detections can correspond to the same physical fire event because of overpass geometry, sub-pixel ambiguity, or repeated detection over consecutive days [Hantson et al., 2013, Andela et al., 2019]. To reduce this redundancy, retained detections within three kilometers and three days of each other were merged and represented by the first detected event head, with both distances evaluated in the metric CRS [Yang et al., 2026]. The merged event heads retain their original date and coordinates, which preserves the daily binary classification target rather than aggregating the response into a long-term susceptibility surface. Finally, retained detections were restricted to May through October, the Cerrado dry-season window used for both positive labels and pseudo absences. As shown in Figure 5, the overwhelming majority of detections inside Cerrado-MG over the 2019 to 2025 study period occurred during these months, with a pronounced peak between July and September. This concentration is consistent with regional climate seasonality and with the dry-spell driven burning propensity reported for the Cerrado biome [Diele-Viegas et al., 2022, Hoffmann et al., 2020, Setzer et al., 2019]. 
+
+Figure 5: Fire-season diagnostics for BDQueimadas detections inside Cerrado-MG. Panels show monthly counts and the May through October dry-season share. The same seasonal restriction also has a spatial consequence. Figure 6 shows that fire detections during the May through October window form the dominant density surface across Cerrado-MG, while detections outside that window are sparse by comparison. Using the fire season for both positive labels and pseudo absences therefore keeps the classification problem focused on plausible fire-prone conditions instead of allowing easy background negatives from months with little observed burning. 8PREPRINT - J UNE 4, 2026 
+
+Figure 6: Fire-density contrast between the May through October fire season and the remaining months inside Cerrado-MG. 
+
+3.3 Pseudo absences and AOI test samples 
+
+Labels remain point-date events rather than coarse grid-cell aggregates, so class balance is handled at sampling time. Training pseudo absences are sampled at ten background point-dates per positive and must satisfy five constraints: they lie inside the Cerrado-MG mask, fall on eligible MapBiomas land cover for their own calendar year, remain more than three kilometers from any same-day positive, occur outside the held-out CU and buffer-zone polygons, and fall inside the May through October fire-season window. This contract keeps negatives physically comparable to positives and avoids easy background samples from irrelevant seasons or land covers [Barbet-Massin et al., 2012]. The AOI test set is constructed independently from training. Its positives are all retained BDQueimadas detections inside the two target CU and buffer-zone polygons over the study period. Its pseudo absences are sampled inside the same AOI polygons under the same biome, land-cover, same-day distance, and season constraints, at one hundred absences per positive. The same AOI point set is reused across all feature stages; only the covariate columns change. This makes per-stage differences in AUC-PR interpretable as marginal feature value rather than as a consequence of different test samples. 
+
+3.4 Covariate sources and staged extraction 
+
+All covariates are extracted through Google Earth Engine, which supplies versioned image collections, reproducible server-side reducers, and spatially explicit sampling over the same point-date table [Gorelick et al., 2017]. The feature stages are nested: each stage contains the same rows as the previous stage plus additional covariates. This row-alignment invariant lets the ablation compare atmospheric, surface, static spatial, and temporal memory families without changing labels, dates, coordinates, or AOI test identity. The atmospheric baseline uses ERA5-Land daily aggregates for heat, humidity, wind, precipitation, and seasonal position. Derived variables are defined in Table 1 and use the transformations introduced in Section 2. This stage overlaps the meteorological logic of the INPE Risco de Fogo index while replacing hand tuned thresholds with learned classifiers. 9PREPRINT - J UNE 4, 2026 Table 1: Stage 1 atmospheric covariates. All variables are sampled or derived for the target point-date from ERA5-Land daily aggregates before model fitting. 
+
+Feature Meaning Source and derivation 
+
+t2m_c Near-surface air temperature in degrees Cel-sius. ERA5-Land temperature_2m , daily mean, converted from kelvin to degrees Celsius. 
+
+rh2m Near-surface relative humidity in percent. Derived from ERA5-Land two meter tempera-ture and dewpoint temperature with the Tetens equation. 
+
+wind_speed_10m Ten meter wind speed in meters per second. Derived from ERA5-Land zonal and merid-ional wind components. 
+
+wind_dir_sin ,
+
+wind_dir_cos 
+
+Circular representation of wind direction. Derived from ERA5-Land wind components to avoid a discontinuity at 0 and 360 degrees. 
+
+precip_mm Daily accumulated precipitation in millime-ters. ERA5-Land total_precipitation_sum ,converted from meters to millimeters. 
+
+sin_doy , cos_doy Cyclic position of the day within the annual fire season. Derived from the sample date as sine and co-sine of day of year. 
+
+The surface-fusion stage adds MODIS vegetation, water-stress, and thermal surface-state variables. Because valid MODIS observations vary by product, cloud cover, and orbit, extraction uses source-specific recent-valid compositing and records thermal observation age. This is an extraction provenance strategy, not post hoc statistical imputation. Table 2: Stage 2 surface covariates. Stage 2 is a strict superset of Stage 1 and adds independently composited MODIS optical and thermal variables. 
+
+Feature Meaning Source and derivation 
+
+ndvi Vegetation greenness and photosynthetic ac-tivity. MODIS Collection 6.1 MOD13Q1 NDVI ,scaled by 0.0001 and sampled from the most recent valid pixel within the configured look-back window. 
+
+ndwi Vegetation and surface water-stress proxy. Derived from MODIS Collection 6.1 MOD09GA near infrared and shortwave infrared reflectance as 
+
+(N IR − SW IR )/(N IR + SW IR ).
+
+lst Daytime land surface temperature in kelvin. MODIS Collection 6.1 MOD11A1 
+
+LST_Day_1km , scaled by 0.02 and sam-pled from the most recent valid clear-sky pixel. 
+
+The static spatial stage adds terrain and human-access context that does not vary by date. These variables test whether residual spatial structure remains after weather and surface state are already known, as suggested by multi-source geographic factor studies [Yang et al., 2026, Freitas et al., 2025]. Table 3: Stage 3 static spatial covariates. Stage 3 is a strict superset of Stage 2 and adds terrain and built-environment context without changing the point-date table. 
+
+Feature Meaning Source and derivation 
+
+slope Local terrain inclination in degrees. Derived in Google Earth Engine from the SRTM USGS/SRTMGL1_003 elevation band and sampled at the model point. 
+
+aspect Local terrain orientation in degrees. Derived in Google Earth Engine from the SRTM elevation band and sampled at the model point. 
+
+distance_built_m Distance to built-up land cover in meters. Computed as capped Euclidean distance to ESA WorldCover 2021 class 50 pixels, using the configured 100 m distance-transform scale. 
+
+The temporal-memory stage adds causal EWMAs of selected atmospheric and surface variables at fixed half-lives of 3, 7, and 15 days. The summaries use trailing history windows only, so they represent environmental memory available at the target date. The grid is a short, parsimonious alternative to model-tuned lagged predictors and is motivated 10 PREPRINT - J UNE 4, 2026 by antecedent rainfall logic, fire-danger systems with multiple fuel-moisture response classes, and applied fire or fuel-moisture models using lagged meteorological summaries [Van Wagner, 1987, de Jong et al., 2016, Cavalcante et al., 2021, Vilchis-Francés et al., 2021, Shmuel et al., 2022, Hou et al., 2024, Setzer et al., 2019]. Table 4: Stage 4 temporal-memory covariates. Stage 4 is a strict superset of Stage 3 and adds causal exponentially weighted summaries of recent atmospheric and surface history. 
+
+Feature family Meaning Source and derivation 
+
+t2m_c_ewma_*d Recent thermal memory at half-lives of 3, 7, and 15 days. Computed locally from trailing ERA5-Land daily temperature history over days D − 1 through D − 60 .
+
+rh2m_ewma_*d Recent humidity memory at half-lives of 3, 7, and 15 days. Computed locally from trailing ERA5-Land derived relative humidity history. 
+
+precip_mm_ewma_*d Recent precipitation memory at half-lives of 3, 7, and 15 days. Computed locally from trailing ERA5-Land daily precipitation history. 
+
+ndvi_ewma_*d Recent vegetation-greenness memory at half-lives of 3, 7, and 15 days. Computed locally from trailing MODIS NDVI history extracted with the same recent-valid compositing rule as Stage 2. 
+
+ndwi_ewma_*d Recent water-stress memory at half-lives of 3, 7, and 15 days. Computed locally from trailing MODIS-derived NDWI history. 
+
+lst_ewma_*d Recent surface-temperature memory at half-lives of 3, 7, and 15 days. Computed locally from trailing MODIS daytime LST history extracted from valid clear-sky pixels. 
+
+# 4 Proposed method 
+
+The protocol proceeds through row-aligned ablation tables, a three-model classifier suite, temporal validation, indepen-dent AOI transfer testing, and retrospective score mapping over dense daily grids. Figure 7 summarizes the complete technical workflow. 
+
+Figure 7: Technical workflow for the retrospective daily Cerrado active-fire detection evaluation. 11 PREPRINT - J UNE 4, 2026 
+
+4.1 Progressive ablation design 
+
+The ablation has four nested stages. Let Dk denote the modeling table for stage k, where each row is one labeled point-date tuple and each column after the identifiers is a predictor available to the classifier. The ablation is progressive: 
+
+Dk+1 must preserve all rows, dates, labels, and identifiers in Dk, and its feature set must be a strict superset of the previous stage. Consequently, a performance change between two stages is attributable to the added variable family rather than to a new sample, a different time window, or a different prevalence. The same invariant is enforced for the AOI test tables, where the point set is fixed once and reused from Stage 1 through Stage 4. Stage 1 is the atmospheric baseline and includes daily temperature, relative humidity, wind, precipitation, and seasonal sine and cosine terms derived from day of year. It tests whether daily thermodynamic and rainfall conditions alone are sufficient to rank fire-prone point-dates. Stage 2 adds optical and thermal surface state through NDVI, NDWI, and land surface temperature, testing whether vegetation greenness, fuel water stress, and near-surface heating reduce errors left by the atmospheric baseline. Stage 3 adds static spatial context through terrain and built-environment proximity, testing whether slope, aspect, and distance to built-up areas explain residual spatial structure after daily weather and surface state are known. Stage 4 adds causal exponentially weighted moving averages of selected atmospheric and surface variables, testing whether short environmental memory improves daily ranking beyond instantaneous same-day conditions. All stages are audited before modeling. The audit checks row counts, key identity, label identity, column nesting, missingness, and AOI test stability. Because the feature tables include same-day environmental covariates, the study is interpreted as retrospective daily classification and ranking rather than prospective forecasting. Rows are not silently imputed or dropped to make a later stage easier to fit. When a sensor-specific extraction gap remains unresolved, the corresponding stage table must expose the gap through the audit rather than hiding it inside the model matrix. 
+
+4.2 Model suite and hyperparameter search 
+
+For every stage, the same three classifiers are trained on the same feature matrix and evaluated under the same splits. Logistic Regression is used as the linear reference model. It tests whether each covariate stage contains an approximately monotonic and additive signal on the log-odds scale. Random Forest is used as the bagging baseline for nonlinear thresholds and interactions. XGBoost is used as the boosting baseline for higher-order interactions among climate, vegetation, terrain, and proximity variables [Chen and Guestrin, 2016, Yang et al., 2026, Bian et al., 2024, Freitas et al., 2025]. The three models are compared under the same rows, features, folds, and AOI tests. Hyperparameters are selected separately for each model and stage using Optuna with a Tree-structured Parzen Estimator sampler and a median pruner. The tuning objective is the mean AUC-PR across the same five time-series folds later used for validation, so the selected hyperparameters are optimized for rare-event ranking rather than for accuracy or AUC-ROC. The trial budget is fixed in the project configuration: 30 trials for Logistic Regression, 30 trials for Random Forest, and 50 trials for XGBoost, each with a per-trial timeout of 600 seconds. Trials are run sequentially, while model-internal fitting uses the available processor threads. After tuning, the best hyperparameters are refit on the complete global training table for the corresponding stage, and the fitted model is stored with its evaluation and diagnostic artifacts. Class imbalance is handled through model-side weighting where supported and through evaluation metrics that remain meaningful under rare prevalence. The training table uses the 1:10 positive to pseudo-absence contract described in Section 3, while XGBoost receives a stage-specific positive-class weight derived from the training labels. The independent AOI test uses a more severe 1:100 positive to pseudo-absence design. No synthetic over-sampling is used, because synthetic balancing would change the rare-event prevalence that the study is designed to expose. 
+
+4.3 Temporal validation and independent AOI testing 
+
+Model validation has two levels. First, each stage and model pair is evaluated with five-fold time-series cross-validation on the global training base. The split is ordered and unshuffled: each validation fold occurs later in time than its corresponding training fold. This design prevents nearby dates from the same fire season from appearing simultaneously in training and validation sets, a leakage risk that is especially acute for daily environmental covariates and short-lived fire events. For each fold, the pipeline records both training and validation metrics. Second, the tuned model is refit on the complete global training base and scored on the independent AOI test set. The two test geographies are Parque Estadual do Pau Furado and Parque Estadual da Serra do Cabral, each evaluated with its official buffer zone. These CU and buffer-zone polygons are excluded from the global training base before pseudo absences are drawn, and the AOI test set is built separately inside the excluded polygons. The AOI protocol measures 12 PREPRINT - J UNE 4, 2026 spatial transfer into protected-area management surfaces. Each AOI receives its own metric block because sample size and fire prevalence differ sharply between the two sites. The AOI test is deliberately more imbalanced than the training table. All retained BDQueimadas positives inside the AOI polygons are kept, and pseudo absences are sampled at one hundred background point-dates per positive under the same season, land-cover, and same-day distance rules. This produces a test setting closer to a manager-facing alert surface, where most candidate point-days are non-fire days. The same AOI point set is reused for all four stages, so Stage 2, Stage 3, or Stage 4 improvements cannot be explained by new test negatives or by changed positive locations. 
+
+4.4 Metrics and diagnostic interpretation 
+
+AUC-PR is the primary metric for both hyperparameter search and reporting. Under rare daily active-fire detection occurrence, AUC-PR evaluates whether the model ranks observed active-fire detections above the large background of plausible non-fire point-dates, and it is more sensitive than AUC-ROC to the false-positive burden emphasized in fire occurrence model evaluation guidelines [Davis and Goadrich, 2006, Saito and Rehmsmeier, 2015, Phelps and Woolford, 2021]. AUC-ROC is retained as a secondary discrimination metric, but it is not used as the headline criterion. The present manuscript reports precision and recall at probability-score cutoff 0.5 to expose warning burden and missed-fire behavior without treating the cutoff as an optimized operational threshold. Cross-validation reporting uses the five-fold validation means produced by the current evaluation artifacts. Training metrics are retained in the JSON reports as fit diagnostics, but the manuscript emphasizes validation and AOI results rather than in-sample performance. For the AOI test, each report stores AUC-PR, AUC-ROC, threshold precision and recall, class counts, and a low-positive warning. Class counts are interpreted together with AUC-PR, especially for low-support AOIs. 
+
+4.5 Interpretability and spatial outputs 
+
+Interpretability is produced after fitting and is not used for model selection. Each trained model emits a feature-importance artifact, and SHAP values are computed on the AOI test rows, with subsampling when the test table exceeds the configured limit. The objective is to inspect model behavior in relation to physically interpretable drivers such as heat, humidity, recent rainfall, vegetation condition, water stress, terrain, and proximity to built-up areas. Feature-importance and SHAP summaries are standard interpretability tools in recent wildfire studies [Cilli et al., 2022, Yang et al., 2026, Freitas et al., 2025]. In the final analysis, they are read together with fold metrics, AOI metrics, and local false-positive or false-negative examples. The paper also distinguishes point-test performance from mapped behavior. Point tests evaluate ranking on sampled AOI positives and pseudo absences, while maps show where a fitted model concentrates high scores over a continuous protected-area surface. Spatial score maps and temporal mirror plots are diagnostic artifacts used to inspect spatial plausibility, warning-volume concentration, and score changes near observed fire dates. 
+
+4.6 Operational-style retrospective simulation 
+
+The final experiment simulates a daily decision-support surface over the two held-out AOIs. For each selected fire-season window, a dense grid is generated across the CU and buffer-zone polygons. The grid spacing is 500 m by default, and every grid cell is paired with every date in the selected window. The same Stage 1 through Stage 4 covariate extraction and preprocessing logic used for the ablation tables is then applied to these grid-date rows. The trained Stage 4 Logistic Regression, Random Forest, and XGBoost models score each grid-date independently. This simulation is retrospective, not a prospective forecast, because the current baseline uses same-day covariates unless a lagged-feature configuration is explicitly selected. Stage 4 temporal memory remains causal because EWMA features are computed from previous history windows rather than future observations. The experiment tests whether trained models concentrate elevated scores near observed fire activity without assigning uniformly high warnings across the full CU plus buffer-zone surface. 
+
+# 5 Results 
+
+Results are reported in five parts: temporal cross-validation, Stage 4 explanatory profiles, independent AOI test performance, AOI-specific explanations, and retrospective operational-style maps. 13 PREPRINT - J UNE 4, 2026 
+
+5.1 Cross-validation performance across ablation stages 
+
+Temporal validation shows a monotonic increase in mean AUC-PR from the atmospheric baseline to the temporal-memory stage for all three model families (Figure 8). In Stage 1, mean validation AUC-PR was 0.241 for Logistic Regression, 0.235 for Random Forest, and 0.229 for XGBoost. Stage 2 increased these values to 0.258, 0.252, and 0.246, respectively, while Stage 3 reached 0.261, 0.274, and 0.264. The complete Stage 4 temporal-memory table produced the highest cross-validation AUC-PR for each model, with values of 0.307 for Logistic Regression, 0.300 for Random Forest, and 0.303 for XGBoost. The corresponding AUC-ROC values in Stage 4 were 0.786, 0.790, and 0.792, respectively. Because the global training table uses a 1:10 positive to pseudo-absence design, the sampled no-skill AUC-PR baseline is approximately 0.091. Stage 4 therefore improves ranking in the Cerrado-MG training domain; AOI transfer is evaluated separately. 
+
+Figure 8: Temporal-validation metrics by ablation stage and model. 
+
+Table 5: Mean five-fold temporal cross-validation AUC-PR and AUC-ROC by ablation stage. Values summarize the fold-level validation metrics shown in Figure 8.                               
+
+> Stage LR AUC-PR LR AUC-ROC RF AUC-PR RF AUC-ROC XGB AUC-PR XGB AUC-ROC 10.241 0.753 0.235 0.756 0.229 0.758 20.258 0.766 0.252 0.768 0.246 0.770 30.261 0.768 0.274 0.776 0.264 0.779 40.307 0.786 0.300 0.790 0.303 0.792
+
+Figure 9 gives the Stage 4 precision-recall traces on pooled temporal-validation predictions. They separate the three model families more clearly than the corresponding ROC traces in Figure 10, consistent with the metric hierarchy defined in Section 4. 14 PREPRINT - J UNE 4, 2026 
+
+Figure 9: Stage 4 precision-recall curves on pooled temporal-validation predictions. 
+
+Figure 10: Stage 4 ROC curves on pooled temporal-validation predictions. 
+
+15 PREPRINT - J UNE 4, 2026 Figure 11 shows the corresponding Stage 4 threshold sensitivity for Precision and Recall. Each panel summarizes the five temporal-validation folds with the fold mean and a 95 percent confidence interval. The curves show the Precision-Recall tradeoff beyond the fixed 0.5 diagnostic cutoff.      
+
+> (a) Logistic Regression (b) Random Forest (c) XGBoost
+
+Figure 11: Stage 4 temporal-validation Precision and Recall across probability-score thresholds. Shaded bands show 95 percent confidence intervals across folds. 
+
+5.2 Stage 4 explanatory profiles under temporal validation 
+
+Stage 4 SHAP summaries were generated for the three trained model families under the cross-validation validation surface (Figure 12). They show which Stage 4 covariates contributed most to fitted probability scores, separating instantaneous atmospheric and surface variables from the EWMA memory features. 16 PREPRINT - J UNE 4, 2026     
+
+> (a) Logistic Regression (b) Random Forest
+> (c) XGBoost
+
+Figure 12: Stage 4 temporal-validation SHAP summaries for ( a) Logistic Regression, ( b) Random Forest, and ( c) XGBoost. 
+
+5.3 Independent AOI test performance 
+
+The independent AOI tests evaluate spatial transfer under a stricter 1:100 positive to pseudo-absence sampling ratio than the global training folds. This design fixes the AOI no-skill AUC-PR baseline near 0.010. Serra do Cabral is the primary AOI transfer reading because it contained 262 positives and 26,200 pseudo absences, providing a more stable held-out surface under the same prevalence design. Random Forest reached the strongest Serra do Cabral AUC-PR in Stages 2 and 3, with values of 0.135 and 0.262, respectively, and remained the strongest Stage 4 model with AUC-PR of 0.100 (Figure 13). At Stage 4, XGBoost obtained AUC-PR of 0.061 and Logistic Regression obtained AUC-PR of 0.049. The Stage 4 threshold diagnostics differed across model families: Random Forest combined precision of 0.134 with recall of 0.324, while XGBoost produced recall of 0.947 with precision of 0.018. 17 PREPRINT - J UNE 4, 2026 
+
+Figure 13: Serra do Cabral AOI metrics by stage and model (262 positives, 26,200 pseudo absences). 
+
+Table 6: Serra do Cabral AOI test metrics by ablation stage and model.                                                         
+
+> Model Metric Stage 1 Stage 2 Stage 3 Stage 4 Logistic Regression AUC-PR 0.027 0.028 0.027 0.049 AUC-ROC 0.744 0.758 0.751 0.781 Precision 0.018 0.017 0.017 0.047 Recall 0.832 0.863 0.847 0.076 Random Forest AUC-PR 0.061 0.135 0.262 0.100 AUC-ROC 0.836 0.919 0.955 0.893 Precision 0.130 0.162 0.250 0.134 Recall 0.080 0.233 0.286 0.324 XGBoost AUC-PR 0.032 0.036 0.032 0.061 AUC-ROC 0.775 0.791 0.783 0.843 Precision 0.017 0.017 0.018 0.018 Recall 0.897 0.908 0.901 0.947
+
+Pau Furado contained only 6 positives and 600 pseudo absences, so its metrics are reported as a small-sample stress test with a low-positive warning. Within this AOI, the highest Stage 4 AUC-PR was obtained by Random Forest (0.304), followed by Logistic Regression (0.130) and XGBoost (0.101) (Figure 14). Across all stages in Pau Furado, Random Forest reached its highest AUC-PR in Stage 3 (0.375), while Stage 4 retained the strongest AUC-PR among the three Stage 4 models. 
+
+Figure 14: Pau Furado AOI metrics by stage and model (6 positives, 600 pseudo absences). 
+
+18 PREPRINT - J UNE 4, 2026 Table 7: Pau Furado AOI test metrics by ablation stage and model. 
+
+Model Metric Stage 1 Stage 2 Stage 3 Stage 4 Logistic Regression AUC-PR 0.085 0.059 0.070 0.130 AUC-ROC 0.789 0.813 0.820 0.876 Precision 0.019 0.023 0.020 0.000 Recall 0.667 0.667 0.667 0.000 Random Forest AUC-PR 0.168 0.282 0.375 0.304 AUC-ROC 0.878 0.933 0.979 0.942 Precision 0.000 0.000 0.286 0.500 Recall 0.000 0.000 0.333 0.167 XGBoost AUC-PR 0.247 0.096 0.105 0.101 AUC-ROC 0.850 0.851 0.872 0.915 Precision 0.024 0.029 0.028 0.033 Recall 0.833 0.833 1.000 1.000 
+
+Figure 15 expands these fixed-threshold readings across the full probability-score threshold range for both AOIs. The Serra do Cabral row is the more stable transfer diagnostic, while the Pau Furado row should be read as low-support stress-test behavior. 
+
+(a) Serra do Cabral, Logistic Regression (b) Serra do Cabral, Random Forest (c) Serra do Cabral, XGBoost 
+
+(d) Pau Furado, Logistic Regression (e) Pau Furado, Random Forest (f) Pau Furado, XGBoost 
+
+Figure 15: Stage 4 AOI Precision and Recall across probability-score thresholds. Top row: Serra do Cabral. Bottom row: Pau Furado. 
+
+5.4 AOI-specific Stage 4 explanations 
+
+Figures 16 and 17 show Stage 4 SHAP summaries on the held-out AOI test rows. 19 PREPRINT - J UNE 4, 2026     
+
+> (a) Logistic Regression (b) Random Forest
+> (c) XGBoost
+
+Figure 16: Stage 4 Pau Furado AOI SHAP summaries for ( a) Logistic Regression, ( b) Random Forest, and ( c) XGBoost. 
+
+For Pau Furado, the small positive support makes the SHAP plots primarily diagnostic of model behavior on the sampled AOI point set. For Serra do Cabral, the larger test set supports a more stable comparison of AOI-specific explanatory profiles. Random Forest produced the highest Stage 4 AOI AUC-PR, while XGBoost produced the highest Stage 4 recall at the 0.5 threshold. 20 PREPRINT - J UNE 4, 2026     
+
+> (a) Logistic Regression (b) Random Forest
+> (c) XGBoost
+
+Figure 17: Stage 4 Serra do Cabral AOI SHAP summaries for ( a) Logistic Regression, ( b) Random Forest, and ( c) XGBoost. 
+
+5.5 Operational-style retrospective maps 
+
+The final output is a retrospective diagnostic simulation over dense 500 m AOI grids. The main text reports one high-fire daily heatmap for each AOI. The selected examples are Pau Furado on 18 September 2019 and Serra do Cabral on 13 September 2024. Both figures compare the three Stage 4 model families on the same AOI grid and date, with CU and buffer-zone boundaries overlaid and observed BDQueimadas detections marked on the corresponding map. These maps connect sampled point tests to continuous spatial score surfaces and were not used for tuning or model selection. In both examples, XGBoost assigns high scores across a broader share of the mapped surface than Logistic Regression or Random Forest. This saturation is a warning-volume diagnostic: high recall at sampled points can correspond to excessive mapped alert area. 21 PREPRINT - J UNE 4, 2026 
+
+Figure 18: Pau Furado Stage 4 operational-style diagnostic heatmap for 18 September 2019. Panels share the same grid and date. 
+
+Figure 19: Serra do Cabral Stage 4 operational-style diagnostic heatmap for 13 September 2024. Panels share the same grid and date. 
+
+# 6 Discussion 
+
+The results support four main findings. First, feature fusion improves temporal validation in the Cerrado-MG training domain when atmospheric, surface, static spatial, and temporal-memory covariates are added in a row-aligned sequence. Second, transfer to held-out CU and buffer-zone surfaces is substantially harder, especially under the 1:100 AOI prevalence design recommended by rare-event evaluation guidance [Phelps and Woolford, 2021]. Third, Random Forest provides the most balanced AOI behavior in this study, whereas XGBoost tends toward high recall and larger warning volume. Fourth, the present models are diagnostic baselines; prospective forecasting requires feature availability before decision time, calibration, and prospective validation. 
+
+6.1 Value of feature-level covariate fusion 
+
+The monotonic Stage 1 to Stage 4 temporal-validation AUC-PR gains indicate that the added covariate families carry complementary ranking information. Because the ablation tables preserve the same rows, dates, labels, and spatial units across stages, the gains reported in Section 5 are not artifacts of sample replacement. The daily point-date formulation retains learnable structure after land-cover filtering, event merging, and dry-season restriction. The causal temporal-memory features add information beyond instantaneous same-day atmospheric and surface conditions. This pattern matches the logic of operational fire-risk indices such as Risco de Fogo, where 22 PREPRINT - J UNE 4, 2026 recent rainfall history is central, and extends it to heat, humidity, precipitation, greenness, water stress, and surface temperature [Setzer et al., 2019]. The result is a ranking improvement, not a deployment claim. A higher temporal-validation AUC-PR does not guarantee stable transfer to a new CU, calibrated probability scores at deployment prevalence, or acceptable warning burden for managers. 
+
+6.2 AOI transfer and deployment prevalence 
+
+The AOI results separate temporal generalization from spatial transfer. Serra do Cabral provides the stronger AOI evidence, and Random Forest remained the most effective AOI-ranking model across the main stages. The Stage 3 peak indicates that static spatial context and surface state can be useful for transfer into this AOI, while the lower Stage 4 AUC-PR relative to Stage 3 suggests that temporal-memory features may introduce additional variance or site-specific behavior. Feature families with strong temporal-validation value still require testing under the target spatial and prevalence regime. In Serra do Cabral, XGBoost produced very high recall at the 0.5 threshold but with low precision, whereas Random Forest produced a more balanced but still false-positive-sensitive profile. The threshold-sensitivity curves show that model families trace different Precision-Recall paths as the probability-score threshold changes. For future operational fire management, a high-recall model can be valuable only if the warning volume remains interpretable and actionable. Pau Furado is best interpreted as a low-support AOI stress test rather than a definitive site-level ranking of algorithms. Within that limited support, Random Forest achieved the highest Stage 4 AUC-PR among the three models, while its strongest Pau Furado value occurred in Stage 3. This pattern reinforces the need to report low-positive warnings beside threshold diagnostics. 
+
+6.3 Model behavior and explanatory diagnostics 
+
+Across the triad, Logistic Regression functions as a transparent linear reference, Random Forest provides the most stable AOI compromise between ranking and threshold behavior, and XGBoost remains competitive under temporal validation while becoming more recall-oriented under AOI transfer. This contrast shows how model family, feature stage, and evaluation regime interact [Cilli et al., 2022, Yang et al., 2026, Bian et al., 2024, Freitas et al., 2025]. The SHAP summaries are model-behavior diagnostics, not direct ecological causality. They audit whether fitted scores rely on physically plausible drivers such as heat, humidity, precipitation memory, vegetation condition, surface temperature, terrain, and built-environment proximity, while inheriting the sampling design, feature collinearity, sensor limits, and model class. 
+
+6.4 Operational-style maps as retrospective diagnostics 
+
+The heatmaps show that point-level ranking does not by itself guarantee useful spatial behavior. They are retrospective diagnostics, excluded from tuning and model selection, that connect sampled AOI tests to the continuous surface managers would inspect. In the selected examples, XGBoost produced the broadest high-score surfaces, reinforcing the warning-volume issue implied by its high-recall AOI profile. A future prospective study should formalize this visual check through temporal mirror plots, daily alert-volume summaries, calibration curves, feature-availability audits, and season-by-season validation. 
+
+6.5 Limitations and future directions 
+
+BDQueimadas active-fire detections represent the fire signal observed by orbital sensors, not a complete census of all fire events. Cloud cover, satellite overpass timing, thermal contrast, sub-pixel fire size, and repeated detections can affect positive labels [Giglio et al., 2003, 2016, Hantson et al., 2013]. The current preprocessing reduces duplicate detections and keeps the reference satellite family consistent; the next round should compare these labels with burned-area products, park incident records, and sensor-confidence filters. The pseudo-absence design controls season, land cover, distance from same-day positives, and spatial hold-out rules, following pseudo-absence practice in ecological modeling [Barbet-Massin et al., 2012]. Because sampled negatives remain background cases, future sensitivity analysis should test prevalence ratios, distance thresholds, and sampling domains while keeping the 1:100 AOI test as the deployment-prevalence reference. The two held-out AOIs are legally and operationally meaningful protected-area surfaces, but they do not represent the full diversity of Cerrado CUs, land-tenure contexts, road networks, agricultural frontiers, and fire-management regimes. 23 PREPRINT - J UNE 4, 2026 A stronger transfer study should add more CUs, more years, and broader buffer-zone contexts while preserving the separation between training geography and independent AOI testing. Stage 3 represents human-access context through distance to built-up areas. Ignition pressure in the Cerrado would be described more directly by distance to roads, rural settlements, urban centers, farms or agricultural edges, pasture mosaics, CU boundaries, road density, and recent land-cover transition metrics. These variables would better represent the human-ignition mechanisms discussed in Brazilian and international wildfire literature [Jain et al., 2020, Hoffmann et al., 2020, Freitas et al., 2025]. Stage 4 uses causal EWMA features as an auditable temporal-memory baseline, but the 3, 7, and 15 day grid is intentionally short. It does not represent seasonal drought memory, such as the slower Drought Code component of the Canadian FWI System or the 120-day rainfall history in the INPE Risco de Fogo index [Van Wagner, 1987, Setzer et al., 2019]. Future experiments should compare EWMAs with denser temporal representations, including convolutional time-series transforms, state-space or SARIMAX-style summaries, temporal clustering of pre-fire trajectories, sequence-aware neural networks, and hybrid representations that preserve both short dry-spell intensity and longer seasonal accumulation. The current same-day covariate design is retrospective by construction. Stages 1 to 3 use environmental conditions from the target date, and Stage 4 adds causal memory without replacing those same-day inputs. Therefore, the study supports daily active-fire detection classification and ranking, not next-day operational forecasting. Prospective forecasting would require predictors known before the decision time, such as D-1 meteorological fields, forecast products, or explicitly lagged remote-sensing summaries, followed by calibration and prospective validation. Future model development can broaden beyond the three-classifier baseline once the training set expands to more CUs, denser gridded histories, or image-like spatiotemporal tensors [Jain et al., 2020]. Probabilistic nonlinear models could quantify uncertainty in rare high-risk areas, and an ensemble decision layer could combine calibrated scores, uncertainty estimates, alert-volume limits, and feature-attribution consistency under predefined operational thresholds. 
+
+# 7 Conclusions and Final Remarks 
+
+This study presents a reproducible retrospective daily active-fire detection benchmark for Cerrado CUs in Minas Gerais, combining BDQueimadas active-fire labels, constrained pseudo absences, row-aligned feature ablation, temporal validation, independent AOI testing, SHAP diagnostics, and retrospective heatmaps. The four-stage ablation shows that causal temporal-memory augmentation adds measurable ranking information under five-fold temporal cross-validation, with Stage 4 producing the highest mean AUC-PR and AUC-ROC for all three model families. Transfer performance decreases under stricter 1:100 prevalence and spatial hold-out conditions, especially where positive support is small, but Random Forest indicates that useful AOI ranking structure remains detectable. The main contribution of the work is therefore a transparent experimental baseline for asking which covariate families, model classes, and validation designs are credible for CU-scale daily active-fire detection ranking in the Cerrado. Because the present stages include same-day environmental covariates, they should not be read as a completed operational forecast. Future versions should enforce predictor availability before the decision time through D-1 covariates, forecast products, or explicitly lagged temporal windows, while also expanding anthropogenic ignition proxies, comparing richer temporal-memory representations, and testing calibrated decision rules under fire-season monitoring. These extensions can build on the same row-aligned ablation contract and AOI testing design introduced here. 
+
+# Acknowledgments 
+
+The author acknowledges the auxiliary use of generative AI tools during the preparation of this manuscript and the computational workflow, including support for code drafting, debugging, documentation, LaTeX editing, and language revision. These tools were used only as assistive tools and were not treated as sources of scientific evidence, methodological authority, or autonomous analysis. 
+
+# References 
+
+Jeffrey Hardesty, Ronald Myers, and Wendy Fulks. Fire, ecosystems, and people: a preliminary assessment of fire as a global conservation issue. The George Wright Forum , 22(4):78–87, 2005. Vania R. Pivello. The use of fire in the cerrado and Amazonian rainforests of Brazil: past and present. Fire Ecology , 7 (1):24–39, 2011. doi: 10.4996/fireecology.0701024. 24 PREPRINT - J UNE 4, 2026 Luisa Maria Diele-Viegas, Lilian Sales, Juliana Hipólito, Claudjane Amorim, Eder Johnson de Pereira, Paulo Ferreira, Cody Folta, Lucas Ferrante, Philip Fearnside, Ana Claudia Mendes Malhado, Carlos Frederico Duarte Rocha, and Mariana M. Vale. We’re building it up to burn it down: fire occurrence and fire-related climatic patterns in Brazilian biomes. PeerJ , 10:e14276, 2022. doi: 10.7717/peerj.14276. Tânia Beatriz Hoffmann, Andeise Cerqueira Dutra, Yosio Edemir Shimabukuro, Egidio Arai, Henrique Luis Godinho Cassol, Cesare Di Girolamo Neto, and Valdete Duarte. Fire occurrence in the Brazilian savanna conservation units and their buffer zones. In IGARSS 2020 – 2020 IEEE International Geoscience and Remote Sensing Symposium ,pages 4263–4266. IEEE, 2020. doi: 10.1109/IGARSS39084.2020.9324164. Alberto W. Setzer, Raffi A. Sismanoglu, and José Guilherme Martins dos Santos. Método do cálculo do risco de fogo do programa do INPE — versão 11, junho/2019. Technical Note sid.inpe.br/mtc-m21c/2019/11.21.11.03-PRP, Instituto Nacional de Pesquisas Espaciais (INPE), 2019. URL http://urlib.net/8JMKD3MGP3W34R/3UEDKUB .INPE. BDQueimadas: Brazilian active fire detections. https://queimadas.dgi.inpe.br , 2024. Accessed 2026-05-09. Piyush Jain, Sean C. P. Coogan, Sriram G. Subramanian, Mark Crowley, Steve Taylor, and Mike D. Flannigan. A review of machine learning applications in wildfire science and management. Environmental Reviews , 28(4):478–505, 2020. doi: 10.1139/er-2020-0019. Roberto Cilli, Mario Elia, Marina D’Este, Vincenzo Giannico, Nicola Amoroso, Angela Lombardi, Ester Pantaleo, Alfonso Monaco, Giovanni Sanesi, Sabina Tangaro, Roberto Bellotti, and Raffaele Lafortezza. Explainable artificial intelligence (XAI) detects wildfire occurrence in the Mediterranean countries of Southern Europe. Scientific Reports ,12:16349, 2022. doi: 10.1038/s41598-022-20347-9. Chuang Yang, Ping Yao, Qiuhua Wang, Shaojun Wang, Dong Xing, Yanxia Wang, and Ji Zhang. XGBoost-based susceptibility model exhibits high accuracy and robustness in plateau forest fire prediction. Forests , 17(1):74, 2026. doi: 10.3390/f17010074. Rong Bian, Keji Chen, Guoqiang Li, Zhengyong Wang, Yilin Qiu, Hua Bai, and Wangying Kong. Evaluation of three algorithms and forest fire risk prediction in Zhejiang province of China. Forests , 15(12):2146, 2024. doi: 10.3390/f15122146. Kamilla Martins Freitas, Ronie Silva Juvanhol, Carlos Jorge Gomes Pinheiro, and Anderson Alvarenga de Moura Meneses. Prediction of forest fire susceptibility using machine learning tools in the Triunfo do Xingu Environmental Protection Area, Amazon, Brazil. Journal of South American Earth Sciences , 153:105366, 2025. doi: 10.1016/j. jsames.2025.105366. David Gunning, Mark Stefik, Jaesik Choi, Timothy Miller, Simone Stumpf, and Guang-Zhong Yang. XAI—explainable artificial intelligence. Science Robotics , 4(37):eaay7120, 2019. doi: 10.1126/scirobotics.aay7120. Riccardo Guidotti, Anna Monreale, Salvatore Ruggieri, Franco Turini, Fosca Giannotti, and Dino Pedreschi. A survey of methods for explaining black box models. ACM Computing Surveys , 51(5):93:1–93:42, 2018. doi: 10.1145/3236009. Scott M. Lundberg and Su-In Lee. A unified approach to interpreting model predictions. In Advances in Neural Information Processing Systems 30 , volume 30, pages 4768–4777, 2017. URL https://papers.nips.cc/paper/ 7062-a-unified-approach-to-interpreting-model-predictions .Nathan Phelps and Douglas G. Woolford. Guidelines for effective evaluation and comparison of wildland fire occurrence prediction models. International Journal of Wildland Fire , 30(4):225–240, 2021. doi: 10.1071/WF20134. Morgane Barbet-Massin, Walter Jetz, Wilfried Thuiller, and Niklaus E. Zimmermann. Selecting pseudo-absences for species distribution models: how, where and how many? Methods in Ecology and Evolution , 3(2):327–338, 2012. doi: 10.1111/j.2041-210X.2011.00172.x. David W. Hosmer, Stanley Lemeshow, and Rodney X. Sturdivant. Applied Logistic Regression . Wiley, 3 edition, 2013. doi: 10.1002/9781118548387. Leo Breiman. Random forests. Machine Learning , 45(1):5–32, 2001. doi: 10.1023/A:1010933404324. Tianqi Chen and Carlos Guestrin. XGBoost: A scalable tree boosting system. In Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , pages 785–794. ACM, 2016. doi: 10.1145/2939672.2939785. Charles E. Van Wagner. Development and structure of the Canadian forest fire weather index system. Forestry Technical Report 35, Canadian Forestry Service, Petawawa National Forestry Institute, Chalk River, ON, 1987. URL 
+
+https://ostrnrcan-dostrncan.canada.ca/handle/1845/228434 .Jesse Davis and Mark Goadrich. The relationship between precision-recall and ROC curves. In Proceedings of the 23rd International Conference on Machine Learning , pages 233–240, New York, NY, USA, 2006. ACM. doi: 10.1145/1143844.1143874. 25 PREPRINT - J UNE 4, 2026 Takaya Saito and Marc Rehmsmeier. The precision-recall plot is more informative than the ROC plot when evaluating binary classifiers on imbalanced datasets. PLOS ONE , 10(3):e0118432, 2015. doi: 10.1371/journal.pone.0118432. Rafael H. M. Pereira and Rogério Jerônimo Barbosa. geobr: Download Official Spatial Data Sets of Brazil , 2026. URL 
+
+https://CRAN.R-project.org/package=geobr . R package version 2.0.0. Louis Giglio, Jacques Descloitres, Christopher O. Justice, and Yoram J. Kaufman. An enhanced contextual fire detection algorithm for MODIS. Remote Sensing of Environment , 87(2–3):273–282, 2003. doi: 10.1016/S0034-4257(03) 00184-6. Louis Giglio, Wilfrid Schroeder, and Christopher O. Justice. The collection 6 MODIS active fire detection algorithm and fire products. Remote Sensing of Environment , 178:31–41, 2016. doi: 10.1016/j.rse.2016.02.054. Renata Libonati, Carlos C. DaCamara, Alberto W. Setzer, Fabiano Morelli, and Arturo E. Melchiori. An algorithm for burned area detection in the Brazilian Cerrado using 8-micron MODIS imagery. Remote Sensing , 7(11):15782–15803, 2015. doi: 10.3390/rs71115782. Julia A. Rodrigues, Renata Libonati, Allan A. Pereira, Joana M. P. Nogueira, Filippe L. M. Santos, Leonardo F. Peres, and Alberto W. Setzer. How well do global burned area products represent fire patterns in the Brazilian Savanna biome? an accuracy assessment of the MCD64 collections. International Journal of Applied Earth Observation and Geoinformation , 78:318–331, 2019. doi: 10.1016/j.jag.2019.02.010. Noel Gorelick, Matt Hancher, Mike Dixon, Simon Ilyushchenko, David Thau, and Rebecca Moore. Google Earth Engine: Planetary-scale geospatial analysis for everyone. Remote Sensing of Environment , 202:18–27, 2017. doi: 10.1016/j.rse.2017.06.031. Stijn Hantson, Marc Padilla, Davide Corti, and Emilio Chuvieco. Strengths and weaknesses of MODIS hotspots to characterize global fire occurrence. Remote Sensing of Environment , 131:152–159, 2013. doi: 10.1016/j.rse.2012.12. 004. Niels Andela, Douglas C. Morton, Louis Giglio, Ronan Paugam, Yang Chen, Stijn Hantson, Guido R. van der Werf, and James T. Randerson. The Global Fire Atlas of individual fire size, duration, speed and direction. Earth System Science Data , 11(2):529–552, 2019. doi: 10.5194/essd-11-529-2019. Mark C. de Jong, Martin J. Wooster, Karl Kitchen, Cathy Manley, Rob Gazzard, and Frank F. McCall. Calibration and evaluation of the Canadian forest fire weather index (FWI) system for improved wildland fire danger rating in the United Kingdom. Natural Hazards and Earth System Sciences , 16(5):1217–1237, 2016. doi: 10.5194/ nhess-16-1217-2016. Rosane B. L. Cavalcante, Bruno M. Souza, Silvio J. Ramos, Markus Gastauer, Wilson R. Nascimento Junior, Cecílio F. Caldeira, and Pedro W. M. Souza-Filho. Assessment of fire hazard weather indices in the eastern Amazon: a case study for different land uses. Acta Amazonica , 51(4):352–362, 2021. doi: 10.1590/1809-4392202101172. Aleida Yadira Vilchis-Francés, Carlos Díaz-Delgado, Rocío Becerril Piña, Carlos Alberto Mastachi Loza, Miguel Ángel Gómez-Albores, and Khalidou M. Bâ. Daily prediction modeling of forest fire ignition using meteorological drought indices in the Mexican highlands. iForest - Biogeosciences and Forestry , 14:437–446, 2021. doi: 10.3832/ ifor3623-014. Assaf Shmuel, Yiftach Ziv, and Eyal Heifetz. Machine-learning-based evaluation of the time-lagged effect of meteoro-logical factors on 10-hour dead fuel moisture content. Forest Ecology and Management , 505:119897, 2022. doi: 10.1016/j.foreco.2021.119897. Xiang Hou, Zhiwei Wu, Shihao Zhu, Zhengjie Li, and Shun Li. Comparative analysis of machine learning-based predictive models for fine dead fuel moisture of subtropical forest in China. Forests , 15(5):736, 2024. doi: 10.3390/f15050736. 26

@@ -1,0 +1,1030 @@
+Title: From Local Geometry to Global Pseudo Labeling for Robust Positive Unlabeled Learning under Covariate Shift
+
+URL Source: https://arxiv.org/pdf/2605.31187v1
+
+Published Time: Mon, 01 Jun 2026 01:07:17 GMT
+
+Number of Pages: 40
+
+Markdown Content:
+# From Local Geometry to Global Pseudo-Labeling for Robust Positive–Unlabeled Learning under Covariate Shift 
+
+Firas Gabetni 1,2, Alexandre Rocchi–Henry 1, Nacim Belkhir 1, Ziyi Liu 2, and Gianni Franchi 1,2,3 
+
+> 1
+
+U2IS, ENSTA  
+
+> 2
+
+Institut Polytechnique de Paris  
+
+> 3
+
+AMIAD, Pôle Recherche, Palaiseau 
+
+Abstract. Detecting covariate shift is critical for building reliable vi-sion systems. While most prior work focuses on improving robustness to shift, explicitly detecting covariate shift remains underexplored. Existing approaches typically rely on fully supervised training, requiring labeled examples from both original and shifted distributions, which is often im-practical. In this paper, we show that covariate shift detection can be effectively addressed with weaker supervision using Positive–Unlabeled (PU) learning. However, under covariate shift, in-distribution and shifted data overlap significantly, making classical PU methods unstable and sen-sitive to noise. To overcome this challenge, we introduce Spectral PU Neighborhood Annotation (S-PUNA) , a geometry-aware frame-work that progressively discovers shifted data by leveraging the local manifold structure of visual features. Extensive experiments show that 
+
+S-PUNA achieves state-of-the-art performance in PU settings and re-markably matches the performances of fully supervised methods. More-over, our approach transfers robustly across different types of shifts, demonstrating strong generalization capabilities. 
+
+Keywords: Covariate shift · Positive Unlabeled Learning · Pseudo la-beling 
+
+## 1 Introduction 
+
+Modern Deep Neural Networks (DNNs) are usually trained on a source distribu-tion and tested on data assumed to follow a similar distribution. A central ob-jective of classical machine learning research has been to improve generalization under mild distributional shifts, commonly referred to as covariate shift , where the input distribution PX changes but P (Y | X) stays the same. Many works therefore focus on domain generalization [65], domain adaptation [2], and robust-ness to small input perturbations [24]. In contrast, under a semantic shift [60] (for example when a model trained on animals is tested on objects) the predic-tions become unreliable. In such cases, the goal is not to generalize but to detect  
+
+> arXiv:2605.31187v1 [cs.CV] 29 May 2026 2F. Gabetni et al.
+
+the shift and raise an alert. Thus, models should be invariant to covariate shift but sensitive to semantic shift. In this work, we argue that detecting covariate shift itself is also an impor-tant problem that has been less studied. In many real applications, knowing that the data distribution has changed is critical. For example, detecting AI-generated data often relies on identifying small distribution differences [62, 66]. Similarly, in finance [14], healthcare [18], or sensor systems [43], gradual covari-ate shifts can signal that model predictions may become unreliable. Existing approaches are predominantly fully supervised. For example, recent work such as DisCoPatch [8] trains a dedicated discriminator to distinguish between real and synthetic images. While effective, such methods require labeled examples from both distributions, limiting their applicability when negative samples are unavailable or expensive to curate. This raises a fundamental question: 
+
+Are we forced to rely on fully supervised training for covariate shift detection, or can we relax the level of supervision? 
+
+We propose to address covariate shift detection through the lens of Posi-tive–Unlabeled (PU) learning . This field studies binary classification when only labeled positive examples and unlabeled data are available. This paradigm natu-rally arises in anomaly detection [55], medical diagnosis [4], or out-of-distribution detection [28], where negative labels are scarce or unreliable. Surprisingly, to the best of our knowledge, PU learning has not been systematically investigated for covariate shift detection. However, directly applying classical PU risk minimization in the presence of covariate shift is problematic. Standard PU methods rely on unbiased risk esti-mators that assume sufficient separability between positive and negative distri-butions. Under covariate shift, the distributions may overlap significantly, leading to small total variation distance and high intrinsic Bayes risk. In this regime, global risk estimation becomes unstable and prone to high variance. We argue that in covariate-shifted PU settings, the negative distribution should not be estimated globally. Instead, it should be progressively discovered 
+
+through its local geometric structure. Motivated by the manifold hypothesis, we treat the unlabeled dataset as a mixture of low-dimensional submanifolds cor-responding to positive and shifted negative components. Rather than directly estimating risk differences, we iteratively uncover the negative manifold by prop-agating reliable local neighborhood information from positive anchor points. To operationalize this idea, we introduce Spectral PU Neighborhood An-notation (S-PUNA) , a geometry-aware pseudo-labeling framework for covari-ate shift detection as illustrated in Figure 1. S-PUNA initializes from labeled positives and iteratively expands both positive and negative anchor sets using confidence-controlled k-nearest neighbor propagation in feature space. Unlike classical k-NN-PU [63] that propagates only positive labels, S-PUNA symmet-rically constructs both classes, progressively refining the decision boundary. A key challenge in iterative pseudo-labeling is preventing semantic drift. We address this through a novel spectral entropy stopping criterion . By monitoring SPUNA 3
+
+the eigenvalue distribution of the covariance matrix of the discovered negative set, we measure its intrinsic dimensionality and structural complexity. The it-erative expansion stops once the spectral entropy stabilizes, indicating that the negative manifold has been sufficiently captured without invading overlapping regions. Finally, we train a DNN classifier to distill the non-parametric neighborhood structure to maximize latent separation and distinguish positive from shifted components. Our contributions are summarized as follows: 
+
+– We are the first to use PU for detecting changes in covariates and to provide theoretical insights on this new problem. 
+
+– We introduce S-PUNA , a geometry-aware framework that progressively uncovers the shifted distribution through local manifold expansion. 
+
+– We propose a principled spectral entropy stopping criterion that detects early contamination and prevents pseudo-labeling drift under covariate overlap. 
+
+– We provide theoretical insights for why spectral entropy signals help prevent annotation contamination. 
+
+– We build new covariate shift benchmarks and demonstrate state-of-the-art performance, approaching fully supervised methods, while showing strong transferability across diverse shifts.              
+
+> Fig. 1: Overview of S-PUNA. Given a PU dataset D, we use a pre-trained DNN Φ(·)
+> that maps samples to the latent feature space Φ(X).S-PUNA then performs iterative
+> k-NN pseudo-labeling .k-NN expands both pseudo-positive ˜XP,U and pseudo-negative
+> ˜XU,N samples symmetrically. The process is stopped using the spectral-entropy crite-rion. The PU classifier g(·)is trained to separate positives and negatives.
+
+## 2 Related Works 
+
+Covariate Shift Detection. While the problem is often included within broader discussions of general OOD detection [60], isolating and detecting these non-semantic shifts remains an under-explored challenge. Fully supervised strategies like DiscoPatch [8] require the unrealistic assumption that the specific covariate shifts are represented in the training set. Meanwhile, standard OOD algorithms like [3] and spatial anomaly detection methods like PatchCore [50] and Sim-pleNet [41] excel in semantic or localized tasks but prove ineffective for image-level covariate shift detection (see Appendix F for detailed results). 4 F. Gabetni et al. 
+
+Positive-Unlabeled (PU) learning. PU learning enables binary classifi-cation using only labeled positives and an unlabeled mixture [4]. Modern ap-proaches rely on disambiguation-free empirical risk estimators. For instance, nnPU [29] prevents overfitting by enforcing non-negative risk constraints, DCPU [34] handles biased or disjoint positive sets, and DistPU [64] mitigates negative-prediction bias by aligning predictions with the class prior through entropy min-imization. PU formulations have also been applied to open-world OOD detection by treating nominal data as positives and deployment data as an unlabeled mix-ture [6, 47]. Most existing methods assume a semantic shift between the P and N, which simplifies the PU framework. While some works [9, 31, 51] address PU under covariate shift, they focus on classifier generalization between train and test sets rather than using the PU framework for shift detection. 
+
+## 3 Preliminaries and mathematical Insights 
+
+3.1 Distribution Shift Detection  
+
+> Fig. 2: Covariate shifts in ImageNet benchmarks. Comparison of natural im-ages (ImageNet, ImageNet-V2) against synthetic corruptions (ImageNet-C), stylized rendering (ImageNet-R), and generative data (GenImage) for the classes Paddy cat (Near shifts are represented in green while Far shifts are in red).
+
+Notations and preliminaries. Let X be the set of all possible inputs (usually points in Rd, i.e. d-dimensional vectors). Let Y = {1, 2, . . . , K } be the set of possible class labels (there are K different classes). During training we receive a dataset  Dtrain = {(x1, y 1), (x2, y 2), . . . , (xn, y n)} where each pair (xi, y i) is supposed to come from the same joint distribution Ptrain (X, Y ). We train a classifier fθ by minimizing the average training loss: 
+
+ˆθ = arg min 
+
+> θ
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ fθ (xi), y i
+
+ (1) Here ℓ(·, ·) denotes a loss function. Classical learning theory assumes that fu-ture test samples (X, Y ) follow the same distribution:  Ptest (X, Y ) = Ptrain (X, Y ).
+
+In practice this assumption rarely holds, leading to distribution shift . Detect-ing and handling such shifts is essential for reliable machine learning systems. Two main types are commonly distinguished: Semantic shift and Covariate shift .SPUNA 5
+
+Semantic Shift occurs when the label distribution differs between training and test data, i.e.,  Ptest (Y )̸ = Ptrain (Y ). This setting is closely related to Out-of-Distribution (OOD) detection , where test samples are drawn from a distribution 
+
+Ptest defined on the same input space X but involving unseen semantic classes. The OOD literature typically distinguishes two regimes [59]: Far OOD where the new classes are semantically very different from those seen during training, and Near OOD where they remain semantically similar. Near-OOD detection is generally more challenging due to the stronger semantic overlap with the training classes. 
+
+Covariate Shift refers to a change in the input distribution while the condi-tional labeling function remains unchanged:  Ptest (X)̸ = Ptrain (X), Ptest (Y |
+
+X) = Ptrain (Y | X). In this case, the optimal classifier is theoretically unchanged, but empirical risk minimization may become biased since the training data no longer reflect the marginal distribution encountered at test time. As with seman-tic shift, one can distinguish between Near Shift , where Ptest (X) differs only slightly from Ptrain (X), and Far Shift corresponding to larger changes in input statistics. This distinction primarily reflects the difficulty of the shift rather than a strict quantitative measure in X .
+
+3.2 Background and Mathematical Insights 
+
+Classical Binary Classification. Let (X, Y ) ∼ P be a random pair taking values in X × {− 1, +1 }, where P denotes the joint data-generating distribution. We denote by  πp = P(Y = +1) , and  πn = P(Y = −1) = 1 − πp , the class priors, and by  P + = PX|Y =+1  and  P − = PX|Y =−1 , the class-conditional distributions. Given a hypothesis class H of measurable functions f : X → R and a loss function ℓ : R × {− 1, +1 } → [0 , 1] , the population (true) risk of a classifier f is defined as 
+
+R(f ) = E(X,Y )∼P [ℓ(f (X), Y )] . (2) Using the law of total expectation, this can be decomposed as 
+
+R(f ) = πp EX∼P + [ℓ(f (X), +1)] + πn EX∼P − [ℓ(f (X), −1)] . (3) In practice, P is unknown and we observe an i.i.d. training sample such that 
+
+D = {(xi, y i)}ni=1 ∼ P n.
+
+The empirical risk is defined as 
+
+ˆRn(f ) = 1
+
+n
+
+> n
+
+X
+
+> i=1
+
+ℓ(f (xi), y i). (4) Empirical Risk Minimization (ERM) selects  ˆf ∈ arg min f ∈H ˆRn(f ).
+
+Positive–Unlabeled (PU) Classification In PU learning, we do not observe labeled negative examples. Instead, we observe: a labeled positive set XP = {xpi }np 
+
+> i=1
+
+∼6 F. Gabetni et al. 
+
+(P +)np , and an unlabeled set XU = {xuj }nu 
+
+> j=1
+
+∼ (PX )nu , where the marginal distribution satisfies 
+
+PX = πpP + + πnP −. (5) Similarly to [17] a key observation is that the negative component of the risk can be recovered from the mixture structure. Indeed, by linearity of expectation and (5), 
+
+EX∼PX [ℓ(f (X), −1)] = πpEX∼P + [ℓ(f (X), −1)] + πnEX∼P − [ℓ(f (X), −1)] . (6) Rearranging yields: 
+
+πnEX∼P − [ℓ(f (X), −1)] = EX∼PX [ℓ(f (X), −1)] − πpEX∼P + [ℓ(f (X), −1)] . (7) Substituting (7) into (3) gives the unbiased PU risk :
+
+Rpu (f ) = πpEX∼P +
+
+ℓ(f (X), +1) − ℓ(f (X), −1)  + EX∼PX [ℓ(f (X), −1)] . (8) Importantly, Rpu (f ) = R(f ) for all f , hence minimizing Rpu is equivalent to minimizing the true risk. An empirical estimator of (8) is 
+
+ˆRpu (f ) = πp
+
+npnp
+
+X
+
+> i=1
+
+˜ℓ(f (xpi )) + 1
+
+nunuX
+
+> j=1
+
+ℓ(f (xuj ), −1) , where  (9) 
+
+˜ℓ(f (x)) = ℓ(f (x), +1) − ℓ(f (x), −1) . (10) 
+
+Rademacher Generalization Bound Let H be a class of functions taking values in [0 , 1] . We can define its empirical Rademacher complexity: 
+
+Rn(H) = Eσ
+
+"
+
+sup  
+
+> f∈H
+
+1
+
+n
+
+> n
+
+X
+
+> i=1
+
+σif (xi)
+
+#
+
+, where σi are i.i.d. Rademacher variables. 
+
+(11) A standard uniform convergence result (see, e.g., Theorem 3.1 of [45]) states that for any δ > 0, with probability at least 1 − δ,
+
+sup  
+
+> f∈H
+
+|R(f ) − ˆRn(f )| ≤ 2Rn(H) + 
+
+r log(1 /δ )2n . (12) This inequality provides a distribution-dependent control of the generalization gap. Applying (12) separately to the positive and unlabeled samples yields, with probability at least 1 − δ,
+
+Rpu (f ) ≤ ˆRpu (f ) + 2 πpRnp (H) + 2 Rnu (H)+ πp
+
+s
+
+log(1 /δ )2np
+
++
+
+s
+
+log(1 /δ )2nu
+
+. (13) Thus, the excess risk is controlled by the complexity of the hypothesis class and the sample sizes np and nu.SPUNA 7
+
+Bayes Optimal Risk and Total Variation Assume now balanced classes: 
+
+πp = πn = 12 . (14) Define the regression function  η(x) = P(Y = +1 | X = x).
+
+We can define the Bayes classifier, as in [5], by  f ∗(x) = 1{η(x) ≥ 1/2}, which minimizes R(f ) over all measurable classifiers. Its risk is 
+
+R(f ∗) = E[min( η(X), 1 − η(X))] . (15) Using the identity 
+
+min( a, b ) = 12 (a + b − | a − b|), (16) and the fact that 
+
+∥P + − P −∥T V = 12
+
+Z
+
+|p+(x) − p−(x)|dx,  (17) one obtains the classical result from statistical decision theory: 
+
+R(f ∗) = 12
+
+ 1 − ∥ P + − P −∥T V 
+
+ . (18) Equation (18) shows that the intrinsic difficulty of the classification problem is entirely governed by the total variation distance between the class-conditional distributions. If the distributions overlap significantly, ∥P + − P −∥T V is small and the Bayes error is large. If they are well separated, ∥P + −P −∥T V approaches 
+
+1 and the Bayes error approaches 0.
+
+3.3 Implications for Covariate Shift Detection 
+
+Under covariate shift, the marginal distribution of X changes while P (Y | X)
+
+remains fixed. When P + and P − differ substantially, the total variation term in (18) captures this shift directly. Combining (13) with (18), we obtain the high-probability bound 
+
+Rpu ( ˆf ) ≤ 12
+
+ 1 − ∥ P + − P −∥T V 
+
+ + 2 πpRnp (H) + 2 Rnu (H)+πp
+
+s
+
+log(1 /δ )2np
+
++
+
+s
+
+log(1 /δ )2nu
+
+. (19) This inequality highlights two sources of difficulty: Intrinsic difficulty , gov-erned by ∥P + −P −∥T V , which reflects distributional overlap and the estimation error , governed by Rademacher complexity and sample size. In extreme classical shift scenarios used in PU, where P + and P − have nearly disjoint supports, ∥P + − P −∥T V ≈ 1, and the intrinsic Bayes error is small. However, in our case ∥P + − P −∥T V ≈ 0, hence the covariate shift might complicate all the training. 8 F. Gabetni et al. 
+
+## 4 Spectral-PU Neighborhood Annotation (S-PUNA) 
+
+In the covariate shift regime, the class-conditional distributions P + and P −
+
+may exhibit substantial overlap in the ambient space, leading to a small total variation distance ∥P + − P −∥T V . As shown in Section 3.2, the Bayes risk scales as R(f ∗) = 12 (1 − ∥ P + − P −∥T V ), implying that when ∥P + − P −∥T V is small, the intrinsic classification problem is difficult. To mitigate this effect, we propose Spectral–PU Neighborhood Anno-tation (S-PUNA) , a progressive, geometry-aware pseudo-labeling framework. Rather than estimating the negative distribution globally, S-PUNA exploits the 
+
+local manifold structure of the unlabeled data to iteratively uncover regions that are statistically inconsistent with the positive anchor distribution. This results in a gradual expansion of a reliable negative support estimate. The Appendix A gives a deeper theoretical overview of the soundness of our proposed approach. 
+
+4.1 Iterative k-NN-Based Pseudo-Labeling 
+
+Our method is a two-stage process as illustrated in Figure 1: an initialization phase of the k-NN, followed by symmetric manifold expansion. Let us consider that we have two sets of pseudo-annotations, one for positive and one for unlabeled negative data, which we denote as:  ˆX (t0) 
+
+> U,P
+
+= ∅, ˆX (t0) 
+
+> U,N
+
+=
+
+∅ for the first iteration t0. Then for the next iterations t = t0 + 1 , . . . , T , we maintain the current annotated sets: 
+
+X (t) 
+
+> P
+
+= XP ∪ ˆX (t−1)  
+
+> U,P
+
+, X (t) 
+
+> N
+
+= ˆX (t−1)  
+
+> U,N
+
+. (20) 
+
+Baseline and Sets Initialization. All samples features ϕ(x) are extracted from the sixth block of a pre-trained Vision Transformer (ViT) [16]. This specific intermediate representation is chosen for its efficacy in capturing the geometric nuances of covariate shifts (see Appendix D for a comparative analysis of feature layer sensitivity). Our technique starts by constructing a k-nearest neighbor ( k-NN) index on Positive Domain (PD) training features, Xtrain . For each sample 
+
+x in the unlabeled pool XU , we compute an initial distance score sorig (x) as the minimum distance from the sample to its k-nearest neighbors in Xtrain . We then initialize the positive (PD) and negative (covariate) sets for the first iteration t0
+
+by ranking the pool according to these scores: 
+
+ˆX (t0) 
+
+> U,c
+
+=
+
+(
+
+{x ∈ X U | x is among top α lowest sorig (·)}, if c = P
+
+{x ∈ X U | x is among top α highest sorig (·)}, if c = N (21) where α is a set small number of features used to seed the initial pseudo-labeled sets. For subsequent iterations t = t0 + 1 , . . . , T , the current annotated sets are maintained as:  X (t) 
+
+> P
+
+= XP ∪ ˆX (t−1)  
+
+> U,P
+
+, X (t) 
+
+> N
+
+= ˆX (t−1)  
+
+> U,N
+
+and X (t) 
+
+> U
+
+=
+
+X (t−1)  
+
+> U
+
+/( ˆX (t) 
+
+> U,N
+
+∩ ˆX (t) 
+
+> U,P
+
+).SPUNA 9
+
+Neighborhood Search and Scoring. At each iteration t, we compute two separate distance metrics for each candidate sample x ∈ X (t) 
+
+> U
+
+:1. dP (x): the mean distance from the sample features ϕ(x) to its k-nearest neighbors in the positive bank X (t) 
+
+> P
+
+.2. dN (x): the mean distance from the sample features ϕ(x) to its k-nearest neighbors in the negative bank X (t) 
+
+> N
+
+.Using these distances we calculate a score for ranking: 
+
+st(x) = dood (x) − did (x). (22) 
+
+Set Expansion. The set is progressively expanded by ranking the candidates based on st(x). We select the top β samples for each class to be added to the respective sets: 
+
+ˆX (t) 
+
+> U,c
+
+= ˆX (t−1)  
+
+> U,c
+
+∪
+
+(
+
+{x | x has top β highest st(x)}, if c = P
+
+{x | x has top β lowest st(x)}. if c = N (23) 
+
+β is a fixed parameter we set during the whole algorithm that controls the number of samples added to the sets at each iteration. This iterative expansion differs from classical k-NN-based PU approaches, which typically only propagate positive labels. Here, both classes are progres-sively constructed, leading to a symmetric refinement of the decision boundary. 
+
+Geometric Interpretation. Under the cluster assumption, points belonging to the same class lie on a low-dimensional manifold. As iterations proceed, the negative set expands along directions of maximal discrepancy from the positive support. This progressively increases the effective separation between the empirical sup-ports of P + and P −.
+
+4.2 Spectral Entropy Stopping Criterion 
+
+A key challenge in iterative pseudo-labeling is preventing semantic drift. To detect when the discovered negative set has saturated its intrinsic structure, we monitor its spectral complexity. Let Σt denote the empirical covariance matrix of ϕ(x) for x ∈ ˆX (t) 
+
+> U,N
+
+:
+
+Σt = 1
+
+| ˆX (t) 
+
+> U,N
+
+|
+
+X  
+
+> x∈ˆX(t)
+> U,N
+
+(ϕ(x) − μt)( ϕ(x) − μt)⊤, (24) where μt is the mean of the features ϕ(x) for x ∈ ˆX (t) 
+
+> U,N
+
+. Let {λ(t)1 , . . . , λ (t) 
+
+> d
+
+} be its eigenvalues normalized such that P 
+
+> i
+
+λ(t) 
+
+> i
+
+= 1 .We define the spectral entropy :
+
+H(Λt) = −
+
+> d
+
+X
+
+> i=1
+
+λ(t) 
+
+> i
+
+log λ(t) 
+
+> i
+
+. (25) 10 F. Gabetni et al. 
+
+Interpretation. Spectral entropy quantifies the dispersion of variance across prin-cipal directions. Low entropy indicates concentration on a narrow manifold; high entropy reflects a richer, more isotropic structure. As the negative manifold is progressively uncovered, H(Λt) increases. We stop when  H(Λt) < H (Λt−1), indicating that the geometric expansion has stabilized. This prevents the algorithm from invading regions where P + and 
+
+P − overlap, which would artificially decrease ∥P + − P −∥T V .
+
+Theoretical Justification. This stopping criterion prevents semantic drift. As formalized in Lemma 1, this inevitably disperses the mixture’s spectrum and strictly decreases spectral entropy. 
+
+Lemma 1 (Spectral Entropy Decrease). Let ΣN , Σ P ≻ 0 be arbitrary within-class covariance matrices, and let μP and μN be arbitrary means real vectors. Let us assume that ∆μ = μP − μN̸ = 0 . For a contaminated mixture 
+
+X ∼ (1 − ε) N (μN , Σ N ) + ε N (μP , Σ P ), its spectral entropy satisfies S(ε) < S (0) 
+
+for all sufficiently small contamination levels ε > 0.
+
+The full proof is provided in Appendix A. 
+
+4.3 Knowledge Distillation into Deep Networks 
+
+After convergence, we obtain the pseudo-labeled dataset 
+
+Danno = X (t) 
+
+> P
+
+∪ ˆX (t) 
+
+> U,N
+
+. (26) We train a parametric classifier gω on top of embeddings ϕ(x), e.g., a multi-layer perceptron. The training objective is: 
+
+L(ω) = − 1
+
+|D anno |
+
+X
+
+> (x, ˆy)∈D anno
+
+CE  gω (ϕ(x)) , ˆy. (27) 
+
+Why Distillation Helps. The k-NN procedure is a non-parametric estimator with low bias but high variance. Distilling its pseudo-labels into a DNN induces a smoother decision boundary, reducing variance while preserving local geometry. Importantly, the learned DNN is optimized to keep the local geometry that comes from the k-NN, allowing for a good separation between positive and negative. 
+
+## 5 Experimental results 
+
+In this section, we evaluate our proposed method S-PUNA and test its ro-bustness under severe covariate shift across diverse datasets. We benchmark 
+
+S-PUNA against classical positive-unlabeled (PU) risk minimization estima-tors as well as neighborhood-based baseline methods. Complete implementation details and hyperparameters are provided in the Appendix B.3. In Section 5.3, we analyze 21 methods using ResNet and ViT architectures to evaluate how supervised and unsupervised techniques perform in detecting covariate shift. SPUNA 11 
+
+5.1 Datasets and Metrics 
+
+We evaluate our proposed method across three primary image classification benchmarks characterized by significant covariate shifts: ImageNet-1K [13], 
+
+TinyImageNet [13], and EuroSAT [21]. 
+
+ImageNet-1K Benchmarks. Using ImageNet-1K as the Positive Domain (PD) baseline, we test our approach on four shifted datasets. ImageNet-V2 [48] (near shift) replicates the original data collection process while introducing subtle sta-tistical biases. ImageNet-R [23] (far shift) provides adversarial and rendered versions (e.g., paintings, sketches) of ImageNet classes, preserving semantic con-tent while altering the visual domain. ImageNet-C (far shift) [24] applies 15 types of algorithmic perturbations, including noise, blur, and weather effects, across five severity levels. Finally, GenImage (near shift) [67] consists of Ima-geNet classes regenerated via various generative models, introducing synthetic distributional shifts. 
+
+TinyImageNet Benchmarks. For TinyImageNet (PD), we consider two shifted variants: TinyImageNet-C [24] (far shift), which applies corruptions simi-lar to ImageNet-C, and TinyImageNet-V2 (near shift), a filtered version of ImageNet-V2 containing only the 200 overlapping classes. 
+
+EuroSAT Benchmarks. To demonstrate the versatility of our method beyond object-centric domains, we evaluate it on the EuroSAT satellite dataset (PD). We consider two shifted variants: EuroSAT-C (far shift) [46], which simulates synthetic atmospheric and sensor-based degradations, and a new dataset intro-duced in this study, EuroSAT-D (near shift). The latter consists of regenerated versions of EuroSAT images to address synthetic generative shifts. Further de-tails on dataset construction are provided in Appendix B.4. 
+
+Metrics and Evaluation. We report standard covariate shift detection met-rics: Area Under the Receiver Operating Characteristic curve ( AUROC ), Area Under the Precision-Recall curve ( AUPR ), and the False Positive Rate at a 95% True Positive Rate ( FPR95 ). In our analysis, we distinguish between near-shift datasets, which exhibit moderate covariate shifts that are distributionally close to the PD data (and thus more challenging to detect), and far-shift datasets, which represent severe shifts that are more easily identifiable. We provide a comprehensive discussion on this taxonomy in Appendix H. 
+
+5.2 Baselines and Implementation Details 
+
+For evaluation, images are projected into a dense feature space extracted from the sixth block of a ViT pre-trained on in-domain data. We select this specific intermediate layer as it captures structural nuances of covariate shifts while mitigating the task-specific overfitting prevalent in deeper layers (see Appendix D). We benchmark S-PUNA against several state-of-the-art PU learning meth-ods, including Dist-PU [64], DC-PU [34], and saPU [11], all of which are optimized using the same ViT feature embeddings. Additionally, we compare 12 F. Gabetni et al. 
+
+our approach against pseudo-labeling strategies such as LaGAM [42] and a 
+
+naive k-NN baseline [63] that propagates labels from the positive set. For S-PUNA, the iterative expansion process terminates when the absolute difference in spectral entropy between consecutive steps, H(Λt) − H(Λt−1), falls below the threshold of 0.0. An ablation study regarding all of the hyperparam-eters of S-PUNA is provided in Appendix C. Upon convergence, the learned structural information is distilled into a MLP via standard cross-entropy train-ing. Results using a ResNet architecture instead of the ViT is detailed in Ap-pendix G. 
+
+5.3 From supervised to unsupervised Covariate shift detection 
+
+To assess the effectiveness of various detection paradigms, we conduct an ex-tensive benchmark in Appendix F, evaluating 14 OOD detection methods, 5 anomaly detection methods, and 3 diffusion-based techniques across both ResNet and ViT architectures. We further compare these against two supervised ap-proaches: DiscoPatch [8] and DRCT [10].  
+
+> Fig. 3: Overview of the performance of ood detection methods on covariate shifted datasets of imagenet1k
+
+Our results indicate that supervised tech-niques achieve superior performance on 
+
+near-shift scenarios, with an average AUROC of 89.8%. However, on far-shift datasets, these methods are out-performed by the majority of unsuper-vised techniques. Among the unsuper-vised approaches, logit-based methods such as ReAct [53] and ASH [15] yield the weakest results, suggesting that high-level class probabilities often discard the subtle structural cues necessary for ro-bust detection. While feature-based meth-ods like MDS [32], hybrid approaches like 
+
+ViM [56] and diffusion based methods like DiffPath [26] show marginal improvements, these findings highlight that current OOD detection methods struggle on covariate shift when restricted to purely unsupervised internal signals. 
+
+5.4 Results ImageNet. Table 1 summarizes the covariate shift detection performance on ImageNet-1K for both near and far shift scenarios. Classical PU-based baselines exhibit a significant performance gap between the two regimes. For instance, Dist-PU improves from 84 .48% AUROC in near-shift cases to 96 .70% in far-shift cases, confirming that the latter is consid-erably easier to identify. However, its near-shift performance remains insuffi-cient, with a high FPR95 of 35 .05% . Similar trends are observed for saPU and SPUNA 13 
+
+LaGAM , while DC-PU struggles across both regimes, particularly regarding FPR95 ( 85 .80% near, 89 .38% far). In contrast, S-PUNA consistently outperforms all baselines. Under near-shift conditions, our method achieves 97 .89% AUROC—surpassing the strongest baseline ( Dist-PU ) by over 13% —while simultaneously reducing the FPR95 from 35 .05% to 9.69% (a −25 .3% improvement). S-PUNA also achieves the highest AUROC under far-shift ( 98 .51% ). On average, our approach yields 98 .20% 
+
+AUROC (a +7 .61% gain over Dist-PU ) and reduces the average FPR95 to 
+
+8.52% , outperforming the best baseline by nearly 18% . Unlike prior methods, our approach maintains high stability across both shift types, demonstrating su-perior robustness. 
+
+Table 1: Comparison of methods on Imagenet with Near Covariate Shift and Far Covariate Shift (w/ C : with classifier; w/o C : without classifier; C: classifier). We report AUROC, AUPR, and FPR95 (%). Results are shown as mean ± std .
+
+Method Near Shift Far Shift Average 
+
+AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓
+
+k-NN [63] 54.40 ±0.00 90.92 ±0.00 62.63 ±0.00 74.79 ±0.00 60.78 ±0.00 80.84 ±0.00 64.59 ±0.00 75.85 ±0.00 71.73 ±0.00 Dist-PU [64] 84.48 ±0.40 87.33 ±0.30 35.05 ±0.93 96.70 ±0.11 96.51 ±0.14 18.06 ±0.58 90.59 ±0.25 91.92 ±0.22 26.56 ±0.75 saPU [11] 82.93 ±0.27 85.83 ±0.26 69.58 ±1.01 95.09 ±0.46 87.53 ±3.17 26.78 ±2.33 89.01 ±0.37 86.68 ±1.72 48.18 ±1.67 Dc-PU [34] 60.61 ±2.44 65.26 ±1.70 85.80 ±1.03 70.51 ±3.96 41.98 ±4.34 89.38 ±10.83 65.56 ±3.20 53.62 ±3.02 87.59 ±5.93 LaGAM [42] 83.01 ±0.54 86.40 ±0.56 65.30 ±1.96 96.50 ±0.13 94.36 ±1.66 17.46 ±0.71 89.75 ±0.33 90.38 ±1.11 41.38 ±1.33 
+
+S-PUNA w/o C (ours) 95.81 ±0.00 97.66 ±0.00 19.22 ±0.00 95.95 ±0.00 97.93 ±0.00 19.92 ±0.00 95.88 ±0.00 97.79 ±0.00 19.57 ±0.00 
+
+S-PUNA w/ C (ours) 97.89 ±0.13 98.81 ±0.08 9.69 ±0.48 98.51 ±0.08 99.20 ±0.05 7.36 ±0.49 98.20 ±0.10 99.00 ±0.06 8.52 ±0.48 
+
+TinyImageNet. On the TinyImageNet benchmark (Table A.7), most baselines perform exceptionally well under near-shift conditions; for instance, Dist-PU 
+
+achieves 99 .96% AUROC and 0.15% FPR95. S-PUNA surpasses these results, reaching perfect near-shift performance ( 100 .00% AUROC, 0.00% FPR95). Our method also provides the strongest far-shift results ( 99 .64% AUROC, 1.20% 
+
+FPR95), slightly improving upon the best-performing baseline, LaGAM (99 .59% 
+
+AUROC, 1.39% FPR95). On average, S-PUNA consistently improves all met-rics across the board compared to the state-of-the-art. 
+
+Table 2: Comparison of methods on Tiny-ImageNet with Near Covariate Shift 
+
+and Far Covariate Shift (w/ C : with classifier; w/o C : without classifier; C: clas-sifier). We report AUROC, AUPR, and FPR95 (%). Results are shown as mean ± std .                                                                     
+
+> Method Near Shift Far Shift Average
+> AUROC ↑AUPR ↑FPR95 ↓AUROC ↑AUPR ↑FPR95 ↓AUROC ↑AUPR ↑FPR95 ↓
+> k-NN [63] 82.00 ±0.00 50.65 ±0.00 78.39 ±0.00 95.82 ±0.00 28.19 ±0.00 96.96 ±0.00 88.91 ±0.00 39.42 ±0.00 87.68 ±0.00 Dist-PU [64] 99.96 ±0.00 99.98 ±0.00 0.15 ±0.04 99.46 ±0.11 96.14 ±0.62 2.81 ±0.60 99.71 ±0.06 98.06 ±0.31 1.48 ±0.32 saPU [11] 91.73 ±0.01 96.37 ±0.01 19.14 ±0.01 92.07 ±0.17 71.47 ±1.97 33.44 ±0.40 91.90 ±0.09 83.92 ±0.99 26.29 ±0.21 Dc-PU [34] 95.93 ±2.90 97.82 ±1.52 16.43 ±13.11 82.95 ±5.58 35.21 ±14.85 61.76 ±21.21 89.44 ±4.24 66.52 ±8.19 39.09 ±17.16 LaGAM [42] 99.93 ±0.01 99.96 ±0.01 0.22 ±0.01 99.59 ±0.21 95.35 ±3.03 1.39 ±0.78 99.76 ±0.11 97.66 ±1.52 0.81 ±0.39
+> S-PUNA w/o C (ours) 100.00 ±0.00 100.00 ±0.00 0.00 ±0.00 99.54 ±0.00 99.62 ±0.00 1.20 ±0.00 99.77 ±0.00 99.81 ±0.00 0.60 ±0.00 S-PUNA w/ C (ours) 99.90 ±0.10 99.92 ±0.08 0.02 ±0.04 99.64 ±0.11 99.46 ±0.15 1.51 ±0.50 99.77 ±0.11 99.69 ±0.12 0.77 ±0.27
+
+14 F. Gabetni et al. 
+
+EuroSAT. Results on the EuroSAT dataset (Table A.6) reveal a critical vulner-ability in traditional PU methods. While several baselines achieve high AUROC under near-shift conditions ( Dist-PU : 99 .78% ), their performance degrades sub-stantially under far-shift scenarios— Dist-PU , for example, drops to 89 .46% AU-ROC with a significant 49 .97% FPR95. In contrast, S-PUNA achieves perfect separation in the far-shift regime ( 100 .00% AUROC, 0.00% FPR95), marking a +10 .54% AUROC gain and a −49 .97% reduction in FPR95 over the best baseline. Averaged across both regimes, S-PUNA reaches 99 .90% AUROC and 
+
+0.33% FPR95, substantially outperforming LaGAM ’s average metrics ( 92 .79% 
+
+AUROC, 28 .92% FPR95). These results confirm the superior robustness of our geometry-aware approach across varying shift severities. Please refer to Appendix E for transfer experiments and robustness across shifts. 
+
+Table 3: Comparison of methods on EuroSAT with Near and Far Covariate Shift .(w/ C : with classifier; w/o C : without classifier; C: classifier). We report AUROC, AUPR, and FPR95 (%). Results are shown as mean ± std .                                                                      
+
+> Method Near Shift Far Shift Average
+> AUROC ↑AUPR ↑FPR95 ↓AUROC ↑AUPR ↑FPR95 ↓AUROC ↑AUPR ↑FPR95 ↓
+> k-NN [63] 58.86 ±0.00 84.80 ±0.00 13.91 ±0.00 81.03 ±0.00 83.11 ±0.00 58.47 ±0.00 69.95 ±0.00 83.96 ±0.00 36.19 ±0.00 Dist-PU [64] 99.78 ±0.13 99.95 ±0.03 0.72 ±0.46 89.46 ±0.50 96.48 ±0.26 49.97 ±2.81 94.62 ±0.31 98.22 ±0.14 25.35 ±1.64 saPU [11] 96.71 ±0.93 99.30 ±0.21 7.55 ±3.58 86.75 ±0.62 95.81 ±0.15 54.38 ±1.06 91.73 ±0.78 97.56 ±0.18 30.97 ±2.32 Dc-PU [34] 68.96 ±3.53 87.87 ±0.59 90.89 ±6.73 60.22 ±4.34 85.05 ±1.43 94.48 ±3.06 64.59 ±3.93 86.46 ±1.01 92.68 ±4.90 LaGAM [42] 99.33 ±0.56 99.86 ±0.14 3.01 ±3.39 86.24 ±0.90 96.28 ±0.27 54.83 ±3.24 92.79 ±0.73 98.07 ±0.21 28.92 ±3.32
+> S-PUNA w/o C (ours) 84.40 ±0.00 38.02 ±0.00 55.76 ±0.00 100.00 ±0.00 100.00 ±0.00 0.00 ±0.00 92.20 ±0.00 69.01 ±0.00 27.88 ±0.00
+> S-PUNA w/ C (ours) 99.79 ±0.05 96.08 ±0.70 0.65 ±0.36 100.00 ±0.00 100.00 ±0.00 0.00 ±0.00 99.90 ±0.03 98.04 ±0.35 0.33 ±0.18
+
+## 6 Conclusion 
+
+In this work, we investigated the efficacy of various paradigms for covariate shift detection. Our analysis demonstrates that while fully supervised approaches perform reasonably well, traditional unsupervised covariate shift detection meth-ods—relying on internal signals like logits or feature statistics fail significantly in the near shift regime. Because covariate shifts preserve semantic content and in-troduce only subtle distributional changes, these unsupervised signals are unable to reliably distinguish shifted samples from in-distribution data. To bridge this gap, we proposed a weakly supervised alternative based on the Positive–Unlabeled (PU) learning framework. To mitigate the instability of clas-sical PU risk estimators under significant distributional overlap, we introduced 
+
+Spectral PU Neighborhood Annotation (S-PUNA) . This geometry-aware method progressively discovers shifted samples through local neighborhood ex-pansion within the feature manifold. Extensive experiments across multiple benchmarks confirm that S-PUNA 
+
+consistently outperforms existing PU baselines and even surpasses fully super-vised models in several settings. Our findings suggest that strictly supervised signals are not a prerequisite for reliable covariate shift detection; rather, by ef-fectively leveraging the intrinsic geometric structure of feature representations, weakly supervised PU learning can achieve highly robust and state-of-the-art performance. SPUNA 1
+
+# From Local Geometry to Global Pseudo-Labeling for Robust Positive–Unlabeled Learning under Covariate Shift –Supplementary Material– 
+
+## Table of Contents 
+
+A Theoretical Justification of the Spectral Entropy Criterion . . . . . . . . . . 2A.1 Contamination Model for the Annotated Negative Set . . . . . . . . . . 2A.2 Special Case: Isotropic Covariances . . . . . . . . . . . . . . . . . . . . . . . . . . 2A.3 General Case: Arbitrary Covariances . . . . . . . . . . . . . . . . . . . . . . . . . 4A.4 Finite-Sample Concentration . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4B Details on Baseline Implementations . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5B.1 Metrics . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5B.2 Construction of P and U . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6B.3 Hyperparameters . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6B.4 EuroSAT and Variant Datasets . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7B.5 Results across Datasets . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8C Ablation Study . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 10 D Details on ViT layer selection and covariate shift . . . . . . . . . . . . . . . . . . . 12 E Generalization of results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 12 F Unsupervised covariate shift detection . . . . . . . . . . . . . . . . . . . . . . . . . . . . 13 F.1 OOD detection methods for unsupervised covariate shift detection 14 F.2 Anomaly detection methods for unsupervised covariate shift detection . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16 G ResNet Results . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18 H Near and Far Covariate Shift . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 18 2 F. Gabetni et al. 
+
+## A Theoretical Justification of the Spectral Entropy Criterion 
+
+A.1 Contamination Model for the Annotated Negative Set 
+
+To justify the spectral entropy stopping rule, we propose Lemma 1 in the main paper. In this section, we analyze the evolution of the covariance structure of the progressively discovered negative set to prove this Lemma. Assume that at iteration t, the annotated negative set is composed of: 
+
+– true negatives drawn from N (μN , Σ N ) with probability 1 − ε,
+
+– contaminated positives drawn from N (μP , Σ P ) with probability ε,where ε ∈ [0 , 1] denotes the contamination level induced by pseudo-labeling errors. The resulting population distribution is therefore the Gaussian mixture 
+
+X ∼ (1 − ε) N (μN , Σ N ) + ε N (μP , Σ P ) (28) 
+
+Population covariance of the contaminated set. Let ∆μ := μP − μN . The covari-ance of a two-component Gaussian mixture satisfies the classical decomposition: 
+
+Σ(ε) = (1 − ε)ΣN + εΣ P + ε(1 − ε)∆μ∆μ ⊤. (29) The first two terms correspond to the within-class covariance, while the third term is the between-class covariance , which is positive semi-definite and of rank at most 1.Define the normalized eigenvalues of Σ(ε):
+
+ρi(ε) = λi(Σ(ε)) tr( Σ(ε)) ,
+
+> d
+
+X
+
+> i=1
+
+ρi(ε) = 1 . (30) The spectral entropy is defined as 
+
+S(ε) = −
+
+> d
+
+X
+
+> i=1
+
+ρi(ε) log ρi(ε). (31) We now show that S(ε) strictly decreases as soon as ε > 0, which formally justifies entropy-based stopping. 
+
+A.2 Special Case: Isotropic Covariances 
+
+Assume 
+
+ΣN = ΣP = σ2Id. (32) Then 
+
+Σ(ε) = σ2Id + ε(1 − ε)∆μ∆μ ⊤. (33) SPUNA 3
+
+Let 
+
+α(ε) = ε(1 − ε)∥∆μ ∥2, u = ∆μ 
+
+∥∆μ ∥ . (34) Then 
+
+Σ(ε) = σ2Id + α(ε)uu ⊤, (35) which is a rank-1 perturbation of a scaled identity. 
+
+Eigenvalues. By the spectral theorem for rank-1 perturbations, 
+
+λ1(ε) = σ2 + α(ε), λi(ε) = σ2 (i = 2 , . . . , d ). (36) The trace equals 
+
+tr( Σ(ε)) = dσ 2 + α(ε). (37) The normalized eigenvalues are therefore 
+
+ρ1(ε) = σ2 + α(ε)
+
+dσ 2 + α(ε) , ρi(ε) = σ2
+
+dσ 2 + α(ε) . (38) 
+
+Pure case. If ε = 0 , then α(0) = 0 and 
+
+ρi(0) = 1
+
+d ∀i,  (39) which yields 
+
+S(0) = −
+
+> d
+
+X
+
+> i=1
+
+1
+
+d log 1
+
+d = log d,  (40) the maximal entropy over the probability simplex. 
+
+Contaminated case. For any ε ∈ (0 , 1) with ∥∆μ ∥ > 0, we have α(ε) > 0,implying 
+
+ρ1(ε) > 1
+
+d > ρ i(ε) (i ≥ 2) . (41) Hence ρ(ε) is non-uniform and strictly majorizes the uniform vector. Since Shannon entropy is strictly Schur-concave (because −x log x is strictly concave), strict majorization implies 
+
+S(ε) < S (0) . (42) Moreover, S(ε) is continuous in ε, and a first-order Taylor expansion around 
+
+0 shows 
+
+S(ε) = log d − Cε + o(ε), C > 0, (43) so entropy decreases immediately at infinitesimal contamination. 4 F. Gabetni et al. 
+
+Interpretation. Even arbitrarily small contamination injects a directional vari-ance component, concentrating spectral mass on the leading eigenvalue and re-ducing entropy. Thus entropy is maximized at purity and strictly decreases once semantic drift begins. 
+
+A.3 General Case: Arbitrary Covariances 
+
+Let 
+
+A(ε) = (1 − ε)ΣN + εΣ P , (44) 
+
+B(ε) = ε(1 − ε)∆μ∆μ ⊤ ⪰ 0. (45) Then 
+
+Σ(ε) = A(ε) + B(ε). (46) 
+
+Eigenvalue monotonicity. By Weyl’s monotonicity theorem for Hermitian ma-trices, 
+
+λi(Σ(ε)) ≥ λi(A(ε)) ∀i.  (47) Since tr( B(ε)) > 0 for ε ∈ (0 , 1) , the largest eigenvalue satisfies 
+
+λ1(Σ(ε)) > λ 1(A(ε)) . (48) Thus the spectrum of Σ(ε) becomes strictly more dispersed. 
+
+Majorization argument. Let ˜ρ(ε) be the normalized eigenvalues of A(ε) and ρ(ε)
+
+those of Σ(ε). Ky Fan inequalities imply that the partial sums of the top k
+
+eigenvalues strictly increase under addition of B(ε).Therefore ρ(ε) strictly majorizes ˜ρ(ε), and by strict Schur-concavity of Shan-non entropy, 
+
+S(Σ(ε)) < S (A(ε)) . (49) Since A(ε) → ΣN as ε → 0+, we obtain 
+
+S(ε) < S (0) for all sufficiently small ε > 0. (50) 
+
+A.4 Finite-Sample Concentration 
+
+In practice, we observe the empirical covariance ˆΣt. By matrix concentration inequalities (e.g., matrix Bernstein bounds), its eigenvalues converge uniformly to those of Σ(ε):
+
+∥ ˆΣt − Σ(ε)∥ = Op
+
+r dn
+
+!
+
+. (51) SPUNA 5
+
+Hence the empirical spectral entropy ˆSt concentrates around S(ε), ensur-ing that entropy drop is detectable with high probability before contamination becomes large. In both isotropic and general Gaussian settings, the mechanism is identical: the Shannon entropy strictly decreases when the N data are contaminated. Therefore, spectral entropy is maximized when the negative set is pure and strictly decreases as soon as contamination begins. This provides a rigorous geometric justification for using spectral entropy as a principled stopping criterion: it detects the earliest onset of semantic drift through spectral anisotropy in feature space. 
+
+## B Details on Baseline Implementations 
+
+All baselines are evaluated under the same detection protocol for covariate shift across three in-distribution datasets: ImageNet, Tiny-ImageNet, and EuroSAT. For each in-distribution dataset, we first sample a class-balanced positive set 
+
+P from the training split. We then construct an unlabeled set U by combining two sources of data: (i) positive samples taken from the validation split of the in-distribution dataset (ImageNet validation set, Tiny-ImageNet validation set, or EuroSAT validation set), and (ii) samples originating from the considered covariate-shift dataset. The remaining part of the validation split is used as the test set and is never observed during the training procedure. All PU baselines are trained using a Multi-Layer Perceptron (MLP) com-posed of a single hidden layer with 512 neurons. The MLP operates on frozen feature embeddings extracted from a pre-trained backbone network. We consider two types of feature extractors: a Vision Transformer (ViT) and a ResNet-50. In both cases, the backbone networks are pre-trained on the cor-responding in-distribution dataset (ImageNet for ImageNet and Tiny-ImageNet experiments, and EuroSAT for EuroSAT experiments). 
+
+ViT features. For the Vision Transformer, we extract the CLS token represen-tation from block 6 of the transformer encoder. This produces a feature vector of dimension 768, which is used as the input embedding for the MLP classifier. 
+
+ResNet-50 features. For ResNet-50, we extract intermediate convolutional fea-tures from the output of the second residual block group (also called layer2 ). The resulting feature map is then processed using global average pooling to pro-duce a fixed-dimensional embedding of size 512, which is used as input to the MLP. 
+
+B.1 Metrics 
+
+Each method is evaluated using three different random seeds. We report three standard metrics commonly used in distribution shift detection [59]: AUROC, AUPR, and FPR95. 6 F. Gabetni et al.                 
+
+> Table A.4: Number of samples used for Pand Uacross datasets.
+> Dataset PUID UCovariate U
+> ImageNet 1000 7000 7000 14000 Tiny-ImageNet 1000 2000 2000 4000 EuroSAT 1000 1000 1000 2000
+
+Given the test split, we compute the AUROC , which measures the ability of a model to distinguish between positive and negative samples across all possible decision thresholds. We also report the AUPR , which evaluates the trade-off between precision and recall across thresholds. Finally, we compute FPR95 , defined as the false positive rate when the true positive rate reaches 95% . Concretely, the shift detection threshold is set at the (1 − 0.95) quantile of the shift (covariate or semantic) scores, and the false positive rate is then measured on the in-distribution samples. Lower FPR95 values indicate better detection performance. 
+
+B.2 Construction of P and U
+
+For each experiment, both the Positive distribution (In-Distribution ID) and covariate shift datasets are shuffled according to the current random seed. We then sample examples from the ID and covariate shift datasets to construct the unlabeled set U .Across all experiments, U is constructed such that the class prior is equal to 
+
+0.5. More precisely, 
+
+U = UID ∪ UCovariate , π = |UID ||UID | + |UCovariate | = 0 .5.
+
+For each dataset, the number of samples used for P , UID , and UCovariate is summarized in Table A.4. All remaining samples that are not used to construct U are used as test data for computing AUROC, AUPR, and FPR95. For corrupted datasets (ImageNet-C, Tiny-ImageNet-C, and EuroSAT-C), we evaluate each corruption severity separately. For a given severity level, we pool all corruption types associated with that severity. 
+
+B.3 Hyperparameters 
+
+Unless otherwise stated, all PU baselines in the main paper are trained using ViT features extracted from the CLS token of the sixth transformer block of a ViT-B/16 backbone [16]. We use the same MLP for all the baselines and the same embedding, and exactly the same data. SPUNA 7
+
+Dist-PU. We use 30 warm-up epochs followed by 150 PU training epochs for ImageNet, and 15 warm-up and 15 PU epochs for EuroSAT and Tiny-ImageNet. The training batch size is 2048, and the learning rate is 10 −4. The entropy, Mixup, and mixed-entropy coefficients are set to μ = 0 .01 , ν = 2 .0, and γ = 0 .02 ,respectively. The Mixup Beta parameter is α = 6 .0.
+
+DC-PU. We use the logistic loss and train for 30 epochs on ImageNet and 10 epochs on Tiny-ImageNet and EuroSAT. Each epoch consists of 200 iterations with batch sizes BP = BU = 512 . The learning rate is 3×10 −3 with learning rate milestones at 6000 and 9000 iterations and a decay factor 0.1. The exponential moving average parameter is β = 0 .9. The penalty parameter is τ = 10 −2, the rollback margin is γ = 0 .7, and the Lagrange multiplier Θ is randomly initialized with standard deviation 0.01 .
+
+SAPU. Training is performed for 50 epochs with 200 iterations per epoch, using batch sizes BP = BU = 512 and nbag = 4 . We use the logistic loss and the AdamW optimizer with learning rate 3 × 10 −4 and weight decay 10 −4.
+
+LaGAM. For meta-validation, we use 250 in-distribution samples and 250 shifted samples. Training is performed for 80 epochs on ImageNet and 50 epochs on EuroSAT and Tiny-ImageNet. The batch size is 1024, and the meta-batch size is 256. Optimization is performed with AdamW using a learning rate 3 × 10 −4
+
+and weight decay 10 −4. The EMA coefficient for pseudo-label updates is linearly scheduled from 0.95 to 0.8. The meta-update is applied to the layer labeled 
+
+classifier . The auxiliary Mixup loss uses weight 1.0 and Beta parameter α =4.0.
+
+B.4 EuroSAT and Variant Datasets 
+
+The EuroSAT dataset [21] is a widely used benchmark for land use and land cover classification. It is built from open-access Earth observation data collected by the Copernicus Sentinel-2 satellite. The dataset contains approximately 27,000 labeled and geo-referenced image patches, each covering a 64 ×64 pixel area with a spatial resolution of 10 meters per pixel. In our experiments, we use the RGB version of EuroSAT, which consists of the red, green, and blue spectral bands encoded as standard JPEG images. This format makes the dataset compatible with standard deep learning architectures used in computer vision. The dataset contains ten classes: Annual Crop , Forest , Herbaceous Veg-etation , Highway , Industrial Buildings , Pasture , Permanent Crop , Res-idential Buildings , River , and Sea/Lake .
+
+EuroSAT-C We use EuroSAT-C [46] to evaluate robustness under corrupted input conditions. This dataset is derived from the EuroSAT test set by applying a set of synthetic corruptions including algorithmic noise , blur , simulated weather effects , and digital artifacts . Each corruption is applied at multiple severity levels. 8 F. Gabetni et al. 
+
+These perturbations are designed to mimic realistic degradations encountered in satellite imagery, such as atmospheric disturbances or sensor noise. Evaluating models on EuroSAT-C therefore provides a systematic assessment of robustness to domain shifts in remote sensing scenarios. 
+
+EuroSAT-D We also introduce EuroSAT-D , a synthetic dataset generated using a Stable Diffusion model fine-tuned on the EuroSAT RGB training set with Low-Rank Adaptation (LoRA). To ensure semantic consistency and visual quality, generated images are fil-tered using a dual-model validation pipeline. We use a fully supervised ViT-Large model pretrained on ImageNet and fine-tuned on EuroSAT classification. Only generated samples for which both networks predict the target class with confidence greater than 0.7 are retained. For the filtering step, the ViT-Large model is fine-tuned on 224 × 224 inputs for 20 epochs with batch size 64 and a 0.2 validation split. Training uses a cosine annealing learning rate schedule with a 3-epoch warmup, base learning rate 10 −4,and weight decay 10 −4.
+
+B.5 Results across Datasets 
+
+Across all datasets, S-PUNA consistently outperforms existing PU-learning base-lines and approaches the performance of fully supervised classifiers. On the Im-ageNet benchmark (Table A.5), classical PU methods such as Dist-PU, saPU, DC-PU, and LaGAM achieve moderate detection performance, with average AU-ROC values ranging between 65 .56 and 90 .59 . In contrast, S-PUNA significantly improves this performance, reaching an average AUROC of 98 .20 when the clas-sifier is used. This result reduces the gap with the supervised classifier (AUROC 
+
+98 .61 ) to less than 0.5 points, while operating under the weaker PU supervision setting. A similar trend can be observed for AUPR and FPR95, where S-PUNA drastically reduces the false positive rate compared to existing PU methods. A key observation is the strong performance of S-PUNA across different types of distribution shifts. In particular, the method remains robust on both near shifts (e.g., ImageNet-V2 or EuroSAT-D) and far shifts (e.g., ImageNet-C or EuroSAT-C). For example, on GenImage and ImageNet-C, S-PUNA achieves AUROC values above 99 , demonstrating that the proposed approach effectively separates shifted samples even under severe covariate shifts. This stability across shifts contrasts with several PU baselines whose performance varies significantly depending on the dataset. The comparison between the two variants of our method further highlights the benefit of the final classifier distillation step. The variant without classi-fier (S-PUNA w/o C) already provides strong performance, outperforming most PU baselines on several datasets. However, adding the classifier consistently im-proves the results, especially on challenging near-shift scenarios. For instance, on ImageNet-V2, the AUROC increases from 92 .65 to 96 .38 , and the FPR95 drops from 33 .70 to 17 .14 . Similar improvements are observed on EuroSAT-D, SPUNA 9
+
+Table A.5: Main Results: Performance comparison across four ImageNet variants and Overall Average (w/ C : with classifier; w/o C : without classifier; C:classifier). Results are shown as mean ± std .
+
+Method ImageNet-V2 ImageNet-R 
+
+AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓
+
+KNN [63] 51.51 ±0.00 93.55 ±0.00 66.67 ±0.00 62.59 ±0.00 88.49 ±0.00 73.92 ±0.00 Dist-PU [64] 77.60 ±0.55 84.69 ±0.28 25.08 ±0.62 93.59 ±0.21 95.90 ±0.10 35.48 ±1.15 saPU [11] 75.53 ±0.22 83.32 ±0.43 87.43 ±1.63 91.11 ±0.64 93.51 ±0.59 50.83 ±3.94 Dc-PU [34] 56.15 ±3.85 69.24 ±2.32 82.23 ±0.70 63.57 ±0.85 72.23 ±3.86 92.13 ±7.92 LaGAM [42] 75.77 ±1.01 84.43 ±0.74 78.49 ±1.67 93.50 ±0.12 95.95 ±0.15 33.11 ±1.00 Supervised classifier 97.05 ±0.38 98.10 ±0.30 13.60 ±2.06 97.86 ±0.39 98.74 ±0.28 9.99 ±1.86 
+
+S-PUNA w/o C (ours) 92.65 ±0.00 95.45 ±0.00 33.70 ±0.00 93.54 ±0.00 96.28 ±0.00 30.45 ±0.00 S-PUNA w/ C (ours) 96.38 ±0.20 97.69 ±0.15 17.14 ±0.85 97.34 ±0.11 98.49 ±0.08 13.37 ±0.82 
+
+Method GenImage ImageNet-C 
+
+AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓
+
+KNN [63] 57.28 ±0.00 88.28 ±0.00 58.59 ±0.00 86.98 ±0.00 33.07 ±0.00 87.75 ±0.00 Dist-PU [64] 91.36 ±0.24 89.96 ±0.31 45.02 ±1.23 99.81 ±0.00 97.11 ±0.18 0.65 ±0.02 saPU [11] 90.32 ±0.32 88.34 ±0.10 51.74 ±0.39 99.06 ±0.29 81.55 ±5.74 2.73 ±0.72 Dc-PU [34] 65.08 ±1.03 61.28 ±1.08 89.36 ±1.36 77.44 ±7.06 11.73 ±4.82 86.64 ±13.74 LaGAM [42] 90.24 ±0.06 88.36 ±0.38 52.11 ±2.24 99.49 ±0.13 92.77 ±3.17 1.82 ±0.42 Supervised classifier 99.64 ±0.00 99.95 ±0.00 1.31 ±0.01 99.87 ±0.01 99.75 ±0.01 0.47 ±0.08 
+
+S-PUNA w/o C (ours) 98.97 ±0.00 99.86 ±0.00 4.74 ±0.00 98.36 ±0.00 99.57 ±0.00 9.38 ±0.00 S-PUNA w/ C (ours) 99.40 ±0.05 99.92 ±0.01 2.23 ±0.11 99.67 ±0.04 99.91 ±0.01 1.34 ±0.15 
+
+Method Average 
+
+AUROC ↑ AUPR ↑ FPR95 ↓
+
+KNN [63] 64.59 ±0.00 75.85 ±0.00 71.73 ±0.00 Dist-PU [64] 90.59 ±0.25 91.92 ±0.22 26.56 ±0.75 saPU [11] 89.01 ±0.37 86.68 ±1.72 48.18 ±1.67 Dc-PU [34] 65.56 ±3.20 53.62 ±3.02 87.59 ±5.93 LaGAM [42] 89.75 ±0.33 90.38 ±1.11 41.38 ±1.33 Supervised classifier 98.61 ±0.20 99.14 ±0.15 6.34 ±1.00 
+
+S-PUNA w/o C (ours) 95.88 ±0.00 97.79 ±0.00 19.57 ±0.00 S-PUNA w/ C (ours) 98.20 ±0.10 99.00 ±0.06 8.52 ±0.48 
+
+where the classifier significantly boosts AUROC from 84 .40 to 99 .79 . This con-firms that the distillation step helps transform the non-parametric neighborhood structure discovered during the PU phase into a smoother and more robust de-cision boundary. Finally, results on Tiny-ImageNet (Table A.7) and EuroSAT (Table A.6) confirm the strong generalization of S-PUNA across datasets of different sizes and domains. In particular, S-PUNA often matches or surpasses the best PU baselines while remaining very close to the supervised upper bound. These results suggest that exploiting local neighborhood expansion within the PU framework allows the model to progressively uncover the negative distribution and produce reliable shift detection even with limited labeled supervision. 10 F. Gabetni et al. 
+
+Table A.6: Comparison of methods on EuroSAT with EuroSAT-D (Near shift) and EuroSAT-C (Far shift) . ( w/ C : with classifier; w/o C : without classi-fier; C: classifier). We report AUROC, AUPR, and FPR95 (%). Results are shown as 
+
+mean ± std .
+
+Method EuroSAT-D EuroSAT-C Average 
+
+AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓
+
+k-NN [63] 58.86 ±0.00 84.80 ±0.00 13.91 ±0.00 81.03 ±0.00 83.11 ±0.00 58.47 ±0.00 69.95 ±0.00 83.96 ±0.00 36.19 ±0.00 Dist-PU [64] 99.78 ±0.13 99.95 ±0.03 0.72 ±0.46 89.46 ±0.50 96.48 ±0.26 49.97 ±2.81 94.62 ±0.31 98.22 ±0.14 25.35 ±1.64 saPU [11] 96.71 ±0.93 99.30 ±0.21 7.55 ±3.58 86.75 ±0.62 95.81 ±0.15 54.38 ±1.06 91.73 ±0.78 97.56 ±0.18 30.97 ±2.32 Dc-PU [34] 68.96 ±3.53 87.87 ±0.59 90.89 ±6.73 60.22 ±4.34 85.05 ±1.43 94.48 ±3.06 64.59 ±3.93 86.46 ±1.01 92.68 ±4.90 LaGAM [42] 99.33 ±0.56 99.86 ±0.14 3.01 ±3.39 86.24 ±0.90 96.28 ±0.27 54.83 ±3.24 92.79 ±0.73 98.07 ±0.21 28.92 ±3.32 Supervised classifier 99.91 ±0.13 98.44 ±2.01 0.21 ±0.35 100.00 ±0.00 100.00 ±0.00 0.00 ±0.00 99.96 ±0.07 99.22 ±1.01 0.11 ±0.18 S-PUNA w/o C (ours) 84.40 ±0.00 38.02 ±0.00 55.76 ±0.00 100.00 ±0.00 100.00 ±0.00 0.00 ±0.00 92.20 ±0.00 69.01 ±0.00 27.88 ±0.00 
+
+S-PUNA w/ C (ours) 99.79 ±0.05 96.08 ±0.70 0.65 ±0.36 100.00 ±0.00 100.00 ±0.00 0.00 ±0.00 99.90 ±0.03 98.04 ±0.35 0.33 ±0.18 
+
+Table A.7: Comparison of methods on Tiny-ImageNet with TinyImageNet-V2 (Near shift) and TinyImageNet-C (Far shift) (w/ C : with classifier; w/o C :without classifier; C: classifier). We report AUROC, AUPR, and FPR95 (%). Results are shown as mean ± std .
+
+Method TinyImageNet-V2 TinyImageNet-C Average 
+
+AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓
+
+k-NN [63] 82.00 ±0.00 50.65 ±0.00 78.39 ±0.00 95.82 ±0.00 28.19 ±0.00 96.96 ±0.00 88.91 ±0.00 39.42 ±0.00 87.68 ±0.00 Dist-PU [64] 99.96 ±0.00 99.98 ±0.00 0.15 ±0.04 99.46 ±0.11 96.14 ±0.62 2.81 ±0.60 99.71 ±0.06 98.06 ±0.31 1.48 ±0.32 saPU [11] 91.73 ±0.01 96.37 ±0.01 19.14 ±0.01 92.07 ±0.17 71.47 ±1.97 33.44 ±0.40 91.90 ±0.09 83.92 ±0.99 26.29 ±0.21 Dc-PU [34] 95.93 ±2.90 97.82 ±1.52 16.43 ±13.11 82.95 ±5.58 35.21 ±14.85 61.76 ±21.21 89.44 ±4.24 66.52 ±8.19 39.09 ±17.16 LaGAM [42] 99.93 ±0.01 99.96 ±0.01 0.22 ±0.01 99.59 ±0.21 95.35 ±3.03 1.39 ±0.78 99.76 ±0.11 97.66 ±1.52 0.81 ±0.39 Supervised classifier 100.00 ±0.01 100.00 ±0.00 0.00 ±0.00 99.79 ±0.23 99.71 ±0.32 0.77 ±0.98 99.90 ±0.12 99.86 ±0.16 0.39 ±0.49 S-PUNA w/o C (ours) 100.00 ±0.00 100.00 ±0.00 0.00 ±0.00 99.54 ±0.00 99.62 ±0.00 1.20 ±0.00 99.77 ±0.00 99.81 ±0.00 0.60 ±0.00 
+
+S-PUNA w/ C (ours) 99.90 ±0.10 99.92 ±0.08 0.02 ±0.04 99.64 ±0.11 99.46 ±0.15 1.51 ±0.50 99.77 ±0.11 99.69 ±0.12 0.77 ±0.27 
+
+## C Ablation Study 
+
+Table A.8 analyzes the sensitivity of S-PUNA to its main hyperparameters on the ImageNet-R benchmark. Overall, the results indicate that the proposed method is robust to most hyperparameter choices, with only a few parameters having a significant impact on performance. 
+
+Effect of contamination tolerance ϵ. The contamination tolerance parameter ϵ
+
+controls how much label noise is tolerated during the pseudo-labeling process. Interestingly, the results show that this parameter has virtually no influence on the final performance. For ϵ ∈ { 0, 0.05 , 0.1}, the detection metrics remain identical, reaching 97 .34% AUROC, 98 .49% AUPR, and 13 .37% FPR95. This behavior suggests that the contamination score estimated by S-PUNA naturally converges toward small values, making the method insensitive to small variations of ϵ. In practice, this indicates that the algorithm is able to control contamination in the pseudo-labeling process without requiring precise tuning of this parameter. 
+
+Effect of expansion parameter β. The parameter β controls the number of sam-ples that are symmetrically added to the positive and shifted sets during each iteration of the algorithm. Unlike ϵ, this parameter has a noticeable impact on the detection performance. Increasing β progressively improves the results, with SPUNA 11                                            
+
+> Table A.8: Ablation study of key hyperparameters of S-PUNA. When varying one parameter, the others are fixed to their default values. Results are on ImageNet-RHyperparameter Value AUROC ↑AUPR ↑FPR95 ↓
+> ϵ
+> 097.34 98.49 13.37 0.05 97.34 98.49 13.37 0.1 97.34 98.49 13.37
+> β
+> 500 93.78 96.15 31.92 1000 96.47 97.93 18.28 1500 97.34 98.49 13.37
+> k(KNN) 100 97.34 98.49 13.37 300 96.98 98.22 15.50 500 97.14 98.35 14.51
+> α
+> 30 97.34 98.49 13.37 50 97.23 98.42 14.22 100 72.45 78.22 89.42
+
+AUROC increasing from 93 .78% for β = 500 to 97 .34% for β = 1500 , while FPR95 decreases from 31 .92% to 13 .37% . This behavior suggests that larger expansion steps allow the algorithm to more effectively explore the local neigh-borhood structure of the feature space and progressively uncover the shifted distribution. However, the improvement saturates beyond β = 1500 , indicating that excessively large expansions do not bring additional benefits. 
+
+Effect of neighborhood size k. The neighborhood size k determines the number of nearest neighbors used to estimate local structure during the manifold expansion stage. The results show that S-PUNA remains highly stable across a wide range of values. For k ∈ { 100 , 300 , 500 }, AUROC remains close to 97% and FPR95 varies only slightly between 13 .37% and 15 .50% . This stability suggests that the proposed geometric expansion strategy is robust to moderate variations in the local neighborhood size, which simplifies the practical use of the method. 
+
+Effect of initialization size α. The parameter α defines the number of samples used to initialize the positive and shifted sets before the iterative expansion process begins. The results indicate that S-PUNA is stable for moderate initial-ization sizes ( α = 30 or 50 ). However, performance degrades significantly when 
+
+α becomes too large. In particular, setting α = 100 leads to a substantial drop in performance, with AUROC decreasing to 72 .45% and FPR95 increasing to 
+
+89 .42% . This degradation can be explained by the fact that overly large initial sets introduce noisy samples early in the process, which propagates errors during the neighborhood expansion phase. Therefore, smaller initialization sizes provide a cleaner starting point and lead to more reliable expansion dynamics. 12 F. Gabetni et al. 
+
+## D Details on ViT layer selection and covariate shift 
+
+To determine which representation layer of the Vision Transformer (ViT-B/16) provides the most suitable features for covariate shift detection, we evaluate the CLS token extracted from each transformer block. The analysis relies on three complementary clustering metrics: the Silhouette score (higher is better), the Davies–Bouldin index (lower is better), and the Calinski–Harabasz index (higher is better). For each experiment, we randomly sample 10,000 images from the ImageNet validation set and 10,000 images from either a covariate shift dataset (ImageNet-C, ImageNet-R, ImageNet-V2, GenImage) or a semantic shift dataset (OOD). We then compute clustering scores by comparing the feature representations of these two groups across all transformer blocks. For clarity, we group the transformer layers into three regions: early blocks 
+
+(before block 4), middle blocks (between blocks 4 and 7), and late blocks (af-ter block 7). Figure A.4 shows that the best separation between distributions consistently occurs in the middle layers of the transformer. Early layers mainly capture low-level visual features such as textures, colors, or simple edges. As a result, they are not well suited for detecting distribution shifts that occur at a higher semantic level, since many datasets share similar low-level statistics. On the other hand, the last layers of the transformer become highly specialized for the classification task. These representations strongly fo-cus on semantic class information learned during training and may ignore subtle variations in the input distribution. Consequently, they are less effective for de-tecting covariate shifts that modify the input statistics without changing the semantic labels. The middle layers provide a better compromise: they capture intermediate-level structures that still preserve information about the input dis-tribution while remaining sufficiently discriminative. Hence, across the three clustering metrics, the middle blocks (approximately layers 3–7) consistently ob-tain the most favorable scores. Based on this observation, we select block 6 for all experiments, as it provides a strong trade-off between distribution separability and representation stability. We performed similar experiments on ResNet-50 to select the correct representation. Another important observation is that semantic shift datasets exhibit stronger separation from ImageNet than covariate shift datasets across most layers. This behavior is expected because semantic shifts introduce larger distribution changes, typically corresponding to different object categories. In contrast, covariate shifts preserve the class semantics while modifying only the input statistics, which makes them more difficult to detect in the feature space. 
+
+## E Generalization of results 
+
+We evaluate how well a detector trained on one type of distribution shift gener-alizes to other shifts. Table A.9 reports AUROC and FPR95 when training on a single shifted dataset and testing on different ones. SPUNA 13        
+
+> Fig. A.4: Layer-wise evaluation of ViT-B/16 representations for distribu-tion shift detection. We assess each transformer block using three clustering quality metrics: the Silhouette score (higher values indicate better separation between clus-ters), the Davies–Bouldin index (lower values indicate better cluster separation and compactness), and the Calinski–Harabasz index (higher values correspond to better defined and more separated clusters).
+
+Training on ImageNetV2 shows strong transfer to synthetic shifts, achiev-ing 91.04 AUROC on GenImage with a very low 0.36 FPR95. However, per-formance drops on corruption-based shifts such as ImageNet-C (70.01 AUROC, 69.29 FPR95). Similarly, training on ImageNet-R generalizes reasonably well to GenImage (87.33 AUROC), but remains weaker on ImageNet-C (68.16 AUROC). Detectors trained on ImageNet-C exhibit poor cross-shift generalization overall, with AUROC dropping to 56.80 on GenImage and 62.79 on ImageNetV2, suggesting that corruption-based shifts do not transfer well to other types of distribution shift. Finally, training on GenImage transfers well to other distribution shifts, achieving 89.69 AUROC on ImageNetV2 and 81.72 AUROC on ImageNet-R, while performance remains moderate on ImageNet-C (72.57 AUROC). Overall, GenImage achieves the strongest cross-shift generalization, with the highest average AUROC of 81.33, followed by ImageNetV2 (80.69) and ImageNet-R (78.22). In contrast, detectors trained on ImageNet-C perform substantially worse, with an average AUROC of only 63.59 and the highest average FPR95 of 82.66. 
+
+## F Unsupervised covariate shift detection 
+
+To better understand how difficult it is to detect covariate shift in large-scale vision models, we evaluate several existing unsupervised shift detection ap-proaches . The objective of this section is to study whether covariate shift can be reliably detected in a fully unsupervised setting, that is, without having access to labeled shifted data. To design our evaluation protocol, we rely on the literature on generalized out-of-distribution (OOD) detection [44, 60]. This line of work studies how 14 F. Gabetni et al. 
+
+Table A.9: Cross-dataset generalization of S-PUNA. Rows indicate the dataset used for PU learning, while columns indicate the dataset used for testing. We report AUROC ↑ and FPR95 ↓.                                                      
+
+> Tested on Trained on ImageNet-V2 ImageNet-R GenImage ImageNet-C Average AUROC ↑FPR95 ↓AUROC ↑FPR95 ↓AUROC ↑FPR95 ↓AUROC ↑FPR95 ↓AUROC ↑FPR95 ↓
+> ImageNetV2 ––81.03 77.80 91.04 0.36 70.01 69.29 80.69 49.15 ImageNet-R 79.17 69.46 ––87.33 40.33 68.16 67.04 78.22 58.94 ImageNet-C 62.79 85.43 71.18 81.50 56.80 81.05 ––63.59 82.66 GenImage 89.69 47.64 81.72 77.70 ––72.57 64.75 81.33 63.36
+
+models behave when the test distribution differs from the training distribution and proposes a taxonomy of distribution shifts depending on where the change occurs in the joint distribution P (X, Y ).In practice, two main types of shifts are commonly considered. Semantic shift corresponds to situations where new classes or new semantic concepts appear at test time. In contrast, covariate shift refers to a change in the input distribution while the underlying labeling rule remains the same. In other words, the marginal distribution of inputs changes but the relationship between inputs and labels stays constant. In this section, we focus on unsupervised approaches that do not require any labeled shifted data. These approaches can be divided into two main families: 
+
+– OOD detection methods , which compute a score from a trained classifier in order to determine whether a sample deviates from the training distribu-tion. 
+
+– Anomaly detection methods , which attempt to model the distribution of normal data and identify samples that deviate from it. 
+
+F.1 OOD detection methods for unsupervised covariate shift detection 
+
+Fig. A.5: Overview of the performance of ood detection methods on covariate shifted datasets of imagenet1k 
+
+OOD detection methods aim to identify samples that do not fol-low the training distribution by computing a detection score from the outputs or the internal repre-sentations of a trained classifier. Typical approaches rely on confi-dence scores, energy-based scores, feature-space distances, or activa-tion manipulation techniques. These methods can be divided into two categories. Methods by design modify the training pro-cedure of the classifier, for example, by introducing additional losses, confi-dence regularization, or auxiliary datasets containing outliers. Although these SPUNA 15 
+
+approaches can improve OOD detection performance, they require retraining the model and often rely on additional data. In contrast, post-hoc methods operate on a pretrained model without mod-ifying its training procedure. They compute an OOD score directly from the model outputs or intermediate features and can therefore be applied in a fully unsupervised way at test time. Because they are simple to use and do not require retraining the model, post-hoc methods are widely used in practice. In our experiments, we focus on unsupervised post-hoc OOD detec-tion methods . Most of the evaluated techniques are implemented using the 
+
+OpenOOD benchmark framework [59], which provides standardized implementa-tions of many state-of-the-art OOD scoring methods. In addition, we also evalu-ate several recent diffusion-based approaches that compute detection scores using generative models, as well as one supervised baseline for reference. Table A.10 presents the results obtained on four datasets using ViT-B/16 features. Several observations can be made from these results. First, unsuper-vised post-hoc methods perform poorly on near covariate shifts . For datasets such as ImageNet-V2 and GenImage, which are relatively close to the ImageNet training distribution, most methods obtain AUROC values between 
+
+54 and 59 . This performance is close to random detection and indicates that these methods struggle to identify small changes in the input distribution. Second, performance improves when the shift becomes larger. For example, on ImageNet-R, which introduces stronger visual changes through artistic rendi-tions of objects, several feature-based methods achieve significantly higher scores. Methods such as ViM , MDS , and KNN reach AUROC values between 85 and 
+
+87 , suggesting that distance-based representations in feature space can capture stronger distribution changes. Third, the results on ImageNet-C show that corruption-based shifts are mod-erately detectable. Most methods obtain AUROC values around 74 –76 , which is better than near shifts but still far from perfect detection. This suggests that low-level perturbations such as noise, blur, or compression alter the input statistics enough to be partially detected but remain difficult to separate completely. The results on GenImage highlight another limitation of these approaches. Despite the synthetic nature of this dataset, the AUROC values remain close to 55 –60 for most methods, showing that generative images can remain close to natural images in feature space and therefore remain difficult to detect. Overall, these results suggest that unsupervised post-hoc OOD detec-tion methods are not well suited for detecting small covariate shifts .They tend to succeed only when the distribution change is sufficiently large. Finally, the supervised baseline DisCoPatch achieves much higher perfor-mance on several datasets, for example, reaching AUROC values above 90 on ImageNet-V2 and GenImage. This result highlights the gap between supervised and unsupervised detection methods. 16 F. Gabetni et al. 
+
+Table A.10: Comparison of OOD detection methods on four shifted datasets using ViT-B/16 features. Methods are grouped by category: unsupervised post-hoc approaches, supervised methods, and diffusion/generative-based approaches. We report AUROC ↑, AUPR ↑, and FPR95 ↓.                                                                                                                                                                                                                            
+
+> Method ImageNet-V2 ImageNet-R ImageNet-C GenImage
+> AUROC AUPR FPR95 AUROC AUPR FPR95 AUROC AUPR FPR95 AUROC AUPR FPR95
+> Unsupervised Methods
+> React [53] 56.73 22.70 93.43 81.08 76.09 74.90 75.83 76.30 69.39 55.92 15.81 93.50 ASH [15] 54.30 21.62 94.44 72.53 70.71 92.33 50.07 55.47 96.43 50.39 12.34 95.08 MLS [22] 56.01 22.58 94.18 74.83 71.70 92.03 74.89 76.48 75.07 56.20 16.30 93.17 MSP [25] 57.51 23.05 93.16 66.95 72.24 99.86 74.73 75.47 70.71 59.15 17.29 92.22 TempScale [20] 57.38 23.08 93.32 77.43 72.12 87.49 75.23 76.09 71.11 58.79 17.23 92.39 Scale [57] 54.3 21.62 94.44 72.53 70.71 92.33 72.15 74.93 78.11 51.37 13.98 93.73 VRA [58] 57.29 22.95 93.47 84.52 79.03 61.65 74.84 75.22 69.60 56.68 16.18 93.30 EBO [38] 54.30 21.62 94.44 72.53 70.71 92.33 73.74 86.43 87.67 53.19 14.88 93.46 GODIN [27] 53.62 19.98 94.50 63.76 53.53 92.84 68.83 81.28 86.96 56.19 14.20 92.14 RMDS [49] 56.85 20.87 93.04 73.10 56.15 61.99 75.79 75.82 66.42 60.54 18.34 90.92 MDS [32] 58.55 23.94 93.44 85.95 78.65 58.09 75.11 86.08 72.97 59.41 17.99 91.34 ViM [56] 57.87 23.37 93.30 87.06 81.45 56.81 76.34 87.44 77.96 56.01 17.16 94.78 GEN [39] 58.00 23.55 92.43 82.74 77.48 72.74 79.65 88.96 71.25 57.70 17.04 91.94 KNN [54] 58.32 23.68 93.24 85.95 80.54 58.63 75.01 86.11 72.50 59.50 18.13 91.50
+> Supervised Method
+> DisCoPatch [8] 90.60 73.20 47.20 71.98 64.96 88.32 77.70 71.12 45.92 92.90 69.73 33.23
+> Diffusion / Generative Methods
+> DiffPath_6D [26] 62.40 62.50 70.67 70.27 75.67 69.83 75.72 19.17 59.65 52.60 89.66 91.52 Lift Map Det – SIMCLR [40] 62.09 62.65 71.19 72.00 49.02 98.97 73.74 46.61 74.69 50.28 88.21 94.80 DDPM-OOD [19] 62.97 12.30 71.30 63.00 31.53 99.86 53.21 73.31 93.89 51.25 10.77 92.85
+
+F.2 Anomaly detection methods for unsupervised covariate shift detection 
+
+Anomaly detection methods are another family of techniques that can poten-tially detect covariate shift. As discussed in the generalized OOD detection liter-ature [44, 60], anomaly detection typically assumes a setting where only normal data are available during training, and the objective is to detect samples that deviate from this notion of normality at test time. Since covariate shift corre-sponds to a change in the input distribution, anomaly detection techniques are natural candidates for identifying such changes. In our evaluation we consider a broad set of anomaly detection methods. 
+
+Classical one-class and density-based methods such as OneClassSVM [52], LOF [7], ABOD [30], ECOD [36], and COPOD [35] estimate normality from the geometric or statistical structure of the feature space. Tree-based methods such as IsolationForest [37] detect anomalies using recursive partitioning and path-length statistics. Deep-feature statistical models such as DFM [1] and PaDiM [12] first extract deep features and then model their distribution in order to iden-tify deviations. Memory-based and flow-based deep anomaly detectors such as PatchCore [50], FastFlow [61], and CFA [33] rely on nearest-neighbor match-ing, likelihood estimation, or feature transformation in order to capture more complex shifts. Finally, SimpleNet [41] learns a lightweight discriminator that separates normal features from noise-augmented features and uses the resulting score as an anomaly signal. SPUNA 17 
+
+Table A.11: Comparison of anomaly detection methods on four shifted datasets using ViT-B/16 features. Methods are grouped by family. We report AUROC, AUPR, and FPR95 (%).                                                                                                                                                                
+
+> Method ImageNet-V2 ImageNet-R ImageNet-C GenImage
+> AUROC ↑AUPR ↑FPR95 ↓AUROC ↑AUPR ↑FPR95 ↓AUROC ↑AUPR ↑FPR95 ↓AUROC ↑AUPR ↑FPR95 ↓
+> Classical one-class / density-based methods
+> OneClassSVM [52] 50.31 37.88 95.23 53.92 36.05 97.96 73.29 67.58 61.33 57.46 12.68 90.17 LOF [7] 50.61 38.41 94.31 55.47 44.70 94.99 84.29 83.47 42.48 61.59 19.40 84.13 ABOD [30] 50.84 38.03 94.36 52.19 39.70 95.61 70.21 68.61 77.95 55.26 13.40 92.35 ECOD [36] 52.98 35.75 95.75 52.23 39.21 95.02 59.94 46.20 93.67 60.14 10.19 90.59 COPOD [35] 54.04 35.10 95.97 57.32 41.93 91.14 74.21 36.95 98.89 59.15 10.20 87.45
+> Tree-based methods
+> IsolationForest [37] 55.20 35.35 97.39 50.72 42.73 98.37 74.93 71.64 55.36 61.28 13.07 90.22
+> Deep-feature statistical models
+> DFM [1] 52.36 36.21 96.26 60.70 52.60 94.07 84.60 81.92 38.56 59.89 15.55 86.77 Padim [12] 50.28 38.54 95.16 61.54 52.54 93.79 85.57 81.53 33.73 62.36 16.23 80.94
+> Memory-based / flow-based deep anomaly detectors
+> Patchcore [50] 50.03 37.69 94.06 53.49 41.01 95.59 74.31 74.87 76.39 56.57 15.45 91.57 FastFlow [61] 51.81 36.55 95.96 50.43 39.46 95.76 74.07 72.03 66.04 55.32 10.79 94.88 CFA [33] 55.06 34.77 97.03 63.73 55.03 91.63 83.58 81.07 41.03 59.06 15.56 87.81
+> Others
+> SimpleNet [41] 53.17 15.37 95.91 58.19 33.11 98.18 59.89 45.72 95.96 59.61 44.08 98.35
+
+Table A.11 presents the performance of these methods. In all methods, we use a ViT-B/16 as encoder for the feature extraction. Overall, the results show that classical anomaly detection methods also struggle to detect near covari-ate shifts. On ImageNet-V2, most methods obtain AUROC values close to 50 ,which corresponds to random performance. This indicates that small changes in the input distribution are extremely difficult to detect using standard anomaly detection techniques. Performance improves slightly for stronger shifts. For example, on ImageNet-C and ImageNet-R several methods achieve AUROC values above 80 . In partic-ular, PaDiM , DFM , and CFA perform relatively well on these datasets, reaching AUROC values around 84 –86 on ImageNet-C. This suggests that modeling the distribution of deep features can help capture larger changes in the input statis-tics. However, performance remains inconsistent across datasets. For example, many methods perform reasonably well on ImageNet-C but fail on GenImage, where AUROC values remain around 55 –62 . This again highlights the difficulty of detecting subtle shifts when the feature distributions remain close. In summary, both OOD detection methods and anomaly detection methods show limited ability to detect covariate shift in a fully unsupervised setting. Their performance improves only when the shift becomes large, while near shifts remain extremely difficult to identify. 18 F. Gabetni et al. 
+
+## G ResNet Results 
+
+Table A.12 reports the performance of S-PUNA using ResNet50 features across four ImageNet shifted datasets. We compare our approach with the weakly su-pervised positive-unlabeled (PU) learning baselines, and for reference, we also report a fully supervised classifier, which represents an upper bound since it relies on labeled supervision unavailable to PU methods. Across all datasets, S-PUNA substantially outperforms existing PU ap-proaches. On ImageNet-V2, the best PU baseline ( Dc-PU ) reaches 55 .72% AU-ROC, whereas S-PUNA achieves 84 .64% AUROC together with a large reduc-tion of FPR95 to 64 .26% . This corresponds to an improvement of +28 .92 over the strongest PU baseline. On ImageNet-R the strongest PU baseline ( LaGAM )obtains 80 .92% AUROC while S-PUNA improves performance to 88 .76% AU-ROC and reduces FPR95 from 82 .03% to 56 .08% corresponding to a gain of 
+
++25 .95 . On GenImage S-PUNA also provides significant gains. While LaGAM 
+
+reaches 80 .12% AUROC, S-PUNA increases performance to 93 .72% AUROC and lowers FPR95 to 31 .08% , yielding a large improvement of +13 .60 on AUROC and +42 .48 on FPR95. Finally, on ImageNet-C, S-PUNA nearly matches the supervised upper bound. It achieves 99 .34% AUROC with 2.59% FPR95, out-performing all PU baselines and approaching the supervised classifier ( 99 .36% 
+
+AUROC). Overall, S-PUNA consistently delivers the strongest performance among PU methods. Averaged across datasets, it reaches 91 .62% AUROC compared to 77 .48% for the best competing PU baseline ( LaGAM ), corresponding to an improvement of +14 .14 while also reducing the average FPR95 from 67 .87% 
+
+to 38 .50% . Although the supervised classifier remains an upper bound ( 93 .55% 
+
+AUROC), S-PUNA significantly narrows the gap while relying only on weak supervision. 
+
+## H Near and Far Covariate Shift 
+
+In real-world deployments, test data often deviates from the training distribu-tion; we refer to this mismatch broadly as distribution shift . Following the gener-alized OOD viewpoint, shifts can be described by where the change is manifested under the joint distribution P (X, Y ), namely the input space X versus the la-bel space Y [60]. In our setting, Covariate Shift primarily alters the input marginal P (X) while keeping the label space fixed, whereas Semantic Shift is associated with changes in label semantics or effective class composition, which typically induces changes in P (X) [60]. 
+
+Near vs. Far Covariate Shift. To further characterize the difficulty of detecting covariate shifts, we distinguish between near and far covariate shifts according to the distance between the input distributions PID (X) and PShift (X). Let d(·, ·)
+
+denote a distance between distributions We define the magnitude of the covariate shift as 
+
+∆X = d(PID (X), P Shift (X)) .SPUNA 19 
+
+Table A.12: Main Results: ResNet50 Performance comparison across four ImageNet variants and Overall Average (w/ C : with classifier; w/o C : without classifier; C: classifier). Results are shown as mean ± std .
+
+Method ImageNet-V2 ImageNet-R 
+
+AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓
+
+KNN [63] 50.28 ±0.00 65.75 ±0.00 94.43 ±0.00 69.88 ±0.00 77.43 ±0.00 88.63 ±0.00 Dist-PU [64] 50.65 ±0.11 65.63 ±0.06 94.69 ±0.11 74.54 ±0.15 80.36 ±0.16 86.46 ±0.47 saPU [11] 54.30 ±0.83 68.75 ±0.71 92.32 ±0.58 68.82 ±0.59 73.16 ±0.07 95.06 ±0.50 Dc-PU [34] 55.72 ±4.60 68.86 ±3.65 93.32 ±2.59 70.99 ±1.59 78.02 ±1.61 88.22 ±2.51 LaGAM [42] 53.80 ±10.21 71.43 ±1.19 91.89 ±1.10 80.92 ±1.63 84.35 ±1.75 82.03 ±3.88 Supervised classifier 88.10 ±0.32 92.07 ±0.26 51.56 ±1.69 91.17 ±0.20 94.09 ±0.16 43.71 ±0.79 
+
+S-PUNA w/o C (ours) 70.22 ±0.00 80.54 ±0.00 80.64 ±0.00 86.21 ±0.00 90.87 ±0.00 59.57 ±0.00 S-PUNA w/ C (ours) 84.64 ±0.27 89.21 ±0.26 64.26 ±1.02 88.76 ±0.20 91.90 ±0.21 56.08 ±0.80 
+
+Method GenImage ImageNet-C 
+
+AUROC ↑ AUPR ↑ FPR95 ↓ AUROC ↑ AUPR ↑ FPR95 ↓
+
+KNN [63] 67.33 ±0.00 66.65 ±0.00 82.82 ±0.00 78.11 ±0.00 77.55 ±0.00 52.29 ±0.00 Dist-PU [64] 61.55 ±0.56 55.99 ±0.57 95.15 ±0.41 93.29 ±0.50 88.63 ±0.98 30.31 ±2.54 saPU [11] 67.01 ±2.38 57.56 ±1.65 96.53 ±0.15 93.48 ±0.67 84.86 ±2.34 38.11 ±6.89 Dc-PU [34] 60.61 ±7.57 57.77 ±5.90 92.88 ±6.20 75.74 ±4.80 58.96 ±6.71 72.30 ±7.61 LaGAM [42] 80.12 ±0.81 77.45 ±1.20 73.56 ±2.23 95.07 ±0.67 89.85 ±1.88 24.01 ±3.96 Supervised classifier 95.57 ±0.34 99.18 ±0.07 21.13 ±1.97 99.36 ±0.05 98.86 ±0.10 2.48 ±0.36 
+
+S-PUNA w/o C (ours) 83.18 ±0.00 97.13 ±0.00 49.30 ±0.00 97.18 ±0.00 99.56 ±0.00 8.64 ±0.00 S-PUNA w/ C (ours) 93.72 ±0.18 98.86 ±0.03 31.08 ±1.16 99.34 ±0.05 99.89 ±0.01 2.59 ±0.17 
+
+Method Average 
+
+AUROC ↑ AUPR ↑ FPR95 ↓
+
+KNN [63] 66.40 ±0.00 71.85 ±0.00 79.54 ±0.00 Dist-PU [64] 70.01 ±0.33 72.65 ±0.44 76.65 ±0.88 saPU [11] 70.90 ±1.12 71.08 ±1.19 80.51 ±2.03 Dc-PU [34] 65.76 ±4.64 65.90 ±4.47 86.68 ±4.73 LaGAM [42] 77.48 ±3.33 80.77 ±1.51 67.87 ±2.79 Supervised classifier 93.55 ±0.23 96.05 ±0.15 29.72 ±1.20 
+
+S-PUNA w/o C (ours) 84.20 ±0.00 92.03 ±0.00 49.54 ±0.00 S-PUNA w/ C (ours) 91.62 ±0.18 94.97 ±0.13 38.50 ±0.79 
+
+A Near Covariate Shift corresponds to situations where ∆X is small, meaning that the shifted samples remain close to the training distribution in feature space. These cases typically arise from mild domain perturbations such as small changes in acquisition conditions or dataset re-sampling. In contrast, a Far Covariate Shift occurs when ∆X becomes large, indi-cating that the shifted distribution lies further away from the training mani-fold. Such shifts often arise from strong corruptions, domain changes, or stylistic transformations that significantly alter the input statistics while preserving the semantic labels. 
+
+Empirical analysis of covariate shift magnitude. To quantify these effects, Ta-ble A.13 reports feature-space distances between ImageNet validation samples and several shifted datasets using embeddings extracted from a ViT backbone. 20 F. Gabetni et al. 
+
+Distances are computed using both cosine distance and mean L2 distance at two representation levels: an intermediate layer ( block6 ) and the final layer ( last ). Several observations can be drawn from these results. First, ImageNet-V2 
+
+consistently exhibits the smallest distances to the ImageNet validation set, with cosine distance 0.0041 and L2 distance 0.0793 at block6. This indicates that ImageNet-V2 remains extremely close to the original distribution and therefore constitutes a typical near covariate shift . Similarly, GenImage also remains relatively close to the ImageNet distribution, with moderate distances at block6 (cosine distance 0.0144 ), suggesting another form of near-to-moderate shift. In contrast, ImageNet-R produces significantly larger feature-space devia-tions, with cosine distance increasing to 0.0366 at block6 and reaching 0.3440 at the final layer. This indicates that stylized renditions of ImageNet classes create a much stronger distributional deviation, making ImageNet-R representative of a far covariate shift .The strongest shifts are observed for ImageNet-C , where the distance from the training distribution increases with the corruption severity level. For in-stance, at block6 the cosine distance increases from 0.0710 at severity 1 to 0.0735 
+
+at severity 5, while the L2 distance rises from 0.3309 to 0.3329 . At the final repre-sentation layer, this effect becomes even more pronounced, with cosine distance reaching 0.3829 at severity 5. These results indicate that ImageNet-C constitutes a progressively stronger far covariate shift as the corruption severity increases. Overall, this analysis allows us to categorize the considered datasets accord-ing to the magnitude of the covariate shift: 
+
+– Near covariate shifts: ImageNet-V2 and GenImage. 
+
+– Far covariate shifts: ImageNet-R and ImageNet-C (all severity levels). This distinction is important because near shifts are typically more difficult to detect: since the shifted samples remain close to the training manifold, classical distributional detectors often fail to identify them reliably. In contrast, far shifts generate stronger deviations in feature space and are therefore easier to detect. Our experiments demonstrate that S-PUNA remains effective in both regimes, including the particularly challenging near-shift scenario. SPUNA 21      
+
+> Table A.13: Feature-space proximity between ImageNet(val) and shifted test distributions under different representation layers . Cosine distance and L2
+> mean are computed on ViT mean of the embeddings extracted at block6 (intermediate) and last (terminal) layers.
+
+Source Target Detail Layer Cosine dist L2 mean ImageNet(val) ImageNet-V2 – block6 0.0041 0.0793 ImageNet(val) GenImage – block6 0.0144 0.1476 ImageNet(val) ImageNet-R – block6 0.0366 0.2375 ImageNet(val) ImageNet-C severity=1 block6 0.0710 0.3309 ImageNet(val) ImageNet-C severity=2 block6 0.0651 0.3155 ImageNet(val) ImageNet-C severity=3 block6 0.0670 0.3192 ImageNet(val) ImageNet-C severity=4 block6 0.0694 0.3241 ImageNet(val) ImageNet-C severity=5 block6 0.0735 0.3329 ImageNet(val) ImageNet-V2 – last 0.0151 0.0389 ImageNet(val) GenImage – last 0.0744 0.0875 ImageNet(val) ImageNet-R – last 0.3440 0.2449 ImageNet(val) ImageNet-C severity=1 last 0.2153 0.1560 ImageNet(val) ImageNet-C severity=2 last 0.2286 0.1602 ImageNet(val) ImageNet-C severity=3 last 0.2553 0.1699 ImageNet(val) ImageNet-C severity=4 last 0.2999 0.1869 ImageNet(val) ImageNet-C severity=5 last 0.3829 0.2165 22 F. Gabetni et al. 
+
+## References 
+
+1. Ahuja, N.A., Ndiour, I., Kalyanpur, T., Tickoo, O.: Probabilistic modeling of deep features for out-of-distribution and adversarial detection. arXiv preprint arXiv:1909.11786 (2019) 16, 17 2. Ajith, A., Gopakumar, G.: Domain adaptation: A survey. In: Computer Vision and Machine Intelligence: Proceedings of CVMI 2022, pp. 591–602. Springer (2023) 1 3. Ammar, M.B., Belkhir, N., Popescu, S., Manzanera, A., Franchi, G.: Neco: Neu-ral collapse based out-of-distribution detection. arXiv preprint arXiv:2310.06823 (2023) 3 4. Bekker, J., Davis, J.: Learning from positive and unlabeled data: a survey. Machine Learning 109 (4), 719–760 (2020) 2, 4 5. Bishop, C.M., Nasrabadi, N.M.: Pattern recognition and machine learning, vol. 4. Springer (2006) 7 6. Blanchard, G., Lee, G., Scott, C.: Semi-supervised novelty detection. The Journal of Machine Learning Research 11 , 2973–3009 (2010) 4 7. Breunig, M.M., Kriegel, H.P., Ng, R.T., Sander, J.: Lof: identifying density-based local outliers. In: Proceedings of the 2000 ACM SIGMOD international conference on Management of data. pp. 93–104 (2000) 16, 17 8. Caetano, F., Viviers, C., Zavala-Mondragón, L.A., de With, P.H., van der Sommen, F.: Discopatch: Taming adversarially-driven batch statistics for improved out-of-distribution detection. In: Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) (2025) 2, 3, 12, 16 9. Chan, A., Alaa, A., Qian, Z., Van Der Schaar, M.: Unlabelled data improves bayesian uncertainty calibration under covariate shift. In: International conference on machine learning. pp. 1392–1402. PMLR (2020) 4 10. Chen, B., Zeng, J., Yang, J., Yang, R.: Drct: Diffusion reconstruction contrastive training towards universal detection of diffusion generated images. In: Forty-first International Conference on Machine Learning (2024) 12 11. Dai, Y., Hou, Z., Li, C., Xu, Y., Wang, E., Li, X.: A closer look to positive-unlabeled learning from fine-grained perspectives: An empirical study. In: Advances in Neu-ral Information Processing Systems (NeurIPS) (2025), https://openreview.net/ forum?id=gioV0q55AJ , neurIPS 2025 (poster) 11, 13, 14, 9, 10, 19 12. Defard, T., Setkov, A., Loesch, A., Audigier, R.: Padim: a patch distribution model-ing framework for anomaly detection and localization. In: International conference on pattern recognition. pp. 475–489. Springer (2021) 16, 17 13. Deng, J., Dong, W., Socher, R., Li, L.J., Li, K., Fei-Fei, L.: Imagenet: A large-scale hierarchical image database. In: 2009 IEEE conference on computer vision and pattern recognition. pp. 248–255. Ieee (2009) 11 14. Dixon, M.F., Halperin, I., Bilokon, P., et al.: Machine learning in finance, vol. 1170. Springer (2020) 2 15. Djurisic, A., Bozanic, N., Ashok, A., Liu, R.: Extremely simple activation shaping for out-of-distribution detection. In: The Eleventh International Conference on Learning Representations (2022) 12, 16 16. Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., Uszkoreit, J., Houlsby, N.: An image is worth 16x16 words: Transformers for image recognition at scale. In: International Conference on Learning Representations (2021) 8, 6 17. Du Plessis, M.C., Niu, G., Sugiyama, M.: Analysis of learning from positive and unlabeled data. Advances in neural information processing systems 27 (2014) 6 SPUNA 23 18. Finlayson, S.G., Subbaswamy, A., Singh, K., Bowers, J., Kupke, A., Zittrain, J., Kohane, I.S., Saria, S.: The clinician and dataset shift in artificial intelligence. New England Journal of Medicine 385 (3), 283–286 (2021) 2 19. Graham, M.S., Pinaya, W.H., Tudosiu, P.D., Nachev, P., Ourselin, S., Cardoso, J.: Denoising diffusion models for out-of-distribution detection. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 2948–2957 (2023) 16 20. Guo, C., Pleiss, G., Sun, Y., Weinberger, K.Q.: On calibration of modern neural networks. In: International conference on machine learning. pp. 1321–1330. PMLR (2017) 16 21. Helber, P., Bischke, B., Dengel, A., Borth, D.: Eurosat: A novel dataset and deep learning benchmark for land use and land cover classification. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing 12 (7), 2217– 2226 (2019) 11, 7 22. Hendrycks, D., Basart, S., Mazeika, M., Zou, A., Kwon, J., Mostajabi, M., Stein-hardt, J., Song, D.: Scaling out-of-distribution detection for real-world settings. In: International Conference on Machine Learning. pp. 8759–8773. PMLR (2022) 16 23. Hendrycks, D., Basart, S., Mu, N., Kadavath, S., Wang, F., Dorundo, E., Desai, R., Zhu, T., Parajuli, S., Guo, M., et al.: The many faces of robustness: A critical analysis of out-of-distribution generalization. In: Proceedings of the IEEE/CVF international conference on computer vision. pp. 8340–8349 (2021) 11 24. Hendrycks, D., Dietterich, T.: Benchmarking neural network robustness to common corruptions and perturbations. arXiv preprint arXiv:1903.12261 (2019) 1, 11 25. Hendrycks, D., Gimpel, K.: A baseline for detecting misclassified and out-of-distribution examples in neural networks. In: International Conference on Learning Representations (2017), https://openreview.net/forum?id=Hkg4TI9xl 16 26. Heng, A., Thiery, A.H., Soh, H.: Out-of-distribution detection with a single uncon-ditional diffusion model. Advances in Neural Information Processing Systems 37 ,43952–43974 (2024) 12, 16 27. Hsu, Y.C., Shen, Y., Jin, H., Kira, Z.: Generalized odin: Detecting out-of-distribution image without learning from out-of-distribution data. In: Proceed-ings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 10951–10960 (2020) 16 28. Katz-Samuels, J., Nakhleh, J.B., Nowak, R., Li, Y.: Training ood detectors in their natural habitats. In: International Conference on Machine Learning. pp. 10848– 10865. PMLR (2022) 2 29. Kiryo, R., Niu, G., du Plessis, M.C., Sugiyama, M.: Positive-unlabeled learning with non-negative risk estimator. In: Advances in Neural Information Processing Systems (NeurIPS) (2017) 4 30. Kriegel, H.P., Zimek, A.: Angle-based outlier detection in high-dimensional data. In: Proceedings of the 14th ACM SIGKDD international conference on Knowledge discovery and data mining. pp. 444–452 (2008) 16, 17 31. Kumagai, A., Iwata, T., Takahashi, H., Nishiyama, T., Adachi, K., Fujiwara, Y.: Positive-unlabeled auc maximization under covariate shift. In: Forty-second Inter-national Conference on Machine Learning (2025) 4 32. Lee, K., Lee, K., Lee, H., Shin, J.: A simple unified framework for detecting out-of-distribution samples and adversarial attacks. Advances in neural information processing systems 31 (2018) 12, 16 33. Lee, S., Lee, S., Song, B.C.: Cfa: Coupled-hypersphere-based feature adaptation for target-oriented anomaly localization. IEEE Access 10 , 78446–78454 (2022) 16, 17 24 F. Gabetni et al. 34. Li, X., Dai, Y., Wang, B., Li, C., Qu, J., Guan, R.: Balancing positive and nega-tive classification error rates in positive-unlabeled learning. In: Advances in Neu-ral Information Processing Systems (NeurIPS) (2025), https://openreview.net/ forum?id=DTq0CLhN4A , neurIPS 2025 (poster) 4, 11, 13, 14, 9, 10, 19 35. Li, Z., Zhao, Y., Botta, N., Ionescu, C., Hu, X.: Copod: copula-based outlier detec-tion. In: 2020 IEEE international conference on data mining (ICDM). pp. 1118– 1123. IEEE (2020) 16, 17 36. Li, Z., Zhao, Y., Hu, X., Botta, N., Ionescu, C., Chen, G.H.: Ecod: Unsupervised outlier detection using empirical cumulative distribution functions. IEEE Transac-tions on Knowledge and Data Engineering 35 (12), 12181–12193 (2022) 16, 17 37. Liu, F.T., Ting, K.M., Zhou, Z.H.: Isolation forest. In: 2008 Eighth IEEE Interna-tional Conference on Data Mining. pp. 413–422. IEEE (2008) 16, 17 38. Liu, W., Wang, X., Owens, J., Li, Y.: Energy-based out-of-distribution detection. Advances in neural information processing systems 33 , 21464–21475 (2020) 16 39. Liu, X., Lochman, Y., Zach, C.: Gen: Pushing the limits of softmax-based out-of-distribution detection. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 23946–23955 (2023) 16 40. Liu, Z., Zhou, J.P., Wang, Y., Weinberger, K.Q.: Unsupervised out-of-distribution detection with diffusion inpainting. In: International Conference on Machine Learn-ing. pp. 22528–22538. PMLR (2023) 16 41. Liu, Z., Zhou, Y., Xu, Y., Wang, Z.: Simplenet: A simple network for image anomaly detection and localization. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 20402–20411 (2023) 3, 16, 17 42. Long, L., Wang, H., Jiang, Z., Feng, L., Yao, C., Chen, G., Zhao, J.: Positive-unlabeled learning by latent group-aware meta disambiguation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2024) 12, 13, 14, 9, 10, 19 43. Lu, J., Liu, A., Dong, F., Gu, F., Gama, J., Zhang, G.: Learning under concept drift: A review. IEEE Transactions on Knowledge and Data Engineering 31 , 2346– 2363 (2019), https://api.semanticscholar.org/CorpusID:69449458 244. Miyai, A., Yang, J., Zhang, J., Ming, Y., Lin, Y., Yu, Q., Irie, G., Joty, S., Li, Y., Li, H.H., Liu, Z., Yamasaki, T., Aizawa, K.: Generalized out-of-distribution detection and beyond in vision language model era: A survey. Transactions on Machine Learning Research (2025), https://openreview.net/forum?id=FO3IA4lUEY 13, 16 45. Mohri, M., Rostamizadeh, A., Talwalkar, A.: Foundations of Machine Learning. MIT Press, Cambridge, MA, 2nd edn. (2018), https://mlcontroversial.com/ foundations-of-machine-learning-2nd-edition/ 646. Oehri, S., Ebert, N., Abdullah, A., Stricker, D., Wasenmüller, O.: Genformer– generated images are all you need to improve robustness of transformers on small datasets. In: International Conference on Pattern Recognition. pp. 176–192. Springer (2024) 11, 7 47. Pang, G., Shen, C., Van Den Hengel, A.: Deep anomaly detection with deviation networks. In: Proceedings of the 25th ACM SIGKDD international conference on knowledge discovery & data mining. pp. 353–362 (2019) 4 48. Recht, B., Roelofs, R., Schmidt, L., Shankar, V.: Do imagenet classifiers generalize to imagenet? In: International conference on machine learning. pp. 5389–5400. PMLR (2019) 11 49. Ren, J., Fort, S., Liu, J., Roy, A.G., Padhy, S., Lakshminarayanan, B.: A sim-ple fix to mahalanobis distance for improving near-ood detection. arXiv preprint arXiv:2106.09022 (2021) 16 SPUNA 25 50. Roth, K., Pemula, L., Zepeda, J., Schölkopf, B., Brox, T., Gehler, P.: Towards total recall in industrial anomaly detection. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 14318–14328 (2022) 3, 16, 17 51. Sakai, T., Shimizu, N.: Covariate shift adaptation on learning from positive and unlabeled data. In: Proceedings of the AAAI conference on artificial intelligence. vol. 33, pp. 4838–4845 (2019) 4 52. Schölkopf, B., Platt, J.C., Shawe-Taylor, J., Smola, A.J., Williamson, R.C.: Esti-mating the support of a high-dimensional distribution. Neural computation 13 (7), 1443–1471 (2001) 16, 17 53. Sun, Y., Guo, C., Li, Y.: React: Out-of-distribution detection with rectified activa-tions. Advances in neural information processing systems 34 , 144–157 (2021) 12, 16 54. Sun, Y., Ming, Y., Zhu, X., Li, Y.: Out-of-distribution detection with deep near-est neighbors. In: International conference on machine learning. pp. 20827–20840. PMLR (2022) 16 55. Takahashi, H., Iwata, T., Kumagai, A., Yamanaka, Y.: Deep positive-unlabeled anomaly detection for contaminated unlabeled data. arXiv preprint arXiv:2405.18929 (2024) 2 56. Wang, H., Li, Z., Feng, L., Zhang, W.: Vim: Out-of-distribution with virtual-logit matching. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition. pp. 4921–4930 (2022) 12, 16 57. Xu, K., Chen, R., Franchi, G., Yao, A.: Scaling for training time and post-hoc out-of-distribution detection enhancement. In: The Twelfth International Confer-ence on Learning Representations (2024), https://openreview.net/forum?id= RDSTjtnqCg 16 58. Xu, M., Lian, Z., Liu, B., Tao, J.: Vra: Variational rectified activation for out-of-distribution detection. Advances in Neural Information Processing Systems 36 ,28941–28959 (2023) 16 59. Yang, J., Wang, P., Zou, D., Zhou, Z., Ding, K., Peng, W., Wang, H., Chen, G., Li, B., Sun, Y., et al.: Openood: Benchmarking generalized out-of-distribution detection. Advances in Neural Information Processing Systems 35 , 32598–32611 (2022) 5, 15 60. Yang, J., Zhou, K., Li, Y., Liu, Z.: Generalized out-of-distribution detection: A survey. International Journal of Computer Vision 132 (12), 5635–5662 (2024) 1, 3, 13, 16, 18 61. Yu, J., Zheng, Y., Wang, X., Li, W., Wu, Y., Zhao, R., Wu, L.: Fastflow: Unsuper-vised anomaly detection and localization via 2d normalizing flows. arXiv preprint arXiv:2111.07677 (2021) 16, 17 62. Yu, P., Xia, Z., Fei, J., Lu, Y.: A survey on deepfake video detection. Iet Biometrics 
+
+10 (6), 607–624 (2021) 2 63. Zhang, B., Zuo, W.: Reliable negative extracting based on knn for learning from positive and unlabeled examples. J. Comput. 4(1), 94–101 (2009) 2, 12, 13, 14, 9, 10, 19 64. Zhao, Y., et al.: Dist-pu: Positive-unlabeled learning from a label distribution per-spective. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) (2022) 4, 11, 13, 14, 9, 10, 19 65. Zhou, K., Liu, Z., Qiao, Y., Xiang, T., Loy, C.C.: Domain generalization: A survey. IEEE transactions on pattern analysis and machine intelligence 45 (4), 4396–4415 (2022) 1 26 F. Gabetni et al. 66. Zhu, M., Chen, H., Huang, M., Li, W., Hu, H., Hu, J., Wang, Y.: Gendet: Towards good generalizations for ai-generated image detection. arXiv preprint arXiv:2312.08880 (2023) 2 67. Zhu, M., Chen, H., Yan, Q., Huang, X., Lin, G., Li, W., Tu, Z., Hu, H., Hu, J., Wang, Y.: Genimage: A million-scale benchmark for detecting ai-generated image. Advances in neural information processing systems 36 , 77771–77782 (2023) 11

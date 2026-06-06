@@ -1,0 +1,315 @@
+Title: GMBFormer: An NDVI-Guided Global Memory Bank Transformer for Urban Green-Space Extraction from Ultra-High-Resolution Imagery
+
+URL Source: https://arxiv.org/pdf/2606.06363v1
+
+Published Time: Fri, 05 Jun 2026 01:35:19 GMT
+
+Number of Pages: 34
+
+Markdown Content:
+# GMBFormer: An NDVI-Guided Global Memory Bank Transformer for Urban Green-Space Extraction from Ultra-High-Resolution Imagery 
+
+Hao Lei a, Xi Cheng a,1, ∗, Chenlu Shu a, Zhiheng Chen a, Zhengjie Duan a,Haoyu Wang b, Zhanfeng Shen b
+
+> a
+
+College of Geophysics, Chengdu University of Technology, Chengdu 610059, China 
+
+> b
+
+National Engineering Research Center for Geomatics, Aerospace Information Research Institute, Chinese Academy of Sciences, and University of Chinese Academy of Sciences, Beijing 100101, China 
+
+Abstract 
+
+Urban green-space extraction from ultra-high-resolution (UHR) imagery is commonly performed patch by patch, which limits semantic reuse among spatially separated but visually similar vegetation patterns. Directly inject-ing the Normalized Difference Vegetation Index (NDVI) into red–green–blue (RGB) backbones can also blur the roles of visual appearance learning and physical vegetation confidence. We propose GMBFormer, a SegFormer-based framework that replaces adjacency-driven feature propagation with selective, similarity-driven prototype retrieval. Only RGB channels enter the backbone and decoder, while NDVI is decoupled as a physics-informed gate that admits high-confidence vegetation descriptors into a compact global memory bank through momentum updates. During training and inference, the current patch queries stored prototypes through memory-mediated cross-attention, 
+
+> ∗
+
+Corresponding author. 
+
+Email address: chengxi13@cdut.edu.cn (Xi Cheng) 
+
+> 1
+
+ORCID: 0000-0002-0587-8651. 
+
+> arXiv:2606.06363v1 [cs.CV] 4 Jun 2026
+
+and the retrieved response is integrated with bounded overhead. Experiments use a self-constructed Chengdu UHR dataset with 7,700 labeled 512 × 512 
+
+patches and two reduced-label settings derived from the public International Society for Photogrammetry and Remote Sensing (ISPRS) Potsdam dataset. Under the same training and evaluation protocol, GMBFormer obtains mean intersection over union (mIoU)/mean Dice (mDice) scores of 89.25%/94.31%, 92.17%/95.92%, and 83.72%/90.86%, respectively, improving the controlled SegFormer-B4 baseline in each setting. Ablation studies indicate that decou-pled NDVI admission, memory retrieval, capacity, and momentum jointly shape the final performance. 
+
+Keywords: urban green space extraction, ultra-high-resolution remote sensing, global memory bank, NDVI-guided memory admission, cross-patch prototype retrieval, semantic segmentation 
+
+1. Introduction 
+
+Urban green spaces support ecological assessment, planning, and pub-lic health by regulating temperature and stormwater and sustaining biodi-versity [1–3]. Ultra-high-resolution (UHR) remote sensing imagery enables fine-grained mapping of these spaces, but its spatial detail also exposes seg-mentation models to fragmented vegetation boundaries, shadows, artificial green-like surfaces, and strong intra-class variability [4]. Deep segmentation models, from convolutional neural networks (CNNs) [5–7] to Transformers and recent state space models [8–12], have improved remote sensing interpretation. SegFormer [13], in particular, offers a strong balance between hierarchical representation and efficiency. Yet UHR map-2ping is still commonly trained and inferred on cropped patches: once a patch is processed, its feature evidence is discarded, and similar green-space pat-terns elsewhere can only be recalled implicitly through shared weights. This is limiting because urban greenery may appear as courtyards, roadside strips, compact tree crowns, or large parks across disconnected crops. Enlarging the receptive field within one crop cannot recover vegetation evidence that is ab-sent from that crop but semantically repeated elsewhere. This patch-wise formulation creates three difficulties. First, spatial con-tinuity is broken across crops, and sliding-window propagation may trans-fer misleading context because adjacency does not imply semantic similarity. Second, urban vegetation varies in illumination, canopy structure, phenology, and scale, while shadows and green-like impervious surfaces often cause con-fusion [3]. Third, the Normalized Difference Vegetation Index (NDVI) pro-vides physical vegetation evidence, but direct concatenation, multimodal fu-sion, or feature-level interaction with red–green–blue (RGB) imagery [3, 14– 16] can entangle RGB appearance learning with vegetation-confidence esti-mation. To address these issues, we propose GMBFormer (Global Memory Bank-enhanced Transformer), which externalizes part of the learned vegetation knowledge into a compact, queryable memory. During memory writing, NDVI is detached from backbone optimization and used only as a physics-informed admission gate for high-confidence green-space prototypes. During memory reading, current RGB-derived features query the stored prototypes through cross-attention, so enhancement is driven by semantic similarity rather than patch adjacency. The memory has fixed capacity and is frozen 3at inference time, keeping retrieval explicit and bounded. The main contributions of this work are summarized as follows: 1. We introduce an NDVI-guided global memory bank for cross-patch se-mantic reuse, using NDVI only for quality-controlled memory admission while keeping RGB representation learning and decoding intact. 2. We design a memory-mediated cross-attention module that lets each patch retrieve vegetation prototypes by semantic similarity, improv-ing non-contiguous green-space recognition without explicit inter-patch communication. 3. We validate GMBFormer on a self-constructed Chengdu UHR dataset and two reduced-label ISPRS Potsdam settings; ablations analyze ad-mission gating, retrieval, memory capacity, and EMA momentum. 
+
+2. Related Work 
+
+2.1. Urban Green Space Extraction from Remote Sensing Imagery 
+
+Urban green space extraction supports ecological assessment and sus-tainable planning [1, 2]. Traditional methods relied on pixel-level classifi-cation, object-based image analysis, and handcrafted spectral indices, with NDVI serving as a long-standing vegetation discriminator [17–20]. Deep models have improved accuracy, but UHR urban scenes remain difficult be-cause vegetation varies across species, illumination, and canopy structure, while shadows and dark impervious surfaces can mimic green-space appear-ance [3, 4]. These characteristics make the task more specific than generic encoder–decoder segmentation. 42.2. Transformer, State Space Model, and Efficient Segmentation 
+
+Transformer-based architectures such as Vision Transformer (ViT), Swin Transformer, and SegFormer have strengthened dense prediction through long-range modeling and hierarchical representation [8, 9, 13], and remote-sensing variants such as UNetFormer and DC-Swin confirm their value for high-resolution land-cover mapping [21, 22]. State space model (SSM)-based models, including Mamba, VMamba, and RSMamba, further improve se-quence modeling efficiency [10–12], while auxiliary geometric priors have also been explored for aerial segmentation [23]. However, UHR imagery is still commonly processed as cropped patches because of memory constraints [24]. Architectures such as GLNet, FCtL, ISDNet, and WiCoNet introduce global branches, contextual retrieval, shallow-detail distillation, or neighbor-window attention [25–28]. These strategies improve local or adjacent-patch consis-tency, but their context is usually tied to the current image, a downsampled scene representation, or nearby windows rather than a persistent memory queried by non-contiguous patches. 
+
+2.3. Vegetation Index Utilization in Remote Sensing Segmentation 
+
+NDVI provides a physically grounded cue for separating vegetation from spectrally similar non-vegetated surfaces [3, 19, 20]. Existing deep models usually inject vegetation indices through channel concatenation [14, 15], mul-timodal fusion [16, 29], or feature-level interaction [3]. These strategies can improve complementarity, but they often treat NDVI as another learnable feature rather than separating RGB appearance encoding from vegetation-confidence estimation. Related red–green–blue-depth (RGB-D) segmenta-tion work also shows that modalities with different physical meanings require 5careful interaction rather than naive mixing [16]. In our setting, such entan-glement may weaken pretrained RGB priors and obscure NDVI as a physical confidence signal. 
+
+2.4. Prototype and Memory-Based Segmentation Methods 
+
+Prototype and memory methods offer reusable representations beyond standard feed-forward extraction. PANet, ASGNet, ProtoSeg, and Atten-tional Prototype Inference (API) use prototypes to improve class-level dis-crimination or few-shot segmentation [30–33], but their prototypes are typ-ically image-local or task-local. Video object segmentation methods such as STM, STCN, and XMem store historical frame features for attention-based retrieval [34–36], and static segmentation methods also use learnable or retrieval-augmented memory for feature enhancement and domain gener-alization [37, 38]. Yet these methods do not address how a remote-sensing model should decide which RGB–NDVI patches are reliable enough to enter a persistent memory. This admission problem is critical in urban green-space extraction because ambiguous shadows, mixed pixels, or artificial surfaces can pollute memory if all features are stored solely by learned similarity. In summary, three gaps remain: UHR segmentation lacks a globally shared semantic memory for non-contiguous cross-patch retrieval; RGB– NDVI fusion often entangles appearance and physical-index roles; and ex-isting memory methods rarely use domain priors to control memory quality. GMBFormer addresses these gaps by coupling NDVI-guided admission with similarity-based prototype retrieval. 63. Methodology 
+
+3.1. Overall Framework 
+
+Fig. 1 shows the architecture of GMBFormer. The four-channel RGB– NDVI input is decomposed into an RGB stream and an NDVI stream: RGB channels are processed by the MiT-B4 backbone, whereas NDVI is detached from gradient optimization and used only to decide which training patches can write into the Global Memory Bank (GMB). Thus, NDVI controls mem-ory quality without becoming a learnable image feature in the backbone or decoder. The GMB writes high-confidence vegetation prototypes by expo-nential moving average (EMA) during training, and reads stored prototypes through cross-attention during both training and inference. The retrieved response is fused into Stage–3 features through a learnable gate, with S = 64 
+
+prototype slots by default. 7Figure 1: Overall architecture of GMBFormer. Only RGB is fed into the MiT-B4 backbone and decoder, while NDVI in the alpha channel gates training-time memory updates. The memory bank stores S = 64 Stage–3 vegetation prototypes, retrieves them through cross-attention, and fuses the response before SegFormer-style decoding. 
+
+For an input I = [ IRGB ; N] ∈ R4×H×W , only IRGB is forwarded to the backbone: 
+
+{F(1) , F(2) , F(3) , F(4) } = MiT-B4 (IRGB ), (1) where C1=64 , C2=128 , C3=320 , and C4=512 . The NDVI channel is used only for the memory-admission decision in Eq. (3); it is not concatenated with RGB features, passed to the decoder, or optimized through the segmentation loss. The GMB enhances F(3) ∈ RC3×H/ 16 ×W/ 16 , which balances spatial detail and semantic abstraction for prototype matching, and the enhanced feature 
+
+˜F(3) replaces F(3) in the SegFormer decoder. 83.2. NDVI-Guided Memory Write 
+
+The global memory bank M ∈ RS×C3 maintains S ℓ 2-normalized pro-totype vectors of dimension C3 for cosine matching. It is initialized with normalized random Gaussian vectors and updated only through the momen-tum mechanism below, without gradient-based optimization. Not every patch should contribute to the memory. Patches dominated by non-vegetated land cover can contaminate green-space prototypes, so the mean NDVI value of each training patch i is used as an admission gate: 
+
+¯ni = 1
+
+HnWn
+
+X
+
+> u,v
+
+Ni(u, v ). (2) where Hn and Wn denote the spatial dimensions of the NDVI gate map. Thus, NDVI affects whether an RGB-derived prototype is written to memory, but it does not provide spatial features for pixel-level prediction. A patch is admitted to update the memory bank only if its mean NDVI exceeds a predefined threshold τnorm :admit (i) = ⊮[¯ ni > τ norm ]. (3) For each admitted patch, Stage–3 features are pooled by global average pooling (GAP) and normalized: 
+
+fi = GAP (F(3)  
+
+> i
+
+) ∈ RC3 , ˆfi = fi
+
+∥fi∥2
+
+. (4) The most similar slot is selected by cosine similarity, 
+
+j∗ = arg max  
+
+> j∈{ 1,...,S }
+
+M⊤ 
+
+> j
+
+ˆfi. (5) and updated by EMA with momentum α:
+
+Mj∗ ← α Mj∗ + (1 − α) ˆfi
+
+∥α Mj∗ + (1 − α) ˆfi∥2
+
+. (6) 9Updates are performed without gradient computation, and the final normal-ization keeps prototypes on the unit hypersphere. 
+
+3.3. Memory Read and Gated Fusion 
+
+Let H3 = H/ 16 and W3 = W/ 16 . Queries are projected from F(3) ,whereas keys and values are projected from the memory bank: 
+
+Q = WQ∗F(3) ∈ RC3×H3×W3 , K = WK M⊤ ∈ RC3×S , V = WV M⊤ ∈ RC3×S .
+
+(7) For each head h and spatial position p, memory attention and retrieval are computed as 
+
+a(h) 
+
+> p,m
+
+=exp 
+
+
+
+Q(h) 
+
+> p
+
+· K(h)⊤ 
+
+> m
+
+/√dh
+
+PSm′=1 exp 
+
+
+
+Q(h) 
+
+> p
+
+· K(h)⊤ 
+
+> m′
+
+/√dh
+
+, R(h) 
+
+> p
+
+=
+
+> S
+
+X
+
+> m=1
+
+a(h) 
+
+> p,m
+
+V(h) 
+
+> m
+
+. (8) The head outputs are concatenated and reshaped to R ∈ RC3×H3×W3 . Ascalar gate g initialized to −3 modulates the memory response: 
+
+˜F(3) = Proj   F(3) ; σ(g) · R , (9) where Proj (·) is a 1 × 1 convolutional projection from 2C3 to C3. Since 
+
+σ(−3) ≈ 0.05 , the memory pathway starts weak and learns how much re-trieved information should enter the decoder. 
+
+3.4. Decoder, Objective, and Complexity 
+
+The decoder follows SegFormer [13]: {F(1) , F(2) , ˜F(3) , F(4) } are projected by multilayer perceptron (MLP) layers, upsampled to H/ 4 × W/ 4, concate-nated, fused, and classified into K channels. We use K=2 for binary green-space extraction and K=3 for the Potsdam background/low-vegetation/tree setting, with bilinear upsampling to the original resolution during inference. 10 The model is optimized with cross-entropy (CE) and Dice losses: 
+
+L = LCE + λ LDice , (10) with λ = 0 .5. Memory writing in Eqs. (2)–(6) is active only during training; at inference time, the bank is frozen. The memory bank itself is small: with S=64 and C3=320 , it occupies about 0.08 MB in float32. The read operation scales as 
+
+O(H3W3C23 + 2 SC 23 + 2 H3W3SC 3 + 2 H3W3C23 ). (11) For 512 × 512 inputs, H3=W3=32 , S=64 , and C3=320 ; the attention terms require about 4.2 × 10 7 multiply–accumulate operations, and the Q/K/V projections and fusion add approximately 5C23 ≈ 0.51 M parameters. 
+
+4. Experiments 
+
+4.1. Datasets and Study Areas 
+
+Fig. 2 summarizes the two study areas and sample construction. It shows the Chengdu study area, mapped green-space distribution, source Google Earth mosaics, and representative binary training samples, together with the Potsdam dataset region, source tile region, and binary/three-class label conversions. Chengdu UHR Dataset. The Chengdu dataset was built from 77 Google Earth RGB mosaics acquired in 2020 at approximately 0.27 m spatial resolu-tion. Each source mosaic was prepared as a 4000 × 4000 image after clipping, stitching, color correction, reprojection to the World Geodetic System 1984 (WGS-84), and temporal consistency checking with Sentinel-2 observations. 11 Manual annotation used high-resolution imagery and reference data; trees, lawns, and natural green spaces were merged into foreground, non-green-space areas into background, and ambiguous pixels into ignore (255). To avoid overlap leakage, source mosaics or spatial blocks were first assigned to training or validation, and 25% overlapping 512 × 512 crops were generated only within the assigned split. This split-before-crop protocol produced 7,700 labeled patches, including 6,160 training and 1,540 validation samples. NDVI for Chengdu was derived from Sentinel-2 imagery rather than Google Earth RGB images. Twelve low-cloud Sentinel-2 observations in 2020 were selected for each of nine large sub-regions through Google Earth Engine, and NDVI was computed from the near-infrared (NIR) and red bands. The 10 m NDVI layers were aligned with the UHR grid, bilinearly upsampled, mapped from [−1, 1] to [0 , 255] , and stored in the alpha channel. For GMB-Former, this alpha channel is only a memory-admission gate and never enters RGB feature learning, decoder fusion, or the segmentation loss. This keeps RGB appearance and NDVI confidence distinct, although the 10 m-to-UHR mismatch can introduce mixed-pixel uncertainty. 12 Figure 2: Study areas and representative samples for the Chengdu and ISPRS Potsdam datasets, including Chengdu source mosaics and binary labels after split-before-crop gen-eration, and Potsdam source tiles with binary and three-class label conversions. 
+
+ISPRS Potsdam Dataset. We further evaluate on the ISPRS 2D Semantic Labeling Potsdam dataset, which contains 38 aerial true orthophoto tiles at 5 cm ground sampling distance with RGB and NIR channels [39, 40]. Each tile is 6000 × 6000 pixels; following the standard split, 24 tiles are used for training and 14 for testing. We construct two reduced-label settings for green-space extraction: a binary setting that merges low vegetation and 
+
+tree as green space, and a three-class setting that merges non-vegetation categories into background while retaining low vegetation and tree . These task-specific conversions are intended for within-paper comparisons among models retrained under the same label mappings, not direct comparison with published six-class Potsdam results. NDVI is computed from NIR and red 13 bands, stored as the alpha channel, and cropped with the RGB tiles into 
+
+512 × 512 patches. 
+
+4.2. Implementation Details 
+
+All experiments were implemented in MMSegmentation 1.x [41] with PyTorch 2.x and trained on a single NVIDIA RTX 3060 graphics process-ing unit (GPU) with 12 GB memory. GMBFormer and SegFormer-B4 use MiT-B4 with a SegFormer-style decoder; Swin-UPerNet uses Swin-Base, Mask2Former uses ResNet-50 with a Mask2Former head, and DeepLabV3 uses ResNet-50-D8 with atrous spatial pyramid pooling (ASPP). ImageNet-pretrained weights are used where available, while GMB modules are initial-ized from scratch. All models use the same data split, 512 × 512 crop size, augmentation pipeline, 320,000 training iterations, 32,000-iteration validation interval, and evaluation protocol. Augmentation includes random resizing (0.5–2.0), ran-dom cropping with at most 75% single-class ratio, horizontal/vertical flip-ping, and photometric distortion. Backbone choices follow each method’s standard configuration. The controlled architectural comparison is GMB-Former versus SegFormer-B4, which share the MiT-B4 backbone and SegFormer-style decoder; the other methods serve as representative references from mask-classification, hierarchical-Transformer, and convolutional segmenta-tion families. All baseline results reported in this study are produced by retraining the models under the same protocol and, for Potsdam, the same reduced-label mappings. GMBFormer, SegFormer-B4, and Swin-UPerNet use AdamW [42]; Mask2Former follows its standard AdamW setting, and DeepLabV3 uses stochastic gradient descent (SGD). Unless otherwise spec-14 ified, GMBFormer uses S = 64 , α = 0 .99 , τraw = 0 .2, and nh = 8 . NDVI thresholds are reported on the raw [−1, 1] scale and mapped to the stored 
+
+[0 , 1] scale by τnorm = ( τraw +1) /2; thus, τraw = 0 .2 corresponds to τnorm = 0 .6.The checkpoint with the best validation mIoU is used for reporting. 
+
+4.3. Evaluation Metrics 
+
+We report overall accuracy (aAcc), mean intersection over union (mIoU), mean accuracy (mAcc), mean Dice (mDice), mean precision (mPrecision), and mean recall (mRecall), with mIoU as the primary metric. Dice and the F1-score are equivalent when β = 1 , so F-score is not reported as a separate column. Ignore-labeled pixels (255) are excluded from all computations. For binary settings, foreground IoU and Dice refer to the green-space class unless otherwise specified. For the Potsdam binary setting, class-wise IoU is reported for background and green space; for the three-class setting, IoU is reported for background, low vegetation, and tree to verify whether gains extend to both vegetation subclasses. 
+
+4.4. Comparison with Representative Segmentation Methods 
+
+We report results for Mask2Former, Swin-UPerNet, DeepLabV3, and SegFormer-B4 to cover mask classification, hierarchical Transformer decod-ing, dilated convolution, and the RGB-only backbone family of our method. Because these methods use different standard backbones, performance dif-ferences among all methods should be interpreted as representative method comparisons; the controlled comparison for the proposed memory design is between GMBFormer and SegFormer-B4. For Potsdam, all methods are re-trained under the custom binary or three-class label mappings described in 15 Section 4.1; no numbers are taken from published six-class leaderboards. 
+
+4.4.1. Chengdu UHR Dataset 
+
+Table 1 reports the quantitative comparison on the Chengdu UHR vali-dation set. 
+
+Table 1: Quantitative comparison on the Chengdu UHR validation set.                                           
+
+> Method Backbone aAcc mIoU mAcc mDice mPrecision mRecall Mask2Former ResNet-50 90.98 86.12 90.74 90.77 90.81 90.74 Swin-UPerNet Swin-Base 92.98 87.41 92.83 92.84 92.85 92.83 DeepLabV3 ResNet-50-D8 91.78 84.50 91.59 91.59 91.59 91.59 SegFormer-B4 MiT-B4 92.99 87.40 92.71 92.83 92.98 92.71 GMBFormer (Ours) MiT-B4 94.45 89.25 94.25 94.31 94.38 94.25
+
+GMBFormer obtains the highest values on all Chengdu validation met-rics, with mIoU increasing from 87.40% for the controlled SegFormer-B4 baseline to 89.25%. The simultaneous gains in precision and recall suggest that NDVI-gated memory retrieval improves RGB-based vegetation discrim-ination rather than simply expanding the predicted green-space foreground. 16 Figure 3: Qualitative comparison on Chengdu UHR binary green-space extraction results. 
+
+Fig. 3 complements the Chengdu quantitative results by showing binary green-space extraction under dense built-up regions, fragmented vegetation, and shadow-affected areas. The visual comparison illustrates the practical role of retrieving reliable vegetation prototypes when a single patch contains only partial or ambiguous green-space evidence. 17 4.4.2. ISPRS Potsdam Custom Binary Setting 
+
+Table 2 reports the custom binary Potsdam evaluation, where low veg-etation and tree are merged into the green-space foreground and all non-vegetated categories are treated as background. This setting mirrors the Chengdu binary extraction task while introducing a public aerial dataset with different spatial resolution, sensor characteristics, and urban morphol-ogy. 
+
+Table 2: Quantitative comparison on the custom ISPRS Potsdam binary setting. IoU bg 
+
+and IoU green denote class-wise IoU for background and green space, respectively.                                                       
+
+> Method Backbone IoU bg IoU green aAcc mIoU mAcc mDice mPrecision mRecall Mask2Former ResNet-50 91.86 87.37 93.35 89.62 94.86 94.46 94.11 94.86 Swin-UPerNet Swin-Base 93.70 90.09 95.99 91.89 95.73 95.76 95.80 95.73 DeepLabV3 ResNet-50-D8 93.12 89.35 95.64 91.23 95.52 95.40 95.29 95.52 SegFormer-B4 MiT-B4 93.58 89.95 95.92 91.76 95.70 95.70 95.69 95.70 GMBFormer (Ours) MiT-B4 93.89 90.45 96.13 92.17 95.95 95.92 95.88 95.95
+
+Under this custom binary Potsdam setting, GMBFormer obtains the high-est mIoU (92.17%) and green-space IoU (90.45%). The gains across the mean and class-wise metrics indicate that the decoupled gate-and-retrieval design remains useful on a public aerial benchmark with different spatial resolution, sensor characteristics, and urban morphology. 
+
+4.4.3. ISPRS Potsdam Custom Three-Class Setting 
+
+Table 3 reports the custom three-class Potsdam evaluation, which aggre-gates all non-vegetation categories as background and separates low vegeta-tion and tree. 18 Table 3: Quantitative comparison on the custom ISPRS Potsdam three-class setting. IoU bg , IoU lv , and IoU tree denote class-wise IoU for background, low vegetation, and tree, respectively. 
+
+Method Backbone IoU bg IoU lv IoU tree aAcc mIoU mAcc mDice mPrecision mRecall Mask2Former ResNet-50 92.90 76.58 75.20 92.51 81.56 89.42 89.63 89.85 89.42 Swin-UPerNet Swin-Base 93.74 78.61 76.43 93.20 82.93 90.46 90.48 90.49 90.46 DeepLabV3 ResNet-50-D8 89.32 74.87 73.11 89.16 79.69 86.37 86.40 86.48 86.37 SegFormer-B4 MiT-B4 93.77 79.01 77.22 93.33 83.33 90.95 90.73 90.53 90.95 GMBFormer (Ours) MiT-B4 94.04 79.48 77.65 93.48 83.72 90.97 90.86 90.74 90.97 
+
+GMBFormer obtains the highest mIoU (83.72%) and improves both veg-etation subclasses, with IoU lv = 79 .48% and IoU tree = 77 .65% . This pattern is consistent with the intended role of the memory bank: retrieved pro-totypes enhance vegetation structure without reducing the task to binary foreground–background separation. 19 Figure 4: Qualitative comparison on ISPRS Potsdam binary and three-class green-space extraction results. 
+
+Fig. 4 supports the quantitative results from both Potsdam settings. In binary maps, GMBFormer follows elongated vegetation strips and small green patches more continuously. In three-class maps, it better preserves the dis-tinction between low vegetation and tree crowns, visually indicating that 20 retrieved prototypes strengthen vegetation structure without collapsing the two subclasses into a single foreground. 
+
+4.5. Qualitative Map-Level Analysis 
+
+Fig. 5 evaluates map-level usability under practical urban mapping condi-tions. The examples cover park-dominated vegetation, roadside linear green-ery, and fragmented greenery within dense buildings. 
+
+> Figure 5: Map-level green-space extraction in three built-up regions of Chengdu.
+
+21 The predictions preserve contiguous parks, narrow roadside vegetation, and scattered courtyard greenery, suggesting that memory-guided retrieval is helpful for multiple urban vegetation morphologies rather than a single scene type. 
+
+4.6. Ablation Study 
+
+Table 4 summarizes the ablation study on the Chengdu validation set. The RGBA variant denotes red–green–blue–alpha input, with NDVI stored in the alpha channel. 
+
+Table 4: Ablation study results on the Chengdu validation set.                                                                                                        
+
+> Variant Sτraw αNDVI Gate Memory Bank mIoU mDice IoU (green) M1 – SegFormer-B4 (RGB only) –––✗✗87.40 92.83 84.75 M2 – RGBA concat –––✗✗86.52 91.97 84.82 M3 – No gate 64 –0.99 ✗✓87.37 92.82 85.64 M4 Full (Ours) 64 0.2 0.99 ✓✓89.25 94.31 86.76
+> τraw = 0 .164 0.1 0.99 ✓✓87.61 93.01 85.96
+> τraw = 0 .364 0.3 0.99 ✓✓87.70 93.10 86.05
+> τraw = 0 .564 0.5 0.99 ✓✓87.53 92.94 85.88
+> S= 32 32 0.2 0.99 ✓✓87.65 93.05 86.00
+> S= 128 128 0.2 0.99 ✓✓87.74 93.14 86.09
+> α= 0 .964 0.2 0.9 ✓✓88.06 93.64 86.28
+> α= 0 .999 64 0.2 0.999 ✓✓87.58 92.99 85.93
+
+Direct RGBA concatenation (M2) degrades mIoU relative to the RGB-only baseline (M1), indicating that simply treating NDVI as a fourth learn-able channel is not an effective use of the physical cue in this setting. The un-gated memory variant (M3) improves green-space IoU over M1 but does not improve mIoU, suggesting that memory retrieval needs admission control to avoid unbalanced prototype updates. The full model combines NDVI-guided admission and memory retrieval, raising mIoU to 89.25% and green-space IoU 22 to 86.76%. The parameter ablations further show that τraw = 0 .2, S = 64 ,and α = 0 .99 provide a favorable operating point: looser or stricter admis-sion, smaller or larger memory capacity, and faster or slower EMA updates all reduce the benefit. 
+
+4.7. Computational Cost 
+
+Table 5: Computational cost comparison for a single 512 × 512 patch. FLOPs denotes floating-point operations.                         
+
+> Model Backbone Parameters (M) FLOPs (G) Inference (ms/patch) DeepLabV3 ResNet-50-D8 65.74 269.81 70.10 SegFormer-B4 MiT-B4 61.37 58.57 28.35 Swin-UPerNet Swin-Base 120.12 304.69 73.64 Mask2Former ResNet-50 44.00 66.32 32.78 GMBFormer (Ours) MiT-B4 61.88 58.94 28.48
+
+As shown in Table 5, GMBFormer introduces only a small structural overhead over the SegFormer-B4 backbone, increasing parameters by 0.51 M and FLOPs by 0.37 G. The measured single-patch latency remains close to SegFormer-B4 (28.48 versus 28.35 ms), but this sub-millisecond difference should be interpreted as comparable runtime under the present setup rather than as a precise latency estimate. Its computational cost remains close to SegFormer-B4 and is substantially lower than DeepLabV3 and Swin-UPerNet in FLOPs, while the preceding comparisons show favorable segmentation accuracy. Mask2Former has fewer parameters, but its measured latency is higher than GMBFormer under the same single-patch evaluation setting. 23 5. Discussion 
+
+5.1. Why Decoupling NDVI from the Backbone Works 
+
+The comparison between red–green–blue–alpha (RGBA) concatenation (M2) and GMBFormer (M4 Full) suggests that, for this task, NDVI is more useful as a physical prior for memory control than as an additional learnable input channel. Direct concatenation perturbs the ImageNet-pretrained RGB stem and forces the backbone to jointly model appearance and vegetation-index distributions. GMBFormer instead keeps RGB responsible for repre-sentation learning and uses NDVI only to control memory admission, pre-serving the pretrained RGB prior while retaining the ecological meaning of NDVI as vegetation confidence. 
+
+5.2. Effect of NDVI Resolution Mismatch 
+
+For the Chengdu dataset, NDVI is derived from 10 m Sentinel-2 observa-tions and then aligned to 0.27 m Google Earth imagery. This cross-resolution construction cannot preserve object-level vegetation boundaries in the same way as the UHR RGB image, especially around narrow roadside greenery, small courtyard vegetation, and mixed pixels near building edges. In GMB-Former, however, this mismatch affects only the memory write gate: NDVI determines whether a patch-level RGB prototype is admitted to the memory bank, while all feature extraction, retrieval queries, decoding, and pixel-level prediction remain RGB-based. Therefore, NDVI misalignment may intro-duce admission noise, such as rejecting small vegetation-dominated patches or admitting mixed patches, but it does not directly inject coarse Sentinel-2 texture into the learned feature maps. Using patch-mean NDVI further 24 makes the gate less sensitive to local boundary misregistration, at the cost of losing fine within-patch vegetation structure. The threshold and capacity ablations partly reflect this trade-off, and higher-resolution NIR observations or adaptive confidence estimation could further reduce gate noise. 
+
+5.3. The Memory Bank as a Semantic Bridge across Patches 
+
+The memory bank externalizes training-set vegetation experience into a similarity-indexed prototype dictionary. The slot assignment in Eq. (5) and EMA update in Eq. (6) act like online spherical clustering, encouraging slots to represent recurring vegetation appearances without explicit cluster-ing supervision. During reading, a patch retrieves prototypes by semantic similarity rather than spatial adjacency, which is important in urban scenes where neighboring crops can contain unrelated land-cover types and visually similar greenery may appear far apart. 
+
+5.4. Generalizability on Potsdam-Derived Settings 
+
+The Chengdu validation and Potsdam-derived results indicate that the proposed mechanism is not limited to the Chengdu imagery. The NDVI gate reduces the chance that RGB-specific distractors enter the memory bank, while the stored prototypes are intended to capture higher-level vegetation structure rather than only local color statistics. The same write-gate-read design could be explored for other UHR segmentation tasks when a reliable physical index is available, such as the Normalized Difference Built-up Index (NDBI) for buildings or the Normalized Difference Water Index (NDWI) for water bodies. 25 5.5. Limitations and Future Work 
+
+Several limitations remain. First, the memory bank reflects the training distribution, so rare vegetation appearances may be underrepresented. Sec-ond, the capacity S is fixed empirically rather than adjusted by prototype utilization; future work should quantify slot usage and adapt capacity auto-matically. Third, the current memory is attached only to Stage–3 features. Fourth, coarse-resolution NDVI can introduce uncertainty into memory ad-mission even though it is excluded from feature learning. Finally, NDVI requires NIR information, which may be unavailable for RGB-only imagery; learning a reliable RGB-based vegetation-confidence substitute remains fu-ture work. 
+
+6. Conclusion 
+
+This study introduced GMBFormer for urban green-space extraction from patch-based UHR imagery. The method decouples RGB representation learn-ing from NDVI-guided memory admission, stores high-confidence vegetation prototypes in a global memory bank, and retrieves them through cross-attention to enhance current patch features by semantic similarity rather than spatial adjacency. Experiments on the Chengdu UHR dataset and two reduced-label set-tings derived from ISPRS Potsdam show improvements over representative segmentation baselines retrained under the same protocols. Ablations in-dicate that direct RGBA concatenation is insufficient, ungated memory is less reliable, and the final performance depends on an appropriate admission threshold, memory size, and EMA momentum. Future work will explore 26 adaptive memory capacity, multi-scale memory, and vegetation-confidence estimation when NIR-derived NDVI is unavailable. 
+
+Declaration of Competing Interest 
+
+The authors declare that they have no known competing financial inter-ests or personal relationships that could have appeared to influence the work reported in this paper. 
+
+Data and Code Availability 
+
+The data and source code necessary to reproduce the results of this study are publicly available at https://github.com/xicheng79/GMBFormer . The ISPRS Potsdam dataset used for additional evaluation is publicly available from the ISPRS 2D Semantic Labeling Challenge. 
+
+Acknowledgements 
+
+This research was supported by the Chengdu University of Technology “AI Research Fund” Program (2025AI038), the Yunnan Sci-Tech Talent and Plat-form Plan Project (202605AF350036), and the “Engineering Research Center for Innovation Application of Low-Altitude Remote Sensing in Plateau and Mountainous Regions (Incubation)” Project of the Yunnan Province Depart-ment of Education. 
+
+References 
+
+[1] Bertram, C., Rehdanz, K., 2015. The role of urban green space for hu-man well-being. Ecological Economics 120, 139–152. 27 [2] Kondo, M.C., Fluehr, J.M., McKeon, T., Branas, C.C., 2018. Urban green space and its impact on human health. International Journal of Environmental Research and Public Health 15, 445. [3] Huang, Y., Wang, L., Zhao, P., Zhao, Y., Yang, Q., Du, Y., Ling, F., 2025. Deep learning in urban green space extraction in remote sensing: A comprehensive systematic review. International Journal of Remote Sensing 46, 1117–1150. doi:10.1080/01431161.2024.2424511. [4] Derkzen, M.L., van Teeffelen, A.J.A., Verburg, P.H., 2015. Quantifying urban ecosystem services based on high-resolution data of urban green space: An assessment for Rotterdam, The Netherlands. Journal of Ap-plied Ecology 52, 1020–1032. [5] Long, J., Shelhamer, E., Darrell, T., 2015. Fully convolutional networks for semantic segmentation, in: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, pp. 3431–3440. [6] Ronneberger, O., Fischer, P., Brox, T., 2015. U-Net: Convolutional net-works for biomedical image segmentation, in: Medical Image Computing and Computer-Assisted Intervention – MICCAI 2015, pp. 234–241. [7] Chen, L.-C., Zhu, Y., Papandreou, G., Schroff, F., Adam, H., 2018. Encoder–decoder with atrous separable convolution for semantic image segmentation, in: Proceedings of the European Conference on Computer Vision, pp. 801–818. [8] Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., 28 Uszkoreit, J., Houlsby, N., 2021. An image is worth 16x16 words: Trans-formers for image recognition at scale, in: International Conference on Learning Representations. [9] Liu, Z., Lin, Y., Cao, Y., Hu, H., Wei, Y., Zhang, Z., Lin, S., Guo, B., 2021. Swin Transformer: Hierarchical vision transformer using shifted windows, in: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 10012–10022. [10] Gu, A., Dao, T., 2024. Mamba: Linear-time sequence modeling with se-lective state spaces, in: Proceedings of the First Conference on Language Modeling. [11] Liu, Y., Tian, Y., Zhao, Y., Yu, H., Xie, L., Wang, Y., Ye, Q., Jiao, J., Liu, Y., 2024. VMamba: Visual state space model, in: Advances in Neural Information Processing Systems 37, pp. 103031–103063. [12] Chen, K., Chen, B., Liu, C., Li, W., Zou, Z., Shi, Z., 2024. RSMamba: Remote sensing image classification with state space model. IEEE Geoscience and Remote Sensing Letters 21, 8002605. doi:10.1109/LGRS.2024.3407111. [13] Xie, E., Wang, W., Yu, Z., Anandkumar, A., Alvarez, J.M., Luo, P., 2021. SegFormer: Simple and efficient design for semantic segmenta-tion with Transformers, in: Advances in Neural Information Processing Systems 34, pp. 12077–12090. [14] Sa, I., Popovic, M., Khanna, R., Chen, Z., Lottes, P., Liebisch, F., Nieto, J., Stachniss, C., Walter, A., Siegwart, R., 2018. WeedMap: A 29 large-scale semantic weed mapping framework using aerial multispectral imaging and deep neural networks. Remote Sensing 10, 1423. [15] Diakogiannis, F.I., Waldner, F., Caccetta, P., Wu, C., 2020. ResUNet-a: A deep learning framework for semantic segmentation of remotely sensed data. ISPRS Journal of Photogrammetry and Remote Sensing 162, 94–114. [16] Zhou, H., Qi, L., Wan, Z., Huang, H., Yang, X., 2022. CANet: Co-attention network for RGB-D semantic segmentation. Pattern Recogni-tion 124, 108468. doi:10.1016/j.patcog.2021.108468. [17] Myint, S.W., Gober, P., Brazel, A., Grossman-Clarke, S., Weng, Q., 2011. Per-pixel vs. object-based classification of urban land cover ex-traction using high spatial resolution imagery. Remote Sensing of Envi-ronment 115, 1145–1161. [18] Puissant, A., Rougier, S., Stumpf, A., 2014. Object-oriented mapping of urban trees using random forest classifiers. International Journal of Applied Earth Observation and Geoinformation 26, 235–245. [19] Rouse, J.W., Haas, R.H., Schell, J.A., Deering, D.W., 1974. Monitoring vegetation systems in the Great Plains with ERTS, in: Proceedings of the Third Earth Resources Technology Satellite-1 Symposium, pp. 309– 317. [20] Tucker, C.J., 1979. Red and photographic infrared linear combinations for monitoring vegetation. Remote Sensing of Environment 8, 127–150. 30 [21] Wang, L., Li, R., Zhang, C., Fang, S., Duan, C., Meng, X., Atkinson, P.M., 2022. UNetFormer: A UNet-like transformer for efficient semantic segmentation of remote sensing urban scene imagery. ISPRS Journal of Photogrammetry and Remote Sensing 190, 196–214. [22] Wang, L., Li, R., Duan, C., Zhang, C., Meng, X., Fang, S., 2022. A novel transformer based semantic segmentation scheme for fine-resolution re-mote sensing images. IEEE Geoscience and Remote Sensing Letters 19, 1–5. [23] Peng, C., Li, H., Tao, C., Li, Y., Ma, J., 2023. MSINet: Mining scale information from digital surface models for seman-tic segmentation of aerial images. Pattern Recognition 143, 109785. doi:10.1016/j.patcog.2023.109785. [24] Ding, L., Tang, H., Bruzzone, L., 2021. LANet: Local attention embed-ding to improve the semantic segmentation of remote sensing images. IEEE Transactions on Geoscience and Remote Sensing 59, 426–435. [25] Chen, W., Jiang, Z., Wang, Z., Cui, K., Qian, X., 2019. Collaborative global-local networks for memory-efficient segmentation of ultra-high resolution images, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 8924–8933. [26] Li, Q., Yang, W., Liu, W., Yu, Y., He, S., 2021. From contexts to locality: Ultra-high resolution image segmentation via locality-aware contextual correlation, in: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 7252–7261. 31 [27] Guo, S., Liu, L., Gan, Z., Wang, Y., Zhang, W., Wang, C., Jiang, G., Zhang, W., Yi, R., Ma, L., Xu, K., 2022. ISDNet: Integrating shal-low and deep networks for efficient ultra-high resolution segmentation, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 4361–4370. [28] Ding, L., Lin, D., Lin, S., Zhang, J., Cui, X., Wang, Y., Tang, H., Bruz-zone, L., 2022. Looking outside the window: Wide-context transformer for the semantic segmentation of high-resolution remote sensing images. IEEE Transactions on Geoscience and Remote Sensing 60, 4410313. [29] Tong, X.-Y., Xia, G.-S., Lu, Q., Shen, H., Li, S., You, S., Zhang, L., 2020. Land-cover classification with high-resolution remote sensing im-ages using transferable deep models. Remote Sensing of Environment 237, 111322. [30] Wang, K., Liew, J.H., Zou, Y., Zhou, D., Feng, J., 2019. PANet: Few-shot image semantic segmentation with prototype alignment, in: Pro-ceedings of the IEEE/CVF International Conference on Computer Vi-sion, pp. 9196–9205. [31] Li, G., Jampani, V., Sevilla-Lara, L., Sun, D., Kim, J., Kim, J., 2021. Adaptive prototype learning and allocation for few-shot segmentation, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 8334–8343. [32] Zhou, T., Wang, W., Konukoglu, E., Van Gool, L., 2022. Rethink-ing semantic segmentation: A prototype view, in: Proceedings of the 32 IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 2582–2593. [33] Sun, H., Lu, X., Wang, H., Yin, Y., Zhen, X., Snoek, C.G.M., Shao, L., 2023. Attentional prototype inference for few-shot segmentation. Pattern Recognition 142, 109726. doi:10.1016/j.patcog.2023.109726. [34] Oh, S.W., Lee, J.-Y., Xu, N., Kim, S.J., 2019. Video object segmentation using space-time memory networks, in: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp. 9226–9235. [35] Cheng, H.K., Tai, Y.-W., Tang, C.-K., 2021. Rethinking space-time networks with improved memory coverage for efficient video object seg-mentation, in: Advances in Neural Information Processing Systems 34, pp. 11781–11794. [36] Cheng, H.K., Schwing, A.G., 2022. XMem: Long-term video object seg-mentation with an Atkinson-Shiffrin memory model, in: Proceedings of the European Conference on Computer Vision, pp. 640–658. [37] Guo, M.-H., Liu, Z.-N., Mu, T.-J., Hu, S.-M., 2023. Beyond self-attention: External attention using two linear layers for visual tasks. IEEE Transactions on Pattern Analysis and Machine Intelligence 45, 5436–5447. [38] Kim, J., Lee, J., Park, J., Min, D., Sohn, K., 2022. Pin the memory: Learning to generalize semantic segmentation, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 4350–4360. 33 [39] Rottensteiner, F., Sohn, G., Jung, J., Gerke, M., Baillard, C., Benitez, S., Breitkopf, U., 2012. The ISPRS benchmark on urban object classifi-cation and 3D building reconstruction. ISPRS Annals of the Photogram-metry, Remote Sensing and Spatial Information Sciences I-3, 293–298. [40] Rottensteiner, F., Sohn, G., Gerke, M., Wegner, J.D., Breitkopf, U., Jung, J., 2014. Results of the ISPRS benchmark on urban object detec-tion and 3D building reconstruction. ISPRS Journal of Photogrammetry and Remote Sensing 93, 256–271. [41] MMSegmentation Contributors, 2023. MMSegmentation: OpenMMLab semantic segmentation toolbox and benchmark. https://github.com/ open-mmlab/mmsegmentation .[42] Loshchilov, I., Hutter, F., 2019. Decoupled weight decay regularization, in: International Conference on Learning Representations. 34
