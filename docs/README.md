@@ -6,89 +6,69 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-06
-- 运行时间：2026-06-06 21:43:15 UTC
+- 最新运行日期：2026-06-07
+- 运行时间：2026-06-07 20:59:31 UTC
 - 运行状态：成功
-- 本次总论文数：23
-- 精读区：9
-- 速读区：14
+- 本次总论文数：15
+- 精读区：4
+- 速读区：11
 
 ### 今日简报（AI）
-今日共梳理23篇论文，精读9篇，精读亮点为多模态领域泛化基准与连续时间动态图表示学习。推荐关注MMDG-Bench多模态泛化基准和基于状态空间模型的动态图长程时空建模，两者均为9.0分高价值工作。普通读者可优先速览异构基础模型几何对齐与视频几何表征两个方向，实用性强。
-- 详情：[/202606/06/README](/202606/06/README)
+今日共推荐15篇论文，精读2篇、速读3篇，重点聚焦空间记忆与模型合并技术。
+
+最值得关注的是《LongSpace》提出的视频长时空间感知-回忆框架（9.0分）与《Saliency-Aware Model Merging》的显著性模型合并方法（8.0分）。
+
+建议优先阅读这两篇精读论文，前者对理解长效视频记忆机制有突破，后者为多模型融合提供了新思路。
+- 详情：[/202606/07/README](/202606/07/README)
 
 ### 精读区论文标签
-1. [MMDG-Bench: A Benchmark for Multimodal Domain Generalization](/202606/06/2606.00891v1-mmdg-bench-a-benchmark-for-multimodal-domain-generalization)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：多模态领域泛化基准
-2. [Learning Long Range Spatio-Temporal Representations over Continuous Time Dynamic Graphs with State Space Models](/202606/06/2606.04672v2-learning-long-range-spatio-temporal-representations-over-continuous-time-dynamic-graphs-with-state-space-models)  
+1. [LongSpace: Exploring Long-Horizon Spatial Memory from Perception to Recall in Video](/202606/07/2606.05677v1-longspace-exploring-long-horizon-spatial-memory-from-perception-to-recall-in-video)  
    标签：评分：9.0/10、query:world-models
-   evidence：动态图上的时空表示学习
-3. [AdaPlanBench: Evaluating Adaptive Planning in Large Language Model Agents under World and User Constraints](/202606/06/2606.05622v1-adaplanbench-evaluating-adaptive-planning-in-large-language-model-agents-under-world-and-user-constraints)  
-   标签：评分：9.0/10、query:world-models
-   evidence：评估LLM代理在世界和用户约束下的自适应规划，涉及世界模型概念
-4. [Flexible route planning and rapid structure learning by mice in complex environments](/202606/06/biorxiv-10-64898-2026-06-02-729586-v1-flexible-route-planning-and-rapid-structure-learning-by-mice-in-complex-environments)  
-   标签：评分：9.0/10、query:world-models
-   evidence：用于规划和导航的世界模型
-5. [Variational Adapter for Cross-modal Similarity Representation](/202606/06/2605.30968v1-variational-adapter-for-cross-modal-similarity-representation)  
-   标签：评分：8.0/10、query:world-models
-   evidence：用于视觉-语言模型跨模态相似性的变体适配器
-6. [Unsupervised Collaborative Domain Adaptation for Driving Scene Parsing](/202606/06/2606.01818v1-unsupervised-collaborative-domain-adaptation-for-driving-scene-parsing)  
+   evidence：用于自动驾驶和机器人导航的长程空间记忆
+2. [Saliency-Aware Model Merging](/202606/07/2606.00511v1-saliency-aware-model-merging)  
    标签：评分：8.0/10、query:cross-domain
-   evidence：无监督协作域适应用于驾驶场景解析
-7. [Robust Scene Transfer for PointGoal Navigation via Privileged Sensor Guided Contrastive Learning](/202606/06/2606.05506v1-robust-scene-transfer-for-pointgoal-navigation-via-privileged-sensor-guided-contrastive-learning)  
+   evidence：基于显著性的模型合并用于跨域性能
+3. [FlatVPR: Plug-and-play Geo-linear Residual Adapter for Geometric Rectification of Foundation Model Feature Manifolds](/202606/07/2606.01734v1-flatvpr-plug-and-play-geo-linear-residual-adapter-for-geometric-rectification-of-foundation-model-feature-manifolds)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：提出基础模型特征流形的几何矫正方法，用于视觉位置识别这一地理空间任务
+4. [Supervised Domain Adaptation Mitigates Cross-Ethnicity Prediction Error in Neuroimaging Based Cognitive Prediction](/202606/07/biorxiv-10-64898-2026-05-25-727742-v2-supervised-domain-adaptation-mitigates-cross-ethnicity-prediction-error-in-neuroimaging-based-cognitive-prediction)  
    标签：评分：8.0/10、query:cross-domain
-   evidence：通过对比学习实现视觉导航的域泛化
-8. [BMCR: Adaptive Backbone Module Composition via Reinforcement Learning for Remote Sensing Object Detection](/202606/06/2606.05586v1-bmcr-adaptive-backbone-module-composition-via-reinforcement-learning-for-remote-sensing-object-detection)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：使用视觉Transformer和CNN的自适应骨干组合用于遥感目标检测
-9. [GMBFormer: An NDVI-Guided Global Memory Bank Transformer for Urban Green-Space Extraction from Ultra-High-Resolution Imagery](/202606/06/2606.06363v1-gmbformer-an-ndvi-guided-global-memory-bank-transformer-for-urban-green-space-extraction-from-ultra-high-resolution-imagery)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：用于超高分辨率遥感图像城市绿地提取的视觉Transformer
+   evidence：监督域适应方法减少神经影像中的跨种族预测误差
 
 ### 速读区论文标签
-1. [Geometry-Preserving Unsupervised Alignment for Heterogeneous Foundation Models](/202606/06/2606.04385v1-geometry-preserving-unsupervised-alignment-for-heterogeneous-foundation-models)  
-   标签：评分：8.0/10、query:world-models
-   evidence：视觉-语言与纯视觉基础模型的无监督对齐
-2. [Learning Geometric Representations from Videos for Spatial Intelligent Multimodal Large Language Models](/202606/06/2606.05833v1-learning-geometric-representations-from-videos-for-spatial-intelligent-multimodal-large-language-models)  
-   标签：评分：8.0/10、query:world-models
-   evidence：利用3D基础模型从视频学习几何表示用于多模态大语言模型
-3. [From Local Geometry to Global Pseudo Labeling for Robust Positive Unlabeled Learning under Covariate Shift](/202606/06/2605.31187v1-from-local-geometry-to-global-pseudo-labeling-for-robust-positive-unlabeled-learning-under-covariate-shift)  
+1. [A Trajectory-Driven Spatio-Temporal Refinement Solution for CVPR 2026 8th UG2+ Challenge Track 3: DOST](/202606/07/2606.00522v2-a-trajectory-driven-spatio-temporal-refinement-solution-for-cvpr-2026-8th-ug2-challenge-track-3-dost)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：正无标签学习下的协变量偏移检测
-4. [One Channel to Rule Them All: Rethinking Input Representation for Visual Place Recognition](/202606/06/2606.00936v1-one-channel-to-rule-them-all-rethinking-input-representation-for-visual-place-recognition)  
+   evidence：数据中心域适应策略用于湍流下动态目标分割
+2. [CAFOSat: A Strongly Annotated Dataset for Infrastructure-Aware CAFO Mapping Using High-Resolution Imagery](/202606/07/2606.00548v1-cafosat-a-strongly-annotated-dataset-for-infrastructure-aware-cafo-mapping-using-high-resolution-imagery)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：利用遥感影像进行CAFO映射的标注数据集
+3. [A Modelling and Evaluation Framework for EuroCrops-Driven Sentinel-2 Crop Segmentation](/202606/07/2606.00676v1-a-modelling-and-evaluation-framework-for-eurocrops-driven-sentinel-2-crop-segmentation)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：使用Sentinel-2遥感影像进行作物分割
+4. [Safe-Subspace Pseudo-Label Refinement for Source-Free Graph Domain Adaptation](/202606/07/2606.00808v1-safe-subspace-pseudo-label-refinement-for-source-free-graph-domain-adaptation)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：研究视觉地点识别中对表观变化的鲁棒性
-5. [An Open-Source Benchmark and Baseline for Multi-temporal Referring Segmentation](/202606/06/2606.00987v1-an-open-source-benchmark-and-baseline-for-multi-temporal-referring-segmentation)  
+   evidence：源自由图域适应中的伪标签精炼，与计算机视觉域适应相关
+5. [Emergent Ordinal Geometry in Transformers Trained on Local Comparisons](/202606/07/2606.01269v2-emergent-ordinal-geometry-in-transformers-trained-on-local-comparisons)  
+   标签：评分：7.0/10、query:cross-domain
+   evidence：Transformer在局部比较训练中的分布外泛化
+6. [Stationarity-Aware Retrieval-Augmented Time Series Forecasting](/202606/07/2606.04135v1-stationarity-aware-retrieval-augmented-time-series-forecasting)  
    标签：评分：7.0/10、query:stm
-   evidence：面向时空视觉推理的多时相参考分割
-6. [A Retrospective Benchmark of Spatiotemporal Covariates for Daily Active-Fire Detection in Cerrado Conservation Units](/202606/06/2606.04170v1-a-retrospective-benchmark-of-spatiotemporal-covariates-for-daily-active-fire-detection-in-cerrado-conservation-units)  
-   标签：评分：7.0/10、query:stm
-   evidence：利用卫星数据构建时空协变量进行每日活跃火检测
-7. [DRIFT: A Residual Flow Adapter for Decoding Continuous Outputs in Vision-Language Models](/202606/06/2606.05758v1-drift-a-residual-flow-adapter-for-decoding-continuous-outputs-in-vision-language-models)  
+   evidence：时间序列预测利用RAG处理非平稳性
+7. [Ultra-efficient High Resolution 3D Reconstruction of Spatial Omics Data with Neural Transcriptomic Field](/202606/07/biorxiv-10-64898-2026-05-28-726140-v1-ultra-efficient-high-resolution-3d-reconstruction-of-spatial-omics-data-with-neural-transcriptomic-field)  
    标签：评分：7.0/10、query:world-models
-   evidence：调整视觉语言模型以输出连续控制动作的框架
-8. [Where Should Knowledge Enter? A Layered Framework for Knowledge Infusion in Multimodal Iterative Generative Mo](/202606/06/2606.06356v1-where-should-knowledge-enter-a-layered-framework-for-knowledge-infusion-in-multimodal-iterative-generative-mo)  
-   标签：评分：7.0/10、query:world-models
-   evidence：通过干预层向多模态生成模型注入知识
-9. [Big data analysis of animal movements in aquatic ecosystems with acoustic telemetry](/202606/06/biorxiv-10-64898-2026-06-01-729394-v1-big-data-analysis-of-animal-movements-in-aquatic-ecosystems-with-acoustic-telemetry)  
+   evidence：类似神经辐射场的隐式表示用于3D空间组学
+8. [VelOT: kinetic-free RNA velocity inference via optimal transport, flow-field smoothing, and VAMP coarse-graining of cellular dynamics](/202606/07/biorxiv-10-64898-2026-06-04-730132-v1-velot-kinetic-free-rna-velocity-inference-via-optimal-transport-flow-field-smoothing-and-vamp-coarse-graining-of-cellular-dynamics)  
    标签：评分：7.0/10、query:stm
-   evidence：使用状态空间模型的时空数据分析
-10. [GABI: Geometry-Aware Boundary Integration for Spacecraft Segmentation](/202606/06/2606.00886v1-gabi-geometry-aware-boundary-integration-for-spacecraft-segmentation)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：边界感知多任务分割处理光照变化
-11. [$A^2$: Smaller Self-Supervised ViTs Localize Better than Larger Ones](/202606/06/2606.03148v1-a2-smaller-self-supervised-vits-localize-better-than-larger-ones)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：自监督ViT的定位特性可应用于遥感
-12. [Eliciting Complex Spatial Reasoning in MLLMs through Wide-Baseline Matching](/202606/06/2606.03577v1-eliciting-complex-spatial-reasoning-in-mllms-through-wide-baseline-matching)  
+   evidence：时空窗口和流场平滑用于细胞动态推断
+9. [OVO-S-Bench: A Hierarchical Benchmark for Streaming Spatial Intelligence in Multimodal LLMs](/202606/07/2606.03890v1-ovo-s-bench-a-hierarchical-benchmark-for-streaming-spatial-intelligence-in-multimodal-llms)  
    标签：评分：6.0/10、query:world-models
-   evidence：多模态大语言模型的空间推理能力
-13. [Pinpoint: Grounded Worldwide Image Geolocation via Cross-Source Retrieval and Reranking](/202606/06/2606.04133v1-pinpoint-grounded-worldwide-image-geolocation-via-cross-source-retrieval-and-reranking)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：对比学习图像-GPS嵌入用于地理定位，与地理空间预训练模型相关
-14. [LongSpace: Exploring Long-Horizon Spatial Memory from Perception to Recall in Video](/202606/06/2606.05677v1-longspace-exploring-long-horizon-spatial-memory-from-perception-to-recall-in-video)  
+   evidence：多模态大语言模型流式空间智能基准，与世界模型和多模态基础模型学习相关
+10. [Breaking Time: A Fully Gaussian Framework for Distributed and Continuous-Time SLAM](/202606/07/2606.06250v1-breaking-time-a-fully-gaussian-framework-for-distributed-and-continuous-time-slam)  
    标签：评分：6.0/10、query:stm
-   evidence：结合3D结构线索的长视频空间记忆
+   evidence：连续时间SLAM结合高斯过程用于时空轨迹估计
+11. [The cost of data aggregation: spatiotemporal compression obscures causal attribution in biodiversity monitoring](/202606/07/biorxiv-10-1101-2025-05-17-654658-v5-the-cost-of-data-aggregation-spatiotemporal-compression-obscures-causal-attribution-in-biodiversity-monitoring)  
+   标签：评分：6.0/10、query:stm
+   evidence：时空压缩对因果归因的影响，基于生态模拟数据
 
 
 <div class="dpr-home-promo-card">
