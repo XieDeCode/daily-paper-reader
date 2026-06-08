@@ -1,0 +1,606 @@
+Title: Cluster-Aware Conformal Calibration for Spatio-Temporal Distributional Prediction
+
+URL Source: https://arxiv.org/pdf/2606.06753v1
+
+Published Time: Mon, 08 Jun 2026 00:15:36 GMT
+
+Number of Pages: 22
+
+Markdown Content:
+# Cluster-Aware Conformal Calibration for Spatio-Temporal Distributional Prediction 
+
+## Gooyoung Kim 1, Chae Young Lim 1, Wen-Ting Wang 2, Hao-Yun Huang 3* ,Wei-Ying Wu 3* 
+
+> 1
+
+Department of Statistics, Seoul National University, Seoul, 08826, South Korea. 
+
+> 2
+
+Institution of Statistics, National Chung Hsing University, Taichung City, 402, Taiwan. 
+
+> 3
+
+Department of Applied Mathematics, National Dong Hwa University, Hualien, 974, Taiwan. *Corresponding author(s). E-mail(s): hhuscout@gms.ndhu.edu.tw; wuweiying1011@gmail.com; Contributing authors: kgy9023@snu.ac.kr; twinwood@snu.ac.kr; egpivo@gmail.com; 
+
+Abstract 
+
+DeepKriging-style models, such as Spatio-Temporal DeepKriging, improve scalability through basis-function embeddings and stochastic gradient learning; however, fixed regular-grid spa-tial bases remain inefficient under highly non-uniform sampling patterns, often over-allocating capacity to sparse regions while under-resolving dense clusters. To address this limitation, we propose a practical extension of DeepKriging for reliable spatio-temporal distributional forecast-ing, incorporating cluster-adaptive spatial bases - whose centers and scales are initialized from the spatial sampling density - to better capture heterogeneous spatial sampling, together with cluster-aware conformal calibration that determines prediction-interval widths within spatial clusters (with a global fallback when calibration samples are insufficient). The resulting calibra-tion pipeline explicitly targets spatial heterogeneity and local miscalibration, and experiments, including simulation studies and PM 2.5 data analysis, demonstrate substantially improved cov-erage accuracy and tail reliability under clustered observation patterns compared with a global conformal baseline.  
+
+> Keywords: Deep learning, spatio-temporal, kriging, cluster, conformal
+
+# 1 Introduction 
+
+Spatio-temporal interpolation plays a fundamental role in environmental monitoring, climate model-ing, and sensor networks, where observations are often irregularly sampled. Classical kriging provides strong theoretical guarantees, including the best linear unbiased predictor (BLUP) and predictive distributions under Gaussian assumptions. However, classical kriging methods often suffer from sub-stantial computational burdens for large spatial or spatio-temporal datasets and typically rely on restrictive covariance assumptions [26]. Comprehensive reviews of space–time covariance structures and covariance-based modeling approaches are provided in [4, 17]. Beyond covariance-based approaches, numerous methods have been proposed for modeling sta-tionary and nonstationary spatio-temporal processes, including hierarchical Bayesian frameworks, mixture-based covariance constructions, deformation methods, and dynamic spatio-temporal models [2, 3, 9, 12, 13, 16, 23–25, 27, 30]. A broader overview of statistical methodologies for stationary and nonstationary spatio-temporal data can be found in [8]. 1
+
+> arXiv:2606.06753v1 [stat.ME] 4 Jun 2026
+
+In recent years, deep neural networks (DNNs) have been increasingly adopted in environmental sciences and spatio-temporal analysis. A comprehensive review of recent statistical and deep learn-ing frameworks for spatio-temporal forecasting is provided by [29]. Specifically, DeepKriging (DK) embeds spatial coordinates via basis expansion and feeds the resulting vectors, together with covari-ates, into a deep neural network (DNN) to model the spatial field nonlinearly while reflecting spatial dependence [5, 15, 19, 20]. DeepKriging-style models, including Spatio-Temporal DeepKriging (STDK), improve scalability by embedding spatial and temporal coordinates through basis functions and learning nonlinear pre-dictors via stochastic gradient descent [19], but fixed regular-grid spatial bases are inefficient under highly non-uniform sampling: they over-allocate capacity to sparse areas while under-resolving dense clusters. These challenges become more pronounced under nonstationarity, clustered sampling, and time-varying observation masks, where both local variability and uncertainty can change sharply over space and time. In classical spatial and spatio-temporal geostatistics, prediction intervals are derived from model-based predictive distributions under assumed covariance structure [6, 7]. Although principled, such intervals can be miscalibrated when covariance assumptions are misspecified or heterogeneity is strong. In this paper, we address this mismatch with cluster-adaptive spatial bases and emphasize 
+
+distributional forecasting and reliable uncertainty quantification . Our contributions are: 
+
+• A cluster-adaptive spatial basis with learnable centers and scales, initialized by the spatial sampling density and optimized jointly with network weights. 
+
+• A multi-quantile joint training extension with non-crossing regularization for distributional forecasting. 
+
+• A cluster-aware conformal calibration layer that adjusts interval widths per spatial cluster (global fallback for small clusters), improving coverage under heterogeneous sampling. Conceptually, our design follows a density-estimation intuition: the spatial sampling density guides spatial capacity allocation before task-specific supervised refinement. Unlike standalone density esti-mation, our target is calibrated conditional quantile prediction over both space and time. Our implementation is publicly available at https://github.com/STLABTW/da-stdk. 
+
+# 2 Methodology 
+
+Let {Y (s, t ) : s ∈ S ⊂ R2, t ∈ T } denote a spatio-temporal process, and let x(s, t ) denote observed covariates. Our goal is to estimate conditional quantiles of Y (s, t ) under heterogeneous, potentially nonstationary, and spatially clustered observation patterns, while preserving temporal dynamics through explicit time-basis modeling. At a high level, our method separates distribution-shape learning and coverage calibration :Sections 2.1–2.2 define the DA-STDK-MQ backbone (adaptive spatial basis + multi-quantile learn-ing), while Section 2.3 applies conformal calibration to enforce interval reliability. The backbone keeps the same feed-forward design spirit as STDK (basis embeddings + covariates → neural net-work) [19], while replacing fixed spatial bases with cluster-adaptive ones and a quadratic loss with a non-crossing multi-quantile loss. Compared with STDK, another key distinction lies in the full uncertainty pipeline, followed by a cluster-aware conformal adjustment to correct local coverage. From a statistical perspective, this can be viewed as a density-informed representation step fol-lowed by supervised quantile fitting and post-hoc coverage correction. Following the STDK input design, our predictor takes three feature groups as input: spatial bases ϕ(s; η), temporal bases ψ(t), and observed covariates x(s, t ). These are concatenated and passed into a shared trunk network (Fig. 1), then mapped to multiple quantile outputs by quantile-specific heads (Section 2.2). 
+
+## 2.1 Cluster-Adaptive Spatial Basis 
+
+We assume the spatial field contains multiple local clusters with different local sampling-density patterns and spatial heterogeneity. Our goal in this module is to learn where the representative centers should be and then learn cluster-level spatial representations around them. Before end-to-end training, we provide a weak, data-informed initialization for center locations so optimization starts from a plausible geometry rather than from arbitrary points. Let s ∈ S ⊂ R2
+
+be spatial coordinates and t ∈ T be time. We initialize centers via a density-weighted clustering objective: 2Fig. 1 : DA-STDK-MQ backbone: concatenated input [ ϕ(s; η), ψ (t), x (s, t )] → MLP trunk fθ →
+
+hidden state h(s, t ) → quantile heads → { ˆYτk }Kk=1 .
+
+Uinit = arg min 
+
+> {uc}Cc=1
+> N
+
+X
+
+> i=1
+
+wi min  
+
+> 1≤c≤C
+
+∥si − uc∥22. (1) Here C denotes the number of initialization centers. In our design, it follows the multi-resolution basis budget, i.e., C = PLℓ=1 Kℓ, where Kℓ is the number of bases in the ℓ level. In principle, C can also be treated as a tunable hyperparameter; however, because this stage provides initialization only, we do not emphasize tuning C in this study. Also, wi reflects local sampling density (larger in denser regions). We optimize Eq. (1) with balanced k-means; a Gaussian mixture model (GMM) initializer (component means) is a practical fallback when imbalance is severe, but it is outside the scope of this study. The statistical rationale is that this initialization acts as a low-variance anchor for spatial parti-tioning under irregular sampling. In finite samples, fully free center learning from random starts can be unstable and may overfit sparse regions. Starting from density-informed centers provides a con-sistent local reference geometry, while subsequent gradient-based updates reduce initialization bias and adapt centers to the task loss. Given (initialized and then trainable) centers, we build a multi-resolution spatial basis to learn cluster representations around each center: 
+
+ϕ(s; η) = ϕ(1) (s; η(1) )⊤, . . . , ϕ (L)(s; η(L))⊤⊤, ϕ(ℓ)(s; η(ℓ)) =  b(∥s − u(ℓ) 
+
+> j
+
+∥/r (ℓ) 
+
+> j
+
+)Kℓ
+
+> j=1
+
+, (2) where b(·) is a radial kernel (e.g., Wendland), and η = ( η(ℓ))Lℓ=1 , where η(ℓ) = {(u(ℓ) 
+
+> j
+
+, r (ℓ) 
+
+> j
+
+)}Kℓ 
+
+> j=1
+
+denotes level-ℓ centers and scales. The basis counts {Kℓ}Lℓ=1 are predefined hyperparameters (fixed before training), so centers are allocated level-by-level. Consider the deep neural network with the input layer x(s, t ), ϕ (s; η), ψ (t), where x(s, t ) denotes observed covariates, ϕ’s are the multi-resolution spatial basis with the parameter η defined in (2), and ψ(t)’s are temporal basis functions such as Gaussian radial basis functions. The corresponding shared trunk output is h(s, t ; θ, η ) ∈ Rd with the trunk parameters ( θ) and basis parameter ( η). We set initial scales from local neighbor distances so each center has a locally adaptive bandwidth. Coarser levels capture global structure, while finer levels capture local variation. Accordingly, the spatial-basis initialization ηinit is built from Uinit and local-distance scales. The corresponding trained center set is 
+
+Utr = {uc}Cc=1 .
+
+During training, all basis parameters η(ℓ) are optimized jointly with network weights, but updates are constrained to stay close to the initialized center geometry. For center stability, one option is an 3explicit proximal penalty (e.g., ∥u − uinit ∥2) [14, 21]. Instead, we use distance-dependent gradient damping: centers that drift farther from initialization receive smaller gradients. This keeps adjustment conservative and improves optimization stability; damping is controlled by dth and κ (Algorithm 1, step (b.3)). To keep centers inside the spatial domain, we use 
+
+Pdomain =
+
+> L
+
+X
+
+> ℓ=1
+> Kℓ
+
+X
+
+> j=1 2
+
+X
+
+> d=1
+
+h
+
+max(0 , −u(ℓ)
+
+> j,d
+
+)2 + max(0 , u (ℓ) 
+
+> j,d
+
+− 1) 2i
+
+, (3) which penalizes centers outside [0 , 1] 2. This term is included in training with coefficient λdomain .
+
+## 2.2 Distributional Forecasting via Multi-Quantile Joint Training 
+
+Let y = Y (s, t ) denote the response at location ( s, t ). For given target quantile levels 0 < τ 1 < · · · <τK < 1, the τk-th quantile predictor is defined as ˆYτk (s, t ) = [1 , h (s, t ; θ, η )⊤]βk. (4) Inspired by [18], to prevent the quantile crossing issue, we adopt the reparameterization 
+
+βk =
+
+> k
+
+X
+
+> ℓ=1
+
+δℓ,
+
+where δ1 = β1 and δk = βk − βk−1 for k ≥ 2. Let Pnc (δ) denote the parameter-level non-crossing regularizer that enforces the feasibility condition, defined as 
+
+Pnc (δ) = 
+
+> K
+
+X
+
+> k=2
+
+J(δk), J(δk) = δk, 0 − max 
+
+
+
+δk, 0,
+
+> d
+
+X
+
+> j=1
+
+max(0 , −δk,j )
+
+
+
+, (5) where δk, 0 corresponds to the intercept component and δk,j (j = 1 , . . . , d ) denotes the coefficient associated with the j-th feature. The multiple quantiles { ˆYτk (s, t )}Kk=1 are jointly estimated by solving arg min 
+
+> θ,η,δ
+
+Loverall := 
+
+> K
+
+X
+
+> k=1
+
+ρτk
+
+ y − ˆYτk (s, t ) + λdomain Pdomain + λnc Pnc (δ), (6) where ρτk (·) denotes the quantile loss at level τk.We initialize η using the density-aware centers and local distance scales described in Section 2.1. The model parameters including the trunk network parameters, the quantile-head increments (with violation-set-aware non-crossing adjustments), and the spatial centers are iteratively updated. Distance-dependent gradient damping is applied to stabilize the optimization process. The detailed training updates are summarized in Algorithm 1. 4Algorithm 1 Overall optimization of DA-STDK-MQ (a) Initialize η ← ηinit from Uinit (Eq. (1), density-aware centers) and local-distance scales. (b) For t = 1 , . . . , T , do: (b.1) Update trunk parameters: 
+
+θ ← θ − γt∇θ Loverall .
+
+(b.2) L1-penalization non-crossing update (Moon et al., 2021): (b.2.1) Define the violation set: 
+
+A(δ) ←
+
+k ≥ 2 : δk, 0 <
+
+> d
+
+X
+
+> j=1
+
+max(0 , −δk,j )
+
+ .
+
+(b.2.2) Update quantile-head increments: 
+
+δk ← δk − γt
+
+(∇δk Loverall + λnc ∇δk J(δk), k ≥ 2, k ∈ A(δ),
+
+∇δk Loverall , otherwise , k = 1 , . . . , K. 
+
+(b.3) Distance-dependent gradient damping for centers 
+
+For each ℓ = 1 , . . . , L , j = 1 , . . . , K ℓ:(b.3.1) Compute displacement and damping factor: 
+
+d(ℓ) 
+
+> j
+
+= ∥u(ℓ) 
+
+> j
+
+− u(ℓ)
+
+> j, init
+
+∥2, a(ℓ) 
+
+> j
+
+= exp   − κ max(0 , d (ℓ) 
+
+> j
+
+− dth ).
+
+(j indexes the center within level ℓ; d(ℓ) 
+
+> j
+
+is displacement, a(ℓ) 
+
+> j
+
+is damping factor.) (b.3.2) Apply damped gradient and update center: ˜∇u(ℓ)
+
+> j
+
+Loverall = a(ℓ) 
+
+> j
+
+∇u(ℓ)
+
+> j
+
+Loverall , u(ℓ) 
+
+> j
+
+← u(ℓ) 
+
+> j
+
+− ηu ˜∇u(ℓ)
+
+> j
+
+Loverall .
+
+## 2.3 Cluster-Aware Conformal Calibration for Reliable Coverage 
+
+While multi-quantile regression provides distributional estimates, it does not guarantee finite-sample coverage under spatial heterogeneity. We therefore apply conformalized quantile regression (CQR) as a post-processing step using a calibration split (validation when available; in our train ratio = 0 .8setting, calibration uses the validation split; otherwise a held-out subset of training data). Using the quantile outputs in Section 2.2 (Eq. (4)), we first form nominal prediction intervals, then calibrate them by conformal adjustment. 
+
+Global CQR baseline 
+
+As a baseline, we use standard conformalized quantile regression (CQR) with a single global adjust-ment term [22]. Given calibration data {(si, t i, Y i)}ni=1 and nominal miscoverage α (e.g., 0.1 for 90% intervals), define nonconformity scores 
+
+Ri = max   ˆYα/ 2(si, t i) − Yi, Y i − ˆY1−α/ 2(si, t i), 0. (7) The global conformal adjustment is ˆqglobal = Q1−α({Ri}ni=1 ), (8) which yields the global interval ˆCglobal 1−α (s, t ) =  ˆYα/ 2(s, t ) − ˆqglobal , ˆY1−α/ 2(s, t ) + ˆ qglobal 
+
+. (9) This baseline is simple, but a single ˆ qglobal can under-adjust hard regions and over-adjust easy regions when spatial uncertainty is heterogeneous. 5Algorithm 2 Cluster-aware conformal calibration (a) Assign calibration points by nearest trained center set Ucal (Section 2.1): ci = c(si). ( i indexes calibration points 1 , . . . , n ; ci is the cluster index for point i via Eq. (10).) (b) Compute 
+
+Ri ← max   ˆYα/ 2(si, t i) − Yi, Y i − ˆY1−α/ 2(si, t i), 0.
+
+(Ri: nonconformity score for calibration point i.) (c) Compute the global quantile: ˆqglobal ← Q1−α({Ri}ni=1 ).
+
+(n: number of calibration points; Q1−α: (1 − α)-quantile.) (d) For each cluster c, define ˆqc =
+
+(Q1−α({Ri : ci = c}), nc ≥ nmin ,
+
+ˆqglobal , nc < n min .
+
+(c indexes clusters 1 , . . . , C ; nc = |{ i : ci = c}| ; nmin : minimum sample threshold for per-cluster quantile.) (e) For test point ( s, t ) with c⋆ = c(s), output Eq. (11). ( c⋆: cluster assigned to the test point via nearest center in Eq. (10).) 
+
+Cluster-aware CQR 
+
+To adapt calibration locally, we use a center set for calibration, denoted by Ucal = {uc}Cc=1 . For DA-STDK-MQ , the clusters are defined by the same spatial centers as in the cluster-adaptive basis (Section 2.1): we set Ucal = Utr (trained centers) so that the partition of space is consistent with the backbone representation. We then define nearest-center cluster assignment. This design is closely related to localized/group-conditional conformal ideas in the conformal prediction literature [10]. Define 
+
+c(s) = arg min  
+
+> c
+
+∥s − uc∥ (10) and ˆCcluster 1−α (s, t ) =  ˆYα/ 2(s, t ) − ˆqc⋆ , ˆY1−α/ 2(s, t ) + ˆ qc⋆
+
+, (11) where c⋆ = c(s) is the cluster assigned to the test point ( s, t ) via Eq. (10), and ˆ qc⋆ is the conformal half-width for that cluster: the (1 − α)-quantile of nonconformity scores among calibration points in cluster c⋆, or ˆ qglobal if the cluster has too few points (Algorithm 2, step (d)). 
+
+# 3 Numerical Study 
+
+## 3.1 Experimental Setup 
+
+This subsection reports model/training choices and the evaluation workflow used for both simulation and real-data studies. 
+
+Model and Training Settings. 
+
+We use a 3-layer MLP with hidden sizes 256, 256, 128, ReLU activations, layer normalization, and dropout 0.1. Optimization uses AdamW with base learning rate 0.01, weight decay 5 × 10 −4, and a reduced rate for basis parameters (0.0005), batch size 4096, maximum 500 epochs, and early stopping patience 50. Spatial bases use Wendland kernels with multi-resolution counts 25, 81, 121 (total 227). Temporal bases use Gaussian RBFs with 10, 15, 45 bases (total 70); temporal bandwidth follows the implementation default (2.5 × grid spacing) and is fixed across methods. Spatial basis initialization uses balanced k-means for DA-STDK-MQ and fixed grids for STDK. We use gradient damping for basis-center updates. For non-crossing, we use the ℓ1-penalization algorithm (penalty gradient applied only to heads in the violation set A(δ)), and tune λnc by grid search (candidate values include 0, 10 −3 ∼ 10 −1 log-scale, and additional larger values). In our current KAUST runs, the best CRPS is achieved at λnc = 0, so the reported results (Tables 1 and 2) use this selected value (i.e., no active non-crossing penalty term). For fair numerical comparison, the domain penalty is applied only to DA-STDK-MQ (learnable centers); STDK uses fixed spatial bases and thus has no Pdomain term. 6In our latest run, DA-STDK-MQ conformal calibration uses trained centers for cluster assignment, i.e., Ucal = Utr . Overall, we isolate gains from spatial adaptation while keeping temporal modeling identical across methods. 
+
+Experimental Pipeline. 
+
+We adopt a reproducible pipeline with fixed configurations and seeds: (1) data preparation with fixed dataset split and observation regime; (2) baseline STDK training; (3) DA-STDK-MQ training with adaptive bases; (4) cluster-aware conformal calibration using a held-out subset (Ours); (5) evaluation of CRPS and coverage metrics with spatial visualizations. 
+
+## 3.2 Simulation Data: KAUST Benchmark 
+
+Data Description and Scenarios. 
+
+We evaluate the performance of the proposed approach using the KAUST spatio-temporal compe-tition datasets, which are generated from a zero-mean Gaussian process with a Mat´ ern space–time covariance structure. The competition comprises six datasets (2a-7, 2a-8, 2a-9, 2b-7, 2b-8, 2b-9); further details can be found in [1]. For brevity, we report results only for the dataset 2b-8, as the find-ings for the remaining datasets are similar. Additional results are provided in the Appendix A. The spatial domain consists of 10,000 locations for the dataset 2b-8, each observed over 100 time points. In the simulation studies, we consider four observation regimes defined by crossing two factors: fixed vs. random observation sets over time, and uniform vs. clustered spatial sampling: 1. Observation method: 
+
+• Fixed : The same set of spatial observation locations ( s) is used at each time step, simulating a permanent monitoring network. 
+
+• Random : Observation sites are randomly resampled at each time step, with each ( t, s ) observed independently via Bernoulli sampling; consequently, the set of observed sites varies over time. 2. Spatial sampling pattern: 
+
+• Uniform : Spatial observation locations are sampled uniformly at random over the spatial domain. 
+
+• Clustered : Spatial observation locations are sampled with a bias toward one corner of the domain (via a Gaussian kernel), inducing spatial imbalance. In our simulation studies, under the clus-tered setting, locations are sampled from a density proportional to (1 + 10 ∥s∥)−2 on [0 , 1] 2,leading to a higher concentration of samples near the origin. The combination yields four scenarios: Fixed Uniform, Fixed Clustered, Random Uniform, and Random Clustered. A total of 10% of the sites are allocated for training and validation (with an 80/20 split, respectively), while the remaining 90% are reserved for testing. Ten replications are conducted for each scenario-model combination. The performance of the estimated quantiles is assessed using the following criteria: 
+
+Probabilistic Accuracy. 
+
+We use the Continuous Ranked Probability Score (CRPS) to evaluate distributional forecasts. The population CRPS for true value y and predicted CDF ˆF is CRPS( y, ˆF ) = 
+
+Z ∞−∞ 
+
+  ˆF (z) − 1y≤z
+
+2dz. (12) In our setting we only have quantile predictions ˆYτk at levels τ1, . . . , τ K (e.g., τ ∈{0.05 , 0.25 , 0.5, 0.75 , 0.95 }), not the full ˆF . We therefore estimate CRPS using a weighted quantile approximation (trapezoidal integration in τ -space): 
+
+\CRPS( y, { ˆYτk }) = 2 
+
+> K
+
+X
+
+> k=1
+
+˜wk ρτk (y − ˆYτk ), (13) 7where ρτ (u) = u(τ − 1u< 0) is the check loss, and ˜ wk are trapezoidal weights from the quantile grid: ˜w1 = τ2 − τ1
+
+2 , ˜wk = τk+1 − τk−1
+
+2 (2 ≤ k ≤ K − 1) , ˜wK = τK − τK−1
+
+2 .
+
+This is more accurate than uniform weights when quantile levels are not equally spaced. All CRPS values reported in this paper are the mean of \CRPS over the test set. Intuitively, CRPS is an integral over the quantile level τ , so each quantile should contribute according to its interval width in τ -space; trapezoidal weights respect this geometry, whereas uniform weights can over-emphasize densely sampled τ regions and underweight sparse ones. 
+
+Distributional Forecasting Results 
+
+Table 1 reports CRPS on 2b-8 with 10 replicates. DA-STDK-MQ improves CRPS in three scenarios, with the largest gain in the random-clustered setting, while showing a small degradation in the random-uniform setting. 
+
+Table 1 : CRPS comparison on 2b-8 (mean (SE), 10 replicates).           
+
+> Scenario STDK DA-STDK-MQ Fixed, uniform 0.1867 (0.0006) 0.1862 (0.0004) Fixed, clustered 0.2329 (0.0019) 0.2224 (0.0013) Random, uniform 0.1962 (0.0004) 0.1984 (0.0007) Random, clustered 0.2814 (0.0009) 0.2528 (0.0010)
+
+Coverage Evaluation 
+
+To evaluate the performance of the proposed method, we compare STDKGC CQR (STDKGC, STDK quantiles with a single conformal ˆ qglobal ), which applies a single conformal adjustment ˆ qglobal 
+
+to all quantile outputs [22], with Ours , which denotes the proposed DA-STDK-MQ equipped with cluster-aware CQR (DA-STDK-MQ + cluster-aware CQR). The comparison in the coverage performance is conducted using the metrics PICP, QICE, and worst-10% coverage. We assess empirical coverage of the 90% prediction interval on the test set via the Prediction Interval Coverage Probability (PICP) [31]: PICP = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+1yn≥ˆylow  
+
+> n
+
+· 1yn≤ˆyhigh  
+
+> n
+
+, (14) where ˆ ylow  
+
+> n
+
+and ˆ yhigh  
+
+> n
+
+are the lower and upper bounds of the 90% PI for the n-th test point. To measure uniformity of coverage across quantile bins, we use Quantile Interval Coverage Error (QICE) [11] with 
+
+M = 4 intervals defined by consecutive predicted quantiles τ ∈ { 0.05 , 0.25 , 0.5, 0.75 , 0.95 } (intervals [ ˆY0.05 , ˆY0.25 ], [ ˆY0.25 , ˆY0.5], [ ˆY0.5, ˆY0.75 ], [ ˆY0.75 , ˆY0.95 ]). The target proportion per interval is 1 /M = 1 /4. Let rm be the empirical proportion of test points whose true value falls in the m-th interval; then QICE = 1
+
+M
+
+> M
+
+X
+
+> m=1
+
+rm − 1
+
+M , rm = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+1yn∈m-th QI . (15) Lower QICE indicates more uniform coverage across the distribution. To diagnose spatial hetero-geneity and under/over-coverage, we also report worst-10% site coverage by the mean coverage of the 10% of sites with lowest coverage (tail behavior). The results correspond to STDKGC versus Ours (cluster-aware CQR), respectively, in Table 2. Since the nominal coverage level is 90%, we evaluate PICP in terms of its closeness to 90%. While 
+
+STDKGC has a slightly better performance under uniform sampling, the difference is not large. In contrast, Ours shows much closer coverage level under clustered sampling (fixed-clustered and random-clustered). The improvement is particularly evident in the Worst10 metric, which reflects 8lower-tail site-wise coverage robustness. Under clustered sampling, Ours substantially reduces the Worst10 coverage deficit. These improvements highlight the limitations of a single global confor-mal adjustment in cluster settings and demonstrate the advantage of the proposed cluster-aware calibration. In addition, Ours improves distributional calibration, yielding lower QICE values across all sce-narios. Figures 2 and 3 show time series at one representative test site per scenario, split into fixed-observation and random-observation pairs for readability. Each panel contains two stacked sub-plots evaluated at the same site: the top subplot is Ours (DA-STDK-MQ + cluster-aware CQR) and the bottom subplot is STDKGC (baseline). Test locations with the largest empirical coverage gaps between STDKGC and Ours are selected, so that the comparison focuses on regions where cluster-aware calibration is most informative. Common legend: gray band = nominal quantile inter-val; blue and red lines = ˆY0.05 and ˆY0.95 of the underlying model; purple dashed lines = 90% PI expanded with ˆ qglobal ; green solid lines (top subplot only) = 90% PI expanded with the cluster-aware ˆqc (Algorithm 2); gray and black dots = test and train values; each subplot title reports the per-site empirical coverage. In the clustered scenarios (Figure 2(b) and Figure 3(b)), the top subplot keeps the true trajectory inside the 90% PI more often than the bottom subplot, consistent with Table 2. We further compare the spatial coverage patterns between STDKGC and Ours under fixed-observation and random-observation scenarios, as shown in Figures 4 and 5, respectively. Each figure presents three panels per row: (1) coverage of STDKGC , (2) coverage of Ours , and (3) the difference ∆ = Ours − STDKGC . Columns correspond to the uniform and clustered observation structures. In panels (1)–(2), green indicates higher empirical coverage and red indicates lower coverage relative to the target level (90%). In panel (3), blue represents positive ∆ and red represents negative ∆. Red × markers denote the spatial basis centers. Under uniform observations, ∆ is close to zero and spatially scattered. In contrast, under clustered observations, ∆ is predominantly positive across broad regions, indicating that Ours achieves superior coverage performance, consistent with the PICP and Worst10 results reported in Table 2. 
+
+## 3.3 Real Data Application 
+
+The MERRA2 CNN HAQAST PM 2.5 dataset provides satellite-derived daily mean particulate matter concentrations on a 0 .5° × 0.625 ° latitude–longitude grid. We consider PM 2.5 datasets from three geographic regions. One-day realizations and their corresponding mean fields from a single replication for the regions of interest are presented in Figure 6. 
+
+• Banda Sea (Indonesia): 10 °S–2 °S latitude, 118 °E–132 °E longitude. A tropical maritime region with relatively homogeneous PM 2.5 levels. For the Banda Sea dataset, the high concentrations of PM 2.5 occurred over land areas. 
+
+• United States: 24 °N–50 °N latitude, 125 °W–66 °W longitude. A large continental domain with diverse emission sources and meteorological conditions. 
+
+• China: 18 °N–54 °N latitude, 73 °E–135 °E longitude. A region with strong spatial gradients in PM 2.5 
+
+due to industrial activity. For each region, the data are restricted to T = 100 timesteps, corresponding to the period from 2020-01-01 to 2020-04-09 and S ≤ 10 ,000 grid cells. In these datasets, the PM 2.5 data uses real geographic coordinates, enabling the spatial kernel to capture actual geographic distance relation-ships. Similar to the simulation study, we consider four observation settings: Fixed Uniform, Fixed Clustered, Random Uniform, and Random Clustered. The performance of the proposed method is evaluated using CRPS , PICP and QICE , as defined in the simulation study. 
+
+## 3.4 Results 
+
+In each table, we report the mean and standard deviation (in parentheses) across 10 replications using different random seeds for the train-test splits, consistent with the procedure used for the KAUST dataset. A total of 10% of the sites are allocated for training and validation (with an 80/20 split, respectively), while the remaining 90% are reserved for testing. The “Improvement (%)” column is defined so that positive values indicate better performance of 
+
+Ours relative to STDKGC . For CRPS and QICE, where smaller values indicate better performance, the improvement is computed as 100 × STDKGC −Ours STDKGC . For PICP, since all reported coverage values 9Table 2 : PICP, QICE, and worst-10% site coverage on the latest run (mean (SE), 10 replicates): STDKGC vs Ours (DA-STDK-MQ + cluster-aware CQR). 
+
+> Scenario  PICP (STDKGC)  PICP (Ours)  QICE (STDKGC)  QICE (Ours)  Worst10 (STDKGC)  Worst10 (Ours) Fixed Uniform  92.4% (0.07)  93.1% (0.08)  0.0429 (0.0004)  0.0401 (0.0003)  79.0% (0.38)  79.0% (0.43) Fixed Clustered  86.9% (0.22)  92.1% (0.16)  0.0331 (0.0005)  0.0318 (0.0002)  63.5% (0.66)  73.9% (0.46) Random Uniform  90.9% (0.04)  91.5% (0.03)  0.0390 (0.0002)  0.0359 (0.0003)  83.7% (0.07)  84.7% (0.06) Random Clustered  80.9% (0.13)  90.7% (0.10)  0.0478 (0.0003)  0.0386 (0.0003)  62.4% (0.23)  81.0% (0.28)
+
+10 (a) Fixed-uniform 
+
+> (b) Fixed-clustered
+
+Fig. 2: Time series at one representative test site for fixed-observation scenarios. (a) Fixed-uniform : For the site 23 at (0 .002 , 0.236), the per-site empirical coverages of the 90% PI are 0 .72 and 0.96 for STDKGC and Ours, respectively. (b) Fixed-clustered : For the site 9971 at (0 .994 , 0.717), the per-site empirical coverages of 90% PI are 0 .55 and 0 .93 for STDKGC and Ours, respectively. In each panel the top subplot shows Ours (DA-STDK-MQ + cluster-aware CQR) and the bottom 
+
+shows STDKGC (baseline). are below the nominal level of 90%, larger PICP values indicate coverage closer to the nominal level. Therefore, the improvement is computed as 100 × Ours −STDKGC STDKGC . Thus, positive values indicate that 
+
+Ours improves the corresponding metric, whereas negative values indicate deterioration. 
+
+3.4.1 PM 2.5 — Banda Sea 
+
+CRPS ranges from 0.93 to 1.23. Similar to the simulation studies, DA-STDK-MQ improves primarily under clustered observation scenarios, with the largest gains in Random Clustered (1 .0% CRPS, 3.3% PICP, 16 .3% QICE). 
+
+3.4.2 PM 2.5 — United States 
+
+The U.S. PM 2.5 results show the strongest DA-STDK-MQ improvements among the PM 2.5 regions. Under the Random Clustered setting, DA-STDK-MQ reduces CRPS by 6.2%, improves coverage by 6.2%, and decreases QICE by 19.0%. Similarly, under the Fixed Clustered setting, it achieves meaningful improvements, with CRPS, PICP, and QICE improved by 3.2%, 1.3%, and 3.7%, respectively. 
+
+3.4.3 PM 2.5 — China 
+
+11 (a) Random-uniform 
+
+> (b) Random-clustered
+
+Fig. 3 : Random-observation analogue of Figure 2. Sites are chosen where Ours achieves coverage close to the 90% nominal level while STDKGC is notably miscalibrated. (a) Random-uniform :For site 181 at (0 .018 , 0.813), the per-site empirical coverages of the 90% PI are 1 .00 and 0 .94 for STDKGC and Ours, respectively. (b) Random-clustered : For site 9891 at (0 .988 , 0.918), the per-site empirical coverages of the 90% PI are 0 .69 and 0 .86 for STDKGC and Ours, respectively. China PM 2.5 has the highest CRPS values among the three regions, reflecting stronger spatial gradients in pollution levels. DA-STDK-MQ achieves meaningful improvements under both clustered scenarios: 2 .6% and 4 .4% CRPS for Fixed and Random Clustered, respectively. Table 6–8 summarize the improvement (%) of CRPS, QICE and PICP of DA-STDK-MQ over STDKGC across all three datasets and four observation scenarios. They demonstrate that the proposed method outperforms well for geographically clustered data. 
+
+# 4 Conclusion 
+
+DeepKriging-style models, such as STDK, achieve scalability via basis-function embeddings and stochastic gradient learning; however, fixed regular-grid spatial bases remain inefficient under highly non-uniform sampling, often over-representing sparse regions while under-resolving dense clusters. In this work, we address this limitation through cluster-adaptive spatial bases and emphasize distributional forecasting with reliable uncertainty quantification. Specifically, we develop (i) a cluster-adaptive spatial basis with learnable centers and scales, initialized from the spatial sampling density and jointly optimized with network weights; (ii) a multi-quantile joint training framework with non-crossing regularization; and (iii) a cluster-aware conformal calibration layer that adjusts prediction-interval widths at the cluster level, with a global fallback for small clusters. Simulation studies and PM 2.5 analysis demonstrate that the proposed framework improves coverage accuracy and distributional forecasting under clustered data structures, compared with global conformal methods. 12 Table 3 : Results for PM 2.5 Banda Sea. Mean ± std over 10 replications. 
+
+Scenario Metric STDKGC Ours Improvement (%) Fixed Uniform CRPS 1.0981 ± 0.0297 1.1005 ± 0.0287 -0.2% PICP 0.8514 ± 0.0032 0.8499 ± 0.0033 -0 .2% QICE 0.0371 ± 0.0008 0.0375 ± 0.0008 -1.0% Fixed Clustered CRPS 1.2316 ± 0.0659 1.2270 ± 0.0706 +0 .4% PICP 0.8241 ± 0.0039 0.8329 ± 0.0039 +1.1% QICE 0.0440 ± 0.0010 0.0418 ± 0.0010 +5 .0% Random Uniform CRPS 0.9311 ± 0.0043 0.9249 ± 0.0044 +0 .7% PICP 0.8753 ± 0.0026 0.8759 ± 0.0044 +0.1% QICE 0.0314 ± 0.0007 0.0316 ± 0.0005 -0.8% Random Clustered CRPS 1.0510 ± 0.0069 1.0409 ± 0.0105 +1 .0% PICP 0.8308 ± 0.0031 0.8583 ± 0.0080 +3.3% QICE 0.0423 ± 0.0008 0.0354 ± 0.0020 +16 .3% 
+
+Table 4 : Results for PM 2.5 United States. Mean ± std over 10 replications. 
+
+Scenario Metric STDKGC Ours Improvement (%) Fixed Uniform CRPS 0.9993 ± 0.0207 1.0018 ± 0.0210 -0.2% PICP 0.7863 ± 0.0054 0.7939 ± 0.0114 +1.0% QICE 0.0534 ± 0.0014 0.0515 ± 0.0029 +3 .5% Fixed Clustered CRPS 1.1969 ± 0.0330 1.1591 ± 0.0284 +3 .2% PICP 0.7448 ± 0.0168 0.7542 ± 0.0120 +1.3% QICE 0.0638 ± 0.0042 0.0614 ± 0.0030 +3 .7% Random Uniform CRPS 0.9625 ± 0.0085 0.9699 ± 0.0095 -0.8% PICP 0.8254 ± 0.0146 0.8304 ± 0.0095 +0.6% QICE 0.0437 ± 0.0037 0.0424 ± 0.0024 +2 .8% Random Clustered CRPS 1.2150 ± 0.0106 1.1395 ± 0.0052 +6 .2% PICP 0.7551 ± 0.0187 0.8016 ± 0.0092 +6.2% QICE 0.0612 ± 0.0047 0.0496 ± 0.0023 +19 .0% 
+
+Table 5 : Results for PM 2.5 China. Mean ± std over 10 replications. 
+
+Scenario Metric STDKGC Ours Improvement (%) Fixed Uniform CRPS 5.574 ± 0.123 5.593 ± 0.103 -0.3% PICP 0.795 ± 0.005 0.793 ± 0.007 -0 .3% QICE 0.051 ± 0.001 0.052 ± 0.002 -1.1% Fixed Clustered CRPS 6.181 ± 0.158 6.020 ± 0.127 +2 .6% PICP 0.754 ± 0.007 0.768 ± 0.005 +1.9% QICE 0.062 ± 0.002 0.058 ± 0.001 +5 .8% Random Uniform CRPS 4.756 ± 0.025 4.752 ± 0.029 +0 .1% PICP 0.859 ± 0.007 0.857 ± 0.006 −0.2% QICE 0.035 ± 0.002 0.036 ± 0.002 -1.0% Random Clustered CRPS 5.442 ± 0.028 5.204 ± 0.034 +4 .4% PICP 0.789 ± 0.008 0.826 ± 0.005 +4.7% QICE 0.053 ± 0.002 0.043 ± 0.001 +17 .5% 
+
+Table 6 : Improvement of CRPS 
+
+Dataset Fixed Unif. Fixed Clust. Rand. Unif. Rand. Clust. PM2.5 Banda Sea -0.2 +0 .4 +0 .7 +1 .0PM2.5 U.S. -0.2 +3 .2 -0.8 +6 .2PM2.5 China -0.3 +2 .6 +0 .1 +4 .4
+
+13 Table 7 : Improvement of PICP                 
+
+> Dataset Fixed Unif. Fixed Clust. Rand. Unif. Rand. Clust. PM2.5 Banda Sea −0.2+1.1 +0.1 +3.3 PM2.5 U.S. +1.0 +1.3 +0.6 +6.2 PM2.5 China −0.3+1.9 −0.2+4.7
+
+Table 8 : Improvement of QICE                 
+
+> Dataset Fixed Unif. Fixed Clust. Rand. Unif. Rand. Clust. PM2.5 Banda Sea -1.0 +5 .0-0.8 +16 .3PM2.5 U.S. +3 .5+3 .7+2 .8+19 .0PM2.5 China -1.1 +5 .8-1.0 +17 .5
+
+Acknowledgements. Lim’s research was supported by National Research Foundation of Korea (NRF) grant funded by the Korea government (MSIT) (RS-2024- 00335033). Huang’s research is partially supported by NSTC 113-2118-M-259-001-MY2 and NDHU Funding 114T2560-03. Wu’s research is partially supported by NSTC 113-2118-M-259-002-MY2 and NDHU Funding 114T2560-03. Wang’s research is supported by NSTC113-2118-M005-005-MY2. 
+
+# References 
+
+[1] Abdulah, S., Alamri, F., Nag, P., Sun, Y., Ltaief, H., Keyes, D.E., Genton, M.G. The second competition on spatial statistics for large datasets. Journal of Data Science 20 (4), 439–460 (2022) [2] Bartlett, M. S. The statistical analysis of spatial pattern. Chapman and Hall/CRC (2013) [3] Bruno, F., Guttorp, P., Sampson, P. D. A nonstationary stochastic model for spatial and spatio-temporal data. Environmetrics 20 (7), 673–690 (2009) [4] Chen, W., Genton, M. G., and Sun, Y. (2021). Space-time covariance structures and models. 
+
+Annual Review of Statistics and Its Application , 8, 191–215. [5] Chen, W., Li, Y., Reich, B. J., Ying, S. DeepKriging: Spatially dependent deep neural networks for spatial prediction. Statistica Sinica 34 (1), 291–311 (2024) [6] Cressie, N. Statistics for Spatial Data . Revised edn. Wiley (1993) [7] Cressie, N., Wikle, C.K. Statistics for Spatio-Temporal Data . Wiley (2011) [8] Cressie, N., Wikle, C. K. Statistics for Spatio-Temporal Data . Wiley, Hoboken (2015) [9] Fuentes, M., Chen, L., Davis, J. M. A class of nonstationary spatial models for environmental applications. Environmetrics 19 (3), 251–268 (2008) [10] Guan, L. Localized conformal prediction: A generalized inference framework for conformal prediction. Biometrika 110 (1), 33–50 (2023) [11] Han, X., Zheng, H., Zhou, M. Card: Classification and regression diffusion models. Advances in Neural Information Processing Systems 35 , 18100–18115 (2022) [12] Huang, H.-C., Hsu, N.-J. Modeling transport effects on ground-level ozone using a non-stationary space–time model. Environmetrics 15 (3), 251–268 (2004) [13] Kolovos, A., Christakos, G., Hristopulos, D. T., Serre, M. L. Methods for generating nonsepa-rable spatiotemporal covariance models with potential environmental applications. Advances in 
+
+14 Water Resources 27 (8), 815–830 (2004) [14] Li, T., Sahu, A.K., Talwalkar, A., Smith, V. Federated Optimization in Heterogeneous Networks. 
+
+Proceedings of Machine Learning and Systems 2, 429–450 (2020) [15] Lin, D.-C., Huang, H.-C., and Tzeng, S. (2023). Some enhancements to DeepKriging. Stat , e559. [16] Ma, C. Spatio-temporal covariance functions generated by mixtures. Mathematical Geology 34 ,965–975 (2002) [17] Montero, J. M., Fern´ andez-Avil´ es, G., Mateu, J. Spatial and Spatio-Temporal Geostatistical Modeling and Kriging . Wiley, Chichester (2015) [18] Moon, S.J., Jeon, J.-J., Lee, J.S.H., Kim, Y. Learning multiple quantiles with neural networks. 
+
+Journal of Computational and Graphical Statistics 30 (4), 1238–1248 (2021) [19] Nag, P., Sun, Y., Reich, B.J. Spatio-temporal DeepKriging for interpolation and probabilistic forecasting. arXiv preprint arXiv:2306.11472 (2023) [20] Nag, P., Sun, Y., Reich, B. J. Bivariate DeepKriging for large-scale spatial interpolation of wind fields. Technometrics 00 (0), 1–12 (2025) [21] Parikh, N., Boyd, S. Proximal Algorithms. Foundations and Trends in Optimization 1(3), 127– 239 (2014) [22] Romano, Y., Patterson, E., Cand` es, E.J. Conformalized Quantile Regression. Advances in Neural Information Processing Systems 32 (2019) [23] Sigrist, F., K¨ unsch, H. R., Stahel, W. A. A dynamic nonstationary spatio-temporal model for short term prediction of precipitation. Annals of Applied Statistics 6(4), 1452–1477 (2012) [24] Stein, M. L. Space–time covariance functions. Journal of the American Statistical Association 
+
+100 (469), 310–321 (2005) [25] Stroud, J. R., M¨ uller, P., Sans´ o, B. Dynamic models for spatiotemporal data. Journal of the Royal Statistical Society: Series B (Statistical Methodology) 63 (4), 673–689 (2001) [26] Sun, Y., Li, B., and Genton, M. G. (2012). Geostatistics for large datasets. In E. Porcu, J.-M. Montero, and M. Schlather (Eds.), Advances and Challenges in Space-time Modelling of Natural Events , pp. 55–77. Springer, Berlin, Heidelberg. [27] Wikle, C. K., Berliner, L. M., and Cressie, N. (1998). Hierarchical Bayesian space-time models. 
+
+Environmental and Ecological Statistics , 5, 117–154. [28] Wikle, C. K., Zammit-Mangion, A. A brief review of deep learning methods for spatio-temporal statistics. Spatial Statistics 49 , 100552 (2022) [29] Wikle, C. K. and Zammit-Mangion, A. (2023). Statistical deep learning for spatial and spatiotemporal data. Annual Review of Statistics and Its Application , 10 , 247–270. [30] Xu, G., Gardoni, P. Spatio-temporal autoregressive models with applications to air quality analysis. Stochastic Environmental Research and Risk Assessment 32 (9), 2695–2710 (2018) [31] Yao, J., Pan, W., Ghosh, S., Doshi-Velez, F. Quality of uncertainty quantification for Bayesian neural network inference. arXiv preprint arXiv:1906.09686 (2019) [32] Zammit-Mangion, A., Wikle, C. K. Deep integro-difference equation models for spatio-temporal forecasting. Spatial Statistics 37 , 100408 (2020) 15 Appendix A Additional Results for the Remaining KAUST Competition Datasets 
+
+Our proposed methodology is further applied to additional KAUST competition datasets, including 2a-7, 2a-8, 2a-9, 2b-7, and 2b-9. Depending on the number of observation locations, we consider different basis-function settings: (9 , 25 , 36) for S = 1000 and (25 , 81 , 121) for S = 10000. All other simulation settings remain the same as those described in Section 3.2. The corresponding results are presented and discussed in this section. 
+
+Table A1 : CRPS on KAUST 2a-7 ( S = 1 ,000, basis [9 , 25 , 36]; mean (SE), 10 replicates). 
+
+Scenario STDK DA-STDK-MQ Fixed, uniform 0.6168 (0.0021) 0.6152 (0.0015) Fixed, clustered 0.6377 (0.0034) 0.6255 (0.0050) Random, uniform 0.5335 (0.0004) 0.5318 (0.0004) Random, clustered 0.5523 (0.0025) 0.5441 (0.0007) 
+
+Table A2 : CRPS on KAUST 2a-8 ( S = 1 ,000, basis [9 , 25 , 36]; mean (SE), 10 replicates). 
+
+Scenario STDK DA-STDK-MQ Fixed, uniform 0.4498 (0.0024) 0.4547 (0.0029) Fixed, clustered 0.4659 (0.0027) 0.4650 (0.0023) Random, uniform 0.4690 (0.0012) 0.4722 (0.0013) Random, clustered 0.5263 (0.0043) 0.4944 (0.0016) 
+
+Table A3 : CRPS on KAUST 2a-9 ( S = 1 ,000, basis [9 , 25 , 36]; mean (SE), 10 replicates). 
+
+Scenario STDK DA-STDK-MQ Fixed, uniform 0.1210 (0.0019) 0.1253 (0.0020) Fixed, clustered 0.1669 (0.0044) 0.1579 (0.0034) Random, uniform 0.1533 (0.0022) 0.1681 (0.0016) Random, clustered 0.2722 (0.0024) 0.2322 (0.0023) 
+
+Table A4 : CRPS on KAUST 2b-7 ( S = 10 ,000, basis [25 , 81 , 121]; mean (SE), 10 replicates). 
+
+Scenario STDK DA-STDK-MQ Fixed, uniform 0.4315 (0.0006) 0.4324 (0.0006) Fixed, clustered 0.4720 (0.0013) 0.4696 (0.0015) Random, uniform 0.4133 (0.0003) 0.4145 (0.0002) Random, clustered 0.4602 (0.0005) 0.4530 (0.0004) 
+
+Table A5 : CRPS on KAUST 2b-9 ( S = 10 ,000, basis [25 , 81 , 121]; mean (SE), 10 replicates). 
+
+Scenario STDK DA-STDK-MQ Fixed, uniform 0.0482 (0.0002) 0.0474 (0.0001) Fixed, clustered 0.0580 (0.0006) 0.0566 (0.0004) Random, uniform 0.0484 (0.0001) 0.0476 (0.0001) Random, clustered 0.0683 (0.0003) 0.0609 (0.0001) 
+
+16 CRPS. 
+
+CRPS information are shown in Table A1 - A5. Across all five datasets, DA-STDK-MQ consistently outperforms STDK in the clustered scenarios, with the largest CRPS reductions in the random-clustered setting: 
+
+• 2a-9: 0.2722 → 0.2322 (+14.7%), the largest relative improvement. 
+
+• 2a-8: 0.5263 → 0.4944 (+6.1%). 
+
+• 2b-9: 0.0683 → 0.0609 (+10.8%). 
+
+• 2b-7: 0.4602 → 0.4530 (+1.6%). 
+
+• 2a-7: 0.5523 → 0.5441 (+1.5%). In uniform scenarios, the two models perform comparably, with DA-STDK-MQ showing a small degradation on some datasets (e.g., 2a-9 random-uniform: 0.1533 → 0.1681). This is consistent with the main paper’s 2b-8 finding: the adaptive basis provides the most benefit when observations are spatially clustered. 
+
+QICE. 
+
+The QICE and Worst-10% site coverage are informed in Table A6 - A10. QICE measures dis-tributional calibration uniformity. Ours reduces QICE in most clustered scenarios, indicating better-calibrated quantile intervals: 
+
+• 2a-8 random-clustered: 0.0790 → 0.0505. 
+
+• 2a-9 random-clustered: 0.0864 → 0.0690. 
+
+• 2b-7 random-clustered: 0.0620 → 0.0544. In uniform scenarios, QICE differences are small, and occasionally Ours shows slightly higher QICE (e.g., 2b-9 fixed-uniform: 0.1125 → 0.1180), likely because the global conformal approach is already well-suited when spatial heterogeneity is low. 
+
+Worst-10% site coverage. 
+
+This metric captures tail reliability—the mean coverage of the 10% worst-covered sites. The improvements are most pronounced under clustered observations: 
+
+• 2a-9 random-clustered: 52.1% → 66.9% (66.9% - 52.1% = +14.8%). 
+
+• 2a-8 random-clustered: 68.1% → 79.7% (79.7% - 68.1%= +11.6%). 
+
+• 2b-7 random-clustered: 73.0% → 81.3% (81.3% - 73.0% = +8.3%). 
+
+• 2b-9 random-clustered: 80.4% → 89.0% (89.0% - 80.4% = +8.6%). 
+
+• 2a-7 random-clustered: 76.9% → 81.4% (81.4% - 76.9% = +4.5%). These gains confirm that cluster-aware CQR specifically targets the spatially disadvantaged sites that global conformal methods fail to protect. 1. Clustered > uniform benefit : Across all five datasets, the improvement from DA-STDK-MQ + cluster-aware CQR is largest in clustered scenarios and smallest (sometimes negligible or slightly negative) in uniform ones. This validates the design motivation. 2. Process difficulty : Process 9 datasets (2a-9, 2b-9) exhibit the widest performance gap between clustered and uniform settings, suggesting a spatially heterogeneous underlying process that particularly benefits from adaptive methods. 3. Grid size effect : The 2a datasets ( S = 1 ,000) show lower absolute PICP and W10 than 2b ( S =10 ,000), especially in fixed-site scenarios. With fewer sites, each spatial cluster has fewer calibration samples, reducing conformal correction precision. Despite this, the relative improvement from Ours remains substantial. 17 Table A6 : PICP, QICE, and worst-10% site coverage on KAUST 2a-7 ( S = 1 ,000, basis [9 , 25 , 36]; mean (SE), 10 replicates): STDKGC vs. Ours. 
+
+> Scenario  PICP (STDKGC)  PICP (Ours)  QICE (STDKGC)  QICE (Ours)  W10 (STDKGC)  W10 (Ours) Fixed, uniform  80.0% (0.32)  80.8% (0.31)  0.0727 (0.0014)  0.0709 (0.0006)  66.4% (0.72)  67.0% (0.51) Fixed, clustered  77.2% (0.58)  81.0% (0.58)  0.0812 (0.0021)  0.0708 (0.0024)  62.2% (0.81)  66.4% (0.77) Random, uniform  89.7% (0.20)  90.8% (0.18)  0.0293 (0.0005)  0.0300 (0.0006)  82.1% (0.28)  82.5% (0.34) Random, clustered  87.7% (0.33)  90.1% (0.20)  0.0380 (0.0019)  0.0321 (0.0005)  76.9% (0.79)  81.4% (0.23)
+> Table A7 : PICP, QICE, and worst-10% site coverage on KAUST 2a-8 ( S = 1 ,000, basis [9 , 25 , 36]; mean (SE), 10 replicates): STDKGC vs. Ours.
+> Scenario  PICP (STDKGC)  PICP (Ours)  QICE (STDKGC)  QICE (Ours)  W10 (STDKGC)  W10 (Ours) Fixed, uniform  90.9% (0.24)  91.5% (0.22)  0.0398 (0.0020)  0.0376 (0.0019)  81.6% (0.64)  82.1% (0.59) Fixed, clustered  87.0% (0.42)  90.0% (0.34)  0.0615 (0.0028)  0.0532 (0.0019)  73.5% (0.79)  77.7% (0.64) Random, uniform  89.6% (0.14)  90.5% (0.10)  0.0446 (0.0017)  0.0421 (0.0018)  82.3% (0.30)  82.3% (0.27) Random, clustered  82.6% (0.61)  88.3% (0.25)  0.0790 (0.0065)  0.0505 (0.0024)  68.1% (1.01)  79.7% (0.38)
+> Table A8 : PICP, QICE, and worst-10% site coverage on KAUST 2a-9 ( S = 1 ,000, basis [9 , 25 , 36]; mean (SE), 10 replicates): STDKGC vs. Ours.
+> Scenario  PICP (STDKGC)  PICP (Ours)  QICE (STDKGC)  QICE (Ours)  W10 (STDKGC)  W10 (Ours) Fixed, uniform  90.5% (0.62)  91.1% (0.48)  0.0346 (0.0007)  0.0351 (0.0006)  69.3% (2.76)  71.7% (2.02) Fixed, clustered  84.0% (1.05)  86.2% (0.92)  0.0493 (0.0018)  0.0483 (0.0019)  52.7% (2.98)  57.0% (2.85) Random, uniform  89.9% (0.24)  90.1% (0.18)  0.0451 (0.0005)  0.0490 (0.0010)  76.8% (0.64)  80.1% (0.25) Random, clustered  76.3% (0.24)  83.1% (0.54)  0.0864 (0.0011)  0.0690 (0.0026)  52.1% (0.61)  66.9% (0.90)
+
+18 Table A9 : PICP, QICE, and worst-10% site coverage on KAUST 2b-7 ( S = 10 ,000, basis [25 , 81 , 121]; mean (SE), 10 replicates): STDKGC vs. Ours. 
+
+> Scenario  PICP (STDKGC)  PICP (Ours)  QICE (STDKGC)  QICE (Ours)  W10 (STDKGC)  W10 (Ours) Fixed, uniform  87.6% (0.12)  88.3% (0.06)  0.0490 (0.0008)  0.0500 (0.0005)  75.4% (0.21)  73.9% (0.21) Fixed, clustered  82.3% (0.21)  87.0% (0.17)  0.0641 (0.0005)  0.0613 (0.0010)  65.3% (0.42)  70.5% (0.43) Random, uniform  89.9% (0.05)  90.4% (0.05)  0.0429 (0.0005)  0.0443 (0.0005)  83.4% (0.08)  81.9% (0.12) Random, clustered  84.2% (0.14)  90.5% (0.10)  0.0620 (0.0011)  0.0544 (0.0012)  73.0% (0.28)  81.3% (0.18)
+> Table A10 : PICP, QICE, and worst-10% site coverage on KAUST 2b-9 ( S = 10 ,000, basis [25 , 81 , 121]; mean (SE), 10 replicates): STDKGC vs. Ours.
+> Scenario  PICP (STDKGC)  PICP (Ours)  QICE (STDKGC)  QICE (Ours)  W10 (STDKGC)  W10 (Ours) Fixed, uniform  98.7% (0.03)  98.7% (0.04)  0.1125 (0.0005)  0.1180 (0.0005)  94.0% (0.19)  93.7% (0.25) Fixed, clustered  97.0% (0.09)  97.5% (0.05)  0.0958 (0.0006)  0.0982 (0.0006)  85.8% (0.62)  88.2% (0.30) Random, uniform  98.6% (0.02)  98.5% (0.02)  0.1125 (0.0006)  0.1169 (0.0004)  95.1% (0.06)  94.8% (0.06) Random, clustered  94.7% (0.02)  96.5% (0.06)  0.0854 (0.0003)  0.0914 (0.0005)  80.4% (0.20)  89.0% (0.21)
+
+19 (a) STDKGC (b) Ours (c) ∆ = Ours − STDKGC (a) Fixed-uniform     
+
+> (d) STDKGC (e) Ours (f) ∆ = Ours −STDKGC (b) Fixed-clustered
+
+Fig. 4 : Spatial coverage comparison for fixed-observation scenarios: (a) Fixed-uniform (top row); (b) Fixed-clustered (bottom row). Each row contains three sub-panels. STDKGC : per-site empirical 90%-PI coverage of STDK + global CQR. Ours : per-site empirical 90%-PI coverage of DA-STDK-MQ + cluster-aware CQR. ∆ = Ours − STDKGC: site-wise difference. In the STDKGC and Ours sub-panels, green = coverage at or above the 90% target and red = under-coverage. In the ∆ sub-panel, blue = Ours improves over STDKGC and red = the opposite. Red × markers = learned spatial basis centers. In Fixed-clustered, ∆ is broadly positive across most of the domain. 20 (a) STDKGC (b) Ours (c) ∆ = Ours − STDKGC (a) Random-uniform     
+
+> (d) STDKGC (e) Ours (f) ∆ = Ours −STDKGC (b) Random-clustered
+
+Fig. 5 : Spatial coverage comparison for random-observation scenarios: (a) Random-uniform; (b) Random-clustered. Same three-sub-panel layout and colour conventions as Figure 4. Red × markers = spatial basis centers. Under Random-clustered, ∆ is again predominantly positive across the domain, consistent with Table 2. 21 Fig. 6 : MERRA2 PM2 .5 concentration over the three real-data regions. Rows (top to bottom): Banda Sea, United States, China. Columns (left to right): Daily mean at 2020-02-19 and Temporal mean over T = 100 days (2020-01-01 to 2020-04-09). 22

@@ -1,0 +1,408 @@
+Title: Meridian: Metric-Semantic Primitive Matching for Cross-View Geo-Localization Beyond Urban Environments
+
+URL Source: https://arxiv.org/pdf/2606.06312v1
+
+Published Time: Fri, 05 Jun 2026 01:22:04 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Meridian: Metric-Semantic Primitive Matching for Cross-View Geo-Localization Beyond Urban Environments 
+
+Mason Peterson *,1 , Qingyuan Li *,1 , Yixuan Jia 1, Fernando Cladera 2,Carlos Nieto-Granda 3, Camillo Jose Taylor 2, Jonathan P. How 1
+
+Abstract — Successful robot automation requires accurate global localization to support repeatability, task planning, goal specification, and safe operation. However, reliable localization in GNSS-denied environments remains an open problem. Over-head aerial imagery offers a promising solution, but existing ap-proaches primarily target structured urban environments and have been rarely demonstrated in unstructured natural terrain. Limitations of the state-of-the-art include a reliance on models trained for specific environments, as well as difficulty handling repetitive geometries and featureless landscapes commonly found in natural outdoor areas. To overcome these challenges, we present Meridian, a method for matching high-level metric-semantic primitives across aerial images and ground robot RGB-D camera data that achieves accurate global localization and generalizes well across diverse environments, all without any training or algorithmic fine-tuning on area-specific data. We formulate novel consistency metrics to estimate a distribution over robot submap poses and to reject outlier hypotheses in a robust pose graph optimization step for accurate robot trajectory estimation. We demonstrate that our algorithm can localize a ground robot across a wide variety of environments, including an autonomous driving dataset, a park and campus area, and a wilderness camp, with an average optimized trajectory error of 2.4 m over 19 km of ground traversal. 
+
+I. I NTRODUCTION 
+
+Consistent robot localization in a global coordinate frame is a foundational prerequisite for downstream autonomy tasks [1]. Aerial imagery acquired from satellites [2], [3] or drones [4] has shown significant utility for consistent pose estimation. Large-scale aerial images can serve as a globally consistent reference for a ground robot, allowing the robot to match features in its local sensor frame with features in the aerial image, enabling cross-view geo-localization —estimation of the ground robot’s pose with respect to the global coordinate frame of the aerial image. Localizing in an aerial image offers many benefits in downstream autonomy tasks. For example, knowing a robot’s pose in an aerial image gives a human operator easy situ-ational awareness, serving as a means for the operator to specify mission plans and for the robot to communicate task performance results [5]. Additionally, cross-view localization                 
+
+> This work is supported by ARL DCIST under Cooperative Agreement Number W911NF-17-2-0181 and DSTA.
+> *These authors contributed equally to this work.
+> 1Massachusetts Institute of Technology, Cambridge, MA 02139, USA.
+> {masonbp, andyli27, yixuany, jhow }@mit.edu .
+> 2GRASP Laboratory, University of Pennsylvania, Philadelphia, PA 19104, USA. {fclad, cjtaylor }@seas.upenn.edu .
+> 3U.S. Army Combat Capabilities Development Command, Army Research Laboratory, Adelphi, MD 20783, USA.
+> carlos.p.nieto2.civ@army.mil .
+
+Fig. 1: Our algorithm maps and matches object centroids and region borders across aerial and ground views, intuitively representing abstract elements of an environment that are key indicators for localization. We propose a robust data association method that leverages semantic and geometric cues to find correct associations, enabling cross-view geo-localization in diverse environments. 
+
+can be useful for multi-robot collaboration, enabling robots to share maps and plans without requiring robots to ever be near each other. The utility offered by cross-view localization has made it a well-studied problem; however, localization in unstructured natural environments remains comparatively underexplored. Most state-of-the-art methods instead focus on autonomous driving applications in urban settings, where roads, buildings, and other structured features provide strong geometric cues for localization [3], [6]–[8]. Localizing from aerial imagery in forested or mountainous environments introduces significant challenges, including repetitive geome-tries and featureless landscapes, which make localization difficult. Furthermore, most current cross-view localization works rely on neural networks that have been trained in areas similar to the region of operation [6], [9], and suffer from decreased performance in novel regions. In contrast, our work presents a method for performing cross-view geo-localization in general environments without requiring any prior knowledge of the environment, enabling easy generalization. We leverage foundation models [10]– [12] for front-end open-set extraction of points (representing objects) and line segments (representing area borders) in any environment. We propose a novel mechanism for extracting hypotheses of point and line matches and incorporate these hypotheses into an outlier rejection framework for accurate cross-view geo-localization. We call our proposed method 
+
+Meridian for its metric-semantic primitive data association. We summarize our contributions as follows: 1) A method for extracting point and line primitives from aerial and ground views as inputs to a sparse matching problem for cross-view geo-localization. 
+
+> arXiv:2606.06312v1 [cs.RO] 4 Jun 2026
+
+2) A data association distance metric that enables correct primitive matching in extreme outlier regimes. 3) A robust pose graph optimization algorithm that incor-porates submap registration measurements as probabil-ity distributions and solves for a set of inlier measure-ments via discrete outlier measurement rejection. 4) A unified cross-view localization system operating on RGB-D inputs that demonstrates the ability to localize a robot in a variety of challenging environments and across different seasons without any fine-tuning or pose initialization. The code and Camp Dataset associated with the paper will be made open-source. II. R ELATED WORK 
+
+Research in cross-view geo-localization spans both coarse, region-level position estimation (on the order of 10–100 m) and meter or sub-meter-level fine-grained pose estimation. 
+
+Coarse Cross-View Image Matching. Early cross-view localization work formulated air-ground localization as a database retrieval problem, where the goal was to iden-tify the best matching aerial image for a given ground image query [13], [14]. Initial approaches relied on hand-crafted descriptors to establish correspondences between aerial and ground imagery. More recently, Siamese-network-based methods have demonstrated strong retrieval perfor-mance by learning global descriptors for aerial and ground images within a shared embedding space [15], [16]. 
+
+Fine-Grained Cross-View Pose Estimation. Recent ad-vances in learned architectures and training strategies have enabled neural networks to achieve fine-grained, meter-level pose estimation from ground imagery [9], although many such methods assume known orientation. More re-cent work explores hybrid learning and feature matching approaches [6], [17], as well as the incorporation of domain priors, such as exploiting the greater co-visibility of struc-tures with higher elevation [8]. Fervers et al. [18] evaluate a dense grid of candidate poses to estimate a probability distribution over poses rather than a single hypothesis. 
+
+Cross-View Robot Trajectory Estimation. Estimating a robot’s full trajectory in an aerial image extends fine-grained cross-view pose estimation to trajectory estimation over time. These works can be categorized into algorithms that assume a vehicle begins with a coarse initial pose estimate and focus on minimizing drift and estimation error using overhead imagery [7], [19], and those that tackle both global localization in an aerial image and fine-grained pose estimation after convergence [4], [20]. Approaches to cross-view trajectory estimation include incorporating likelihood measurements of potential poses into a particle filter [2], [4] and incorporating fine-grained pose measurements into a factor graph [7]. Miller et al. [4] propose an algorithm for extracting coarse semantics from a LiDAR point cloud and efficiently scoring potential poses based on polar class-wise images. Most similar to our work, Ankenbauer et al. [20] detect and match predefined objects (rocks and cars) across views. Adjacent to cross-view localization, [21]–[24] use         
+
+> Fig. 2: Our cross-view localization pipeline begins by extracting sparse primitives, grouped in aerial patches and ground submaps. The matching and registration module uses submaps and aerial patches to detect cross-view loop closures. Then, pose graph optimization is performed to estimate the ground trajectory. Once a rough trajectory is committed to, the resulting rotation can be used to guide the matching algorithm. We run mapping at a fixed 6 Hz and trigger submap creation after 20 new 3D segments are seen.
+
+OpenStreetMap (OSM) for building and road constraints to guide accurate localization. In comparison, we use only a single limited-field-of-view camera with depth values (which can also be obtained through LiDAR-RGB fusion) and an aerial orthophoto, without requiring scene-specific training or a prior map. 
+
+Geometric Feature Matching. Similar to Ankenbauer et al. [20], we leverage the geometric similarity of observed features across aerial and ground views for matching and subsequent pose estimation. Geometry-based correspondence finding has roots in global point cloud registration, which seeks to register two point clouds by finding associations between pairs of points [25]. Methods for performing global point cloud registration include pose estimation via graduated non-convexity optimization [25], [26], random consensus sampling [27], and optimizing for large cliques of mutually consistent associations [28]. Maximum clique or densest subgraph formulations have been used for performing global registration of 3D objects by representing objects by their centroids and leveraging geometric consistency for matching across views [20], [29], [30]. Recent work has formulated line and plane primitive matching using the Grassmannian metric to measure distances across pairs of primitives for consistency scoring [31], [32]. However, the Grassmannian metric can only represent primitives as unbounded, meaning line segments cannot be differentiated from infinite lines. In this work, we propose a novel scoring method that accounts for bounded lines and can be used with a known rotation or translation to guide the solution when available. III. P ROPOSED APPROACH 
+
+We propose a method for estimating a geo-stamped trajec-tory of a robot from aerial imagery using a single limited-field-of-view camera with depth measurements. The funda-mental concept we leverage is that high-level point and line features are useful as a sparse environment representation for matching features between aerial and ground views (see Fig. 1). A diagram of our cross-view mapping, match-ing, and trajectory estimation pipeline is shown in Fig. 2, broken up into three submodules: Mapping (Section III-A), Matching and Registration (Sections III-B and III-C), and Robust Pose Graph Optimization (Section III-D). In an offline mapping phase, sparse points and lines (i.e. 
+
+primitives ) with semantic descriptors are extracted from an aerial image. Then, as a robot navigates in the area, it uses RGB-D camera input to create a map of primitives, which are grouped into submaps . Initially, the robot operates with no global location knowledge, so a place recognition module is used to recommend aerial patches for ground submap registration. Our graph-theoretic data association algorithm is employed to match points and lines between the ground and aerial views, and these matches are used to produce a probability distribution of the transformation between the submap center and the associated aerial patch. Likely pose hypotheses are passed as potential loop closures to our outlier rejection module, which eventually commits to a rough global localization estimate after sufficiently many consistent loop closures have been observed. Once a rough global location has been obtained, we use the pose estimate to determine geographically proximate aerial patches (thus skipping place recognition) and provide a prior on rotation in submap registration, enabling more accurate pose refinement. 
+
+A. Ground and Aerial Primitive Extraction 
+
+The central goal of our sparse primitive extraction ap-proach is to find a set of sparse, high-level features rep-resented in both the aerial and ground views. We find that representing objects as points and region boundaries as lines (e.g. , edge of a road or patch of grass) sparsely encodes important features observable from both views. To extract aerial points and lines, we first split an aerial reference image into overlapping aerial patches and run Segment Anything [11] on each aerial patch. Each segment with an area below a threshold is represented as a single point feature defined by the segment centroid. Alpha shapes are then used to extract the border of each large segment, and fine-grained borders are fused together into coarse lines based on proximity and semantic and directional similarity. Additionally, we run DINOv2 [12] on each aerial patch to assign each primitive a DINOv2 semantic embedding. Since the aerial imagery is typically obtained before a ground robot experiment, this computation can be done offline beforehand. Ground metric-semantic primitives are created by first mapping segments as 3D point clouds with ROMAN [30]. To enable incremental localization, newly observed 3D segments are stored in a queue, and the most recently seen segments are incorporated into a 3D submap when the queue is Ground 2D Segments Ground Primitives  
+
+> Aerial 2D Segments Aerial Primitives
+> Fig. 3: Example aerial and ground segment maps converted to point and line primitives. Ground segment maps are built in 3D and then projected to 2D, while Segment Anything [11] is used to directly create 2D segments from aerial images. Ground and aerial 2D segments are then converted to point and line primitives (right).
+
+sufficiently large. 3D segments in each new submap are projected to 2D and converted to sparse points and lines following the same procedure as aerial primitive extraction. The camera frustum of an RGB-D camera with a limited field of view (FOV) and range tends to introduce line artifacts; therefore, we mark segment points along the FOV boundaries and at the maximum depth range as border points , and retain only lines that are sufficiently distant from these points. We show example aerial and ground segment maps and the resulting primitives in Fig. 3. 
+
+B. Graph-Theoretic Outlier Rejection 
+
+As both the primitive matching and the robust pose graph optimization leverage similar outlier rejection technology, we introduce the common theoretical foundation here. Given an outlier-polluted set of measurements, a consistency graph 
+
+G = ( N , E) can be constructed, where nodes represent a measurement, and weighted edges exist between measure-ments that are deemed consistent. An edge weight ei,j ∈
+
+[0 , 1] encodes the consistency between measurements i and 
+
+j, where an edge weight of 0 denotes that a pair of measure-ments are inconsistent. The graph G can be represented with an affinity matrix , M ∈ [0 , 1] |N |×|N | , where each element 
+
+M(i, j ) = ei,j , i, j ∈ N .Peterson et al. [30] showed that multiple measures of consistency can be effectively incorporated by taking their geometric mean, where for any n ∈ N and x1, . . . , x n ∈ R,the geometric mean GM (x1, . . . , x n) ≜ (Π ni=1 xi) 1 
+
+> n
+
+. We combine pairwise consistency and individual measurement quality by letting 
+
+M(i, j ) = GM (s(i, j ), q (i), q (j)) (1) where s(i, j ) ∈ [0 , 1] is a scoring function measuring pairwise consistency, and q(i) ∈ [0 , 1] is a scoring function for the quality of a single input measurement. For pairwise measurements, we compute a consistency score f ∈ [0 , 1] by scoring a difference term d with a noise term σ,
+
+f (d, σ ) = 
+
+( exp 
+
+ −d2
+
+> 2σ2
+
+
+
+|d| < σ 
+
+0 otherwise. (2) Specific uses of f are discussed in Sections III-C and III-D. Once a consistency graph is constructed, the goal of outlier rejection becomes finding a set of mutually consistent nodes within the graph. We leverage the insights of Lusk et al. [28], who further proposed that inliers tend to be found in the densest set of mutually consistent nodes. Then, a robust set of inlier measurements can be found by solving 
+
+max 
+
+> u∈{ 0,1}n
+
+u⊤Mu u⊤u .
+
+subject to uiuj = 0 if Mi,j = 0 , ∀i, j. 
+
+(3) Furthermore, Jia et al. [33] showed that approximate Bayesian inference techniques can be applied to this prob-lem, yielding an approximate probability distribution over the possible sets of inlier measurements. This distribution is represented as a set of particles, which can be clustered into nearby solutions to obtain a smaller set of likely hypotheses. By maintaining multiple candidate solutions during front-end inlier selection, we are able to incorporate these probability-weighted hypotheses into a back-end solver, giving it more complete information and enabling the discovery of good solutions in challenging, high-outlier regimes. 
+
+C. Metric-Semantic Primitive Matching 
+
+Constructing initial probabilistic loop closure hypotheses begins with the creation of a ground submap. Once created, we select a subset of aerial patches that will be used for primitive matching and registration. We use AnyLoc [34] to create global descriptors for each aerial patch in the offline aerial map creation phase. Similarly, AnyLoc is run at regular intervals on ground robot camera frames, and each ground submap receives a small set of global descriptors from frames contained in that submap. We run primitive matching and registration on the top Kglobal patches with the highest global descriptor similarity to any of the ground submap’s set of global descriptors. In the matching module, points and lines from an aerial patch and a ground submap are used to construct a set of putative associations based on the Kprim most semantically similar primitives. Each association ai = ( oa 
+
+> ui
+
+, o g 
+
+> vi
+
+) is be-tween a pair of points or between a pair of lines, with superscripts a and g denoting aerial and ground primitives respectively, and ui and vi representing the aerial and ground primitive indices belonging to the i-th association. Given these putative associations, correspondence consistency is represented with a data association affinity matrix, MDA ,where MDA (i, j ) ∈ [0 , 1] follows the general scoring formula in Equation (1) with custom scoring functions sDA and qDA .Then, the outlier rejection described in Section III-B is used to identify a dense subset of mutually consistent associations. Importantly, we propose a novel scoring function for point-to-point and line-to-line associations that differentiates Aerial primitives Ground primitives Putative associations                                      
+
+> oa1oa3
+> oa2
+> oa4
+> og1
+> og2
+> og3
+> og4
+> a1= ( ,)oa1og1
+> a2= ( ,)
+> a3= ( ,)
+> oa1og2
+> oa2og4
+> Consistency scoring
+> ≈
+> ≈
+> oa1
+> oa2
+> og4
+> ≉
+> =
+> og2
+> sθ(a2, a 3) = 1 sθ(a1, a 3) = 1
+> spos (a1, a 3) = 1 spos (a2, a 3) = 0
+> oa1
+> oa2og1
+> og4
+> og1
+> og4
+> oa1
+> oa2
+> og2
+> og4
+> oa1
+> oa2
+> angle( ,)oa1oa2
+> angle( ,)og1og4
+> c(,)oa1oa2
+> c(,)og1og4
+> angle( ,)oa1oa2
+> angle( ,)og4og2
+> c(,)oa1oa2
+> c(,)og4og2
+
+Fig. 4: Point and line association consistency scoring. The ground truth associations are indicated by color. On the bottom left, oa 
+
+> 1
+
+and 
+
+oa 
+
+> 2
+
+are correctly matched with og 
+
+> 1
+
+and og
+
+> 4
+
+. This match is validated via a distance and angle check. On the right, oa 
+
+> 1
+
+and oa 
+
+> 2
+
+are matched with og 
+
+> 2
+
+and og
+
+> 4
+
+. Although the two angles are consistent, the shortest distance between the two lines is inconsistent, so these association pairs are deemed inconsistent. 
+
+between infinite lines and bounded rays and line segments. Existing approaches for line associations use the affine Grassmannian metric [31], which treats lines as affine sub-spaces. This is limiting for two reasons. First, since all non-parallel infinite 2D lines intersect, the Grassmannian metric between lines reduces to only the angle between two lines, which does not discriminate enough between correct and spurious matches in 2D. Second, it is not clear how to incorporate known rotation or translation priors into the Grassmannian metric, which we show are helpful when a coarse rotation or translation estimate is available. We instead propose a scoring metric that is general to both infinite and bounded lines and allows incorporation of a known rotation constraint. We define 
+
+sDA (ai, a j ) = 
+
+(
+
+GM (sθ (ai, a j ), s t(ai, a j )) , is line (ai, a j )
+
+st(ai, a j ), otherwise .
+
+(4) Scoring functions sθ and st are illustrated between two primitive sets in Fig. 4. We define the directional scoring function sθ to be 
+
+sθ (ai, a j ) = f
+
+
+
+angle (oa 
+
+> ui
+
+, o a 
+
+> uj
+
+) − angle (og 
+
+> vi
+
+, o g 
+
+> vj
+
+), σ θ
+
+
+
+,
+
+(5) where angle (oui , o uj ) = cos −1   d(oui )⊤d(ouj )  measures the angle between two line directions, with d(oui ) being the normalized direction vector of a line oui . By taking the absolute value, we ensure that we take the smaller of the two angles formed by two lines. Thus, sθ (ai, a j ) measures the difference between the two angles formed by the pair of lines with a noise term σθ . The two angles should be invariant between modalities if the two associations ai and 
+
+aj are consistent. The translational invariant st(ai, a j ) scores the consistency between pairs of associations of any primitive type. Let 
+
+c(oui , o uj ) = ˜ p(oui , o uj )− ˜p(ouj , o ui ), where ˜p(oui , o uj ) ∈
+
+R3 returns the point on primitive oui that is nearest to object 
+
+ouj . Thus, c defines a vector between the two closest points on objects oui and ouj . Then, we define the translational Aerial patch (r, t)Aerial patch (m, n)
+
+Xi
+
+Xj
+
+T m,n i T r,t j
+
+Ar,t Am,n Fig. 5: Cross-view pose graph. Aerial patches are connected via known translations, and pose variables are connected via odometry estimates. Ground poses Xi and Xj estimate a distribution of potential poses in aerial patches, Am,n and Ar,t respectively. Individual hypotheses in T m,n k and T r,t j can be evaluated for consistency by comparing the chained odometry transform Todom  
+
+> and the chained loop closure transform TLC .
+
+invariant as 
+
+st(ai, a j ) = f
+
+
+
+∥c(oaui , o auj )∥ − ∥ c(ogvi , o gvj )∥, σ t
+
+
+
+. (6) The key insight here is that the distance between the two closest points on two primitives is invariant to rotation and translation, so we can use this distance as a consistency check on pairs of associations. Furthermore, if a prior on rotation exists ( e.g. , from a rough initial pose after the system has globally localized), st and sθ can naturally incorporate the known rotation by splitting st into x and y components and evaluating absolute angles with sθ . In this way, high-scoring matches that are not consistent with a known rotation direction can be rejected. Finally, following the findings of [30], we incorporate the semantics into the singular quality score qDA by taking the scaled cosine similarity of the associated primitives’ DINOv2 [12] descriptors. Using 
+
+sDA and qDA , the data association affinity matrix MDA is computed and [33] is used to solve for a distribution of inlier data association sets represented as particles. We use each particle’s association vector to compute a 2D transformation between the center of the aerial patch and the center of the ground submap using a modification of Arun’s method [35]. Line directions are treated equivalently to centroid-adjusted points when constructing the cross-covariance matrix, ensuring that the rotation aligns both points and line directions. Translation is estimated by jointly minimizing point and Pl¨ ucker line coordinate errors via weighted least squares. To resolve line direction ambiguities, a minimal non-degenerate subset of associated points and/or lines is selected, and all possible line direction combinations are enumerated, with a transform computed for each. The transform yielding the smallest error across all primitives is used to fix line directions, after which a refined transform is computed using all inlier associations. We then cluster the transformations estimated from all association particles in pose space. The top L largest clusters by cardinality are selected as pose estimate hypotheses. This procedure produces a potentially multi-modal pose distribution, which is provided to the robust pose graph optimization module. 
+
+D. Robust Pose Graph Optimization 
+
+We formulate cross-view trajectory estimation as a robust pose graph optimization (RPGO) problem where the graph consists of ground nodes Xk ∈ SE (3) , k = 1 , . . . , K , repre-senting the K ground poses, and aerial nodes Am,n ∈ SE (3) ,
+
+m = 1 , . . . , M , n = 1 , . . . , N , representing an aerial image divided into M ×N patches. Since aerial patches are already in a common global frame, we only optimize the ground poses. We write the cross-view registration probability distri-bution obtained from our registration module as T m,n k where 
+
+(m, n ) denotes the aerial patch and k denotes the ground pose index. Concretely, we represent this distribution as a set of L hypotheses, such that T m,n k =
+
+n 
+
+Tm,n k,ℓ , p m,n k,ℓ 
+
+o Lℓ=1 
+
+,where Tm,n k,ℓ represents a single hypothesis transformation corresponding to a probability pm,n k,ℓ . We approximate each normalized probability pm,n k,ℓ as the number of particles that were part of the corresponding cluster Tm,n k,ℓ divided by the total number of particles. In practice, the collection of all submap-to-aerial-patch probability distributions contains many incorrect individual hypotheses, which stems from two factors: first, place recog-nition in cross-view regimes is difficult, requiring registration attempts on a large number of aerial patches, and second, cross-view registration tends to be highly multi-modal. In-spired by [36], we approach this problem with the same unified outlier rejection mechanism outlined in Section III-B. In this scenario each element of the affinity matrix MRPGO 
+
+represents consistency between a pair of loop closures rather than a pair of associations. Each MRPGO (i, j ) considers two discrete loop closure measurements, Tm,n i and Tr,t j ,where we drop the hypothesis subscript for simplicity. Then the two measurements, Todom = X−1 
+
+> i
+
+Xj and TLC =(Am,n Tm,n i )−1 Ar,t Tr,t j , should be similar to each other if the two loop closures are consistent. We use the transforms to construct the pairwise score, 
+
+sRPGO 
+
+ Tm,n i , Tr,t j
+
+ = GM  f  ψ(T−1
+
+> odom
+
+TLC ), σ ψ (i, j ) ,f (∥todom − tLC ∥, σ t(i, j ))) (7) where ψ extracts the 2D yaw from a transformation, todom 
+
+and tLC represent the translational components of the cor-responding transformations, and σψ and σt are rotation and translation noise terms. While maximum clique approaches are a common way of rejecting outliers in pose graph optimization [36], our key contribution is defining σψ and 
+
+σt as functions that scale linearly with path length between the two robot poses. This models the marginal uncertainty between two poses connected by odometry measurements, without the heavy computation of calculating that uncertainty for every pair of ground submaps. Without scaling the uncertainty terms, outlier rejection is overly conservative and cannot account for the drift that occurs from robot odometry. Other works have addressed this with a second solver using graduated non-convexity after an initial frame alignment [37]; however, our single step process is more computationally reasonable and avoids cascaded failures. Park / Campus Camp A Camp B 
+
+Camp A Out-Of-Date Camp B Out-Of-Date 
+
+Aerial Image Aerial Image 
+
+Camp Short 
+
+Off-Road Fig. 6: Top row and bottom right two images: self-collected aerial images and the final optimized trajectory of each sequence shown in a unique color (corresponding to sequence colors in Tables II and III) with the ground truth drawn in black. Bottom left: trajectories used for the off-road submap registration experiment. 
+
+Furthermore, we can naturally integrate the different es-timated probabilities of different individual hypotheses via the quality score, which we define as qRPGO 
+
+
+
+Tm,n k,ℓ 
+
+
+
+=
+
+pm,n k,ℓ / max ˜ℓ∈1..L pm,n k, ˜ℓ . Then, once MRPGO is computed, we use CLIPPER [28] to solve for a set of inlier loop closures. Outlier loop closures are removed from the pose graph and pose graph optimization is performed to estimate the robot trajectory in the global frame. IV. E XPERIMENTS 
+
+We evaluate the full Meridian pipeline for robot cross-view trajectory estimation from an aerial image, and additionally perform isolated ground-to-aerial submap registration exper-iments. Represented regions span diverse urban and natural environments, testing generalization without environment-specific training or fine-tuning. 
+
+Datasets First, we test Meridian using the KITTI odome-try dataset [38], showcasing a large-scale urban environment. We use KISS-ICP [39] for odometry and LiDAR-projected depth maps for mapping. Aerial imagery is obtained from Vexcel. Next, we evaluate Meridian on a self-collected Park/Campus Dataset with five robot trajectories totaling 
+
+3.1 km (Fig. 6). The traversals cover parkland, sidewalks, parking lots, and narrow alleyways, extending evaluation beyond autonomous-driving settings. We use an aerial or-thomosaic from drone imagery collected in November 2024. RGB-D ground data was collected a year later (November 2025) on a heterogeneous team of two Clearpath Husky UGVs, two Boston Dynamics Spots, and an Agile-X Scout Mini with ZED 2i cameras. The Husky and Scout UGVs use DLIO [40] and the Spots use onboard visio-kinematic odometry. Ground-truth pose was obtained by fusing GPS and odometry. Finally, we evaluate Meridian on our self-collected Camp A and Camp B datasets with 10 trajectories totaling 
+
+6.3 km . Most of the traversal is constrained to roads due to traversability limitations, but roughly one fifth covers rocky off-road areas, fields, and trails, enabling cross-view localization evaluation in previously untested environments. We evaluate all 10 sequences on same-week aerial imagery and five sequences (which maintain sufficient overlap with the different geographic footprint of the older aerial imagery) on 1.5-year-old aerial imagery. The older imagery contains seasonal changes, moved objects, and partial coverage dif-ferences. Ground data was collected in April 2026 with the same sensor suite as the Park/Campus dataset, and ground-truth poses are obtained from GPS and odometry with manual correction for GPS-degraded sequences A-5 and A-7. 
+
+Implementation Details We use 60 m ×60 m aerial patches with 50% overlap and ground submaps of 120 3D segments. We set Kglobal = 25 , Kprim = 20 , σt =2 m ,
+
+σθ =20 deg , and L = 25 . Rough global localization is accepted after ≥ 6 loop closures are accepted as inliers and the inlier set makes up at least 50% of all ground submaps. 
+
+A. Full Pipeline Experiments 
+
+We begin by running the Meridian cross-view localization pipeline on the KITTI odometry sequences 00, 02, and 09, following [4]. We report RMS absolute trajectory error (ATE) in Table I, computed between OXTS ground truth and Meridian’s estimated trajectory. The reported “incremen-tal” ATE reflects the instantaneous pose estimate error at TABLE I: KITTI ATE (m)                         
+
+> Method Seq. 00 Seq. 02 Seq. 09 OSM  OSM-SLAM [21] 3.8 1.3 –Przewodowski [22] 2.8 3.1 3.6 Li [23]* 1.6 failed 1.1 Aerial  Miller [4] 2.0 9.1 7.2 Ankenbauer [20] 3.5 4.4 3.0 Meridian (incremental) 2.0 3.3 2.4 Meridian (final trajectory) 1.5 4.2 2.1
+
+* Did not report whether error is reported as RMSE or mean or whether error is absolute in a global position sense or whether [41] was used to provide a least-squares alignment. 
+
+TABLE II: Trajectory Estimation Error on Park/Campus Dataset                              
+
+> Sequence Robot Type Path Length (m) Incremental ATE (m) Final ATE (m) 1Spot 504 3.22 1.77
+> 2Husky 239 1.07 1.22
+> 3Spot 951 2.52 2.25
+> 4Husky 694 2.2 2.38
+> 5Scout 734 1.56 1.07
+> Mean / Std ––2.11 ±0.75 1.74 ±0.53
+
+each timestamp after Meridian has committed to a global localization, and we additionally report the RMSE of the final optimized trajectory. We include OpenStreetMap-based methods for reference, though they require mapped roads and are therefore limited to urban settings. In contrast, Meridian requires only overhead imagery and matches or outperforms prior aerial-image-based methods in both incremental and final ATE. Furthermore, Meridian generalizes well to environments beyond urban driving scenes, demonstrated by performance on the Park/Campus and Camp sequences in Tables II and III. These environments include featureless landscapes and repetitive geometries including sidewalks, parking lots, rural roads, fields, forested areas, and off-road terrain. Across the Park/Campus and Camp sequences, Meridian achieves an average incremental ATE of 3.07 m and final ATE of 
+
+2.35 m over 9 km of unique traversal. Using 1.5-year-old aerial imagery, Meridian exhibits only modest degradation despite seasonal changes, moved objects, and partial map coverage. 
+
+B. Submap Registration Experiments 
+
+We isolate the matching and registration module by split-ting robot trajectories into submaps created every 40 m and evaluate registration success on each ground submap in a 
+
+60 m ×60 m aerial patch. We report the top-L success rate for L ∈ { 1, 5, 10 , 25 }, where a hypothesis is successful if it is within 5 m translation and 5◦ rotation error. We highlight performance on off-road terrain by registering a subset of off-road submaps to the 1.5-year-old overhead imagery, which contains more of the off-road regions. We compare Meridian to a variant, “Meridian w/o Lines”, which only uses points for registration. Additionally, we compare against FG 2 [6], a learning-based cross-view geo-localization method trained on KITTI data. Since FG 2 op-erates on a single ground and aerial image pair, we run it on each ground image in a Meridian submap and cluster its 
+
+TABLE III: Trajectory Estimation Error on Camp Dataset                                                                    
+
+> Seq. Robot Type Path Len. (m) ATE (m) Up-To-Date Aerial Outdated Aerial Inc. Final Inc. Final A-1 Spot 1426 4.50 2.61
+> A-2 Husky 467 4.48 3.15
+> A-3 Husky 409 2.51 2.16
+> A-4 Spot 458 1.53 1.38 3.00 2.27
+> A-5 Spot 211 1.42 2.02 1.79 1.6
+> A-6 Spot 506 2.04 2.78
+> A-7 Husky 996 3.66 2.09 7.25 4.07
+> B-1 Spot 597 4.72 2.94
+> B-2 Spot 448 2.60 2.27 4.12 3.80
+> B-3 Spot 755 2.87 2.23 4.34 2.84
+> Mean ––3.03 2.38 4.10 2.91
+> Std ––1.18 0.47 1.82 0.93
+
+TABLE IV: Registration Success Rate (Percentage <5 m, <5 deg)                                                                                                          
+
+> Dataset Method Known Rotation Unknown Rotation Top-1Top-5Top-10 Top-25 Top-1Top-5Top-10 Top-25
+> KITTI Seq. 00  Meridian 38.3 71.3 82.4 92.7 23.0 44.1 53.6 62.8
+> Meridian w/o Lines 41.8 70.1 76.6 80.1 22.2 36.0 43.7 56.3 FG 277.0 95.4 96.6 98.9 ––––Park/ Campus  Meridian 53.5 80.7 89.5 92.1 39.5 61.4 66.7 73.7
+> Meridian w/o Lines 43.9 71.1 77.2 84.2 29.8 38.6 45.6 59.6 FG 221.1 44.7 57.9 78.9 ––––Camp All  Meridian 33.7 61.1 69.3 79.1 15.7 27.5 36.3 46.7
+> Meridian w/o Lines 28.8 50.7 55.9 61.4 8.8 17.3 23.9 34.0 FG 222.5 48.0 62.7 75.5 ––––Camp Off-Road  Meridian 30.3 53.0 62.1 72.7 9.1 13.6 22.7 36.4
+> Meridian w/o Lines 22.7 45.5 51.5 65.2 4.5 16.7 18.2 34.8 FG 213.6 27.3 36.4 45.5 ––––
+
+TABLE V: RPGO Experiment: Camp A ATE (m) (Inc. / Final)                     
+
+> A-1 A-2 A-3 A-4 A-5 A-6 A-7
+> Meridian 4.5 / 2.6 4.5 / 3.2 2.5 / 2.2 1.5 / 1.4 1.4 / 2.0 2.0 / 2.8 3.7 / 2.1 w/o scaling - / 17.2 - / 20.1 - / 95.5 - / 2.5 - / 1.7 - / 7.2 - / 5.0
+
+predicted poses for top-L evaluation. We evaluate Meridian variants using both known and unknown rotation, but only report FG 2 in a known-rotation setting since FG 2 requires 360-degree imagery for unknown-rotation inference. Although FG 2 outperforms Meridian on KITTI submaps, we find that Meridian generalizes better across all environ-ments and consistently outperforms FG 2 on our self-collected data. Furthermore, we find that our method for matching both points and lines results in higher registration success rate, especially in the Camp All and Park/Campus submaps, where region boundaries yield abundant line features. 
+
+C. Loop Closure Outlier Rejection Experiments 
+
+Finally, in Table V we compare Meridian against a variant of our method that does not scale uncertainty with distance traveled in loop closure rejection (“w/o scaling”). Without uncertainty scaling, incremental solutions are never accepted due to excessive rejection of loop closures. As a result, the final trajectory errors are generally much higher as well, indicating that this variant is overly conservative. V. C ONCLUSION 
+
+We have demonstrated our cross-view localization pipeline across a range of urban and natural environments, and shown that metric-semantic primitives can be reliably as-sociated across viewpoints to register ground robot maps with overhead aerial imagery. A limitation of the proposed work is a low recall rate from place recognition, requiring the algorithm to run matching on many non-overlapping ground submap and aerial patch pairs. While these can be rejected downstream by our robust pose graph optimization, scalability would be improved with higher cross-view place recognition recall. Furthermore, we have observed that DI-NOv2 [12] feature similarity tends to be less discriminative across aerial and ground views than between two ground views. Future work includes investigating methods to bridge the semantic differences between ground and aerial views. ACKNOWLEDGMENT 
+
+Portions of the code were developed using Claude Code. REFERENCES [1] L. Carlone, A. Kim, T. Barfoot, D. Cremers, and F. Dellaert, “Part1 prelude,” in SLAM Handbook. From Localization and Mapping to Spatial Intelligence , L. Carlone, A. Kim, T. Barfoot, D. Cremers, and F. Dellaert, Eds. Cambridge University Press, 2026. [2] D.-K. Kim and M. R. Walter, “Satellite image-based localization via learned embeddings,” in 2017 IEEE international conference on robotics and automation (ICRA) . IEEE, 2017, pp. 2073–2080. [3] S. Wang, Y. Zhang, A. Vora, A. Perincherry, and H. Li, “Satellite image based cross-view localization for autonomous vehicle,” in 2023 IEEE International Conference on Robotics and Automation (ICRA) .IEEE, 2023, pp. 3592–3599. [4] I. D. Miller, A. Cowley, R. Konkimalla, S. S. Shivakumar, T. Nguyen, T. Smith, C. J. Taylor, and V. Kumar, “Any way you look at it: Semantic crossview localization and mapping with lidar,” IEEE Robotics and Automation Letters , vol. 6, no. 2, pp. 2397–2404, 2021. [5] M. A. Hsieh, A. Cowley, J. F. Keller, L. Chaimowicz, B. Grocholsky, V. Kumar, C. J. Taylor, Y. Endo, R. C. Arkin, B. Jung, et al. , “Adaptive teams of autonomous aerial and ground robots for situational aware-ness,” Journal of field robotics , vol. 24, no. 11-12, pp. 991–1014, 2007. [6] Z. Xia and A. Alahi, “Fgˆ 2: Fine-grained cross-view localization by fine-grained feature matching,” in Proceedings of the Computer Vision and Pattern Recognition Conference , 2025, pp. 6362–6372. [7] Y. Zhang, Y. Shi, S. Wang, A. Vora, A. Perincherry, Y. Chen, and H. Li, “Increasing slam pose accuracy by ground-to-satellite image registration,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2024, pp. 8522–8528. [8] S. Wang, C. Nguyen, J. Liu, Y. Zhang, S. Muthu, F. A. Maken, K. Zhang, and H. Li, “View from above: Orthogonal-view aware cross-view localization,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 14 843–14 852. [9] Y. Shi and H. Li, “Beyond cross-view image retrieval: Highly accurate vehicle localization using satellite image,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2022. [10] X. Zhao, W. Ding, Y. An, Y. Du, T. Yu, M. Li, M. Tang, and J. Wang, “Fast segment anything,” arXiv preprint arXiv:2306.12156 , 2023. [11] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo, et al. , “Segment anything,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 4015–4026. [12] M. Oquab, T. Darcet, T. Moutakanni, H. Vo, M. Szafraniec, V. Khali-dov, P. Fernandez, D. Haziza, F. Massa, A. El-Nouby, et al. , “Dinov2: Learning robust visual features without supervision,” arXiv preprint arXiv:2304.07193 , 2023. [13] T.-Y. Lin, S. Belongie, and J. Hays, “Cross-view image geolocaliza-tion,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2013, pp. 891–898. [14] A. Durgam, S. Paheding, V. Dhiman, and V. Devabhaktuni, “Cross-view geo-localization: a survey,” IEEE Access , 2024. [15] S. Hu, M. Feng, R. M. Nguyen, and G. H. Lee, “Cvm-net: Cross-view matching network for image-based ground-to-aerial geo-localization,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2018, pp. 7258–7267. [16] L. M. Downes, D.-K. Kim, T. J. Steiner, and J. P. How, “City-wide street-to-satellite image geolocalization of a mobile ground agent,” in 
+
+2022 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2022, pp. 11 102–11 108. [17] P. Xia, Q. Wu, L. Yu, Y. Liu, M. Xiong, L. Liang, Y. Zhang, and Y. Wan, “Revisiting cross-view localization from image matching,” 
+
+arXiv e-prints , pp. arXiv–2508, 2025. [18] F. Fervers, S. Bullinger, C. Bodensteiner, M. Arens, and R. Stiefel-hagen, “Uncertainty-aware vision-based metric cross-view geolocal-ization,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 21 621–21 631. [19] M. ´ A. Mu˜ noz-Ba˜ n´ on, A. Olivas, E. Velasco-S´ anchez, F. A. Candelas, and F. Torres, “Geo-localization based on dynamically weighted factor-graph,” IEEE Robotics and Automation Letters , vol. 9, no. 6, pp. 5599– 5606, 2024. [20] J. Ankenbauer, P. C. Lusk, A. Thomas, and J. P. How, “Global local-ization in unstructured environments using semantic object maps built from various viewpoints,” in 2023 IEEE/RSJ international conference on intelligent robots and systems (IROS) . IEEE, 2023, pp. 1358–1365. [21] M. Frosi, V. Gobbi, and M. Matteucci, “Osm-slam: Aiding slam with openstreetmaps priors,” Frontiers in Robotics and AI , vol. 10, p. 1064934, 2023. [22] A. Przewodowski, F. S. Os´ orio, and V. G. Junior, “Global localization using openstreetmap and elevation offsets.” J. Braz. Comput. Soc. ,vol. 30, no. 1, pp. 264–273, 2024. [23] Z. Li, R. Zuo, Y. Wang, F. Ding, C. Wei, and M. Wu, “Odometry-assisted lidar-openstreetmap matching method for vehicle global po-sitioning,” IEEE Internet of Things Journal , 2026. [24] S. Lee and J.-H. Ryu, “Autonomous vehicle localization without prior high-definition map,” IEEE Transactions on Robotics , vol. 40, pp. 2888–2906, 2024. [25] Q.-Y. Zhou, J. Park, and V. Koltun, “Fast global registration,” in 
+
+European conference on computer vision . Springer, 2016, pp. 766– 782. [26] H. Yang, J. Shi, and L. Carlone, “Teaser: Fast and certifiable point cloud registration,” IEEE Transactions on Robotics , vol. 37, no. 2, pp. 314–333, 2020. [27] M. A. Fischler and R. C. Bolles, “Random sample consensus: a paradigm for model fitting with applications to image analysis and automated cartography,” Communications of the ACM , vol. 24, no. 6, pp. 381–395, 1981. [28] P. C. Lusk and J. P. How, “CLIPPER: Robust Data Association without an Initial Guess,” IEEE Robotics and Automation Letters , 2024. [29] R. Dub´ e, M. G. Gollub, H. Sommer, I. Gilitschenski, R. Siegwart, C. Cadena, and J. Nieto, “Incremental-segment-based localization in 3-d point clouds,” IEEE Robotics and Automation Letters , vol. 3, no. 3, pp. 1832–1839, 2018. [30] M. B. Peterson, Y. X. Jia, Y. Tian, A. Thomas, and J. P. How, “ROMAN: Open-Set Object Map Alignment for Robust View-Invariant Global Localization,” in Robotics: Science and Systems (RSS) , 2025. [31] P. C. Lusk, D. Parikh, and J. P. How, “GraffMatch: Global matching of 3d lines and planes for wide baseline lidar registration,” IEEE Robotics and Automation Letters , vol. 8, no. 2, pp. 632–639, 2022. [32] Z. Yu, Z. Qiao, W. Liu, H. Yin, and S. Shen, “Slim: Scalable and lightweight lidar mapping in urban environments,” IEEE Transactions on Robotics , 2025. [33] Y. Jia, M. B. Peterson, Q. Li, Y. Tian, and J. P. How, “Distribution estimation for global data association via approximate bayesian infer-ence,” arXiv preprint arXiv:2509.15565 , 2025. [34] N. Keetha, A. Mishra, J. Karhade, K. M. Jatavallabhula, S. Scherer, M. Krishna, and S. Garg, “AnyLoc: Towards universal visual place recognition,” IEEE Robotics and Automation Letters , vol. 9, no. 2, pp. 1286–1293, 2023. [35] K. S. Arun, T. S. Huang, and S. D. Blostein, “Least-squares fitting of two 3-d point sets,” IEEE Transactions on pattern analysis and machine intelligence , no. 5, pp. 698–700, 1987. [36] J. G. Mangelson, D. Dominic, R. M. Eustice, and R. Vasudevan, “Pair-wise consistent measurement set maximization for robust multi-robot map merging,” in 2018 IEEE international conference on robotics and automation (ICRA) . IEEE, 2018, pp. 2916–2923. [37] Y. Tian, Y. Chang, F. H. Arias, C. Nieto-Granda, J. P. How, and L. Carlone, “Kimera-multi: Robust, distributed, dense metric-semantic slam for multi-robot systems,” IEEE Transactions on Robotics , vol. 38, no. 4, 2022. [38] A. Geiger, P. Lenz, C. Stiller, and R. Urtasun, “Vision meets robotics: The kitti dataset,” The international journal of robotics research ,vol. 32, no. 11, pp. 1231–1237, 2013. [39] I. Vizzo, T. Guadagnino, B. Mersch, L. Wiesmann, J. Behley, and C. Stachniss, “KISS-ICP: In Defense of Point-to-Point ICP – Simple, Accurate, and Robust Registration If Done the Right Way,” IEEE Robotics and Automation Letters (RA-L) , vol. 8, no. 2, pp. 1029–1036, 2023. [40] K. Chen, B. T. Lopez, A.-a. Agha-mohammadi, and A. Mehta, “Direct lidar odometry: Fast localization with dense point clouds,” IEEE Robotics and Automation Letters , vol. 7, no. 2, pp. 2000–2007, 2022. [41] B. K. Horn, “Closed-form solution of absolute orientation using unit quaternions,” Journal of the optical society of America A , vol. 4, no. 4, pp. 629–642, 1987.

@@ -1,0 +1,1365 @@
+Title: Spatiotemporal Imputation with Graph-Informed Flow Matching
+
+URL Source: https://arxiv.org/pdf/2606.06682v1
+
+Published Time: Mon, 08 Jun 2026 00:10:19 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+Zepeng Zhang 1 Aref Einizade 2 Jhony H. Giraldo 3 Olga Fink 1
+
+## Abstract 
+
+Missing data is a common challenge in spatiotem-poral systems, arising in applications such as air quality monitoring and urban traffic management. Traditional machine learning approaches, like re-current and graph neural networks, rely on it-erative propagation, which tends to accumulate errors over time and space. Recent diffusion-based methods mitigate error propagation but require iterative sampling and often depend on problem-agnostic Gaussian priors, limiting both efficiency and effectiveness. To address these lim-itations, we propose GiFlow , a Graph-Informed Flow Matching framework for spatiotemporal im-putation. GiFlow replaces the typical Gaussian prior with a graph-informed prior constructed via spatiotemporal filtering of observable sig-nals, which better aligns the source distribution to the target and thereby simplifies the genera-tion trajectory. The flow field is parameterized by a hybrid vector field model that integrates spa-tial attention, temporal attention, and spatiotem-poral propagation, enabling joint modeling of spatial and temporal dependencies. Extensive experiments on both synthetic and real-world datasets demonstrate that the proposed GiFlow outperforms the state-of-the-art approaches in spa-tiotemporal imputation. The code is available at https://github.com/zepengzhang/GiFlow. 
+
+## 1. Introduction 
+
+Spatiotemporal data characterizes both spatial and tempo-ral information and is ubiquitous in domains such as envi-ronmental science, urban systems, and climate forecasting (Atluri et al., 2018; Wang et al., 2020). In practice, spa-
+
+> 1
+
+IMOS, EPFL, 1015 Lausanne, Switzerland 2SAMOVAR, T ´el ´ecom SudParis, Institut Polytechnique de Paris, 91120 Palaiseau, France 3LTCI, T ´el ´ecom Paris, Institut Polytechnique de Paris, 91120 Palaiseau, France. Correspondence to: Olga Fink 
+
+<olga.fink@epfl.ch >.
+
+Proceedings of the 43 rd International Conference on Machine Learning , Seoul, South Korea. PMLR 306, 2026. Copyright 2026 by the author(s). 
+
+tiotemporal data is often incomplete due to sensor failures, transmission errors, or system instability (Yi et al., 2016). The incompleteness of spatiotemporal data compromises the reliability of subsequent analyses (Ma et al., 2024; Marisca et al., 2024), motivating the need for robust spatiotemporal imputation techniques (Cao et al., 2018; Cini et al., 2022). Early approaches to spatiotemporal imputation rely on sta-tistical models that impose restrictive assumptions on the underlying data distribution, such as temporal smoothness levels, often failing to capture complex, nonlinear depen-dencies (Liu et al., 2023a; He et al., 2025). Deep learning methods have been introduced to better exploit spatiotem-poral correlations. Specifically, recurrent neural networks (RNNs) are used to capture temporal dependencies by prop-agating hidden states (Cao et al., 2018), while graph neural networks (GNNs) are deployed to model spatial relation-ships over the underlying graph topology (Cini et al., 2022). Despite their success, these models generally rely on itera-tive propagation across space and time, which can lead to error accumulation and information bottlenecks (Deng et al., 2024; He et al., 2025; Cini et al., 2025). Generative models provide an alternative paradigm by in-ferring the entire data distribution in a non-autoregressive manner. Unlike RNN/GNN-based models that propagate intermediate estimates step by step, generative models can perform imputation jointly and conditionally on all available observations, thereby avoiding the accumulation of errors during iterative propagation (Liu et al., 2019; 2023a; He et al., 2025). Among them, diffusion models have demon-strated remarkable success across various domains (Croitoru et al., 2023; Yang et al., 2023; Cao et al., 2024), and recent works have adapted them for spatiotemporal imputation (Liu et al., 2023a; He et al., 2025). However, diffusion models typically rely on the problem-agnostic Gaussian prior, pre-senting an absence of the available problem-specific struc-ture. Moreover, the sampling of diffusion models requires many iterative denoising steps, and the imputation often demands multiple sampling runs followed by averaging, limiting both efficiency and robustness when applied to large-scale spatiotemporal data. Recent work has explored flow matching (FM) as a general-ization of diffusion models, which follows a deterministic transport path (Lipman et al., 2023; Albergo & Vanden-1
+
+> arXiv:2606.06682v1 [cs.LG] 4 Jun 2026 Spatiotemporal Imputation with Graph-Informed Flow Matching
+
+Eijnden, 2023; Liu et al., 2023b). FM avoids stochastic noise injection, supports efficient deterministic sampling, and does not rely on Gaussian priors. These characteristics make FM particularly attractive for conditional tasks such as imputation, where partial observations encode strong struc-tural information. The flexibility on prior selection allows FM to have shorter generative paths, which enhances gener-ation performance (Tong et al., 2024). Building on these in-sights, we propose GiFlow , the first Graph-Informed Flow Matching framework for spatiotemporal imputation. Un-like existing diffusion-based methods that rely on problem-agnostic Gaussian priors (Liu et al., 2023a; He et al., 2025), GiFlow constructs a graph-informed prior using spatiotem-poral filtering of observable signals, simplifying generation trajectories. Combined with a hybrid vector field integrating attention mechanisms and spatiotemporal propagation, our approach overcomes the limitations of iterative propagation in RNN- and GNN-based models, as well as the unstruc-tured priors and inefficiency of diffusion-based methods. Our contributions are summarized as follows: • We introduce GiFlow, a novel generative model for spa-tiotemporal imputation that integrates graph-informed priors into the flow matching framework. • We design a graph-informed prior based on adaptive spatiotemporal filtering. Compared to the problem-agnostic Gaussian prior, this problem-tailored prior is more aligned with the target distribution and provably reduces transport cost. We also theoretically analyze the relationship between filtering factors and the recep-tive field in the spatiotemporal filtering process. • We conduct extensive experiments on both synthetic and real-world datasets, demonstrating that the pro-posed GiFlow model achieves competitive or superior performance across diverse missing patterns and miss-ing rates, outperforming state-of-the-art baselines. 
+
+## 2. Preliminaries 
+
+2.1. Notations and Problem Definition Notations. We use calligraphic letters like X to represent sets, uppercase bold letters like X to represent matrices, low-ercase bold letters like x to represent vectors, and lowercase letters like x to represent scalars. We use Xij to represent the element in the i-th row and j-th column of X. 1 stands for the all-one matrix. We denote by |x|, ∥x∥, and ∥X∥
+
+the absolute value of x, the ℓ2-norm of x, and the Frobe-nius norm of X, respectively. vec( ·) is the vectorization operation of a matrix. diag( x) represents a matrix with its diagonal elements given by vector x. ◦ represents element-wise multiplication between matrices and ⊕ denotes the Kronecker sum operator between matrices. 
+
+Graphs and Signals. Let spatiotemporal data be repre-sented as a matrix X ∈ RN ×R, where the r-th column of 
+
+X denotes the signals observed at time r across N nodes (e.g. , traffic sensors or air quality stations). We denote by 
+
+R = {1, . . . , R } the set of timesteps. The relationships among the nodes are captured by a graph G = ( N , E), with 
+
+N being the set of nodes and E being the set of edges. Let 
+
+A ∈ RN ×N denote the adjacency matrix, D = diag( A1 )
+
+the degree matrix, and L = D − A the Laplacian. For simplicity, we focus on one-dimensional signals, though the method generalizes to multi-dimensional signals. 
+
+Spatiotemporal Imputation. We consider scenarios where some entries of X are missing. Define a binary mask 
+
+M ∈ { 0, 1}N ×R such that Mir = 1 if the data on the node i at time r is observed, and 0 otherwise. The incom-plete observations are then given by X ◦ M. The task of spatiotemporal imputation is to estimate the missing entries based on the incomplete observations, leveraging both spa-tial dependencies across nodes and temporal dependencies across timesteps. 
+
+2.2. Conditional Flow Matching 
+
+FM learns a vector field that transports samples from a source distribution to a target distribution (Albergo & Vanden-Eijnden, 2023; Lipman et al., 2023; Liu et al., 2023b). Let ϕt : [0 , 1] × Rd → Rd denote a step-dependent flow map with t being the flow step, that evolves x0 ∼ p0
+
+to x1 ∼ p1 via the ordinary differential equation (ODE): 
+
+dϕ t(x) = ut(ϕt(x)) dt, ϕ0(x) = x0, (1) where ut : [0 , 1] × Rd → Rd is a step-dependent vector field. This induces a step-dependent probability density path 
+
+pt through the push-forward operator pt = [ ϕt]∗p0 (Lipman et al., 2023). The FM objective seeks a trainable vector field vt(·; θ) that approximates ut:
+
+LFM (θ) = Et∼U [0 ,1] ,x∼pt
+
+|vt(x; θ) − ut(x)|2. (2) This objective allows sampling from p1 given a sample from p0, as well as modeling continuous sample dynamics. However, it is generally intractable, as both pt and ut are unknown. Conditional flow matching (CFM) (Lipman et al., 2023) pro-vides a tractable alternative by approximating a conditional vector field ut(x | z):
+
+LCFM (θ) = Et∼U [0 ,1] , z∼q(z), x∼pt(x|z)
+
+
+
+|vt(x; θ) − ut(x|z)|2. (3) Here, z is chosen such that the marginal distributions of 
+
+pt(x | z) match the boundary distributions p0 and p1. Typ-ically, z = ( x0, x1) is sampled from a joint distribution 2Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+q(z) = π(x0, x1) with marginals p0 and p1. Importantly, 
+
+LCFM and LFM are equivalent in the sense that their gradi-ents with respect to θ coincide (Lipman et al., 2023). More discussions on spatiotemporal imputation and flow matching are provided in Appendix A. 
+
+## 3. Graph-Informed Flow Matching 
+
+In this section, we first construct a graph-informed prior via adaptive spatiotemporal filtering and then introduce the GiFlow framework for spatiotemporal imputation, with theoretical justifications on its effectiveness. A schematic overview of the GiFlow framework is provided in Figure 1. 
+
+3.1. Graph-Informed Prior via Adaptive Spatiotemporal Filtering 
+
+Let XM 
+
+> 1
+
+= X1 ◦ M denote the observable spatiotemporal signal. The goal of GiFlow is to model the conditional distribution p1(X1 | XM 
+
+> 1
+
+) via a generative model pθ (X1 |
+
+XM 
+
+> 1
+
+). Typically, generative models start from an isotropic Gaussian and treat XM 
+
+> 1
+
+as a conditioning variable (Liu et al., 2023a; He et al., 2025). However, the reliance on such a simple prior complicates the generative process as the prior distribution differs significantly from the target distribution (Kollovieh et al., 2025). To construct a more structured prior, we can decompose the conditional distribution as 
+
+pθ (X1 | XM 
+
+> 1
+
+) = 
+
+Z
+
+pθ (X1 | X0, XM 
+
+> 1
+
+)q0(X0 | XM 
+
+> 1
+
+) dX0.
+
+Setting q0 to a problem-agnostic standard Gaussian, as in most existing diffusion and FM models, neglects the spa-tiotemporal structure. Leveraging the flexibility of FM, we construct a graph-informed prior more aligned to the target data distribution p1. By facilitating such alignment, we aim to reduce the overall transport cost. We construct the graph-informed prior leveraging the joint continuous spatiotemporal filtering, which has been adopted in previous joint spatiotemporal frameworks (Stanley et al., 2020; Pan et al., 2021; Einizade et al., 2024). Specifically, we consider xM 
+
+> 1
+
+= vec( XM 
+
+> 1
+
+) as a spatiotemporal graph signal living on top of the Cartesian product between the spatial and temporal graphs. We denote by Lη and Lξ the spatial and temporal graph Laplacians, respectively. Then the spatiotemporal filtering operator can be defined as the Kronecker sum of Lη and Lξ , i.e. , Lηξ = τξ Lξ ⊕ τη Lη ,where τη and τξ control the range of the receptive field. In this way, the joint spatiotemporal filtering operation can be described as xτ = e−Lηξ xM 
+
+> 1
+
+. It can be shown (Stanley et al., 2020) that the matrix form of this spatiotemporal filtering operation, where xτ = vec( Xτ ), takes the form of 
+
+Xτ = e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ . (4) The continuous spatiotemporal model enables adaptive fil-tering. From the perspective of minimizing transport cost, we obtain the optimal τ = ( τη , τ ξ ) by solving the following minimization problem: 
+
+minimize    
+
+> τη,τ ξ>0
+
+X1 − e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ 2 +
+
+ατ tr 
+
+ e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ
+
+⊤Lη e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ
+
+
+
+,
+
+(5) where the first term enforces signal alignment and the sec-ond term encourages Laplacian smoothness (Bontonou et al., 2019; Dong et al., 2020). This optimization balances align-ment and smoothness, producing a spatiotemporal graph-informed prior that is close to the target distribution. Expanding the exponentials via the Taylor series gives 
+
+Xτ =
+
+> ∞
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+!
+
+XM
+
+> 1
+> ∞
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+!
+
+, (6) which propagates information across all nodes and timesteps for any nonzero (τη , τ ξ ). Truncating it to Kη spatial hops and Kξ temporal hops gives 
+
+XKη ,K ξ 
+
+> τ
+
+=
+
+
+
+> Kη
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+ XM
+
+> 1
+
+
+
+> Kξ
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+ .
+
+Proposition 3.1 (Adaptive spatiotemporal receptive field) .
+
+Let Cs and Ct denote the spectral radii of Lη and Lξ , re-spectively. Then the truncation error is bounded by 
+
+Xτ − XKη ,K ξ
+
+> τ
+
+≤
+
+> ∞
+
+X 
+
+> k=Kη+1
+
+|τη |k
+
+k! Cks
+
+!
+
+·
+
+> ∞
+
+X
+
+> m=0
+
+|τξ |m
+
+m! Cmt
+
+!
+
++
+
+> ∞
+
+X
+
+> k=0
+
+|τη |k
+
+k! Cks
+
+!
+
+·
+
+> ∞
+
+X 
+
+> m=Kξ+1
+
+|τξ |m
+
+m! Cmt
+
+!! 
+
+∥XM 
+
+> 1
+
+∥.
+
+(7) The proof of Proposition 3.1 is provided in Appendix B.1. According to Eq. (7) , the truncation error can be reduced either by decreasing (τη , τ ξ ) or increasing (Kη , K ξ ). In particular, for smaller filtering factor (τη , τ ξ ), a smaller truncation order (Kη , K ξ ) suffices to achieve the same ap-proximation error. Therefore, (τη , τ ξ ) effectively controls the spatial and temporal receptive fields: smaller values yield more localized receptive fields, while larger values expand them to capture long-range dependencies. Optimiz-ing τ = ( τη , τ ξ ) thus enables an adaptive spatiotemporal receptive field. In the following theorem, we explicitly show how the graph-informed prior in GiFlow enables more efficient transport 3Spatiotemporal Imputation with Graph-Informed Flow Matching ++
+
+Problem-agnostic Gaussian Incomplete spatiotemporal signal Spatiotemporal dependency Graph-informed prior Target distribution Gaussian prior ... ... ... ... ... Probability density path 
+
+Figure 1. Schematic comparison of GiFlow and FM-Gauss (a FM model with a Gaussian prior). The red and blue dashed lines represent the information used to generate the prior for GiFlow and FM-Gauss, respectively. GiFlow constructs a graph-informed prior via adaptive spatiotemporal filtering of the observable signals, aligning the source distribution closer to the target, and hence simplifying the generation trajectories (lower part). In contrast, because a problem-agnostic Gaussian prior ignores the spatiotemporal structure, it differs significantly from the target distribution, and thereby the model must traverse a longer path to reach the target distribution (upper part). 
+
+compared to standard FM start from an isotropic Gaus-sian, highlighting the benefit of incorporating structural spatiotemporal knowledge. 
+
+Theorem 3.2 (Control of transport cost) . Consider flow matching for spatiotemporal imputation. Let pG0 denote the graph-informed prior obtained via the spatiotemporal filtering operator defined in Eq. (4) , with (τη , τ ξ ) being the optimal solution to Problem (5) with ατ = 0 , and let 
+
+pGauss 0 be the standard isotropic Gaussian prior. Denote by 
+
+q1 the target distribution. Then, the transport cost of flow matching with pG0 is no larger than that with pGauss 0 :
+
+CFM (pG0 → q1) ≤ C FM (pGauss 0 → q1), (8) 
+
+where CFM denotes the expected quadratic cost along the probability path. 
+
+The proof of Theorem 3.2 is provided in Appendix B.2. Intuitively, since the standard Gaussian prior ignores the spatiotemporal structure, the model must traverse a longer path to reach the target distribution. In contrast, the graph-informed prior integrates spatial smoothness and temporal consistency via adaptive spatiotemporal filtering, aligning the source distribution closer to the target distribution and thereby reducing the overall transport cost. It is worth noting that since GiFlow adopts a deterministic input, it does not require multiple sampling runs followed by averaging as in existing diffusion approaches (Liu et al., 2023a; He et al., 2025), which improves computational effi-ciency. Nonetheless, in scenarios where uncertainty quan-tification of the imputations is desired, additional Gaussian noise can be injected into the graph-informed prior to enable stochastic sampling. 
+
+3.2. Graph-Informed Probability Flows 
+
+For imputation problems, the data naturally comes in pairs 
+
+(X0, X1) (Albergo et al., 2024). To construct an FM model, it suffices to specify a conditional probability path and a vector field. We adopt a linear conditional probability path, which is optimal in the sense that the resulting conditional flow corresponds to the optimal transport displacement map, minimizing a bound on the kinetic energy (Lipman et al., 2023). Specifically, for a data pair (XM 
+
+> 1
+
+, X1), the graph-informed linear conditional flow is defined as 
+
+ϕt(X | Z) = (1 − t)e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ + tX1. (9) This induces a unique vector field: 
+
+ut(X | Z) = X1 − e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ . (10) Let vt be the parameterized vector field. The regression loss of GiFlow is then given by 
+
+LGiFM (θ) = Et∼U [0 ,1] ,Z∼q(Z),X∼pt(X)
+
+h
+
+M ◦
+
+
+
+vt(Xt; θ, M, L) − X1 + e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ
+
+ 2 i
+
+.
+
+3.3. Vector Field Model 
+
+We parameterize the vector field model vt using a spatiotem-poral model that captures both spatial and temporal depen-dencies, which has three main components: spatial attention, temporal attention, and spatiotemporal propagation. 4Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+Spatial attention. We first learn correlations between nodes using static node embeddings. Node embeddings are pro-cessed by a GNN developed in (Morris et al., 2019) to cap-ture spatial information. The propagated node embedding 
+
+Xn serves as both the key and query for spatial attention. The value is computed by Xηt = MLP( Xt) ∈ RN ×H ,where Xt is computed using the defined conditional flow as in Eq. (9) . To learn pairwise spatial associations, we employ self-attention: 
+
+Qη = XnWηQ, Kη = XnWηK , Vη = Xηt WηV ,αηn1,n 2 = exp( ⟨qηn1 , kηn2 ⟩)
+
+P 
+
+> n′∈N
+
+exp( ⟨qηn1 , kηn′ ⟩) ,
+
+where WηQ, WηK , WηV ∈ RH×H are learnable matrices, 
+
+Qη , Kη , Vη ∈ RN ×H denote the query, key, and value ma-trices for spatial self-attention, with qηi , kηi , vηi representing their i-th rows. For a given spatiotemporal point (n, r ), we aggregate spatial messages from all nodes, weighted by the learned attention scores, to obtain the spatial embedding for each node. This aggregation is computed as 
+
+hηn = MLP X
+
+> n′∈N
+
+αηn,n ′ , vηn′
+
+!
+
+. (11) 
+
+Temporal attention. To capture correlations across timesteps, we employ a temporal attention mechanism. Un-like recurrent sequence models such as RNNs or LSTMs, Transformers do not inherently encode sequential informa-tion (Wen et al., 2023). To address this, we first incorporate standard positional encoding (Vaswani et al., 2017). When real-world timestamps are available, we additionally use a learnable embedding layer to encode them (Zhou et al., 2021). Let XP E and XT E denote the positional encoding and timestamp encoding. The input to the temporal attention module is then given by 
+
+Xξt = MLP( X⊤ 
+
+> t
+
+) + XP E + XT E ∈ RR×H . (12) For any pair of timesteps (r1, r 2) ∈ R , Xξt serves as the key, query, and value in the temporal attention computation. The temporal attention scores and aggregation are computed as follows: 
+
+Qξ = Xξt WξQ, Kξ = Xξt WξK , Vξ = Xξt WξV ,αξr1,r 2 = exp  ⟨qξr1 , kξr2 ⟩P 
+
+> r′∈R
+
+exp  ⟨qξr1 , kξr′ ⟩ ,
+
+where WξQ, WξK , WξV ∈ RH×H are learnable parameter matrices, and Qξ , Kξ , Vξ ∈ RR×H denote the query, key, and value matrices. For a spatiotemporal point (n, r ), tem-poral messages from all timesteps are aggregated using the learned attention weights, producing the temporal embed-ding computed as 
+
+hξr = MLP X
+
+> r′∈R
+
+αξr,r ′ , vξr′
+
+!
+
+. (13) 
+
+Spatiotemporal propagation. The aggregated spatial and temporal messages are concatenated with the original fea-tures and time embedding that encodes the information of the step t in the probability density path, then projected via a linear layer to obtain H ∈ RN ×R×H . We then perform 
+
+LM P layers of message passing in both spatial and temporal domains, with the ℓ-th ( ℓ = 1 , . . . , L M P ) layer defined by 
+
+H(ℓ+1)  
+
+> r
+
+= GNN( Hr , Gs) ∈ RN ×H , ∀r ∈ R ,
+
+H(ℓ+1)  
+
+> n
+
+= GNN( Hn, Gt) ∈ RR×H , ∀n ∈ N , (14) where spatial message passing is applied independently for each timestep, and temporal message passing is applied independently for each node. The GNN model follows the architecture developed in (Wu et al., 2019). After LM P 
+
+layers, we obtain Hprop ∈ RN ×R×H . Then a linear layer projects the features back to the original signal dimension. For one-dimensional signals, the final output is 
+
+Xout = MLP( Hprop ) ∈ RN ×R. (15) The GiFlow model integrates graph-informed priors with a spatiotemporal architecture in the flow matching framework, providing an effective generative model for spatiotemporal imputation. 
+
+## 4. Experiments 
+
+We assess the performance of GiFlow using synthetic data (Qiu et al., 2017; Giraldo et al., 2022) as well as three widely used real-world datasets that have different sizes and spatiotemporal patterns: two air quality datasets (Air-36 and AQI) (Zheng et al., 2015; Yi et al., 2016) and a traffic dataset (PeMS08) (Guo et al., 2021). Specifically, Air-36 and AQI collect hourly sampled PM2.5 pollutant data in China. PeMS08 is collected by the Caltrans Performance Measurement System (PeMS) (Chen et al., 2001), contain-ing highway traffic flow data in California. It originally collects data every 30 seconds, and the collected data is then aggregated with a 5-minute interval. To simulate realistic incomplete spatiotemporal signals, we adopt two missing data injection strategies: (1) Point missing: following the setup of (Cini et al., 2022; Deng et al., 2024), we randomly mask a fraction ρ of the available data; (2) Block missing: we first randomly select a node and a starting timestep, then mask a contiguous segment of data from that timestep for the selected node. This process is repeated iteratively until a fraction ρ of the available data is masked. We compare 5Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+Table 1. Imputation performance on the synthetic dataset. 
+
+Model σ = 0 .1 σ = 0 .3
+
+MAE RMSE MAPE MAE RMSE MAPE BRITS 0.35 0.56 7.90 0.39 0.64 12.26 SAITS 0.30 0.41 7.52 0.36 0.47 11.27 SPIN 0.83 1.08 26.83 0.87 1.12 29.82 GRIN 0.24 0.31 5.98 0.35 0.46 11.05 OPCR 0.32 0.42 11.12 0.44 0.57 14.88 PriSTI 0.32 0.36 11.21 0.37 0.47 12.48 GiFlow 0.23 0.30 6.65 0.34 0.44 10.67 
+
+the performance of GiFlow with five non-parametric meth-ods (Mean-S, Mean-T, Linear, KNN, and FP (Rossi et al., 2022)), two RNN-based methods (BRITS (Cao et al., 2018) and SAITS (Du et al., 2023)), four spatiotemporal GNN-based and transformer-based methods (SPIN (Marisca et al., 2022), GRIN (Cini et al., 2022), OPCR (Deng et al., 2024), and a diffusion-based method PriSTI (Liu et al., 2023a). To obtain the filtering factors τη and τξ , we optimize Problem (5) with stochastic gradient descent. Specifically, the fil-tering factors are optimized using the training data, where the complete ground-truth signals are available. Once se-lected, the filtering factors remain constant during inference. Details about the datasets and baselines are provided in Ap-pendix C.1 and Appendix C.2, respectively. To evaluate the performance, we use three metrics: mean absolute error (MAE), root mean squared error (RMSE), and mean abso-lute percentage error (MAPE). All the experiment results are conducted five times using different seeds, and we report the average performance. The implementation details can be found in Appendix C.3. 
+
+4.1. Performance Evaluation on Synthetic Datasets 
+
+To evaluate the proposed GiFlow, we generate a synthetic spatiotemporal dataset following the procedure described in (Qiu et al., 2017; Giraldo et al., 2022). This yields a smooth, temporally evolving graph signal X ∈ RN ×R.Specifically, we sample 50 nodes uniformly at random within a 50 ×50 square domain. A graph is then con-structed using KNN based on the spatial positions, with 
+
+k = 5 . Let Lη ∈ RN ×N be the spatial graph Laplacian, for which we compute the eigen-decomposition Lη = VΛV ⊤.Its inverse square root is used to construct a smoothed propagation operator L− 12 
+
+> η
+
+= UΛ − 12 U⊤ where Λ− 12 =diag(0 , λ − 12 
+
+> 2
+
+, . . . , λ − 12 
+
+> N
+
+). The initial signal is generated in the spectral domain as a low-frequency signal. Subsequent signals are generated iteratively via xr = xr−1 + L− 12 
+
+> η
+
+fr ,where f is an i.i.d. Gaussian signal. The length of the gener-ated signal is set to R = 3000 . To simulate the real-world noisy conditions, we add small Gaussian noise to the signal using ˜X = X + ϵ, ϵ ∼ N (0, σ 2I). We conduct experi-2             
+
+>    ! 
+> 
+> 
+> 
+> 
+> 
+>  
+> 
+> 
+> 
+> " 2    
+>    
+> 22
+> 2
+> 2
+> 2
+> 2
+>  
+>  
+> 
+> 
+> 
+>  !
+
+Figure 2. Performance with different missing rates. 
+
+ments using the point missing strategy ( ρ = 20% ) with both 
+
+σ = 0 .1 and σ = 0 .3 to evaluate the performance under dif-ferent noisy levels. The results are given in Table 1, where the best results are in bold , and the second best results are underlined . From the results, we can see that the GiFlow model performs well under different noisy levels. 
+
+4.2. Performance Evaluation on Real-world Datasets 
+
+We first evaluate model performance on the two air quality datasets: a small Air-36 dataset that is collected in Beijing and a large dataset that is collected from 43 Chinese cities. The temporal graph is defined as a line graph to model the auto-regressive nature of the time series. The spatial graph is constructed from training data using distance-based simi-larity. Specifically, we first compute the pairwise distance matrix Ψ ∈ RN ×N using node features. Then we apply a Gaussian kernel exp( −( ψij  
+
+> ω
+
+)2) with the decay rate ω set to the standard deviation of Ψ to transform the distances into edge weights between 0 and 1. The weight matrix is further converted into a binary adjacency matrix with thresholding. The results with the point missing and block missing strate-gies ( ρ = 20% ) are reported in Table 2 and 3, respectively. The results show that simple averaging methods, Mean-S and Mean-T, fail to achieve satisfactory results, indicating that simple spatial or temporal averaging cannot capture the system dynamics. Linear interpolation performs well under point missing, but degrades significantly under block missing. The same happens to RNN-based methods BRITS 6Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+Table 2. Imputation performance with point missing strategy ( ρ = 20% ). 
+
+Model Air-36 AQI MAE RMSE MAPE MAE RMSE MAPE Mean-S 19 .22 ±0.17 31 .81 ±0.50 45 .60 ±0.75 34 .93 ±0.05 48 .94 ±0.53 112 .45 ±0.27 
+
+Mean-T 30 .39 ±0.22 44 .83 ±0.55 83 .64 ±1.22 20 .57 ±0.02 33 .78 ±0.31 55 .44 ±0.18 
+
+Linear 11 .02 ±0.12 21 .28 ±0.60 27 .68 ±0.50 8.97 ±0.04 19 .95 ±0.25 21 .42 ±0.11 
+
+KNN 20 .33 ±0.14 34 .25 ±0.71 41 .74 ±0.96 18 .95 ±0.03 33 .03 ±0.27 52 .44 ±0.20 
+
+FP 16 .51 ±0.17 28 .68 ±0.80 38 .51 ±1.70 15 .65 ±0.02 27 .20 ±0.41 45 .70 ±0.18 
+
+BRITS 14 .23 ±0.17 24 .64 ±0.59 31 .42 ±0.72 16 .55 ±0.12 26 .78 ±0.36 41 .25 ±0.35 
+
+SAITS 14 .32 ±0.13 23 .85 ±0.61 31 .62 ±0.85 17 .95 ±0.07 28 .95 ±0.41 44 .89 ±0.30 
+
+SPIN 11 .05 ±0.87 20 .97 ±1.90 22 .26 ±1.56 8.72 ±0.12 19 .61 ±0.67 18 .55 ±0.28 
+
+GRIN 9.94 ±0.12 19 .09 ±0.87 21 .95 ±0.22 7.97 ±0.08 18 .46 ±0.54 16 .81 ±0.24 
+
+OPCR 10 .03 ±0.12 19 .32 ±0.60 21 .61 ±0.68 8.40 ±0.20 19 .30 ±0.69 16 .91 ±0.59 
+
+PriSTI 10 .29 ±0.14 19 .66 ±0.25 21 .91 ±0.66 8.17 ±0.28 19 .85 ±0.28 16 .37 ±0.59 
+
+CoSTI 9.95 ±0.10 19 .66 ±0.27 22 .08 ±0.37 8.10 ±0.13 18 .59 ±0.37 17 .17 ±0.41 
+
+GiFlow 9.54 ±0.18 18 .10 ±0.78 21 .27 ±0.33 7.83 ±0.10 17 .80 ±0.28 16 .24 ±0.31 
+
+Table 3. Imputation performance with block missing strategy ( ρ = 20% ). 
+
+Model Air-36 AQI MAE RMSE MAPE MAE RMSE MAPE Mean-S 19 .80 ±0.29 32 .03 ±0.23 44 .00 ±1.88 34 .96 ±0.19 48 .70 ±0.91 117 .44 ±1.95 
+
+Mean-T 41 .06 ±0.42 59 .70 ±1.00 102 .80 ±2.19 26 .81 ±0.13 42 .69 ±0.38 76 .71 ±1.19 
+
+Linear 33 .03 ±0.57 52 .53 ±1.28 81 .95 ±5.11 23 .87 ±0.24 40 .83 ±0.75 69 .03 ±1.12 
+
+KNN 20 .78 ±0.39 34 .33 ±0.56 40 .34 ±2.57 18 .58 ±0.12 32 .80 ±0.36 52 .55 ±1.13 
+
+FP 16 .65 ±0.30 28 .66 ±0.74 35 .76 ±2.02 15 .19 ±0.14 26 .74 ±0.53 44 .81 ±1.08 
+
+BRITS 17 .78 ±0.46 28 .16 ±0.93 32 .19 ±2.23 17 .60 ±0.09 28 .24 ±0.19 44 .21 ±0.21 
+
+SAITS 18 .04 ±0.23 28 .63 ±0.52 40 .54 ±1.01 19 .45 ±0.16 30 .85 ±0.66 49 .86 ±0.79 
+
+SPIN 16 .59 ±0.31 28 .07 ±0.37 31 .17 ±1.04 14 .73 ±0.15 26 .79 ±0.47 32 .23 ±0.21 
+
+GRIN 16 .27 ±0.32 27 .67 ±0.67 31 .86 ±1.17 14 .47 ±0.14 25 .23 ±0.23 33 .03 ±0.32 
+
+OPCR 15 .27 ±0.19 25 .44 ±1.10 33 .38 ±1.03 14 .52 ±0.28 25 .95 ±1.52 31 .75 ±0.54 
+
+PriSTI 15 .07 ±0.65 25 .57 ±1.27 29 .84 ±1.96 14 .54 ±0.45 26 .61 ±1.48 31 .77 ±0.39 
+
+CoSTI 15 .19 ±0.27 26 .85 ±0.79 30 .85 ±0.63 14 .78 ±0.37 26 .71 ±0.74 32 .36 ±0.62 
+
+GiFlow 14 .76 ±0.38 25 .33 ±2.14 28 .95 ±0.80 13 .74 ±0.30 25 .43 ±2.61 31 .09 ±1.79 
+
+and SAITS, which even underperform the nonparametric FP model. This is because for block missing, there are con-tiguous missing blocks, making methods that only rely on individual time series struggle with inferring missing values based on signals from distant timesteps. The other deep learning methods that consider both spatial and temporal information, i.e. , SPIN, GRIN, OPCR, PriSTI, and GiFlow, perform better than the methods using only temporal in-formation. Among them, GiFlow achieves the overall best results across different missing patterns and metrics, demon-strating its effectiveness in spatiotemporal imputation. To further evaluate the effectiveness of the proposed GiFlow model, we conduct experiments on the Air-36 dataset, using the point missing strategy with ρ ranging from 20% to 60%. For comparison, we choose four spatiotemporal baselines, which are shown to be better than other baselines accord-ing to the results reported in Table 2 and 3. The results on MAPE are presented in Figure 2, while the results on MAE and RMSE are presented in Appendix C.4. From the results, we observe that for all the methods, the imputa-tion performance steadily degrades with increasing missing rates. Moreover, the proposed GiFlow model consistently outperforms the other methods across different missing rates. These results validate the robustness of the proposed GiFlow model under different missing patterns and missing rates. As proved in Proposition 3.1, the filtering factors τη and τξ
+
+determine the receptive field of the spatiotemporal filtering operation. Intuitively, when facing a higher missing rate, the model would require a larger receptive field to obtain a close approximation of the missing signals based on the 7Spatiotemporal Imputation with Graph-Informed Flow Matching 2    
+
+>   
+> 
+> 
+> 
+> 2
+>    
+> τ
+>  
+>  
+> τ
+> 
+>  
+> τ
+>  
+>  
+> τ
+> 
+>  
+
+Figure 3. Filtering factors with different missing rate. 
+
+observable ones. In the following, we investigate how τη
+
+and τξ change as the missing rate ρ increases. The values of the filtering factors τη and τξ under both the point missing strategy and block missing strategy on the Air-36 dataset with ρ ranging from 20% to 60% are presented in Figure 3. It is evident that with increasing missing rate, τη and τξ be-come larger and larger. This pattern corroborates the results we obtained from Proposition 3.1 that with increasing miss-ing rate, the model likely requires a larger spatiotemporal receptive field. Moreover, for block missing, τη increases a lot as the missing rate increases, while τξ remains relatively stable. This is largely due to the fact that with the block missing strategy, we have larger temporal gaps in the data, making the model more reliant on spatial filtering. A similar phenomenon has been observed in the AQI dataset, which is presented in Appendix C.5. 
+
+4.3. Ablation Study Ablation on prior construction. In the proposed GiFlow model, the graph-informed prior construction is critical as it provides a close alignment between the source and target distribution, and hence reduces the transport cost. To empir-ically validate the effectiveness of the graph-informed prior generated with adaptive spatiotemporal filtering, we eval-uate several variants of GiFlow. Specifically, we consider: (1) FM-Gauss: a FM model employs the same vector field model architecture as in GiFlow but with a problem-agnostic Gaussian prior; (2) GFM: GiFlow with a spatial-only graph-informed prior, i.e. , the filtering parameter τη is obtained by optimizing Problem (5) with τξ fixed as 0; (3) TFM: GiFlow with a temporal-only graph-informed prior, i.e. , the filtering parameter τξ is obtained by optimizing Problem (5) with τη
+
+fixed as 0. We conduct experiments on Air-36 dataset with point missing strategy. To validate the results in Theorem 3.2, we also evaluate the transport cost of different models. The results are reported in Table 4. From the results, we ob-serve that the FM-Gauss performs the worst, and it is worse 
+
+Table 4. The effect of different priors. (T. C. stands for transport cost.) 
+
+Model T. C. MAE RMSE MAPE FM-Gauss 299.62 12.79 ±0.63 22.15 ±1.18 26.85 ±1.92 
+
+TFM 123.39 10.12 ±0.13 19.60 ±0.72 22.41 ±0.82 
+
+GFM 115.05 9.75 ±0.23 18.67 ±0.72 21.55 ±0.54 
+
+GiFlow 104.29 9.54 ±0.18 18 .10 ±0.78 21 .27 ±0.33 
+
+Table 5. The performance of GiFlow with reduced components.                  
+
+> MAE RMSE MAPE GiFlow 9.54 ±0.18 18 .10 ±0.78 21 .27 ±0.33
+> w/o spatial attention 10 .05 ±0.21 19 .97 ±0.68 21 .46 ±0.52
+> w/o temporal attention 9.87 ±0.25 19 .59 ±0.97 21 .53 ±0.71
+> w/o spatiotemporal attention 10 .22 ±0.22 20 .02 ±0.85 21 .88 ±0.75
+> w/o spatiotemporal propagation 10 .40 ±0.81 19 .92 ±1.06 23 .22 ±2.44
+
+than several baselines in Table 2, emphasizing that FM with a Gaussian prior fails to achieve state-of-the-art imputation performance. TFM and GFM give better results than FM-Gauss, indicating that the Laplacian filtering in both the spatial and temporal domains provides more structured and informative prior to the FM framework. Notably, GFM out-performs all baselines in Table 2, indicating that the spatial filtering alone already provides a good prior for the model. Leveraging on both spatial and temporal dependencies, Gi-Flow gives the best results, indicating that combining both spatial and temporal filtering brings additional performance gain. The results on transport cost corroborate the con-clusions of Theorem 3.2. They demonstrate that applying graph filtering can substantially reduce the transport cost. Moreover, it can also be observed that models with lower transport costs tend to achieve better performance. 
+
+Ablation on architectural components. We conduct abla-tion studies to examine the individual contributions of the vector field model components by evaluating four variants of GiFlow: removing spatial attention, removing tempo-ral attention, removing both spatial and temporal attention, and removing spatiotemporal propagation. In GiFlow, the outputs of the attention modules are concatenated and then projected to the hidden dimension through a linear layer. To remove an attention module, we simply exclude it from the concatenated representation and adjust the input dimen-sion of the subsequent linear layer accordingly. To remove spatiotemporal propagation, we set the propagation layer 
+
+LM P to zero. The experiment is conducted on the Air-36 dataset under the point-missing setting with ρ = 20% , and the results are reported in Table 5. We observe that spatial attention, temporal attention, and spatiotemporal propaga-tion each contribute positively to the overall performance. Notably, removing spatiotemporal propagation leads to the largest performance drop, highlighting the importance of in-formation propagation in the spatiotemporal domain. Com-8Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+Table 6. The performance of GiFlow with graphs generated by different thresholds.                             
+
+> Threshold Avg. degree MAE RMSE MAPE 0.02 22.22 10 .33 ±0.57 20 .07 ±0.82 22 .34 ±1.48
+> 0.05 19.27 9.97 ±0.20 19 .86 ±0.83 22 .19 ±0.61
+> 0.1 17.16 9.54 ±0.18 18 .10 ±0.78 21 .27 ±0.33
+> 0.2 14.11 9.74 ±0.17 18 .44 ±0.27 21 .41 ±0.63
+> 0.4 10.55 9.94 ±0.18 19 .01 ±0.86 21 .84 ±0.60
+> 0.6 6.8 11 .15 ±1.57 20 .20 ±1.52 26 .44 ±4.21
+
+Table 7. The inference time on test set.             
+
+> Model Air-36 AQI PeMS08 PriSTI 9.30 43.12 7.46 CoSTI 0.37 8.41 3.63 GiFlow 0.28 2.47 0.99
+
+pared with the ablation study on the prior design, these results suggest that the prior design has a larger impact on performance than the architectural components. 
+
+4.4. Sensitivity Analysis of Graph Quality 
+
+In our experiments, the threshold for graph binarization is set to either 0.1 or 0.2. To investigate how sensitive GiFlow is to the graph quality, we evaluate its performance using graphs constructed with different thresholds, ranging from 0.02 to 0.6. The experiment is conducted on the Air-36 dataset under the point-missing setting with ρ = 20% ,and we report the performance and the average degree of the resulting graphs in Table 6 . The results show that GiFlow performs consistently well when the threshold is between 0.05 and 0.4, with the best result at 0.1. However, under extreme threshold values, such as 0.02 or 0.6, the performance drops noticeably. These findings suggest that GiFlow is robust to moderate variations in graph quality, while its performance degrades significantly when the graph structure deviates substantially from a well-chosen one. 
+
+4.5. Runtime Analysis Inference time analysis. In this section, we evaluate the complexity of different generative models. Specifically, we evaluate the inference time (in minutes) required to impute the test sets of the datasets for the considered diffusion models and GiFlow. The experiments are conducted on an A100 NVIDIA GPU with 80GB of memory. The results are reported in Table 7. From the results, it is evident that GiFlow significantly outperforms diffusion models in terms of inference speed. 
+
+Filtering factor optimization complexity analysis. During training, GiFlow requires the optimization of the adaptive fil-tering factors. To evaluate the efficiency of this process, we optimize these filtering factors for 100 epochs with a batch 
+
+Table 8. The complexity of optimizing filtering factors.                     
+
+> Air-36 AQI PeMS08 S-10 S-20 S-30 S-50 Time 0.19 0.36 0.46 5.75 11.56 23.98 69.85 Memory 0.02 0.04 0.03 1.01 3.49 7.47 19.88
+
+Table 9. Performance with different Euler steps.                         
+
+> Euler steps Inference time MAE RMSE MAPE 11.58 9.87 ±0.16 19 .50 ±0.81 21 .81 ±0.45
+> 21.94 9.87 ±0.17 19 .36 ±0.90 21 .76 ±0.45
+> 54.60 9.81 ±0.15 18 .95 ±0.81 21 .63 ±0.45
+> 10 10.37 9.67 ±0.18 18 .50 ±0.79 21 .64 ±0.38
+> 20 17.15 9.54 ±0.18 18 .10 ±0.78 21 .27 ±0.33
+
+size of 64. To evaluate the applicability of this optimization process to larger graphs, we generate synthetic graphs with 10,000 to 50,000 nodes using the same procedure described in Section 4.1. We report the total training time (in minutes) and peak GPU memory usage (in gigabytes) on both real-world datasets and large synthetic graphs in Table 8, where S-i represents synthetic graphs with i thousand nodes. The results validate that this optimization process is efficient and applicable to larger graphs. 
+
+Performance with fewer Euler steps. In our experiments, we use 20 Euler steps to do the imputation. To investigate how GiFlow performs with fewer generation steps, we evalu-ate its performance with different numbers of steps, ranging from 1 to 20. We conduct experiments on the Air-36 dataset under the point-missing setting with ρ = 20% . The per-formance and the inference time (in seconds) are shown in Table 9. The performance of GiFlow degrades slightly with decreased Euler steps. In particular, with 5 steps, GiFlow still achieves lower MAE and RMSE than the second-best baseline, while offering substantially faster inference. These results suggest that GiFlow provides a favorable efficiency– accuracy trade-off and remains effective even with fewer Euler steps. 
+
+## 5. Conclusion 
+
+In this work, we consider the spatiotemporal imputation problem. We developed a graph-informed flow matching method named GiFlow, which uses a graph-informed prior derived based on adaptive spatiotemporal filtering of observ-able signals. Compared with the problem-agnostic Gaussian prior, the proposed graph-informed prior better aligns with the target data distribution, and it provably reduces the trans-port cost from the source to the target distribution. We also theoretically analyze the relationship between spatiotempo-ral filtering factors and the receptive field in the filtering pro-cess. Experiments on both synthetic and real-world datasets with various missing patterns and missing rates demonstrate the effectiveness and robustness of the GiFlow model. 9Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+## Acknowledgments 
+
+This work was supported by the Swiss National Science Foundation (SNSF) under Grant No. 200021 200461. The contributions of Aref Einizade and Jhony H. Giraldo to this project were supported by Hi! PARIS and the ANR/France 2030 program (Grant ANR-23-IACL-0005 and ANR-23-CMAS-0033). 
+
+## Impact Statement 
+
+This paper presents work whose goal is to advance the field of machine learning. There are many potential societal consequences of our work, none of which we feel must be specifically highlighted here. 
+
+## References 
+
+Albergo, M. S. and Vanden-Eijnden, E. Building normaliz-ing flows with stochastic interpolants. In International Conference on Learning Representations , 2023. Albergo, M. S., Goldstein, M., Boffi, N. M., Ranganath, R., and Vanden-Eijnden, E. Stochastic interpolants with data-dependent couplings. In International Conference on Machine Learning , 2024. Ansley, C. F. and Kohn, R. On the estimation of arima models with missing values. In Time Series Analysis of Irregularly Observed Data , pp. 9–37. Springer, 1984. Atluri, G., Karpatne, A., and Kumar, V. Spatio-temporal data mining: A survey of problems and methods. ACM Computing Surveys , 51(4):1–41, 2018. Behmanesh, M., Krahn, M., and Ovsjanikov, M. TIDE: Time derivative diffusion for deep learning on graphs. In 
+
+International Conference on Machine Learning , 2023. Beretta, L. and Santaniello, A. Nearest neighbor imputa-tion algorithms: A critical evaluation. BMC Medical Informatics and Decision Making , 16(Suppl 3):74, 2016. Bontonou, M., Lassance, C., Hacene, G. B., Gripon, V., Tang, J., and Ortega, A. Introducing graph smoothness loss for training deep learning architectures. In IEEE Data Science Workshop , 2019. Cao, H., Tan, C., Gao, Z., Xu, Y., Chen, G., Heng, P.-A., and Li, S. Z. A survey on generative diffusion models. 
+
+IEEE Transactions on Knowledge and Data Engineering ,36(7):2814–2830, 2024. Cao, W., Wang, D., Li, J., Zhou, H., Li, L., and Li, Y. BRITS: Bidirectional recurrent imputation for time series. In Advances in Neural Information Processing Systems ,2018. Chen, C., Petty, K., Skabardonis, A., Varaiya, P., and Jia, Z. Freeway performance measurement system: Mining loop detector data. Transportation Research Record , 1748(1): 96–102, 2001. Cini, A., Marisca, I., and Alippi, C. Filling the g ap s: Mul-tivariate time series imputation by graph neural networks. In International Conference on Learning Representations ,2022. Cini, A., Marisca, I., Zambon, D., and Alippi, C. Graph deep learning for time series forecasting. ACM Computing Surveys , 57(12):1–34, 2025. Croitoru, F.-A., Hondru, V., Ionescu, R. T., and Shah, M. Diffusion models in vision: A survey. IEEE Transac-tions on Pattern Analysis and Machine Intelligence , 45 (9):10850–10869, 2023. Deng, L., Wu, C., Lian, D., and Chen, E. Learning from highly sparse spatio-temporal data. In Advances in Neural Information Processing Systems , 2024. Dhariwal, P. and Nichol, A. Diffusion models beat GANs on image synthesis. In Advances in Neural Information Processing Systems , 2021. Dong, X., Thanou, D., Toni, L., Bronstein, M., and Frossard, P. Graph signal processing for machine learning: A re-view and new perspectives. IEEE Signal Processing Mag-azine , 37(6):117–127, 2020. Du, W., C ˆot ´e, D., and Liu, Y. SAITS: Self-attention-based imputation for time series. Expert Systems with Applica-tions , 219:119619, 2023. Einizade, A., Malliaros, F., and Giraldo, J. H. Continuous product graph neural networks. In Advances in Neural Information Processing Systems , 2024. Giraldo, J. H., Mahmood, A., Garcia-Garcia, B., Thanou, D., and Bouwmans, T. Reconstruction of time-varying graph signals via Sobolev smoothness. IEEE Transactions on Signal and Information Processing over Networks , 8:201– 214, 2022. Guo, S., Lin, Y., Wan, H., Li, X., and Cong, G. Learning dy-namics and heterogeneity of spatial-temporal graph data for traffic forecasting. IEEE Transactions on Knowledge and Data Engineering , 34(11):5415–5428, 2021. He, W., Huang, J., Gu, J., Zhang, J., and Bai, Y. Filling the missings: Spatiotemporal data imputation by conditional diffusion. In International Joint Conference on Artificial Intelligence , 2025. Ho, J., Jain, A., and Abbeel, P. Denoising diffusion prob-abilistic models. In Advances in Neural Information Processing Systems , 2020. 10 Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+Kingma, D. and Ba, J. Adam: A method for stochastic optimization. In International Conference on Learning Representations , 2015. Kollovieh, M., Lienen, M., L ¨udke, D., Schwinn, L., and G ¨unnemann, S. Flow matching with gaussian process priors for probabilistic time series forecasting. In Inter-national Conference on Learning Representations , 2025. Li, Y., Yu, R., Shahabi, C., and Liu, Y. Diffusion con-volutional recurrent neural network: Data-driven traffic forecasting. In International Conference on Learning Representations , 2018. Lipman, Y., Chen, R. T. Q., Ben-Hamu, H., Nickel, M., and Le, M. Flow matching for generative modeling. In 
+
+International Conference on Learning Representations ,2023. Liu, M., Huang, H., Feng, H., Sun, L., Du, B., and Fu, Y. PriSTI: A conditional diffusion framework for spatiotem-poral imputation. In IEEE International Conference on Data Engineering , 2023a. Liu, Q., Yin, X., Yuille, A., Brown, A., and Singh, M. Flowing from words to pixels: A noise-free framework for cross-modality evolution. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2025a. Liu, X., Gong, C., and Liu, Q. Flow straight and fast: Learning to generate and transfer data with rectified flow. In International Conference on Learning Representations ,2023b. Liu, Y., Yu, R., Zheng, S., Zhan, E., and Yue, Y. Naomi: Non-autoregressive multiresolution sequence imputation. In Advances in Neural Information Processing Systems ,2019. Liu, Y., Liu, B., Zhang, Y., Hou, X., Song, G., Liu, Y., and You, H. See further when clear: Curriculum consistency model. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2025b. Ma, L., Wang, M., and Peng, K. A spatiotemporal industrial soft sensor modeling scheme for quality prediction with missing data. IEEE Transactions on Instrumentation and Measurement , 73:1–10, 2024. Marisca, I., Cini, A., and Alippi, C. Learning to reconstruct missing data from spatiotemporal graphs with sparse ob-servations. In Advances in Neural Information Processing Systems , 2022. Marisca, I., Alippi, C., et al. Graph-based forecasting with missing data through spatiotemporal downsampling. In 
+
+International Conference on Machine Learning , 2024. Morris, C., Ritzert, M., Fey, M., Hamilton, W. L., Lenssen, J. E., Rattan, G., and Grohe, M. Weisfeiler and Leman go neural: Higher-order graph neural networks. In AAAI Conference on Artificial Intelligence , 2019. Nelwamondo, F. V., Mohamed, S., and Marwala, T. Missing data: A comparison of neural network and expectation maximization techniques. Current Science , pp. 1514– 1521, 2007. Pan, C., Chen, S., and Ortega, A. Spatio-temporal graph scattering transform. In International Conference on Learning Representations , 2021. Price, I., Sanchez-Gonzalez, A., Alet, F., Andersson, T. R., El-Kadi, A., Masters, D., Ewalds, T., Stott, J., Mohamed, S., Battaglia, P., et al. Probabilistic weather forecasting with machine learning. Nature , 637(8044):84–90, 2025. Qiu, K., Mao, X., Shen, X., Wang, X., Li, T., and Gu, Y. Time-varying graph signal reconstruction. IEEE Journal of Selected Topics in Signal Processing , 11(6):870–883, 2017. Rombach, R., Blattmann, A., Lorenz, D., Esser, P., and Ommer, B. High-resolution image synthesis with latent diffusion models. In IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2022. Rossi, E., Kenlay, H., Gorinova, M. I., Chamberlain, B. P., Dong, X., and Bronstein, M. M. On the unreasonable effectiveness of feature propagation in learning on graphs with missing node features. In Learning on Graphs Con-ference , 2022. Sohl-Dickstein, J., Weiss, E., Maheswaranathan, N., and Ganguli, S. Deep unsupervised learning using nonequi-librium thermodynamics. In International Conference on Machine Learning , 2015. Sol ´ıs-Garc ´ıa, J., Vega-M ´arquez, B., Nepomuceno, J. A., and Nepomuceno-Chamorro, I. A. CoSTI: Consistency mod-els for (a faster) spatio-temporal imputation. Knowledge-Based Systems , 327:114117, 2025. Song, Y., Sohl-Dickstein, J., Kingma, D. P., Kumar, A., Er-mon, S., and Poole, B. Score-based generative modeling through stochastic differential equations. In International Conference on Learning Representations , 2021. Song, Y., Dhariwal, P., Chen, M., and Sutskever, I. Consis-tency models. In International Conference on Machine Learning , 2023. Stanley, J. S., Chi, E. C., and Mishne, G. Multiway graph signal processing on tensors: Integrative analysis of irreg-ular geometries. IEEE Signal Processing Magazine , 37 (6):160–173, 2020. 11 Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+Tashiro, Y., Song, J., Song, Y., and Ermon, S. CSDI: Condi-tional score-based diffusion models for probabilistic time series imputation. In Advances in Neural Information Processing Systems , 2021. Tong, A., Fatras, K., Malkin, N., Huguet, G., Zhang, Y., Rector-Brooks, J., Wolf, G., and Bengio, Y. Improv-ing and generalizing flow-based generative models with minibatch optimal transport. Transactions on Machine Learning Research , pp. 1–34, 2024. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., and Polosukhin, I. Atten-tion is all you need. In Advances in Neural Information Processing Systems , 2017. Wang, S., Cao, J., and Philip, S. Y. Deep learning for spatio-temporal data mining: A survey. IEEE Transactions on Knowledge and Data Engineering , 34(8):3681–3700, 2020. Wen, Q., Zhou, T., Zhang, C., Chen, W., Ma, Z., Yan, J., and Sun, L. Transformers in time series: A survey. In 
+
+International Joint Conference on Artificial Intelligence ,2023. Wu, F., Souza, A., Zhang, T., Fifty, C., Yu, T., and Wein-berger, K. Simplifying graph convolutional networks. In 
+
+International Conference on Machine Learning , 2019. Yang, L., Zhang, Z., Song, Y., Hong, S., Xu, R., Zhao, Y., Zhang, W., Cui, B., and Yang, M.-H. Diffusion models: A comprehensive survey of methods and applications. 
+
+ACM Computing Surveys , 56(4):1–39, 2023. Yi, X., Zheng, Y., Zhang, J., and Li, T. ST-MVL: Filling missing values in geo-sensory time series data. In In-ternational Joint Conference on Artificial Intelligence ,2016. Zheng, Y., Yi, X., Li, M., Li, R., Shan, Z., Chang, E., and Li, T. Forecasting fine-grained air quality based on big data. In ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , 2015. Zhou, H., Zhang, S., Peng, J., Zhang, S., Li, J., Xiong, H., and Zhang, W. Informer: Beyond efficient transformer for long sequence time-series forecasting. In AAAI Con-ference on Artificial Intelligence , 2021. 12 Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+## A. Related Work 
+
+Spatiotemporal imputation addresses the problem of reconstructing missing values in data that combine temporal dynamics with spatial dependencies, with applications in domains such as air quality monitoring (Cao et al., 2018), traffic forecasting (Li et al., 2018), and weather prediction (Price et al., 2025). Early statistical approaches rely on distributional assumptions such as temporal smoothness or local similarity across series. Examples include autoregressive models (Ansley & Kohn, 1984), expectation-maximization (Nelwamondo et al., 2007), and k-nearest neighbors (Beretta & Santaniello, 2016). While these methods are simple and theoretically well-understood, they struggle in real-world settings where spatial and temporal dependencies are highly nonlinear and heterogeneous. Their limited capacity to capture complex interactions has motivated the development of more flexible machine learning approaches. Neural methods have significantly advanced imputation by better capturing temporal and spatial dependencies. RNNs and their extensions exploit temporal correlations by recursively propagating hidden states, as in BRITS (bidirectional recurrent imputation for time series) (Cao et al., 2018), while transformer-based designs such as SAITS (self-attention-based imputation for time series) (Du et al., 2023) introduce attention mechanisms to jointly optimize imputation and reconstruction. However, these approaches typically operate on individual time series and ignore spatial relationships. To address this limitation, GNN models have been proposed to incorporate spatial dependencies by propagating information over a graph topology. Examples include GRIN (graph recurrent imputation network) (Cini et al., 2022), SPIN (spatiotemporal point inference network) (Marisca et al., 2022), and OPCR (one-step propagation and confidence-based refinement) (Deng et al., 2024), which combine temporal modeling with graph-based message passing. Despite their effectiveness, these iterative propagation schemes are prone to error accumulation and information bottlenecks, particularly under high missing rates (Cini et al., 2025). Generative models provide an alternative paradigm by directly modeling conditional data distributions, thereby avoiding the accumulation of errors across propagation steps. Diffusion-based approaches (Sohl-Dickstein et al., 2015; Ho et al., 2020; Song et al., 2021) have demonstrated strong generative performance in multiple domains, from vision (Dhariwal & Nichol, 2021; Rombach et al., 2022) to spatiotemporal data (Liu et al., 2023a; He et al., 2025). Conditional diffusion frameworks, such as CSDI (conditional score-based diffusion models for imputation) (Tashiro et al., 2021), have been adapted to time-series imputation, while PriSTI (spatiotemporal imputation with enhanced prior modeling) (Liu et al., 2023a) and related models extend them to spatiotemporal settings. However, these methods typically rely on problem-agnostic Gaussian priors and require computationally expensive iterative denoising. In practice, accurate inference often demands multiple sampling runs followed by averaging, which limits both efficiency and robustness when applied to large-scale spatiotemporal data. The iterative nature of diffusion models leads to high inference computational costs. To improve the sampling efficiency of diffusion models, consistency models have been proposed, where the models are trained to map any point at any time step to the trajectory’s starting point (Song et al., 2023). The idea of the consistency model has also been applied to the problem of spatiotemporal imputation, which demonstrates significant improvement in inference computational costs (Sol ´ıs-Garc ´ıa et al., 2025). This line of approaches, however, still relies on the problem-agnostic Gaussian priors. It has been shown that the idea of the consistency model can be extended to accommodate the flow matching framework as well (Liu et al., 2025b). But the effectiveness of such an extension has not been investigated yet in the spatiotemporal imputation task. Flow matching (Albergo & Vanden-Eijnden, 2023; Lipman et al., 2023; Liu et al., 2023b) generalizes diffusion by directly learning a continuous probability flow from a source to a target distribution, regressing vector fields along transport paths. Instead of relying on stochastic noise injection, flow matching directly learns a continuous probability flow that transports a source distribution to the target distribution. FM can accommodate arbitrary source distributions, although Gaussian priors are still often chosen for convenience. FM avoids stochastic noise injection, reduces training variance, and stabilizes optimization (Lipman et al., 2023; Albergo & Vanden-Eijnden, 2023). Moreover, the deterministic inference of FM enables efficient sampling without repeated averaging as required in diffusion models (Liu et al., 2023a). These characteristics make FM particularly suitable for tasks where partial observations are available (Albergo et al., 2024; Kollovieh et al., 2025; Liu et al., 2025a), since we can build problem-tailored priors based on it. By aligning the prior distribution to the target distribution, the performance of FM can be further enhanced (Tong et al., 2024). 13 Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+## B. Proofs 
+
+B.1. Proof of Proposition 3.1 
+
+Our results on the truncation error analysis of the spatiotemporal filtering can be viewed as an extension of the truncation error analysis for spatial filtering presented in (Behmanesh et al., 2023). The Taylor series for the spatiotemporal filtering defined in (4) is given by 
+
+Xτ =
+
+> ∞
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+!
+
+XM
+
+> 1
+> ∞
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+!
+
+. (16) Intuitively, for any nonzero (τη , τ ξ ), this series propagates information from the whole graph, as no factor in front of the power of the Laplacian is zero. The truncated version of Xτ is defined by 
+
+XKη ,K ξ 
+
+> τ
+
+=
+
+
+
+> Kη
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+ XM
+
+> 1
+
+
+
+> Kξ
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+ . (17) Therefore, we have 
+
+Xτ − XKη ,K ξ
+
+> τ
+
+=
+
+> ∞
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+!
+
+XM
+
+> 1
+> ∞
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+!
+
+−
+
+
+
+> Kη
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+ XM
+
+> 1
+
+
+
+> Kξ
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+
+
+=
+
+
+
+> Kη
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+ +
+
+
+
+> ∞
+
+X 
+
+> k=Kη+1
+
+(−τη )k
+
+k! Lkη
+
+ XM
+
+> 1
+> ∞
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+!
+
+−
+
+
+
+> Kη
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+ XM
+
+> 1
+
+
+
+> Kξ
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+
+
+=
+
+
+
+> ∞
+
+X 
+
+> k=Kη+1
+
+(−τη )k
+
+k! Lkη
+
+ XM
+
+> 1
+> ∞
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+!
+
++
+
+
+
+> Kη
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+ XM
+
+> 1
+
+
+
+> ∞
+
+X 
+
+> m=Kξ+1
+
+(−τξ )m
+
+m! Lmξ
+
+
+
+≤
+
+
+
+> ∞
+
+X 
+
+> k=Kη+1
+
+(−τη )k
+
+k! Lkη
+
+ XM
+
+> 1
+> ∞
+
+X
+
+> m=0
+
+(−τξ )m
+
+m! Lmξ
+
+!
+
++
+
+
+
+> Kη
+
+X
+
+> k=0
+
+(−τη )k
+
+k! Lkη
+
+ XM
+
+> 1
+
+
+
+> ∞
+
+X 
+
+> m=Kξ+1
+
+(−τξ )m
+
+m! Lmξ
+
+
+
+≤
+
+
+
+> ∞
+
+X 
+
+> k=Kη+1
+
+|τη |k
+
+k! Cks
+
+
+
+> ∞
+
+X
+
+> m=0
+
+|τξ |m
+
+m! Cmt
+
+!
+
++
+
+> ∞
+
+X
+
+> k=0
+
+|τη |k
+
+k! Cks
+
+! 
+
+> ∞
+
+X 
+
+> m=Kξ+1
+
+|τξ |m
+
+m! Cmt
+
+ ∥XM 
+
+> 1
+
+∥,
+
+(18) which completes the proof. 
+
+B.2. Proof of Theorem 3.2 
+
+Let X0 ∼ p0 and X1 ∼ q1 be the source and target distributions of a flow matching model, while XM 
+
+> 1
+
+= X1 ◦ M being the observable data, then the transport cost CFM (p0 → q1) is defined as follows: 
+
+CFM (p0 → q1) = EX1∼p1(X0)
+
+h
+
+Xt=0 (XM 
+
+> 1
+
+) − X1
+
+> 2
+
+i
+
+, (19) 14 Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+where Xt=0 (XM 
+
+> 1
+
+) represents the source sample generated from the observable data XM 
+
+> 1
+
+. Specifically, for FM with a Gaussian prior, we have XGauss t=0 (XM 
+
+> 1
+
+) = XM 
+
+> 1
+
++ Σ ◦ (1 − M) with Σ ∼ N  0, σ 2I sampled from an isotropic Gaussian distribution. Therefore, we have 
+
+CFM (pGauss  
+
+> 0
+
+→ q1) = EX1∼p1(X0)
+
+h
+
+XM 
+
+> 1
+
++ Σ ◦ (1 − M) − X1
+
+> 2
+
+i
+
+= EX1∼p1(X0)
+
+h
+
+∥X1 ◦ M + Σ ◦ (1 − M) − X1∥2i
+
+= EX1∼p1(X0)
+
+h
+
+∥(X1 − Σ) ◦ (1 − M)∥2i
+
+= EX1∼p1(X0)
+
+h
+
+∥X1 ◦ (1 − M)∥2i
+
++ EX1∼p1(X0)
+
+h
+
+∥Σ ◦ (1 − M)∥2i
+
+= EX1∼p1(X0)
+
+h
+
+∥X1 ◦ (1 − M)∥2i
+
++ σ2tr ( 1 − M) .
+
+(20) For GiFlow, the graph-informed prior is constructed based on the spatiotemporal filtering defined in (4) , leading to 
+
+XGt=0 (XM 
+
+> 1
+
+) = e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ . Since τη and τξ are obtained by optimizing (5) with ατ = 0 , we have 
+
+X1 − e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ 2 ≤ X1 − XM 
+
+> 1
+> 2
+
+(21) since τη and τξ represent the optimal solution of (5) . Note that since Problem (5) is nonconvex, we can only obtain stationary solutions in practice. In such cases, we can optimize (5) using gradient-based methods with initialization τη = 0 and τξ = 0 ,then Eq. (21) still holds. Therefore, we have 
+
+CFM (pG 
+
+> 0
+
+→ q1) = EX1∼p1(X0)
+
+h
+
+X1 − e−τη Lη XM 
+
+> 1
+
+e−τξ Lξ 2i
+
+≤ EX1∼p1(X0)
+
+h
+
+X1 − XM
+
+> 1
+> 2
+
+i
+
+= EX1∼p1(X0)
+
+h
+
+∥X1 − X1 ◦ M∥2i
+
+≤ EX1∼p1(X0)
+
+h
+
+∥X1 ◦ (1 − M)∥2i
+
++ σ2tr ( 1 − M) .
+
+(22) Combining Eq. (20) and Eq. (22) completes the proof. 
+
+## C. Experiments 
+
+C.1. Introduction of Datasets 
+
+We conduct experiments on three real-world datasets: two air quality datasets, Air-36 and AQI, and a traffic dataset, PeMS08. Air-36 and AQI collect hourly-sampled PM2.5 pollutant data. Specifically, Air-36 is collected from 36 monitoring stations in Beijing, while AQI is collected from 437 monitoring stations spread across 43 Chinese cities. Both air quality datasets have 8760 timesteps, covering one year from 2014/05/01 to 2015/04/30 (Zheng et al., 2015). PeMS08 is a traffic dataset about highway traffic flow in California, which is collected by the Caltrans Performance Measurement System (PeMS) (Chen et al., 2001). Specifically, it is collected from 170 monitoring sensors covering two months from 2016/07/01 to 2016/08/31. It originally collects data every 30 seconds, and the collected data is then aggregated with a 5-minute interval. The statistics of the datasets are summarized in Table 10. 
+
+Table 10. Statistics of the datasets. 
+
+Dataset # Nodes # Timesteps Sampling intervals Collected date Air-36 36 8760 1 hour 2014/05/01 – 2015/04/30 AQI 437 8760 1 hour 2014/05/01 – 2015/04/30 PeMS08 170 17856 5 minute 2016/07/01 – 2016/08/31 
+
+C.2. Introduction of Baselines 
+
+To evaluate the performance of our proposed method, we compare it with various baselines: 15 Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+• Mean-S : imputes the missing values using the spatial average, i.e., the mean values of all nodes at a given timestep. • Mean-T : imputes the missing values using the temporal average, i.e., the mean values of all timesteps for a given node. • Linear : imputes the missing values using temporal linear interpolation for each node independently. • KNN : imputes the missing values using the average signal of neighboring nodes. • FP (Rossi et al., 2022): performs feature propagation to impute the missing values. • BRITS (Cao et al., 2018): a bidirectional RNN-based model. • SAITS (Du et al., 2023): a transformer-based model. • SPIN (Marisca et al., 2022): an efficient version of spatio-temporal attention-based method. • GRIN (Cini et al., 2022): a GNN model with bidirectional gated recurrent unit. • OPCR (Deng et al., 2024): a GNN model that contains attention-based one-step propagation and confidence-based refinement. • PriSTI (Liu et al., 2023a): a conditional diffusion model. • CoSTI (Sol´ ıs-Garc´ ıa et al., 2025): a consistency model. 
+
+C.3. Implementation Details 
+
+For all the experimental results, we give the average performance and standard deviation with 5 independent trials. For all the datasets, we select windows of length 24. For each dataset, we randomly select 70%/10%/20% of the data for training, validation, and testing. The Adam optimizer is used in all experiments for model training (Kingma & Ba, 2015). We fix the maximum number of epochs to 300, and we use early stopping on the validation set with a patience of 10 epochs. To stabilize the training process, we employed an exponential moving average (EMA) of the model parameters with a decay rate of 0.9999. To solve the ODE, we utilized an Euler solver with 20 steps. The models’ hyperparameters are tuned based on the results of the validation set. The search space of hyperparameters are as follows: 1) learning rate: {0.005, 0.001, 0.0005 }; 2) weight decay: {0, 5e-4, 5e-5, 5e-3 }; 3) dropout rate: {0, 0.1, 0.2, 0.3 }; 4) GNN layers: {2, 4, 6, 8 }; 5) embedding dimension: {32, 64, 128 }; 6) weight parameter ατ : {0.1, 0.01, 0.001, 0.0001 }.
+
+C.4. Performance with different missing rate 
+
+To evaluate the robustness of the model under different missing rates, we conduct experiments using the point missing strategy on the Air-36 dataset, with ρ ranging from 20% to 60%. The results on MAE and MAPE are showcased in Figure 2. In the following, we present the results on RMSE in Figure 4. The results on RMSE exhibit similar patterns as in the MAE and MAPE results, where the imputation performance steadily degrades with increasing rates, and GiFlow consistently outperforms the other baselines across different missing rates. 2      
+
+> !! " 
+> 
+> 
+> 2
+> 2
+> 22
+> 2
+> 2
+> 
+>  
+> 
+> 
+> 
+> #
+
+Figure 4. Performance on RMSE with different Missing Rate. 
+
+16 Spatiotemporal Imputation with Graph-Informed Flow Matching 
+
+C.5. Filtering factor values with increasing missing rate 
+
+To validate the theoretical results presented in Proposition 3.1, we evaluate how the filtering factors τη and τξ change with increasing missing rates. The results on the Air-36 dataset are showcased in Figure 3. In the following, we present the results on the AQI dataset in Figure 5. The patterns of τη and τξ with increasing missing rate on the AQI dataset coincide with the patterns on the Air-36 dataset. Specifically, the filtering factors τη and τξ increase as the missing rate increases, which corroborates the results we obtained from Proposition 3.1. Moreover, we observe that the increase of τη is more significant than the increase of τξ , indicating that the model relies more on spatial filtering than temporal filtering. 
+
+C.6. Applicability to Other Datasets 
+
+In this section, we evaluate GiFlow on a traffic dataset about highway traffic flow in California to validate its applicability to other datasets. Specifically, we conduct experiments using both the point missing strategy and block missing strategy with ρ = 20% on the PeMS08 dataset. The results are reported in Table 11. It can be observed that KNN and FP perform quite bad, indicating that relying only on the spatial dependencies cannot characterize the system dynamics well. The spatiotemporal methods still achieve good results, highlighting the importance of considering both spatial and temporal dependencies. The proposed GiFlow achieves the best results on all metrics, validating the applicability of GiFlow to other datasets under different missing patterns. 2    
+
+>   
+> 
+> 
+> 
+> 
+> 
+> 
+> 
+>  
+> τ
+>  
+>  
+> τ
+> 
+>  
+> τ
+>  
+>  
+> τ
+> 
+>  
+
+Figure 5. Filtering factor values with different missing rates on the AQI dataset. 
+
+Table 11. Imputation performance on PeMS08 under point and block missing strategies. 
+
+Model Point Missing Block Missing MAE RMSE MAPE MAE RMSE MAPE Mean-S 86.64 ±0.11 113.59 ±0.12 141.40 ±1.67 34.69 ±0.25 55.86 ±0.67 32.39 ±2.89 
+
+Mean-T 21.27 ±0.05 39.74 ±0.07 13.96 ±0.06 86.36 ±0.47 113.37 ±0.57 141.93 ±3.10 
+
+Linear 14.71 ±0.04 24.04 ±0.08 9.94 ±0.05 32.17 ±0.32 56.26 ±0.47 34.51 ±3.03 
+
+KNN 117.65 ±0.19 152.50 ±0.22 195.18 ±2.10 117.40 ±1.13 152.28 ±1.03 195.49 ±6.17 
+
+FP 118.93 ±0.08 149.14 ±0.30 206.13 ±2.96 118.97 ±0.44 149.08 ±0.34 206.26 ±5.25 
+
+BRITS 17.66 ±0.03 29.13 ±0.08 12.07 ±0.10 24.29 ±0.25 38.36 ±0.79 20.45 ±1.62 
+
+SAITS 18.15 ±0.13 28.28 ±0.17 12.48 ±0.27 32.31 ±1.82 47.23 ±2.22 24.55 ±2.27 
+
+SPIN 14.82 ±0.06 24.26 ±0.43 9.34 ±0.06 19.63 ±0.16 30.43 ±0.33 14.94 ±1.85 
+
+GRIN 13.72 ±0.12 21.49 ±0.29 8.82 ±0.27 21.65 ±0.41 36.28 ±0.49 16.42 ±1.37 
+
+OPCR 12.77 ±0.20 19.88 ±0.32 8.67 ±0.52 22.96 ±1.06 39.89 ±1.13 21.70 ±2.98 
+
+PriSTI 13.02 ±0.37 20.08 ±0.45 8.79 ±0.86 18.94 ±1.01 30.77 ±1.32 14.48 ±0.54 
+
+GiFlow 12 .66 ±0.19 19 .83 ±0.05 8.43 ±0.18 18 .70 ±0.37 29 .97 ±0.37 14 .02 ±1.67 
+
+17
