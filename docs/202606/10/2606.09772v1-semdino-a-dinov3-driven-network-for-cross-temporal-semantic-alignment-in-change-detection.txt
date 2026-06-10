@@ -1,0 +1,761 @@
+Title: SemDINO: A DINOv3-Driven Network for Cross-Temporal Semantic Alignment in Change Detection
+
+URL Source: https://arxiv.org/pdf/2606.09772v1
+
+Published Time: Tue, 09 Jun 2026 02:40:55 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+> JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 1
+
+# SemDINO: A DINOv3-Driven Network for Cross-Temporal Semantic Alignment in Change Detection 
+
+Xinyu Tong*, Meihua Zhou* †, Jinxiao Sun, Yingjie Tang, Lei Wang †
+
+Abstract —Abstract—Semantic change detection (SCD) aims to simultaneously locate land-cover changes and identify semantic categories before and after transition. However, existing methods suffer from insufficient cross-temporal alignment, weak multi-scale representation, and poor robustness to pseudo-changes caused by illumination, season, and registration noise. To ad-dress these issues, we propose a novel end-to-end semantic change detection network named SemDINO, which integrates a dual-branch encoder, multi-scale temporal interaction, semantic purification, change enhancement, and decoupled multi-task prediction into a unified framework. Specifically, we construct a dual-branch encoder that combines a CNN backbone and frozen DINOv3 features via gated pyramid fusion, enabling rich multi-scale semantic representation. Then, a multi-scale tempo-ral bidirectional transformer interaction (M-TBTT) module is proposed to achieve global cross-temporal feature alignment and information interaction. To further enhance genuine changes and suppress pseudo-variations, we introduce semantic purification (SCP), bidirectional change enhancement (BiChangeEnhance), and multi-scale change enhancement (MCE) modules collabora-tively. Finally, a multi-branch CD prediction head is designed to jointly output binary change mask, bi-temporal semantic maps, and edge constraint. Extensive experiments on public remote sensing CD datasets demonstrate that SemDINO achieves superior performance and generalization ability against state-of-the-art methods, especially in complex scenarios with interference factors. 
+
+Index Terms —Remote sensing, Semantic Change Detection, self-supervised, DINOv3. 
+
+I. I NTRODUCTION 
+
+# SEMANTIC change detection (SCD) aims to infer land-cover transitions from bi-temporal remote sensing images. Unlike binary change localization, SCD predicts a semantic change map that describes both changed regions and their category transitions. HRSCD formalizes large-scale SCD with semantic transition annotations [1]. SECOND further promotes SCD evaluation in high-resolution aerial scenes with detailed semantic categories [9]. These benchmarks show that SCD is not only a localization problem, but also a temporal semantic reasoning problem. 
+
+> Xinyu Tong and Lei Wang are with the Xinjiang Institute of Ecology and Geography, Chinese Academy of Sciences, Urumqi 830011, China, and also with the University of Chinese Academy of Sciences, Beijing 100049, China. (e-mail:tongxinyu25@mails.ucas.ac.cn, egiwang@ms.xjb.ac.cn) Meihua Zhou is with the University of Chinese Academy of Sciences, Beijing 100049, China. (e-mail:zhoumeihua25@mails.ucas.ac.cn) Jinxiao Sun is with the School of Computer Science, Xiangtan University, Xiangtan 411105, China. Yingjie Tang is with the College of Information and Communication Engineering, Harbin Engineering University, Harbin 150001, China. *Xinyu Tong and Meihua Zhou contribute equally.
+> †Corresponding author.
+
+The main difficulty of SCD lies in cross-temporal semantic alignment. In unchanged regions, the semantic states at T1
+
+and T2 should remain consistent under illumination variation, seasonal change, and local misregistration. In changed regions, the semantic discrepancy between the two temporal states should be preserved and converted into a from-to category. A model that overreacts to appearance differences produces pseudo changes. A model that over-smooths temporal features may miss true semantic transitions. Robust SCD therefore requires a representation that can support both unchanged-region consistency and changed-region discrimination. Existing SCD methods address this issue from different perspectives. Post-classification comparison obtains semantic changes by comparing two independently predicted semantic maps, but errors from either temporal image can propagate to the final change map. BiSRNet improves this pipeline by modeling bi-temporal semantic reasoning in high-resolution remote sensing images [2]. SCanNet strengthens joint spatio-temporal modeling for semantic transition prediction [3]. ChangeMamba introduces state-space modeling into remote sensing change detection and extends it to SCD [4]. BT-SCD uses boundary detection and task interaction to improve the re-lation between change localization and semantic prediction [5]. CdSC further considers cross-difference semantic consistency for SCD [6]. These methods improve semantic reasoning, but most of them still rely on task-specific features learned from limited SCD annotations. Under cross-scene variations and pseudo temporal changes, such semantic features can be unstable. Foundation models provide a complementary source of semantic priors. DINOv3 learns transferable dense represen-tations through large-scale self-supervised pretraining [18]. ChangeCLIP shows that vision-language priors can benefit remote sensing change detection [19]. Semantic-CD explores open-vocabulary SCD by introducing CLIP-based semantic knowledge into the prediction process [7]. VFM-ReSCD adapts visual foundation models to recurrent SCD in very-high-resolution remote sensing images [8]. These studies in-dicate that pretrained priors can improve semantic robustness. However, for SCD, the prior should not only refine a change mask. It should be converted into bi-temporal semantic states and support from-to transition reasoning. Direct injection is also insufficient, because foundation features and convolu-tional neural network (CNN) pyramid features differ in scale, channel distribution, and semantic granularity. This paper presents SemDINO, a DINOv3-driven frame-work optimized for cross-temporal semantic alignment in semantic change detection (SCD). Consequently, the archi- 
+
+> arXiv:2606.09772v1 [cs.CV] 8 Jun 2026 JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 2
+
+tectural workflow of SemDINO naturally revolves around the Multi-scale Bidirectional Temporal Transformer (M-TBTT). First, Pyramid Fusion (PyFu) establishes the foundation by de-livering semantic-prior-enhanced feature pyramids. Upon this input basis, M-TBTT executes bidirectional cross-temporal se-mantic alignment to yield mutually calibrated temporal states. This bidirectional design effectively eliminates temporal-order bias, providing a formally symmetric foundation for both unchanged-region consistency and changed-region transition discrimination. To systematically eliminate temporal noise and amplify authentic semantic changes, a post-alignment Feature Change Enhancement (#FeaCE) pipeline is deployed, which sequen-tially refines the calibrated representations via Bi-Change Enhancement (BCE), Semantic Clean Purification (SCP), and Multi-scale Change Enhancement (MCE). Ultimately, the ChangeFusion module and a flexible, decoupled multi-task prediction head (CD-Head) translate these polished features into a comprehensive set of co-dependent outputs, including a binary change map, dual-temporal semantic maps, and an edge guidance map. Notably, while SemDINO is natively optimized for the intricate SCD task, the decoupled design of the CD-Head allows the entire framework to seamlessly switch to standard Binary Change Detection (BCD) without any architectural modifications, delivering highly competitive BCD performance and demonstrating exceptional task-level generalizability. The main contributions are summarized as follows. 1) We propose M-TBTT as the core cross-temporal seman-tic alignment mechanism for SCD. It performs bidirectional temporal interaction across pyramid levels and calibrates both temporal states, providing a unified basis for unchanged-region consistency and changed-region transition discrimination. 2) We introduce a DINOv3-guided PyFu design to support semantic alignment. PyFu adapts frozen DINOv3 features by Separate Adaptation Block (SepAB) and injects them into CNN pyramid features through GatedFusion, producing multi-scale semantic representations with both local details and pretrained semantic priors. 3) We develop an SCD-oriented refinement and predic-tion pipeline. #FeaCE enhances true changes and suppresses pseudo variations after alignment, while ChangeFusion and CD-Head compose the final CD map from CD Map, S1 Head, S2 Head, and Edge Map. Experiments on public SCD datasets validate the effectiveness of the proposed design. 4) We design a decoupled multi-task CD-Head to verify the versatility of our learned features. While SemDINO is tailored for intricate SCD, this plug-and-play head allows the model to flexibly switch to standard BCD tasks. Without altering the core architecture, SemDINO delivers highly competitive BCD performance, validating its exceptional task-level gener-alizability. II. R ELATED WORK 
+
+A. Semantic Change Detection in Remote Sensing 
+
+SCD methods are generally designed to recover semantic transitions from bi-temporal remote sensing images, where the output should indicate both the changed locations and the land-cover categories involved in each transition [1], [23]. Early post-classification comparison pipelines obtain semantic changes by independently parsing the two temporal images and then comparing their semantic maps. This strategy is simple, but the final transition map is sensitive to classification errors from either temporal image. Later methods therefore learn semantic change representations more directly. HRSCD introduces large-scale SCD with multitask learning, and BiSR-Net models bi-temporal semantic reasoning for high-resolution SCD [1], [2]. ChangeMask further explores semantic-change causal relationships and temporal symmetry in an encoder-transformer-decoder framework [23]. SMNet combines CNN and Transformer representations in a symmetric SCD frame-work [24]. ClearSCD leverages semantic information and change relationships for high-resolution SCD [25]. DMTNet focuses on decoder-side task-specific prediction for SCD [26]. Recent methods further enhance temporal semantics and change cues through joint spatio-temporal modeling, state-space representation, boundary-aware interaction, and cross-difference semantic consistency [3]–[6]. These studies show that SCD performance depends on how effectively temporal semantic states are represented and compared, but many meth-ods still rely on task-specific annotations to learn semantic features, which may limit stability under cross-scene variations and pseudo temporal changes. 
+
+B. Multi-scale Semantic Representation Learning for SCD 
+
+High-resolution SCD requires semantic representations at multiple spatial scales, because semantic transitions may appear as small object-level changes or large region-level conversions [27]. Shared bi-temporal encoders and feature pyramids are commonly used to extract comparable features from two temporal images, while multi-level decoders recover dense semantic and change predictions. In this setting, shallow features preserve boundaries and small structures, but they are sensitive to radiometric disturbance and local misregistration. Deep features encode stronger semantics, but they may lose fine spatial details required by precise transition boundaries. Existing SCD methods improve this balance through bi-temporal semantic reasoning, joint spatio-temporal modeling, boundary-aware learning, task interaction, and dual-dimension feature interaction [2], [3], [5], [27]. SCNet further introduces semantic enhancement and change consistency constraints to improve temporal semantic stability [28]. These studies suggest that multi-scale representation is essential for SCD, but most existing pyramidal features are still learned mainly from limited SCD annotations. This makes them vulnerable to domain shifts, seasonal variations, and pseudo temporal disturbances. 
+
+C. Foundation-model Priors for Semantic Change Detection 
+
+Visual foundation models provide transferable dense rep-resentations that can complement task-specific SCD features. RemoteCLIP shows that vision-language foundation models can learn transferable remote sensing semantics [30]. Self-supervised vision transformers such as DINO, DINOv2, and JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 3 
+
+> Fig. 1.
+
+Overview of the proposed SemDINO framework. Given bi-temporal remote sensing images It=1 and It=2 , the network first extracts multi-scale features using a CNN backbone with FPN, and enhances them with complementary features from the frozen DINOv3 encoder. The Pyramid Fusion ( PyFu ) module then fuses the CNN and DINO features at each scale. Next, the Multi-scale Bidirectional Temporal Transformer ( M-TBTT ) aligns the bi-temporal features in both directions ( T1 → T2 and T1 ← T2), with learnable gating ( LG-g ) to adaptively control the alignment strength. After alignment, the change enhancement pipeline # FeaCE (BCE, SCP, MCE) refines the change features, which are then fused by two parallel ChangeFusion modules. Finally, the multi-task CD-Head simultaneously outputs the change detection (CD) map, the semantic segmentation maps for both T1 and T2, and the auxiliary edge map for supervision. 
+
+DINOv3 provide dense visual features with strong semantic abstraction [16]–[18]. In remote sensing change detection, ChangeCLIP uses vision-language priors to improve semantic relevance and generalization, while ChangeDINO incorporates frozen DINOv3 features into a multi-scale Siamese framework for optical building change detection [19], [20]. Recent studies further adapt visual foundation models and segmentation foun-dation models to SCD. SCD-SAM adapts Segment Anything Model features to SCD through contextual semantic change-aware modeling [29]. PerASCD studies foundation-model-driven SCD and explores how pretrained encoders can be adapted to SCD decoding [31]. ChangeVFM investigates the use of vision foundation models for SCD-oriented represen-tation learning [32]. These methods indicate that foundation-model priors can improve semantic robustness, but their use in SCD remains limited by feature adaptation. Existing pretrained features are often used as generic dense representations or change-mask refinement cues, while SCD requires them to be converted into pyramid-aligned bi-temporal semantic states for from-to transition reasoning. III. M ETHODOLOGY 
+
+A. Overview of the SemDINO Framework 
+
+Given two co-registered remote sensing images It=1 and 
+
+It=2 , SCD aims to predict a semantic change map that describes both change localization and semantic transition. In SemDINO, this target is constructed through a decomposed output scheme, including CD Map, S1 Head, S2 Head, and Edge Map. The CD Map localizes changed pixels. S1 Head and S2 Head predict the semantic states at T1 and T2. Edge Map provides auxiliary boundary supervision. For a pixel p, the semantic transition relation is written as 
+
+Yscd (p) = H (Ycd (p), Y s1 (p), Y s2 (p)) , (1) where H(·) denotes the SCD composition rule. When 
+
+Ycd (p) = 0 , the pixel is assigned to the unchanged class.  
+
+> Fig. 2.
+
+Overview of the Pyramid Fusion ( PyFu ) module and multi-level feature extraction from DINOv3. Given the input image It,the frozen DINOv3 encoder extracts multi-level semantic features, which are then processed by Separate Adaptation Blocks (SepAB) 
+
+to generate aligned multi-level DINO features Fdino,t . Each SepAB adapts the DINO features via a bottleneck structure: Conv 1 × 1 →
+
+BN → depth-wise Conv 3 × 3 → BN → Conv 1 × 1. At each pyramid scale, the aligned DINO features Fdino,t are concatenated with the CNN pyramid features Fpyramid,t . The concatenated features are then fed into our GatedFusion module, which first projects them via a 1 × 1 convolution, then refines them through a Channel Attention (CA) branch and a Spatial Attention (SA) branch. The CA branch uses adaptive average pooling and a gated convolution structure to enhance channel-wise dependencies, while the SA branch employs a 7 × 7 convolution to capture spatial context. The outputs of the two attention branches are aggregated and combined with a residual connection to produce the final enhanced features ft,i . The entire PyFu module is applied at four pyramid levels ( ×4) to obtain multi-scale fused features. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 4 
+
+> Fig. 3.
+
+Overview of #FeaCE : Change Enhancement Structure. Given the aligned bi-temporal features f ′ 
+
+> 1
+
+and f ′
+
+> 2
+
+, the pipeline consists of three sequential modules: a. Bi-Change Enhancement (BCE) computes the absolute difference of the input features to extract initial change information, which is then enhanced by a learnable gating branch derived from the sum of the two features. A residual convolution branch is added to preserve detailed change cues, producing the initial change feature. b. Semantic Clean Purify (SCP) generates a change mask from the BCE output, and obtains non-change regions by inverting the mask. It then filters the bi-temporal features with the non-change mask, applies learnable gates to the filtered features, and refines them with convolution layers to yield clean bi-temporal features f ′
+
+> 1,clean
+
+and f ′
+
+> 2,clean
+
+. c. Multi-scale Change Enhancement (MCE) first computes the absolute difference of the two clean features, then constructs multi-scale representations via identity mapping, 2× and 4× average pooling. At each scale, attention weights are applied to the pooled change features. These multi-scale features are fused from coarse to fine through bilinear upsampling and convolution layers. Finally, a residual connection with the original BCE output is adopted to generate the final enhanced change feature. 
+
+When Ycd (p) = 1 , the semantic transition is determined by the semantic states at T1 and T2. This relation gives two require-ments. Unchanged regions require cross-temporal semantic consistency. Changed regions require semantic discrepancy to be preserved and converted into from-to transition categories. As shown in Fig. 1, the core of SemDINO is cross-temporal semantic alignment. PyFu first constructs semantic-prior-enhanced pyramids by injecting frozen DINOv3 fea-tures into CNN features. On this basis, M-TBTT performs bidirectional temporal alignment through Stage1: T1 → T2
+
+and Stage2: T1 ← T2. This step is central to SCD, because the two temporal semantic states must be calibrated before their difference can be interpreted as a semantic transition. After alignment, #FeaCE refines the change representation by suppressing pseudo variations and enhancing true semantic changes. ChangeFusion integrates aligned temporal features and enhanced change features, and the CD-Head outputs CD Map, S1 Head, S2 Head, and Edge Map for final SCD composition. For compact notation, F i 
+
+> pyramid ,t
+
+and F i 
+
+> dino ,t
+
+are denoted by 
+
+F pt,i and F dt,i , respectively. For each temporal image It, feature extraction and fusion are written as 
+
+F pt,i = FPN i(Backbone( It)) ,F dt,i = SepAB i(DINOv3( It)) ,ft,i = PyFu i(F pt,i , F dt,i ),t ∈ { 1, 2}, i = 1 , . . . , 4.
+
+(2) M-TBTT performs bidirectional temporal interaction at each pyramid level. To keep the formulation compact, the cross-temporal attention operator is denoted by 
+
+A(Q, K, V ) = Softmax 
+
+ QK ⊤
+
+√d
+
+
+
+V. (3) For the i-th level, Stage1: T1 → T2 is formulated as 
+
+O1→2,i = A (Wq1f1,i , W k1f2,i , W v1f2,i ) ,f ′ 
+
+> 1,i
+
+= f1,i + g1,i O1→2,i . (4) Stage2: T1 ← T2 is symmetric: 
+
+O2→1,i = A (Wq2f2,i , W k2f1,i , W v2f1,i ) ,f ′ 
+
+> 2,i
+
+= f2,i + g2,i O2→1,i . (5) Here, g1,i and g2,i correspond to LG-g. They are initialized as zero in the implementation, so M-TBTT starts from an identity mapping and gradually learns cross-temporal correction. This makes the alignment stable at early training stages. More importantly, M-TBTT differs from feature differencing, con-catenation, and one-way temporal interaction. It does not treat one temporal image as a fixed reference. Instead, it updates both temporal states under mutual conditioning. The T1 → T2
+
+path calibrates the T1 representation with respect to T2, while the T1 ← T2 path calibrates the T2 representation with respect to T1. This symmetric alignment reduces temporal-order bias and provides the semantic basis for distinguishing unchanged-region consistency from changed-region transition. The aligned deep features are sent to #FeaCE: 
+
+d = F#FeaCE = #FeaCE( f ′
+
+> 1,4
+
+, f ′
+
+> 2,4
+
+). (6) Following Fig. 3, d denotes the enhanced change feature generated by BCE, SCP, and MCE. Let 
+
+S = {f ′
+
+> 1,1
+
+, f ′
+
+> 1,2
+
+, f ′
+
+> 1,3
+
+, f ′
+
+> 2,1
+
+, f ′
+
+> 2,2
+
+, f ′
+
+> 2,3
+
+, d } (7) denote the feature set used by ChangeFusion. It contains three aligned features from T1, three aligned features from T2, and one enhanced change feature. All features are resized to the same spatial resolution and concatenated along the channel dimension: 
+
+X = Concat ( {U (f ) | f ∈ S} ) , (8) where U(·) denotes bilinear upsampling. Since S contains 3 + 3 + 1 groups of features, X aggregates seven feature groups. ChangeFusion is formulated as 
+
+Fscd = ChangeFusion( f ′
+
+> 1,1:3
+
+, f ′
+
+> 2,1:3
+
+, d ) = F(X)⊙CA ( F(X)) ,
+
+(9) JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 5
+
+Algorithm 1 SemDINO Optimization 
+
+Require: Images It=1 , I t=2 ; labels Ycd , Y s1 , Y s2 , Y edge ; pa-rameters Θ
+
+Ensure: ˆYcd , ˆYs1 , ˆYs2 , ˆYedge , and ˆYscd  
+
+> 1:
+
+Compute F p 
+
+> 1,i
+
+and F p 
+
+> 2,i
+
+by Backbone+FPN.  
+
+> 2:
+
+Compute F d 
+
+> 1,i
+
+and F d 
+
+> 2,i
+
+by frozen DINOv3 and SepAB.  
+
+> 3:
+
+for i = 1 to 4 do  
+
+> 4:
+
+Fuse features by PyFu to obtain f1,i and f2,i . 
+
+> 5:
+
+Compute Stage1 response O1→2,i and update f ′ 
+
+> 1,i
+
+=
+
+f1,i + g1,i O1→2,i . 
+
+> 6:
+
+Compute Stage2 response O2→1,i and update f ′ 
+
+> 2,i
+
+=
+
+f2,i + g2,i O2→1,i . 
+
+> 7:
+
+end for  
+
+> 8:
+
+Compute d = F#FeaCE by BCE, SCP, and MCE.  
+
+> 9:
+
+Build X = Concat( {U (f ) | f ∈ S} ). 
+
+> 10:
+
+Compute Fscd = F(X) ⊙ CA( F(X)) . 
+
+> 11:
+
+Predict CD Map, S1 Head, S2 Head, and Edge Map by the multi-task CD-Head.  
+
+> 12:
+
+Compose ˆYscd from CD Map, S1 Head, and S2 Head.  
+
+> 13:
+
+Minimize L and update Θ.where F(·) denotes the 1×1 convolutional fusion layer, CA( ·)
+
+denotes the channel attention recalibration in ChangeFusion, and ⊙ denotes element-wise multiplication. The multi-task CD-Head predicts the decomposed outputs: 
+
+( ˆYcd , ˆYs1 , ˆYs2 , ˆYedge ) = CD -Head( Fscd ). (10) The final semantic change map is composed as 
+
+ˆYscd (p) = 
+
+(0, σ( ˆYcd (p)) < τ, 
+
+Ψ
+
+
+
+arg max ˆYs1 (p), arg max ˆYs2 (p)
+
+
+
+, σ( ˆYcd (p)) ≥ τ, 
+
+(11) where τ is the change threshold and Ψ( ·) denotes the from-to semantic transition encoding. The training objective supervises the decomposed outputs: 
+
+L = λcd Lcd + λs1 Ls1 + λs2 Ls2 + λedge Ledge ,
+
+Lcd = BCE( ˆYcd , Y cd ),
+
+Ls1 = CE( ˆYs1 , Y s1 ), Ls2 = CE( ˆYs2 , Y s2 ),
+
+Ledge = BCE( ˆYedge , Y edge ).
+
+(12) The four losses serve one SCD objective. CD Map determines whether a pixel enters semantic transition composition. S1 Head and S2 Head provide the temporal semantic states. Edge Map regularizes boundary-sensitive regions where semantic transitions are most ambiguous. 
+
+B. Pyramid Fusion (PyFu) 
+
+PyFu is designed for semantic-prior injection. Its structure is shown in Fig. 2. CNN pyramid features preserve local textures, boundaries, and small structures. However, their semantic abstraction depends heavily on task-specific SCD labels. DINOv3 features provide stronger semantic context, but they are not naturally aligned with CNN pyramid features in scale, channel dimension, and feature distribution. PyFu addresses this mismatch by using SepAB for adaptation and GatedFusion for selective residual fusion. For the i-th pyramid level, SepAB adapts the DINOv3 feature. Then, the adapted DINOv3 feature and the CNN pyramid feature are concatenated and projected: 
+
+˜F dt,i = SepAB i(F dt,i ),Zt,i = ϕ1×1
+
+
+
+[F pt,i , ˜F dt,i ]
+
+
+
+. (13) SepAB adopts a bottleneck form: 
+
+SepAB : Conv 1×1 → BN → DW -Conv 3×3 → BN → Conv 1×1.
+
+(14) The CA and SA branches produce channel and spatial gates: 
+
+Gca  
+
+> t,i
+
+= σ (ϕc2 (δ(ϕc1(GAP( Zt,i ))))) ,Zca  
+
+> t,i
+
+= Zt,i ⊙ Gca 
+
+> t,i
+
+,Gsa  
+
+> t,i
+
+= σ  ϕ7×7
+
+ [Avg c(Zca 
+
+> t,i
+
+), Max c(Zca 
+
+> t,i
+
+)]  ,Zsa  
+
+> t,i
+
+= Zca  
+
+> t,i
+
+⊙ Gsa 
+
+> t,i
+
+.
+
+(15) Here, GAP( ·) denotes adaptive average pooling, δ(·) denotes SiLU, and Avg c(·) and Max c(·) denote channel-wise average pooling and max pooling. The final PyFu output is 
+
+ft,i = F pt,i + Zsa 
+
+> t,i
+
+. (16) The role of PyFu can be stated from semantic error de-composition. Let Sit denote an ideal SCD-oriented semantic feature at level i. A CNN pyramid feature is written as 
+
+F pt,i = Sit + ϵloc  
+
+> t,i
+
++ ϵsem  
+
+> t,i
+
+, (17) where ϵloc  
+
+> t,i
+
+denotes local disturbance and ϵsem  
+
+> t,i
+
+denotes semantic insufficiency. PyFu injects a DINOv3-based residual compen-sation: 
+
+∆t,i = Zt,i ⊙ Gca  
+
+> t,i
+
+⊙ Gsa 
+
+> t,i
+
+,ft,i = F pt,i + ∆ t,i . (18) Since CA and SA are generated by sigmoid functions, the gates satisfy 
+
+0 ≤ Gca  
+
+> t,i
+
+≤ 1, 0 ≤ Gsa  
+
+> t,i
+
+≤ 1. (19) Thus, the compensation is controlled: 
+
+∥∆t,i ∥ ≤ ϕ1×1
+
+
+
+[F pt,i , ˜F dt,i ]
+
+
+
+. (20) If the DINOv3 prior compensates part of ϵsem  
+
+> t,i
+
+, the semantic representation error satisfies 
+
+ft,i − Sit = ϵloc  
+
+> t,i
+
++ ϵsem  
+
+> t,i
+
++ ∆ t,i ,
+
+∥ft,i − Sit ∥ ≤ ∥ ϵloc  
+
+> t,i
+
+∥ + ∥ϵsem  
+
+> t,i
+
++ ∆ t,i ∥. (21) This expression explains the design objective. PyFu keeps the local-detail representation of CNN-FPN and adds a gated DINOv3 semantic compensation to reduce semantic insuffi-ciency. For SCD, this is necessary because unchanged-region consistency and changed-region transition discrimination both depend on reliable semantic states at T1 and T2.JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 6
+
+C. #FeaCE: Change Enhancement Structure 
+
+The #FeaCE module is shown in Fig. 3. It receives the aligned deep features f ′ 
+
+> 1,4
+
+and f ′ 
+
+> 2,4
+
+from M-TBTT. Its objective is to separate unchanged-region semantic consistency from changed-region semantic transition discrimination. It contains BCE, SCP, and MCE. BCE extracts an initial change feature from the feature difference and shared temporal context: 
+
+Dbce = ϕd(|f ′ 
+
+> 1,4
+
+− f ′
+
+> 2,4
+
+|),Gbce = σ(ϕg (f ′ 
+
+> 1,4
+
++ f ′
+
+> 2,4
+
+)) ,FBCE = Dbce ⊙ Gbce + ϕr (Dbce ).
+
+(22) The absolute difference captures temporal discrepancy, the sum-derived gate introduces shared context, and the residual branch preserves detailed change cues. SCP estimates a change mask and uses its inverse to filter non-change features: 
+
+Mchg = σ(ϕm(FBCE )) , Mnchg = 1 − Mchg ,f ′ 
+
+> 1,mask
+
+= f ′ 
+
+> 1,4
+
+⊙ Mnchg , f ′ 
+
+> 2,mask
+
+= f ′ 
+
+> 2,4
+
+⊙ Mnchg ,G1 = σ(ϕg1(f ′
+
+> 1,mask
+
+)) , G2 = σ(ϕg2(f ′
+
+> 2,mask
+
+)) .
+
+(23) The clean temporal features are obtained by gated cross-temporal refinement: 
+
+f ′ 
+
+> 1,clean
+
+= ϕ1
+
+ f ′ 
+
+> 1,4
+
++ G1 ⊙ f ′
+
+> 2,mask
+
+ ,f ′ 
+
+> 2,clean
+
+= ϕ2
+
+ f ′ 
+
+> 2,4
+
++ G2 ⊙ f ′
+
+> 1,mask
+
+ . (24) Let Ω0 = {p : Ycd (p) = 0 } denote unchanged regions and 
+
+Ω1 = {p : Ycd (p) = 1 } denote changed regions. In Ω0, SCD requires semantic consistency: 
+
+Ys1 (p) = Ys2 (p), p ∈ Ω0. (25) SCP supports this property by activating Mnchg . When 
+
+Mnchg (p) is large, the two temporal features exchange infor-mation: 
+
+f ′
+
+> 1,clean
+
+(p) ≈ ϕ1
+
+ f ′
+
+> 1,4
+
+(p) + G1(p) ⊙ f ′
+
+> 2,4
+
+(p) ,p ∈ Ω0. (26) This reduces temporal semantic discrepancy in unchanged regions. In Ω1, SCD requires transition discrimination: 
+
+Yscd (p) = Ψ( Ys1 (p), Y s2 (p)) , p ∈ Ω1. (27) When Mnchg (p) is small, cross-temporal mixing is suppressed: 
+
+f ′
+
+> 1,clean
+
+(p) ≈ ϕ1(f ′
+
+> 1,4
+
+(p)) ,f ′
+
+> 2,clean
+
+(p) ≈ ϕ2(f ′
+
+> 2,4
+
+(p)) , p ∈ Ω1. (28) Thus, the discrepancy required for from-to semantic transition reasoning is preserved. MCE constructs multi-scale change evidence from the clean features: 
+
+Dclean = |f ′ 
+
+> 1,clean
+
+− f ′
+
+> 2,clean
+
+|,Ds = Pool s(Dclean ), Bs = Pool s(FBCE ), s ∈ { 1, 2, 4},Es = Bs ⊙ σ(ϕs(Ds)) .
+
+(29) The scale-wise evidence is fused and added to the initial BCE feature: 
+
+FMCE = ϕmce (E1, U(E2), U(E4)) ,F#FeaCE = FMCE + FBCE . (30) MCE provides scale-aware robustness. Let the clean differ-ence contain a true semantic transition component T and a nuisance component ϵ:
+
+Dclean = T + ϵ. (31) For local independent nuisance, s × s average pooling reduces the variance approximately as 
+
+Var(Pool s(ϵ)) ≈ 1
+
+s2 Var( ϵ). (32) Therefore, the 2× and 4× branches attenuate local pseudo-change responses caused by illumination variation, seasonal noise, and slight registration error. The identity branch pre-serves fine boundaries and small changed objects. The resid-ual connection with FBCE prevents multi-scale fusion from removing detailed change cues. Overall, #FeaCE serves as a refinement stage after cross-temporal alignment. BCE extracts the initial temporal discrep-ancy, SCP uses the change and non-change masks to separate consistency refinement from transition preservation, and MCE aggregates change evidence across scales. Therefore, #FeaCE does not define the temporal relation by itself. It strengthens the aligned representation produced by M-TBTT. Consequently, the architectural workflow of SemDINO naturally revolves around M-TBTT. First, Pyramid Fusion (PF) establishes the foundation by delivering semantic-prior-enhanced feature pyramids. Upon this input basis, M-TBTT executes bidirectional cross-temporal semantic alignment to yield mutually calibrated temporal states. The Feature Change Enhancement (FCE) pipeline then refines these aligned rep-resentations, successfully suppressing pseudo-changes while amplifying genuine semantic transitions. Finally, the Change-Fusion module and the decoupled SCD head translate the con-solidated features into a CD map, S1/S2 semantic maps, and an edge map, which jointly compose the final SCD results. This symbiotic design establishes SemDINO as a fundamentally alignment-driven SCD framework, rather than a conventional change-mask refinement model with a superficially appended semantic branch. IV. E XPERIMENTS AND ANALYSIS 
+
+In this section, we will first introduce the necessary exper-imental setup, including an overview of the dataset, details of the experimental deployment, and evaluation metrics. Next, to validate the detection performance of the proposed network, we conducted comparative experiments and analyzed the re-sults. Finally, we performed ablation experiments on relevant modules. 
+
+A. Experiments Settings 
+
+Datasets. The Landsat-SCD dataset [10] is established based on Landsat-series remote sensing images acquired in JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 7
+
+Tumushuke, Xinjiang (39 ◦39 ′–40 ◦04 ′ N, 78 ◦53 ′–79 ◦19 ′ E) from 1990 to 2020. Geographically, the study area borders the Taklamakan Desert and features an extremely fragile ecological system, serving as a pivotal regional node of the Belt and Road economic corridor . The dataset contains a total of 8,468 remote sensing image pairs with a consistent spatial resolution of 30 meters and a unified pixel dimension of 416 
+
+× 416 pixels. The land cover annotation system defines five major semantic categories, including cropland, desert, built-up areas, water bodies, and unchanged land areas. To guar-antee the authenticity and reliability of experimental data, all samples produced by spatial interpolation augmentation were eliminated, yielding 2,425 original and unprocessed image pairs. These authentic samples were randomly partitioned into training, validation, and test subsets following a standard 6:2:2 division ratio [3], [5], corresponding to 1,455 training pairs, 485 validation pairs, and 485 test pairs respectively. The SECOND dataset [9] is a large-scale publicly avail-able benchmark for semantic change detection, which covers multiple urban areas across China with elaborate manual annotations. All images in this dataset are 512 × 512 pixels, with spatial resolutions varying from 0.5 m to 3 m. The dataset defines seven land-cover categories: unchanged areas, low vegetation, non-vegetated surface, trees, water bodies, buildings, and playgrounds, containing a total of 4662 image pairs. Following the official partitioning strategy in existing studies [5], [9], the original dataset assigns 2968 pairs for training and 1694 pairs for testing. In this work, we further subdivide the original test set to construct a validation subset, finally forming a new data division of 2968 training pairs, 847 validation pairs, and 847 test pairs. WHU-CD [21]: This dataset is dedicated to building change detection, comprising aerial images of the same area captured before and after an earthquake. The original single image pair has a spatial resolution of 0.3 m, and we follow the standard experimental setup by cropping it into 256 × 256 patches. The widely adopted split results in 4,536 training pairs, 504 validation pairs, and 2,760 test pairs. LEVIR-CD [22]: This dataset focuses on building change detection, containing Google Earth image pairs collected across 20 different regions with temporal intervals ranging from 5 to 14 years. The spatial resolution is 0.5 m, and the standard split yields 7,120 training pairs, 1,024 validation pairs, and 2,048 test pairs. Following common practice, we tile the images into non-overlapping 256 × 256 patches without additional curation. 
+
+Implementation Details. All experiments are implemented based on PyTorch and conducted on NVIDIA Tesla A100 GPUs. The proposed SemDINO adopts a dual-branch encoder, where the pre-trained DINOv3 vision transformer is fully frozen to extract robust global semantic features, and the pre-trained ResNet50 backbone is fine-tuned to capture fine-grained local texture and multi-scale contextual information. The remaining newly designed modules, including TBTT, SCP, MCE, BiChangeEnhance, feature fusion branches, and the multi-task decoding head, are trained from scratch. For train-ing optimization, we employ the stochastic gradient descent (SGD) optimizer with a momentum of 0.9 and a weight decay of 5e-4. The initial learning rate is dynamically updated following the polynomial decay strategy with a power of 1.5. Specifically, we set the initial learning rate to 0.01 and the batch size to 2 for all datasets. The entire framework is opti-mized by a composite loss function, which consists of cross-entropy loss for bi-temporal semantic segmentation, binary cross-entropy loss for change detection, change similarity loss for feature constraint, and auxiliary edge loss with a weight of 0.1 to strengthen boundary perception. We train the model for 200 epochs on all datasets. 
+
+Evaluation Metrics To quantitatively evaluate the perfor-mance of the proposed semantic change detection framework, we adopt four widely used evaluation metrics: overall accuracy (OA), separated Kappa (SeK), mean intersection over union (mIoU), and SCD F1-score ( Fscd ). The mIoU is adopted to quantify change detection capability, while OA, SeK and Fscd 
+
+are used to comprehensively evaluate the overall prediction performance. We denote the global confusion matrix as Q = {qi,j },where qi,j represents the number of pixels with ground-truth label j and predicted label i. The indices satisfy i, j ∈{0, 1, 2, . . . , C }, where class 0 corresponds to unchanged regions and classes 1 to C denote different changed land-cover categories. The detailed calculation formulas are given as follows: IoU nc = q0,0
+
+PCi=0 qi, 0 + PCj=0 q0,j − q0,0
+
+ , (33) IoU c =
+
+PCi=1 
+
+PCj=1 qi,j 
+
+PCi=0 
+
+PCj=0 qi,j − q0,0
+
+ , (34) mIoU = IoU nc + IoU c
+
+2 , (35) OA =
+
+PCi=0 qi,i 
+
+PCi=0 
+
+PCj=0 qi,j 
+
+, (36) 
+
+Pscd =
+
+PCi=1 qi,i 
+
+PCi=1 
+
+PCj=0 qi,j 
+
+, (37) 
+
+Rscd =
+
+PCi=1 qi,i 
+
+PCi=0 
+
+PCj=1 qi,j 
+
+, (38) 
+
+Fscd = 2 × Pscd × Rscd 
+
+Pscd + Rscd 
+
+. (39) Different from standard Kappa coefficient, separated Kappa (SeK) focuses on the classification performance within changed regions. We construct a new confusion matrix eQ =
+
+{eqi,j } by removing the category of unchanged pixels. Let ρ be the overall accuracy on changed regions and η be the expected accuracy under random prediction. Following the improved SeK calculation scheme in existing SCD researches, we further introduce an exponential weighting term associated with IoU c
+
+to enhance evaluation rationality. The corresponding formulas are defined as: JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 8      
+
+> TABLE I COMPARISION RESULTS FOR SCD TASK BASED ON LANDSAT -SCD AND SECOND DATASET .
+
+Methods Landsat-SCD SECOND 
+
+OA (%) mIoU (%) Sek (%) Fscd (%) OA (%) mIoU (%) Sek (%) Fscd (%) 
+
+HRSCD4 91.28 79.19 32.27 73.21 87.02 72.16 21.02 61.22 SSCDl 93.12 81.56 40.77 80.00 87.60 72.80 22.60 62.83 BiSRNet 93.66 82.59 43.55 81.70 87.68 73.10 23.16 63.32 TED 94.70 85.60 50.34 84.52 87.57 73.00 22.87 62.90 SCanNet 94.88 85.50 50.77 85.16 87.39 72.99 23.42 63.66 MambaSCD 95.68 87.84 55.97 88.23 87.43 73.20 23.21 62.62 BT-HRSCD 95.67 87.67 56.29 87.34 87.52 72.95 22.90 63.11 DEFO-MLTSCD 95.65 87.79 56.38 87.21 87.54 73.48 23.63 63.45 BT-SCD 96.15 88.74 59.32 88.56 88.35 73.67 24.21 64.37 SemDINO 96.46 89.51 62.24 89.92 88.76 74.19 24.53 65.27 
+
+ρ =
+
+PC−1 
+
+> i=0
+
+eqi,i 
+
+PC−1
+
+> i=0
+
+PC−1 
+
+> j=0
+
+eqi,j 
+
+, (40) 
+
+η =
+
+PC−1
+
+> i=0
+
+PC−1 
+
+> j=0
+
+eqi,j × PC−1 
+
+> j=0
+
+eqj,i 
+
+PC−1
+
+> i=0
+
+PC−1 
+
+> j=0
+
+eqi,j 
+
+2 , (41) SeK = eIoU c−1 · ρ − η
+
+1 − η . (42) 
+
+B. Comparison Experiments and Analysis. 
+
+We compare SemDINO with nine advanced SCD methods on Landsat-SCD and SECOND datasets, as listed in Table I. On Landsat-SCD, SemDINO achieves optimal OA (96.46%), mIoU (89.51%), Sek (62.24%) and Fscd (89.92%), exceed-ing the second-best BT-SCD by clear margins and DEFO-MLTSCD [34]. On the SECOND benchmark, our method also attains the highest scores: OA=88.76%, mIoU=74.19%, Sek=24.53%, Fscd=65.27%. Conventional CNN frameworks (HRSCD4 [1], SSCDl [2]) lag severely in semantic discrimina-tion metrics Sek and Fscd. Recent transformer/Mamba-based competitors (MambaSCD [4], BT-HRSCD [33], BT-SCD) de-liver decent results but suffer from asymmetric unidirectional temporal alignment and insufficient utilization of foundation model semantics. The consistent performance superiority of SemDINO demonstrates the effectiveness of our DINO se-mantic fusion, M-TBTT symmetric bidirectional alignment, and dual-consistency change enhancement pipeline for high-precision semantic change detection. V. D ISCUSSION 
+
+In this section, to verify the generalization and robustness of our SemDINO model, we conduct a more in-depth analysis of the encoding module and the CD-Head module, respectively. 
+
+A. Analysis of Generalization in Pre-trained Backbones 
+
+We fix the DINOv3 backbone frozen and replace only the subsequent CNN branch to validate its contribution, as shown in Table II. We construct four settings: DI-NOv3+ResNet50 (our SemDINO), DINOv3+ResNet34, DI-NOv3+MobileNetV2, and DINOv3 without any CNN branch. All CNNs are ImageNet-pre-trained and fully trainable under identical training configurations. Table II results show our DINOv3+ResNet50 obtains opti-mal metrics. Shallow ResNet34 and lightweight MobileNetV2 both degrade accuracy due to limited feature extraction ca-pacity, and removing the CNN branch leads to the worst performance. Notably, even the standalone DINOv3 variant maintains acceptable prediction accuracy, highlighting the dominant role of DINOv3 as the core feature foundation. It confirms that frozen DINOv3 provides general semantic prior, while trainable ResNet50 supplements task-specific feature refinement to compensate insufficient semantic representation.            
+
+> TABLE II ANALYSIS OF GENERALIZATION IN PRE -TRAINED BACKBONES .†
+> DENOTES THE FROZEN DINO V3BACKBONE .‡DENOTES THE TRAINABLE
+> CNN MODULE WITH IMAGE NET PRE -TRAINING . O UR SEM DINO (DINO V3+R ES NET 50)
+
+Methods OA Sek #Params (%) (%) (Pre-train-Enc.)+ w/o Enc. 
+
+DINOv3 † + ResNet50 ‡ 96.46 62.24 (230+25)M + 2.09M DINOv3 † + ResNet34 ‡ 96.21 61.75 (230+21)M + 2.09M DINOv3 † + MobileNetV2 ‡ 95.83 60.92 (230+3)M + 2.09M DINOv3 † (w/o CNN) 95.47 60.16 230*M + 2.09M 
+
+B. Analysis of SemDINO/CD-Head Module Generalization 
+
+To verify the generalization and flexibility of our SemDINO framework and prediction head, we validate its performance on the binary change detection (BCD) task. Specifically, the entire proposed SemDINO architecture remains unchanged, and only the CD-Head is flexibly switched to either an SCD-Head or a BCD-Head for different task requirements. Table III presents the experimental results on the WHU-CD and LEVIR-CD datasets for the BCD task. These results verify the plug-and-play property of our prediction head, demonstrat-ing that the framework can be flexibly adapted to different change detection tasks by simply replacing the head, without modifying the core feature extraction and fusion pipeline. This strong generalization confirms the high universality of the proposed SemDINO, enabling its broad applicability across various remote sensing change detection scenarios. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 9
+
+TABLE III GENERALIZATION PERFORMANCE ON BCD TASK . T HE DINO V3 
+
+> BACKBONE AND INTERMEDIATE
+
+MOFPN ARE FIXED ; ONLY THE PREDICTION HEAD IS REPLACED FOR BINARY CHANGE DETECTION .
+
+Methods WHU-CD LEVIR-CD F1(%) IoU(%) F1(%) IoU(%) IFNet [13] 89.82 81.52 91.60 84.51 BIT [14] 80.97 68.02 89.94 81.72 ChangeFormer [15] 87.96 78.51 89.92 81.69 ChangeCLIP [19] 90.05 81.91 92.04 85.26 MambaBCD [4] 94.19 89.02 - -ChangeDINO [20] 94.18 89.00 92.31 85.72 SemDINO (Ours) 93.72 88.89 92.97 86.51 
+
+VI. C ONCLUSION 
+
+In this paper, we propose a novel SemDINO framework for remote sensing semantic change detection, which effectively addresses the critical challenges of insufficient semantic fea-ture representation, weak cross-temporal feature consistency, and low robustness in complex land-cover change scenarios for remote sensing imagery. Built upon the powerful unsupervised pre-trained knowledge of the DINO self-supervised learning paradigm, the proposed SemDINO model excavates inher-ent semantic priors from massive unlabeled remote sensing images, and constructs a robust Siamese feature extraction architecture tailored for semantic change detection tasks. By integrating multi-scale semantic perception, cross-temporal feature alignment, and auxiliary edge constraint optimization, our method achieves precise discrimination of subtle land cover variations and accurate classification of diverse change categories. REFERENCES [1] R. Caye Daudt, B. Le Saux, A. Boulch, and Y. Gousseau, “Mul-titask learning for large-scale semantic change detection,” Computer Vision and Image Understanding , vol. 187, p. 102783, 2019, doi: 10.1016/j.cviu.2019.07.003. [2] L. Ding, H. Guo, S. Liu, L. Mou, J. Zhang, and L. Bruzzone, “Bi-temporal semantic reasoning for the semantic change detection in HR remote sensing images,” IEEE Trans. Geosci. Remote Sens. , vol. 60, pp. 1–14, 2022, doi: 10.1109/TGRS.2022.3154390. [3] L. Ding, J. Zhang, H. Guo, K. Zhang, B. Liu, and L. Bruzzone, “Joint spatio-temporal modeling for semantic change detection in remote sensing images,” IEEE Trans. Geosci. Remote Sens. , vol. 62, pp. 1–14, 2024, doi: 10.1109/TGRS.2024.3362795. [4] H. Chen, J. Song, C. Han, J. Xia, and N. Yokoya, “ChangeMamba: Remote sensing change detection with spatiotemporal state space model,” 
+
+IEEE Trans. Geosci. Remote Sens. , vol. 62, pp. 1–20, 2024, doi: 10.1109/TGRS.2024.3417253. [5] Y. Tang, S. Feng, C. Zhao, Y. Chen, Z. Lv, and W. Sun, “A semantic change detection network based on boundary detection and task inter-action for high-resolution remote sensing images,” IEEE Trans. Neural Netw. Learn. Syst. , vol. 36, no. 9, pp. 17184–17198, Sept. 2025, doi: 10.1109/TNNLS.2025.3570425. [6] Q. Wang, W. Jing, K. Chi, and Y. Yuan, “Cross-difference seman-tic consistency network for semantic change detection,” IEEE Trans. Geosci. Remote Sens. , vol. 62, pp. 1–12, 2024, Art. no. 4406312, doi: 10.1109/TGRS.2024.3386334. [7] Y. Zhu, L. Li, K. Chen, C. Liu, F. Zhou, and Z. Shi, “Semantic-CD: Remote sensing image semantic change detection towards open-vocabulary setting,” arXiv preprint arXiv:2501.06808 , 2025. [8] J. Zhang, L. Ding, T. Zhou, J. Wang, P. M. Atkinson, and L. Bruzzone, “Recurrent semantic change detection in VHR remote sensing images using visual foundation models,” IEEE Trans. Geosci. Remote Sens. , vol. 63, pp. 1–14, 2025, doi: 10.1109/TGRS.2025.3546808. [9] K. Yang et al. , “Asymmetric Siamese networks for semantic change detection in aerial images,” IEEE Trans. Geosci. Remote Sens. , vol. 60, pp. 1–18, 2021. [10] P. Yuan, Q. Zhao, X. Zhao, X. Wang, X. Long, and Y. Zheng, “A transformer-based Siamese network and an open optical dataset for semantic change detection of remote sensing images,” Int. J. Digit. Earth ,vol. 15, no. 1, pp. 1506–1525, Dec. 2022. [11] R. Caye Daudt, B. Le Saux, and A. Boulch, “Fully convo-lutional Siamese networks for change detection,” in Proc. 25th IEEE Int. Conf. Image Process. (ICIP) , 2018, pp. 4063–4067, doi: 10.1109/ICIP.2018.8451652. [12] S. Fang, K. Li, J. Shao, and Z. Li, “SNUNet-CD: A densely connected Siamese network for change detection of VHR images,” 
+
+IEEE Geosci. Remote Sens. Lett. , vol. 19, pp. 1–5, 2022, doi: 10.1109/LGRS.2021.3056416. [13] C. Zhang, P. Yue, D. Tapete, L. Jiang, B. Shangguan, L. Huang, and G. Liu, “A deeply supervised image fusion network for change detection in high resolution bi-temporal remote sensing images,” ISPRS J. Photogramm. Remote Sens. , vol. 166, pp. 183–200, Aug. 2020, doi: 10.1016/j.isprsjprs.2020.06.003. [14] H. Chen, Z. Qi, and Z. Shi, “Remote sensing image change detection with transformers,” IEEE Trans. Geosci. Remote Sens. , vol. 60, pp. 1–14, 2022, doi: 10.1109/TGRS.2021.3095166. [15] W. G. C. Bandara and V. M. Patel, “A transformer-based Siamese network for change detection,” in Proc. IEEE Int. Geosci. Remote Sens. Symp. (IGARSS) , 2022, pp. 207–210, doi: 10.1109/IGARSS46834.2022.9883686. [16] M. Caron, H. Touvron, I. Misra, H. J´ egou, J. Mairal, P. Bojanowski, and A. Joulin, “Emerging properties in self-supervised vision transformers,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2021, pp. 9650–9660, doi: 10.1109/ICCV48922.2021.00951. [17] M. Oquab et al. , “DINOv2: Learning robust visual features without supervision,” Trans. Mach. Learn. Res. , 2024. [18] O. Sim´ eoni et al. , “DINOv3,” arXiv preprint arXiv:2508.10104 , 2025. [19] S. Dong, L. Wang, B. Du, and X. Meng, “ChangeCLIP: Remote sensing change detection with multimodal vision-language representation learning,” ISPRS J. Photogramm. Remote Sens. , vol. 208, pp. 53–69, Feb. 2024, doi: 10.1016/j.isprsjprs.2024.01.004. [20] C.-H. Cheng and C.-C. Hsu, “ChangeDINO: DINOv3-driven building change detection in optical remote sensing imagery,” arXiv preprint arXiv:2511.16322 , 2025. [21] S. Ji, S. Wei, and M. Lu, “Fully convolutional networks for multisource building extraction from an open aerial and satellite imagery data set,” 
+
+IEEE Trans. Geosci. Remote Sens. , vol. 57, no. 1, pp. 574–586, Jan. 2019. [22] H. Chen and Z. Shi, “A spatial–temporal attention-based method and a new dataset for remote sensing image change detection,” Remote Sens. ,vol. 12, no. 10, p. 1662, May 2020. [23] Z. Zheng, Y. Zhong, S. Tian, A. Ma, and L. Zhang, “ChangeMask: Deep multi-task encoder-transformer-decoder architecture for semantic change detection,” ISPRS J. Photogramm. Remote Sens. , vol. 183, pp. 228–239, Jan. 2022, doi: 10.1016/j.isprsjprs.2021.10.015. [24] Y. Niu, H. Guo, J. Lu, L. Ding, and D. Yu, “SMNet: Symmetric multi-task network for semantic change detection in remote sensing images based on CNN and Transformer,” Remote Sens. , vol. 15, no. 4, Art. no. 949, 2023, doi: 10.3390/rs15040949. [25] K. Tang, F. Xu, X. Chen, Q. Dong, Y. Yuan, and J. Chen, “The ClearSCD model: Comprehensively leveraging semantics and change relationships for semantic change detection in high spatial resolution remote sensing imagery,” ISPRS J. Photogramm. Remote Sens. , vol. 211, pp. 299–317, May 2024, doi: 10.1016/j.isprsjprs.2024.04.013. [26] Z. Li, X. Wang, S. Fang, J. Zhao, S. Yang, and W. Li, “A decoder-focused multitask network for semantic change detection,” 
+
+IEEE Trans. Geosci. Remote Sens. , vol. 62, pp. 1–15, 2024, doi: 10.1109/TGRS.2024.3362728. [27] B. Wang, Z. Jiang, W. Ma, X. Xu, P. Zhang, Y. Wu, and H. Yang, “Dual-dimension feature interaction for semantic change detection in remote sensing images,” IEEE J. Sel. Topics Appl. Earth Observ. Remote Sens. ,vol. 17, pp. 9595–9605, 2024, doi: 10.1109/JSTARS.2024.3394571. [28] Z. Jiang, B. Wang, P. Zhang, Y. Wu, W. Ma, X. Xu, and H. Yang, “Semantic enhancement and change consistency network for semantic change detection in remote sensing images,” Int. J. Digit. Earth , vol. 18, no. 1, 2025, doi: 10.1080/17538947.2025.2496790. [29] L. Mei, Z. Ye, C. Xu, H. Wang, Y. Wang, C. Lei, W. Yang, and Y. Li, “SCD-SAM: Adapting Segment Anything Model for semantic change detection in remote sensing imagery,” IEEE Trans. Geosci. Remote Sens. ,vol. 62, pp. 1–13, 2024, doi: 10.1109/TGRS.2024.3407884. JOURNAL OF L ATEX CLASS FILES, VOL. 14, NO. 8, AUGUST 2021 10 
+
+[30] F. Liu, D. Chen, Z. Guan, X. Zhou, J. Zhu, Q. Ye, L. Fu, and J. Zhou, “RemoteCLIP: A vision language foundation model for remote sensing,” 
+
+arXiv preprint arXiv:2306.11029 , 2023. [31] H. Shen, L. Yan, H. Xie, Y. Wei, X. Li, W. Shen, P. Lv, and F. Tan, “Foundation model-driven semantic change detection in remote sensing imagery,” arXiv preprint arXiv:2602.13780 , 2026. [32] H. Huang, K. Ding, D. Zhu, Q. Cheng, X. Huang, X. Huang, S. Wang, and Z. Shao, “ChangeVFM: Unleashing the power of vision foundation models for semantic change detection in remote sensing images,” Geo-spatial Information Science , 2026, doi: 10.1080/10095020.2026.2646372. [33] S. Fang, W. Li, S. Yang, Z. Li, J. Zhao, and X. Wang, “BT-HRSCD: High-resolution feature is what you need for a semantic change detection network with a triple-decoding branch,” IEEE Trans. Geosci. Remote Sens. , vol. 62, 2024, Art. no. 4416714. [34] Z. Li, X. Wang, S. Fang, J. Zhao, S. Yang, and W. Li, “A decoder-focused multitask network for semantic change detection,” IEEE Trans. Geosci. Remote Sens. , vol. 62, 2024, Art. no. 5609115.
