@@ -1,0 +1,520 @@
+Title: Geometric Coastline Localization using Vision-Language Models
+
+URL Source: https://arxiv.org/pdf/2606.10468v1
+
+Published Time: Wed, 10 Jun 2026 00:43:33 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Geometric Coastline Localization using Vision-Language Models 
+
+Rafia Malik a, Bernhard Pfahringer a, Karin Bryan b, Mark Dickson b, Eibe Frank a
+
+> aThe University of Waikato, New Zealand
+> bThe University of Auckland, New Zealand
+
+Abstract 
+
+Coastline detection in remotely sensed imagery is a task that may benefit from automation, but machine learning-based approaches typically annotate individual pixels and neither model nor evaluate coastline geometry explicitly: generation of a vector-based representation is delegated to a post-processing step, if considered at all. This formulation relegates coastline geometry, the primary representation used in coastal change analysis, to a secondary artifact rather than the learning objective. Independent of that representational choice, coastlines used in practice are defined by geomorphic proxies such as vegetation lines, dune toes, or cli ff 
+
+edges rather than the instantaneous land-water boundary commonly used in pixel-based segmentation approaches. In this work, we revisit coastline extraction from a representation perspective and formulate the task as geometric boundary localization. Using the New Zealand Coastal Change Dataset (NZCCD) and high-resolution aerial imagery from Land Information New Zealand (LINZ), we develop CoastlineVLM-7B, a vision-language model (VLM) built on the GeoChat-7B /LLaVA-1.5 architecture that jointly performs coastline presence detection, proxy-type classification, and coastline grounding. Crucially, grounding a coastline with this model yields a thin coastline boundary represented as a polyline rather than a dense segmentation mask. We evaluate the approach against widely used deep learning-based segmentation models under strict one-pixel boundary supervision. Experimental results show that coastline extraction, under strict one-pixel supervision, is more e ff ectively evaluated using geometric distance metrics rather than pixel-overlap metrics such as Intersection over Union (IoU). This observation motivates the use of a geometry-oriented evaluation framework. We show that CoastlineVLM-7B improves geometric alignment with the ground-truth coastlines compared to segmentation-based approaches, reducing worst-case geometric error and improving global boundary matching as measured by Hausdor ff distance (reduced from 37.74 m to 31.84 m) and Earth Mover’s Distance (reduced from 21.12 m to 17.32 m). These results indicate that output representation is a critical design choice in coastline extraction, and that geometry-oriented learning, combined with the semantic reasoning capabilities of vision-language models, aligns well with how coastlines are defined and evaluated in operational coastal monitoring. 
+
+Keywords: Coastline extraction, Geometric boundary localization, Vision-language models, Remote sensing, Coastal monitoring 
+
+1. Introduction 
+
+Coastlines are a fundamental input for coastal hazard assess-ment, erosion monitoring, and long-term coastal change analysis [ 1]. In operational settings, coastlines are used as vector ge-ometries for transect-based measurements, spatial analysis in geographic information systems (GIS), and expert interpretation [2, 3 ]. In contrast to this operational use, most deep learning ap-proaches to coastline detection formulate the task in pixel space, typically as a land-water segmentation problem [ 4, 5, 6], and extract the final coastline through post-processing operations such as geometric contour extraction, skeletonization, and line simplification [7, 8]. This formulation introduces a representation mismatch be-tween the learning objective and the geometric coastline prod-ucts used in coastal analysis. Segmentation models are opti-mized to classify pixels [ 9 , 10 , 11 , 12 ], whereas coastal mon-itoring workflows require accurate geometric boundaries. As a result, segmentation metrics such as intersection-over-union (IoU) or pixel accuracy poorly reflect coastline localization error, particularly when evaluating thin boundaries in high-resolution imagery. In addition, the vectorization stage introduces heuristic decisions such as thresholding, contour selection, and smoothing [ 7, 8], which vary across coast types and reduce reproducibility. Another form of mismatch arises from the inconsistent use of the terms shoreline and coastline in the literature. While shoreline often refers to the instantaneous land-water bound-ary, coastal science typically defines coastlines using geomor-phic proxies such as the vegetation line, dune toe, or cli ff edge [ 1]. These proxies provide more stable indicators of coastal morphology and are widely adopted in operational monitoring datasets. For example, the New Zealand Coastal Change Dataset (NZCCD) [ 13 ] and the Victorian Coastal Monitoring Program (VCMP) [ 14 ] dataset explicitly define coastlines using proxy-dependent indicators rather than the instantaneous land-water boundary, reflecting how coastlines are interpreted in practical coastal analysis. In this work, we revisit coastline extraction from a repre-sentation perspective and formulate the problem as geometric boundary localization. Instead of learning dense segmentation masks and deriving coastlines through post-processing, we train a vision-language model to localize the coastline boundary di-rectly while simultaneously reasoning about coastline presence 
+
+> arXiv:2606.10468v1 [cs.CV] 9 Jun 2026
+
+and proxy type. The proposed model, CoastlineVLM-7B, is built on the GeoChat-7B architecture [ 15 ], which extends the LLaVA-1.5 multimodal framework [ 16 ] with object-grounding capabilities for remote sensing imagery. While GeoChat grounds objects using fixed bounding boxes, we generalize this capabil-ity to represent coastlines as polylines, which enables direct localization of thin coastline boundaries. CoastlineVLM-7B combines visual features with textual descriptions of coastline proxies to reduce ambiguity in complex coastal environments. Our qualitative results indicate that conventional segmentation models often misidentify roads, vegetation edges, or muddy wa-ter boundaries as coastlines, highlighting the limitations of such approaches. To avoid the conceptual mismatch between pixel-based met-rics and the evaluation of coastline localization approaches, we adopt a geometry-oriented evaluation framework based on dis-tance metrics that quantify alignment between extracted and expert-generated reference coastlines. We measure geometric alignment using Chamfer distance [ 17 ], Hausdor ff distance [ 18 ], Fréchet distance [ 19 ], and the Earth Mover’s Distance [ 20 ]. Ex-perimental results on our Coastline-Instruct dataset show that, under strict one -pixel supervision, CoastlineVLM-7B achieves improved geometric alignment with the reference coastline as measured by these distance-based evaluation metrics. Our contributions are: 
+
+• We revisit coastline extraction from a representation per-spective and formulate the task as geometric boundary localization, highlighting the limitations of segmentation-centric approaches for coastline extraction. 
+
+• We introduce a new multi-task vision-language model, CoastlineVLM-7B, that jointly performs coastline pres-ence detection, proxy-type classification, and coastline grounding. 
+
+• We propose a geometry-oriented evaluation framework for coastline localization using distance-based boundary metrics. 
+
+• We demonstrate that vision-language reasoning improves geometric coastline localization in complex coastal envi-ronments. The remainder of this paper is organized as follows. Sec-tion 2 reviews existing approaches to coastline extraction, related tasks involving extraction of thin geometric structures, as well as recent advances in vision-language models for remote sens-ing. Section 3 describes the dataset used in this study and the proposed CoastlineVLM-7B architecture, including the training framework and evaluation metrics. Section 4 presents quantita-tive and qualitative results together with a detailed discussion. Section 5 discusses limitations of the proposed approach. Sec-tion 6 concludes the paper and outlines directions for future research. 
+
+2. Related Work 
+
+2.1. Coastline Detection in Remote Sensing 
+
+Coastline extraction from remote sensing imagery is a fun-damental task for coastal monitoring, erosion assessment, and hazard management [ 7 , 4]. A comprehensive review by Boak and Turner [ 1] emphasizes that coastal boundaries are defined using geomorphic proxies such as vegetation lines, dune toes, or cli ff edges rather than the instantaneous land-water interface. Such proxy-based definitions are widely used in coastal geomor-phology and monitoring applications. Traditional coastline detection methods are based on spectral thresholding [ 5], edge detection [ 7], and object-based image analysis applied to aerial or satellite imagery [ 4]. More recently, automated workflows have been developed to detect coastlines in large volumes of satellite data. For example, CoastSat enables large-scale coastline monitoring using publicly available satellite imagery and cloud-based processing platforms [ 21 ]. Despite these advances, many approaches focus primarily on identifying the land-water interface rather than proxy-based coastlines used in coastal change studies. Most deep learning approaches formulate coastline detection as a semantic segmentation problem [ 4, 5]. Convolutional neural network architectures such as fully convolutional networks [ 9], U-Net [ 10 ], and DeepLabV3 + [11 ] have been widely applied to segment land and water regions in remote sensing imagery. More recently, transformer-based segmentation architectures, such as SegFormer [ 12 ], have been introduced to capture long-range spatial dependencies in visual scenes. Although these models improve segmentation accuracy compared to traditional approaches, they still produce raster outputs rather than explicit coastline geometries. Some studies approach coastline detection indirectly by iden-tifying coastal proxy indicators that correlate with shoreline posi-tion. For example, convolutional neural networks have been used to detect coastal vegetation edges from aerial imagery as proxies for coastline position [ 22 ]. Transformer-based architectures have also been used to capture long-range spatial dependencies when predicting coastal boundaries from remote sensing imagery [6]. However, these methods still treat coastline detection as a pixel classification problem and derive coastline boundaries through post-processing of segmentation outputs. 
+
+2.2. Geometric Boundary Extraction and Thin Structure Mod-elling 
+
+Beyond coastline detection, computer vision researchers have extensively studied the extraction of thin geometric struc-tures from images. Examples include road network reconstruc-tion [ 23 , 24 ] and building boundary extraction [ 25 ]. These problems share a common challenge: the target structures are spatially thin and geometrically constrained, making them di ffi -cult to evaluate using region-based segmentation metrics alone. In remote sensing, building extraction research provides a representative example. Early deep learning approaches treated building detection as a semantic segmentation task using fully convolutional networks [ 9, 10 ]. However, segmentation out-puts often produce jagged or fragmented boundaries that require 2additional geometric regularization. Recent studies therefore explore approaches that explicitly model geometric primitives such as vertices, edges, or polygons. For instance, Polygon-RNN identifies object boundaries by sequentially regressing polygon vertices [ 26 ]. More recent work reconstructs building geometry using feature lines and topological reasoning to generate polyg-onal representations [ 27 ]. These approaches demonstrate that explicitly modelling geometric structure can improve alignment with manually delineated boundaries. Similar challenges arise in other thin-structure extraction problems, which have often been addressed using segmentation-centric learning. For example, DeepRoadMapper reconstructs road topology from aerial imagery by converting pixel-wise pre-dictions into structured road graphs [ 23 ]. In remote sensing, segmentation-based approaches have also been used to iden-tify rivers and surface water boundaries from satellite imagery [ 28 ]. A more geometry-aware formulation is found in medical imaging, where DeepVesselNet predicts vessel centrelines and bifurcations to explicitly model vascular structure [29]. The challenges addressed in these studies are closely related to coastline localization, where the target structure is also a spatially thin boundary. Prior work in domains such as build-ing extraction and vessel analysis highlights that segmentation outputs alone may be insu ffi cient for modelling thin geomet-ric structures, motivating formulations that explicitly represent boundary geometry, as pursued in this work. 
+
+2.3. Vision-Language Models in Remote Sensing 
+
+Recent advances in multimodal learning have introduced vision-language models capable of integrating visual perception with natural language reasoning. Early large-scale models such as CLIP demonstrated the ability to learn joint visual-text repre-sentations from large image-text datasets [ 30 ]. Subsequent work extended these ideas to instruction-following multimodal sys-tems. LLaVA combines a visual encoder with a large language model to enable multimodal reasoning over images using natural language prompts [16]. In the remote sensing domain, several studies have adapted vision-language models to geospatial imagery. GeoChat is a multimodal model designed for visual reasoning in Earth ob-servation imagery that extends the LLaVA framework using remote sensing training data and tasks [ 15 ]. Other recent work explores multimodal large language models for satellite image interpretation and geospatial reasoning [31, 32]. The use of multimodal models for explicit geometric bound-ary localization has received limited attention in remote sensing applications, where work on vision-language models has largely focused on high-level semantic reasoning tasks such as caption-ing, scene description, or question answering. While recent vision-language models demonstrate strong semantic reasoning capabilities for remote sensing imagery, they have rarely been applied to structured geometric localization tasks. Our work takes a step toward closing this gap in the context of coastline extraction by investigating whether direct geometric boundary localization can be e ff ectively combined with multimodal rea-soning over coastal proxy indicators.               
+
+> Table 1: Summary Statistics of the Coastline-Instruct Dataset
+> Attribute Value
+> Covered regions 8Region names Auckland, Bay of Plenty, Hawke’s Bay, Northland, Otago, Taranaki, Waikato, West Coast Dataset size 17,977 Positive images 8,988 Negative images 8,989 Training split 16,221 Validation split 881 Test split 875 Image size 504 ×504 px Image resolution 0.1-0 .5 meter per pixel Image source LINZ Data Service
+
+3. Dataset and Methodology 
+
+3.1. Coastline-Instruct Dataset 
+
+To train and evaluate our approach, we construct a multi-modal instruction-following dataset named Coastline-Instruct .Table 1 summarizes the key statistics of the Coastline-Instruct dataset. The dataset pairs high-resolution ortho-rectified aerial imagery from the Land Information New Zealand (LINZ) Data Service [ 33 ] with coastline annotations from the New Zealand Coastal Change Dataset (NZCCD), enabling instruction-based supervision for coastline presence detection, proxy-type classifi-cation, and geometric coastline grounding (polyline prediction). NZCCD provides nationally consistent coastline vectors de-lineated by coastal scientists using geomorphic proxy indicators appropriate to local coastal morphology, such as vegetation lines, dune toes, or cli ff edges. These proxies provide stable indicators of coastal morphology and are commonly used in coastal moni-toring because the instantaneous land-water boundary can vary significantly due to tides, waves, and short-term environmental conditions [1]. The LINZ imagery has spatial resolutions ranging from ap-proximately 0 .1 m to 0 .5 m per pixel. At this resolution, indi-vidual pixels correspond to roughly 10-50 cm on the ground, enabling accurate localization of thin coastal boundaries. The dataset is divided into training, validation, and test sets using a region-held-out split design to prevent data leakage be-tween splits. The West Coast region is held out entirely as the test set, ensuring that evaluation is performed on coastal environ-ments not observed during training. This region is characterized by complex coastal morphology and dynamic shorelines, pro-viding a challenging benchmark for coastline localization. The 
+
+Hawke’s Bay region is used as the validation set, while the re-maining regions are used for training. Consequently, no regions are shared across the training, validation, and test splits. Due to this region-based sampling strategy, proxy class dis-tributions vary across the three splits. The training set includes all five proxy classes, while the validation set contains Vegeta-tion line, Cli ff line, and Gravel berm. The West Coast test set contains Vegetation line, Cli ff line, and Built structure line, with no Gravel berm or Waterline samples due to the natural proxy characteristics of that region. 3To construct training samples, source imagery tiles are subdi-vided using a sliding window of 504 × 504 pixels with one-third overlap. Each tile is paired with coastline annotations derived from the NZCCD vector dataset. Samples are categorized as either positive images containing coastline segments or negative images without coastlines. Each dataset entry follows a conversational instruction for-mat compatible with instruction-tuned vision-language models, allowing the dataset to support unified multi-task supervision within a single multimodal training framework. A simplified image-instruction pair from the Coastline-Instruct dataset is shown in Fig. 1. Each Coastline-Instruct sample pairs an aerial image with structured supervision for coastline presence detec-tion, proxy-type classification, and coastline grounding. The Coastline-Instruct dataset will be released upon publi-cation to support reproducible research in multimodal coastline analysis. 
+
+3.2. Task Formulation 
+
+The Coastline-Instruct dataset supports a multi-task instruction-following formulation for coastline analysis and features the following three tasks: 
+
+Task I: Coastline Presence Detection. The model predicts whether a coastline proxy is visible in the image using a binary question-answer format. 
+
+Task II: Proxy-Type Classification. The model predicts the geomorphic proxy defining the coastline (e.g., vegetation line, dune toe, or cli ff edge). This task introduces semantic reasoning about coastal morphology. 
+
+Task III: Coastline Grounding. The model localizes the coastline as a polyline, represented by a text sequence of normal-ized image coordinate pairs in the form [[ x1, y1], . . . , [xK , yK ]], where each coordinate lies in the range [0 , 100]. This enables direct prediction of coastline geometry without requiring post-processing. 
+
+3.3. CoastlineVLM-7B Framework 
+
+Our proposed model, CoastlineVLM-7B , is built on the GeoChat-7B architecture, which itself extends the LLaVA-1.5 multimodal framework. LLaVA-1.5 couples a CLIP vision en-coder and a Vicuna large language model via a multimodal pro-jector that projects CLIP’s visual embeddings into Vicuna’s to-ken embedding space. Vicuna is a LLaMA -based, decoder -only (i.e., autoregressive) transformer trained with cross - entropy and instruction-tuned for conversational use. Figure 2 shows the overall CoastlineVLM-7B framework. It consists of three main components: 
+
+• Vision Encoder: extracts visual features from input aerial imagery. 
+
+• Multimodal Projector: maps visual embeddings into the language model token space. 
+
+• Large Language Model: generates textual responses conditioned on visual features and task prompts.            
+
+> (a) Raw input image (504 ×504) (b) Ground-truth label (polyline)
+> Task I: Presence
+> Q: Is the coastline visible in this image? Answer only with Yes. or No. A: Yes.
+> Task II: Proxy Type
+> Q: What coastline proxy defines the coastline in this image? Answer with one of: Vegetation line, Cli ff line, Gravel berm, Built structure line, Waterline.
+> A: Vegetation line
+> Task III: Coastline Grounding
+> Q: Give the coastline as a list of [x,y] points in normalized coordinates 0-100. Format exactly as [[x1,y1],...,[xN,yN]].
+> A: [[69,100],[72,98],...,[100,75]]
+> (c) Image-instruction pair from the Coastline-Instruct dataset
+> Figure 1: Visualization of a Coastline-Instruct sample: (a) raw input image, (b) ground-truth coastline polyline, and (c) the three instructions paired with their actual answers.
+
+Through instruction tuning, the model learns to generate responses corresponding to coastline presence detection, proxy classification, and coastline grounding tasks. 
+
+3.4. CoastlineVLM Training Setup 
+
+The CoastlineVLM-7B model is fine-tuned using instruction-based supervision. Each training sample consists of an input image paired with a task prompt and the corresponding ground-truth response. The CLIP vision encoder is kept frozen during training to maintain stability and reduce overfitting given the relatively small dataset. Only the multimodal projector and LoRA adapters in the language backbone are fine-tuned during instruction tuning. Training is performed on four NVIDIA A100 GPUs, with inference conducted on a single A100 GPU. The full training configuration for the CoastlineVLM localization experiments is summarized in Table 2. We report results across four random seeds. The seed controls stochastic aspects of training such as model initialization, data shu ffl ing, and dropout, while the dataset splits remain fixed. A validation set (Hawke’s Bay region) is used during training for monitoring performance and selecting model checkpoints. Final results reported in this paper are evaluated on the held-out West Coast test set. Unless otherwise stated, CoastlineVLM-7B results correspond to the seed-42 model. 4Figure 2: Overview of the CoastlineVLM-7B framework. Input aerial images are encoded using a CLIP-based vision encoder, and the resulting visual tokens are projected into the language embedding space via a multimodal projector. The multimodal LLM (GeoChat-7B / LLaVA-1.5) processes the visual tokens together with task prompts to perform three instruction-following tasks: coastline presence detection, proxy type classification, and coastline grounding via polyline prediction, producing a thin coastline boundary representation. Predictions are evaluated using geometric distance metrics. Table 2: Training configuration used for CoastlineVLM localization experiments                      
+
+> Parameter Value
+> Backbone GeoChat-7B (Vicuna-based VLM) Vision encoder CLIP ViT-L /14-336 Image resolution 504 ×504 Train samples 16,221 Validation samples 881 Training Hardware 4×NVIDIA A100 GPUs Batching 8 per GPU, accumulation 4 (e ff ective 128) Epochs (max) 30 Epochs run 10 (early stopping) Best model checkpoint epoch 5 Optimizer AdamW Learning rate 3×10 −5
+> LR schedule Cosine Seeds 42, 43, 44, 45
+
+3.5. Segmentation Baselines 
+
+To provide a comparison with conventional pixel-wise meth-ods, we train four semantic segmentation models for coastline boundary detection. The evaluated architectures include U-Net, U-Net ++ , DeepLabV3 +, and SegFormer, which are widely used architectures for semantic segmentation in remote sensing im-agery. All baseline models follow the training configuration described in the SWED dataset benchmark study [ 34 ], includ-ing the same loss formulations and optimization settings. They are trained and evaluated using the same data splits and pre-processing pipeline as CoastlineVLM to ensure a consistent comparison. During training, coastline polylines from the NZCCD dataset are rasterized into 1-pixel-wide binary boundary masks that serve as segmentation ground-truth. Since segmentation mod-els produce raster outputs, an additional post-processing step is required to convert predicted masks into vector coastline ge-ometries. At inference time, predicted segmentation masks are post-processed using skeletonization to extract a single-pixel centerline for geometric evaluation. 
+
+3.6. Polyline Representation and Fixed-K Resampling 
+
+Coastlines are represented as polylines with variable num-bers of vertices. During dataset preprocessing, ground-truth coastlines are simplified using the Ramer-Douglas-Peucker (RDP) algorithm [35] and capped at a maximum of K ≤ 50 vertices to satisfy the context-window constraints of LLaVA-1.5. As a re-sult, training polylines remain variable in length but are bounded by this upper limit. For evaluation, geometric distance metrics can be sensitive to di ff erences in vertex sampling density along the curve. To ensure consistent and fair comparison across methods, both predicted and ground-truth coastlines are uniformly resampled to a fixed number of vertices ( K = 50) using arc-length interpolation. This normalization is applied to outputs from both CoastlineVLM and the segmentation baselines prior to computing geometric metrics. By enforcing a consistent vertex representation during evaluation, our geometric evaluation metrics are computed un-der consistent geometric conditions and are not influenced by di ff erences in vertex sampling density. The detailed arc-length resampling procedure is described in Appendix B, which provides the full mathematical formulation. 
+
+3.7. Evaluation Metrics 
+
+To evaluate localization accuracy, we adopt a geometry-based evaluation framework based on distance metrics that quan-tify geometric alignment between predicted and reference coast-lines. Five complementary metrics are used to capture di ff erent aspects of geometric boundary alignment: Chamfer distance (average proximity), Modified Average Hausdor ff distance (di-rectional deviation), Hausdor ff distance (worst-case error), Earth 5Table 3: Summary of geometric distance metrics used to evaluate coastline localization accuracy 
+
+Metric Purpose Description 
+
+Chamfer Distance Average boundary proximity Symmetric mean nearest-neighbour distance between two point sets Modified Average Hausdor ff Distance (Mod. Avg HD) Worst directional boundary deviation Maximum of directed mean nearest-neighbour distances (symmetric) Hausdor ff Distance Worst-case boundary error Maximum of directed max nearest-neighbour distances between point sets Earth Mover’s Distance (EMD) Global structural alignment Optimal point-to-point matching distance calculated via bipartite assignment Fréchet Distance (normalized) Ordered curve alignment Maximum separation between two ordered curves during traversal 
+
+Mover’s Distance (global structural alignment), and Fréchet dis-tance (ordered curve similarity). Table 3 provides a concise summary of these metrics and their objectives. The formal math-ematical definitions are provided in Appendix A. We also consider three custom tolerance-based metrics that measure the percentage of predicted coastline points located within fixed spatial tolerances (e.g., 5 m, 10 m, and 20 m) of the ground-truth coastline. These metrics quantify how much of the predicted coastline lies within predefined distance thresholds. For the first two tasks, which are classification tasks, we report the F1 metric. In the case of the second task, we report both Micro-F1 and Macro-F1. 
+
+4. Results and Discussion 
+
+4.1. Task-wise Performance 
+
+Table 4 summarizes the task-wise performance of Coast-lineVLM on the Coastline-Instruct dataset across four di ff erent seeds for the random number generator, with the mean and stan-dard deviation reported across runs. For the polyline grounding task, only the Fréchet distance is shown in this table. The model achieves high accuracy on the semantic reasoning tasks, includ-ing coastline presence detection and proxy-type classification, while also supporting direct polyline grounding of coastline ge-ometry. Presence detection achieves a mean F1 score of 0.99 across seeds. The confusion matrix indicates approximately 99% correct classification for both presence and absence cases. For proxy-type classification, both Micro-F1 and Macro-F1 scores are reported due to the class imbalance present in the dataset. Approximately 70% of New Zealand beaches are sandy [13 ], where the coastline proxy is typically defined by the vegeta-tion line, resulting in a strong dominance of this class. While the Micro-F1 score reflects overall classification performance domi-nated by the majority proxy type, the Macro-F1 score provides a more balanced evaluation across all proxy categories.                                    
+
+> Table 4: Task-wise performance of CoastlineVLM-7B on the Coastline-Instruct dataset (West Coast test set) across four random seeds (mean ±std)
+> Seed Presence Detection Proxy Classification Polyline Grounding F1 Micro-F1 /Macro-F1 Fréchet (normalized) ↓
+> 42 0.99 0.90 /0.25 0.27 43 0.99 0.89 /0.25 0.27 44 0.99 0.90 /0.25 0.27 45 0.99 0.90 /0.25 0.28
+> Mean ±Std 0.990 ±0.000 0.898 ±0.004 /0.250 ±0.000 0.273 ±0.004
+
+To further analyze proxy-type predictions, Fig. 3 shows the normalized confusion matrix for Task II. The confusion matrix reflects the absence of Gravel berm and Waterline samples in the test set, resulting in zero support for these classes. Accordingly, no predictions or false positives are observed. This is consistent with the region-based split described in Section 3.1. Vegetation-line proxies are correctly identified in 92% of cases, while cli ff -line proxies achieve a lower classification ac-curacy of 73% with 27% of cli ff cases misclassified as vegeta-tion lines. Built-structure proxies exhibit the largest confusion, with 83% predicted as vegetation lines and only 17% correctly identified, likely due to the visual similarity between coastal infrastructure edges and natural vegetation boundaries in aerial imagery. These results suggest that the model tends to favor vegetation-line predictions when proxy boundaries share simi-lar visual characteristics. They also highlight the di ffi culty of representing coastline proxies using purely visual cues, as proxy definitions often depend on geomorphic interpretation rather than simple appearance. For the geometric grounding task, the model achieves a mean Fréchet score of 0.27 across seeds in normalized coor-dinate space (Table 4), indicating that the predicted coastlines generally preserve the structure of the ground-truth geometry. Fréchet distance is reported only for CoastlineVLM-7B because it produces ordered curve predictions, which are not directly available from the segmentation masks generated by the bench-mark models. Across the test set, coordinate generation was stable with no malformed predictions observed, and the pre-dicted polylines consistently contained the expected number of vertices. 
+
+4.2. Coastline Localization Results 
+
+Table 5 compares the geometric localization performance of CoastlineVLM-7B with four segmentation baselines on the West Coast test set. While UNet achieves higher scores on the strict tolerance thresholds ( ≤5m, ≤10m, and ≤20m) and lower Chamfer and average Hausdor ff distances, CoastlineVLM-7B produces substantially better global coastline geometry. In partic-ular, the proposed model achieves the lowest Hausdor ff distance and Earth Mover’s Distance, indicating improved worst-case alignment and stronger global structural correspondence with the ground-truth coastline. These results suggest that Coast-lineVLM captures the overall coastline curve more consistently, whereas segmentation models tend to optimize local bound-ary proximity through pixel-wise classification. This behavior is consistent with the formulation of coastline extraction as a 6Vegetation line                               
+
+> Cliff line
+> Gravel berm
+> Built structure line
+> Waterline
+> Other
+> Predicted Value
+> Vegetation line
+> Cliff line
+> Gravel berm
+> Built structure line
+> Waterline
+> Other
+> Ground Truth
+> 0.92 0.06 0.00 0.01 0.00 0.00
+> 0.27 0.73 0.00 0.00 0.00 0.00
+> 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.83 0.00 0.00 0.17 0.00 0.00
+> 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.00 0.00 0.00 0.00 0.00 0.00
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+Figure 3: Normalized confusion matrix for proxy-type classification (Task II). The matrix is normalized by ground-truth labels and illustrates the dominance of vegetation-line proxies as well as confusion among geomorphically similar boundary types. SMP UNet    
+
+> SMP UNet++
+> DeepLabV3+
+> SegFormer
+> CoastlineVLM-7B
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> 20.0
+> Distance (m)
+> 9.43
+> 13.78
+> 18.02 17.99
+> 11.98
+> SMP UNet
+> SMP UNet++
+> DeepLabV3+
+> SegFormer
+> CoastlineVLM-7B
+> 0
+> 20
+> 40
+> 60
+> 80
+> Distance (m)
+> 37.74
+> 68.25
+> 78.41
+> 74.48
+> 31.84
+> SMP UNet
+> SMP UNet++
+> DeepLabV3+
+> SegFormer
+> CoastlineVLM-7B
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> Distance (m)
+> 11.99
+> 19.67
+> 32.26 30.97
+> 13.42
+> SMP UNet
+> SMP UNet++
+> DeepLabV3+
+> SegFormer
+> CoastlineVLM-7B
+> 0
+> 10
+> 20
+> 30
+> 40
+> Distance (m)
+> 21.12
+> 28.59
+> 38.93 39.61
+> 17.32
+
+Figure 4: Comparison of geometric localization distance metrics from Table 5. Lower values indicate better geometric alignment with the ground-truth coast-line. 
+
+geometric boundary localization problem rather than a dense pixel-classification task. Figure 4 visualizes the distance metrics reported in Table 5. The figure shows that CoastlineVLM-7B reduces global and worst-case boundary deviations, as reflected in lower Hausdor ff 
+
+distance and Earth Mover’s Distance values, while UNet retains an advantage in local proximity measured by Chamfer distance. 
+
+4.3. Comparison with Segmentation Baselines 
+
+To better interpret the above results, we contrast them with standard pixel-based metrics commonly used in semantic seg-mentation research. A representative example is Intersection over Union (IoU). However, coastline extraction in our setting is fundamentally a geometric localization problem. Pixel-based metrics require exact pixel correspondence, which makes them unsuitable for evaluating thin one-pixel boundaries. If a pixel from an extracted coastline is close to a pixel from the ground-truth coastline, but the two pixels are not identical, this does not contribute to increasing the IoU. Segmentation baselines, especially UNet, yield the highest scores when evaluated using pixel-overlap (IoU) criteria, but their predictions are more fragmented, which leads to increased geometric localization error. In contrast, the proposed VLM for-mulation predicts the coastline directly as a geometric curve, en-abling more consistent alignment with the ground-truth coastline. This behavior is reflected in Table 5, where CoastlineVLM-7B achieves the best Hausdor ff distance and Earth Mover’s Distance while remaining competitive on average Hausdor ff distance. 
+
+4.4. Training Stability Across Seeds 
+
+Table 6 shows the proposed model’s performance across the tolerance-based metrics and the distance metrics across the four seeds. Performance variation across seeds was small, indicating stable training behavior and consistent localization performance. The percentage of pixels localized within 5 m, 10 m, and 20 m varied by less than 0.006 across seeds, while geometric distance metrics such as Chamfer distance (11.88 ± 0.11 m) and Haus-dor ff distance (31.63 ± 0.48 m) also showed low variance. These results indicate that the model’s localization performance is not sensitive to random initialization. 
+
+4.5. E ff ect of Proxy-Type Class Balancing 
+
+We use the original proxy-type distribution for the primary comparison between CoastlineVLM and the benchmark segmen-tation models to ensure fairness. However, we performed an additional proxy balancing experiment where minority proxy-type classes were up-sampled in the training set to reduce class imbalance while preserving the dominant geomorphic proxies. Fig. 5 illustrates the proxy-type distribution before and after upsampling. The original training set exhibits a strong class im-balance dominated by vegetation and cli ff proxies, while gravel berm, built structure line, and waterline proxies are severely underrepresented. Proxy-type upsampling increases the repre-sentation of three underrepresented proxy types: gravel berm, built structure line, and waterline. Table 7 shows that proxy balancing improves both tolerance-based and geometric localization metrics, indicating that better proxy-type balance is a promising direction for future perfor-mance gains. In particular, the Chamfer distance decreases from 11.98 m to 9.69 m (approximately a 19% reduction), reflecting a notable improvement in the geometric alignment between pre-dicted and ground-truth coastline curves. 
+
+4.6. Qualitative Analysis 
+
+Figure 6 provides a qualitative comparison between the UNet baseline and the proposed CoastlineVLM-7B model under strict 1px boundary supervision. UNet predictions often appear frag-mented and may produce inland false positives. In contrast, CoastlineVLM-7B generates a more continuous coastline that better follows the true coastline boundary. This behavior ex-plains the improved geometric performance observed in Table 5, where CoastlineVLM-7B achieves substantially lower Hausdor ff ,average Hausdor ff , and Earth Mover’s distances. 7Table 5: Geometric coastline localization performance on the West Coast test set. Lower values are better for distance metrics ( ↓), while higher values are better for tolerance metrics ( ↑). Results for CoastlineVLM-7B are reported using the original proxy distribution.                                                                                                         
+
+> Tolerance Metrics ( ↑, %) Distance Metrics ( ↓, m) Model ≤5m ≤10m ≤20m Chamfer Hausdor ff Avg HD EMD
+> UNet 0.696 0.768 0.854 9.43 37.74 11.99 21.12 UNet ++ 0.656 0.720 0.795 13.78 68.25 19.67 28.59 DeepLabV3 +0.066 0.092 0.106 18.02 78.41 32.26 38.93 SegFormer 0.184 0.206 0.236 17.99 74.48 30.97 39.61
+> CoastlineVLM-7B 0.333 0.608 0.852 11.98 31.84 13.42 17.32
+> Table 6: CoastlineVLM-7B localization performance across four random seeds (mean ±std)
+> Tolerance Metrics ( ↑, %) Distance Metrics ( ↓, m) Seed ≤5m ≤10m ≤20m Chamfer Hausdor ff Avg HD EMD
+> 42 0.333 0.608 0.852 11.979 31.837 13.419 17.319 43 0.330 0.611 0.859 11.759 31.024 13.040 16.761 44 0.337 0.613 0.862 11.813 31.551 13.257 16.993 45 0.324 0.600 0.855 11.967 32.092 13.418 17.286
+> Mean ±Std 0.331 ±0.005 0.608 ±0.006 0.857 ±0.004 11.880 ±0.107 31.626 ±0.477 13.284 ±0.185 17.090 ±0.261
+> Figure 5: Distribution of coastline proxy types in the training dataset before and after proxy-type upsampling. Minority proxy classes (gravel berm, built structure line, and waterline) were duplicated to reduce class imbalance.
+
+To further analyze model behavior across diverse coastal conditions, we examine predictions on representative test scenes grouped by common sources of segmentation error. Figure 7 presents qualitative comparisons across failure modes (columns) for all models (rows). The failure modes are categorized into road adjacency, muddy water regions, vegetation edges, highly curved coastlines, and swash-washed beaches. Benchmark segmentation models frequently misidentify strong inland edges such as roads, vegetation boundaries, or sediment-laden water, as coastline segments, resulting in fragmented pre-dictions and higher false positive rates. In contrast, CoastlineVLM-7B generates a more continuous and coherent coastline trace. 
+
+5. Limitations 
+
+Although the proposed approach demonstrates improved global coastline geometry, several limitations remain. First, coastline polylines are simplified during dataset preparation to a maximum of K = 50 vertices to maintain stable token lengths for the vision-language model. This simplification may limit geo-  
+
+> (a) UNet (fragmented prediction) (b) CoastlineVLM-7B
+> Figure 6: Qualitative comparison on a West Coast test image. Ground-truth coastlines are shown in blue and model predictions in red. UNet produces fragmented coastline predictions, whereas CoastlineVLM-7B generates a more continuous coastline trace aligned with the ground-truth. For better visualization, the ground-truth and CoastlineVLM outputs are shown thicker in this figure.
+
+metric detail for highly curved coastlines. Second, the Coastline-Instruct dataset focuses on coastal environments within New Zealand, and further evaluation across diverse coastal morpholo-gies will be necessary to assess broader geographic generaliza-tion. Third, the proxy-type distribution in the dataset is imbal-anced, with vegetation and cli ff proxies dominating the train-ing data. While our proxy-balancing experiment indicates that improved class balance can further enhance performance, addi-tional data collection for underrepresented proxy types would likely further improve performance. 
+
+6. Conclusion and Future Work 
+
+We presented CoastlineVLM-7B, a multimodal vision-language model for coastline localization from high-resolution aerial im-agery. Unlike conventional segmentation-based approaches that treat coastline detection as a pixel-wise classification problem, 8Table 7: E ff ect of proxy-type class balancing on CoastlineVLM localization performance                       
+
+> Tolerance Metrics ( ↑, %) Distance Metrics ( ↓, m) Proxy Sampling ≤5m ≤10m ≤20m Chamfer Hausdor ff Avg HD EMD
+> Original 0.333 0.608 0.852 11.98 31.84 13.42 17.32 Upsampled 0.443 0.728 0.894 9.69 25.25 10.70 13.75
+
+Road adjacency Muddy water Vegetation land Curved beaches Swash beaches UNet 
+
+UNet ++ 
+
+DeepLabV3 +
+
+SegFormer 
+
+CoastlineVLM 
+
+> Figure 7: Qualitative comparison across challenging coastal environments in the West Coast test set. Columns are grouped by common failure modes: road adjacency (1-2), muddy water (3-4), vegetation land (5), curved beaches (6), and swash-washed beaches (7-8). Ground-truth coastlines are shown in blue and model predictions in red. For better visualization, the ground-truth and CoastlineVLM outputs are shown thicker in this figure.
+
+the proposed method formulates coastline extraction as a geomet-ric boundary localization task and predicts coastline geometry directly as a polyline. To train and evaluate the model, we in-troduced the Coastline-Instruct dataset, which combines aerial imagery with geomorphologically defined coastline proxies and instruction-based supervision for coastline detection, proxy-type reasoning, and geometric coastline grounding within a unified multimodal framework. Experimental results on the West Coast test set demonstrate that CoastlineVLM-7B produces more coherent global coastline geometry compared with segmentation baselines, achieving the lowest Hausdor ff distance and Earth Mover’s Distance among the evaluated models. While conventional segmentation architec-tures remain competitive under strict local tolerance thresholds, the proposed vision-language formulation provides improved global structural alignment with the ground-truth coastline. Future work will investigate approaches to further improve the geometric representation of coastline boundaries in vision-language models. The current dataset focuses on New Zealand coastlines, and expanding the dataset to additional coastal envi-ronments and proxy types may improve generalization across diverse coastal morphologies. Improving the balance of proxy-type distributions through targeted data augmentation or resam-pling strategies may also enhance geometric localization accu-racy. More broadly, integrating multimodal reasoning with struc-tured geometric prediction may enable vision-language models to address a wider range of thin-boundary extraction problems in Earth observation, such as rivers and road networks. 
+
+7. Funding Details 
+
+This research was supported by the Time-Evolving Data Science and Artificial Intelligence for Advanced Open Environ-mental Science (TAIAO) project, funded by the New Zealand Ministry of Business, Innovation and Employment (MBIE), as part of a PhD research program at the University of Waikato, New Zealand. 98. Data and Code Availability 
+
+The Coastline-Instruct dataset was constructed using aerial imagery sourced from the Land Information New Zealand (LINZ) Data Service and coastline vector data from the New Zealand Coastal Change Dataset (NZCCD). LINZ imagery is distributed under the Creative Commons Attribution 4.0 license, while NZCCD data is provided under the Creative Commons Attribution-NonCommercial 4.0 license. The derived Coastline-Instruct dataset follows the attribution requirements of both sources and will be released for non-commercial research use under the Cre-ative Commons Attribution-NonCommercial 4.0 license. The code and dataset will be made publicly available to support reproducibility. 
+
+References 
+
+[1] E. H. Boak, I. L. Turner, Shoreline definition and detection: A review, Journal of Coastal Research 21 (4) (2005) 688– 703. [2] E. R. Thieler, E. A. Himmelstoss, J. L. Zichichi, A. Er-gul, Digital shoreline analysis system (dsas) version 4.0—an arcgis extension for calculating shoreline change, Tech. Rep. 2008-1278, U.S. Geological Survey (2009). doi:10.3133 /ofr20081278. [3] P. Scala, G. Manno, G. Ciraolo, Coastal dynamics an-alyzer (cda): A qgis plugin for transect based analy-sis of coastal erosion, SoftwareX 28 (2024) 101894. doi:https: // doi.org /10.1016 /j.softx.2024.101894. URL https://www.sciencedirect.com/science/ article/pii/S2352711024002644 
+
+[4] W. Sun, C. Chen, W. Liu, G. Yang, X. Meng, L. Wang, K. Ren, Coastline extraction using remote sensing: A re-view, GIScience & Remote Sensing 60 (1) (2023) 2243671. doi:10.1080 /15481603.2023.2243671. [5] S. Toure, O. Diop, K. Kpalma, A. S. Maiga, Shoreline detection using optical remote sensing: A review, ISPRS International Journal of Geo-Information 8 (2) (2019) 75. doi:10.3390 /ijgi8020075. [6] Z. Yang, G. Wang, L. Feng, Y. Wang, G. Wang, S. Liang, A transformer model for coastline prediction in weitou bay, china, Remote Sensing 15 (19) (2023) 4771. doi:10.3390 /rs15194771. [7] R. Gens, Remote sensing of coastlines: Detec-tion, extraction and monitoring, International Jour-nal of Remote Sensing 31 (7) (2010) 1819–1836. doi:10.1080 /01431160902926673. [8] L. Tang, T. Ai, M. Yang, J. Stoter, An adaptive simplifica-tion method for coastlines using bridging skeleton lines, ISPRS International Journal of Geo-Information 13 (5) (2024) 155. doi:10.3390 /ijgi13050155. [9] J. Long, E. Shelhamer, T. Darrell, Fully convolutional networks for semantic segmentation, in: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2015, pp. 3431–3440. [10] O. Ronneberger, P. Fischer, T. Brox, U-net: Convolutional networks for biomedical image segmentation, in: Inter-national Conference on Medical Image Computing and Computer-Assisted Intervention (MICCAI), 2015, pp. 234– 241. [11] L.-C. Chen, Y. Zhu, G. Papandreou, F. Schro ff , H. Adam, Encoder-decoder with atrous separable convolution for semantic image segmentation, in: Proceedings of the Eu-ropean conference on computer vision (ECCV), 2018, pp. 801–818. [12] E. Xie, W. Wang, Z. Yu, A. Anandkumar, J. M. Alvarez, P. Luo, Segformer: Simple and e ffi cient design for seman-tic segmentation with transformers, NeurIPS (2021). [13] M. Tuck, M. Dickson, E. Ryan, M. Ford, T. Kon-lechner, A national scale coastal change dataset for aotearoa new zealand, Data in Brief 57 (2024) 111104. doi:https: // doi.org /10.1016 /j.dib.2024.111104. [14] Department of Energy, Environment and Climate Action (Victoria), Vcmp sites – shorelines, victorian Coastal Mon-itoring Program (VCMP) shoreline dataset. Accessed 10 March 2026 (2026). URL https://discover.data.vic.gov.au/datas et/vcmp-sites-shorelines 
+
+[15] K. Kuckreja, M. S. Danish, M. Naseer, A. Das, S. Khan, F. S. Khan, Geochat: Grounded large vision-language model for remote sensing, in: Proceedings of the IEEE /CVF Conference on Computer Vision and Pattern Recognition (CVPR), 2024, pp. 27831–27840. doi:10.1109 /CVPR52733.2024.02629. [16] H. Liu, C. Li, Q. Wu, Y. J. Lee, Visual instruction tuning, Advances in neural information processing systems 36 (2023) 34892–34916. [17] H. G. Barrow, J. M. Tenenbaum, R. C. Bolles, H. C. Wolf, Parametric correspondence and chamfer matching: Two new techniques for image matching, Proceedings of the 5th International Joint Conference on Artificial Intelligence (1977) 659–663. [18] D. P. Huttenlocher, G. A. Klanderman, W. J. Rucklidge, Comparing images using the hausdor ff distance, IEEE Transactions on Pattern Analysis and Machine Intelligence 15 (9) (1993) 850–863. doi:10.1109 /34.232073. [19] T. Eiter, H. Mannila, Computing discrete fréchet distance, Tech. Rep. CD-TR 94 /64, Technical University of Vienna (1994). URL https://www.kr.tuwien.ac.at/staff/eite r/et-archive/files/cdtr9464.pdf 
+
+10 [20] Y. Rubner, C. Tomasi, L. J. Guibas, The earth mover’s distance as a metric for image retrieval, International Journal of Computer Vision 40 (2) (2000) 99–121. doi:10.1023 /A:1026543900054. [21] K. Vos, M. D. Harley, K. D. Splinter, J. A. Simmons, I. L. Turner, Coastsat: A google earth engine-enabled python toolkit to extract shorelines from publicly available satellite imagery, Environmental Modelling & Software 122 (2019) 104528. [22] M. S. J. Rogers, M. Bithell, S. M. Brooks, T. Spencer, Vedge_detector: automated coastal vegetation edge detec-tion using a convolutional neural network, International Journal of Remote Sensing 42 (13) (2021) 4805–4835. arXiv:https: // doi.org /10.1080 /01431161.2021.1897185, doi:10.1080 /01431161.2021.1897185. URL https://doi.org/10.1080/01431161.2021. 1897185 
+
+[23] G. Mattyus, W. Luo, R. Urtasun, Deeproadmapper: Ex-tracting road topology from aerial images, in: Proceedings of the IEEE International Conference on Computer Vision (ICCV), 2017, pp. 3438–3446. [24] F. Bastani, S. He, S. Abbar, M. Alizadeh, H. Balakr-ishnan, S. Chawla, S. Madden, D. DeWitt, Roadtracer: Automatic extraction of road networks from aerial im-ages, in: 2018 IEEE /CVF Conference on Computer Vision and Pattern Recognition, 2018, pp. 4720–4728. doi:10.1109 /CVPR.2018.00496. [25] D. Acuna, H. Ling, A. Kar, S. Fidler, E ffi cient interactive annotation of segmentation datasets with polygon-rnn ++ ,in: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2018, pp. 859– 868. doi:10.1109 /CVPR.2018.00096. [26] L. Castrejon, J. Pont-Tuset, J. T. Barron, F. Marques, J. Ma-lik, Polygon-rnn: Annotating object instances with a poly-gon, in: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2017, pp. 5230– 5238. [27] S. Wei, S. Ji, M. Lu, From lines to polygons: Polyg-onal building contour extraction from high-resolution remote sensing imagery, ISPRS Journal of Photogram-metry and Remote Sensing 210 (2024) 107–121. doi:10.1016 /j.isprsjprs.2024.02.006. [28] F. Isikdogan, A. C. Bovik, P. Passalacqua, Surface water mapping by deep learning, IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing 10 (11) (2017) 4909–4918. [29] G. Tetteh, V. Efremov, N. D. Forkert, M. Schneider, J. Kirschke, B. Weber, C. Zimmer, M. Piraud, B. H. Menze, Deepvesselnet: Vessel segmentation, centerline predic-tion, and bifurcation detection in 3-d angiographic vol-umes, Frontiers in Neuroscience Volume 14 - 2020 (2020). doi:10.3389 /fnins.2020.592352. URL https://www.frontiersin.org/journals/n euroscience/articles/10.3389/fnins.2020.59 2352 
+
+[30] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, G. Krueger, I. Sutskever, Learning transferable visual models from natural language supervision, in: M. Meila, T. Zhang (Eds.), Proceedings of the 38th International Con-ference on Machine Learning, Vol. 139 of Proceedings of Machine Learning Research, PMLR, 2021, pp. 8748–8763. URL https://proceedings.mlr.press/v139/rad ford21a.html 
+
+[31] W. Zhang, M. Cai, T. Zhang, Y. Zhuang, X. Mao, Earthgpt: A universal multimodal large language model for multi-sensor image comprehension in remote sensing domain, IEEE Transactions on Geoscience and Remote Sensing 62 (2024) 1–20. doi:10.1109 /TGRS.2024.3409624. [32] Y. Zhan, Z. Xiong, Y. Yuan, Skyeyegpt: Unifying re-mote sensing vision-language tasks via instruction tun-ing with large language model, ISPRS Journal of Pho-togrammetry and Remote Sensing 221 (2025) 64–77. doi:https: // doi.org /10.1016 /j.isprsjprs.2025.01.020. URL https://www.sciencedirect.com/science/ article/pii/S0924271625000206 
+
+[33] Land Information New Zealand, Linz data service: Open geospatial data portal, accessed: 2024 (2024). URL https://data.linz.govt.nz 
+
+[34] C. Ortega-Adame, M. Gonzalez-Audicana, A. Salinas-Castillo, et al., Swed: A benchmark dataset for seman-tic segmentation of water bodies from sentinel-2 im-agery, Remote Sensing of Environment 273 (2022) 112859. doi:10.1016 /j.rse.2022.112859. [35] D. H. Douglas, T. K. Peucker, Algorithms for the reduction of the number of points required to represent a digitized line or its caricature, The Canadian Cartographer 10 (2) (1973) 112–122. doi:10.3138 /FM57-6770-U75U-7727. 
+
+Appendix A. Geometric Distance Metrics 
+
+This appendix provides the formal definitions of the geomet-ric distance metrics used to evaluate coastline boundary align-ment. The formulations follow standard definitions used in geo-metric matching and computer vision literature [ 17 , 18 , 19 , 20 ]. Let the predicted coastline and ground-truth coastline be represented as two ordered sets of K resampled points: 
+
+A = {ai}Ki=1, B = {b j}Kj=1,
+
+where ai, b j ∈ R2 denote coastline coordinates in meters. All distances are computed in meters after resampling both predicted and ground-truth coastlines to a fixed number of K
+
+arc-length equidistant points, except for Fréchet distance in the 11 task-wise polyline grounding evaluation, which is computed in normalized coordinate space and scaled by the diagonal length of the normalized 100 × 100 coordinate plane. 
+
+Appendix A.1. Chamfer Distance 
+
+The symmetric Chamfer distance measures the average nearest-neighbour distance between two point sets. It is defined using directed components: 
+
+dA→B = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+min   
+
+> 1≤j≤K
+
+∥ai − b j∥ (A.1) 
+
+dB→A = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+min  
+
+> 1≤i≤K
+
+∥b j − ai∥ (A.2) The symmetric Chamfer distance is then computed as 
+
+dCD (A, B) = 12 (dA→B + dB→A) (A.3) 
+
+Appendix A.2. Modified Average Hausdor ff Distance 
+
+The Modified Average Hausdor ff distance captures direc-tional average boundary deviation by taking the maximum of the directed mean nearest-neighbour distances: 
+
+mA→B = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+min   
+
+> 1≤j≤K
+
+∥ai − b j∥ (A.4) 
+
+mB→A = 1
+
+K
+
+> K
+
+X
+
+> j=1
+
+min  
+
+> 1≤i≤K
+
+∥b j − ai∥ (A.5) The symmetric Modified Average Hausdor ff distance is de-fined as 
+
+dAH (A, B) = max( mA→B, mB→A) (A.6) 
+
+Appendix A.3. Hausdor ff Distance 
+
+The Hausdor ff distance captures the worst-case boundary deviation between two point sets. The directed components are defined as 
+
+hA→B = max  
+
+> 1≤i≤K
+
+min   
+
+> 1≤j≤K
+
+∥ai − b j∥ (A.7) 
+
+hB→A = max   
+
+> 1≤j≤K
+
+min  
+
+> 1≤i≤K
+
+∥b j − ai∥ (A.8) The symmetric Hausdor ff distance is then given by 
+
+dH (A, B) = max( hA→B, hB→A) (A.9) 
+
+Appendix A.4. Discrete Fréchet Distance 
+
+The discrete Fréchet distance measures similarity between two ordered curves while preserving point order along the curves. It is defined as 
+
+dF (A, B) = min  
+
+> α,β
+
+max  
+
+> t
+
+∥A(α(t)) − B(β(t)) ∥, (A.10) where α and β are order-preserving mappings along the two polylines. 
+
+Appendix A.5. Earth Mover’s Distance 
+
+Earth Mover’s Distance (EMD) measures global structural correspondence by computing the optimal transport cost between two point sets. Let π denote the permutation minimizing the total transport cost: 
+
+π∗ = arg min 
+
+> π
+> K
+
+X
+
+> i=1
+
+∥ai − bπ(i)∥ (A.11) The EMD is then defined as 
+
+dEMD (A, B) = 1
+
+K
+
+> K
+
+X
+
+> i=1
+
+∥ai − bπ∗(i)∥ (A.12) 
+
+Appendix B. Uniform Arc-Length Resampling 
+
+To ensure consistent evaluation, both predicted and ground-truth polylines are uniformly resampled to a fixed number of vertices K using arc-length parameterization. Let a polyline be defined as an ordered sequence of vertices: 
+
+P = {p0, p1, . . . , pN−1}, pi ∈ R2
+
+The cumulative arc-length along the polyline is computed as: 
+
+si =
+
+> i−1
+
+X
+
+> t=0
+
+∥pt+1 − pt∥
+
+with total length 
+
+L = sN−1
+
+We then define K uniformly spaced arc-length positions 
+
+tk = kK − 1 L, k = 0, . . . , K − 1For each target arc-length tk, the corresponding polyline segment [ p j, p j+1] satisfying 
+
+s j ≤ tk ≤ s j+1
+
+is identified. The resampled vertex is obtained via linear interpolation: 
+
+p(tk) = (1 − α)p j + αp j+1
+
+where 
+
+α = tk − s j
+
+s j+1 − s j
+
+This procedure produces a uniformly spaced polyline with exactly K vertices. 12

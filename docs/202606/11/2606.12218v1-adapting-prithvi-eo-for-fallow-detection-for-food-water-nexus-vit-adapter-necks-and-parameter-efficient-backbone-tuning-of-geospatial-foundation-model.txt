@@ -1,0 +1,580 @@
+Title: Adapting Prithvi-EO for Fallow Detection for Food-Water Nexus: ViT-Adapter Necks and Parameter-Efficient Backbone tuning of Geospatial Foundation Model
+
+URL Source: https://arxiv.org/pdf/2606.12218v1
+
+Published Time: Thu, 11 Jun 2026 01:13:36 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# Adapting Prithvi-EO for Fallow Detection for Food-Water Nexus: ViT-Adapter Necks and Parameter-Efficient Backbone tuning of Geospatial Foundation Model 
+
+## Sk Muhammad Asif 
+
+Earth, Atmospheric and Geospatial Science Saint Louis University Saint Louis, Missouri, USA skmuhammad.asif@slu.edu 
+
+## Orhun Aydin 
+
+Earth, Atmospheric and Geospatial Science Saint Louis University Saint Louis, Missouri, USA orhun.aydin@slu.edu 
+
+Abstract 
+
+Understanding spatial distribution of fallow land is important for optimizing the food-water (FW) nexus, given fallowing’s role in crop rotation and water conservation. Fallow is a low accuracy class in USDA Cropland Data Layer (CDL). Geospatial foundation model (GFM), Prithvi-EO has shown strong transferability across com-puter vision tasks. However, its Vision Transformer (ViT) backbone produces features at a single spatial scale that are ill-suited for the multi-scale features required by object detection heads. Existing ap-proaches synthesise multi-scale pyramids through scaling of single-stride tokens, sacrificing spatial heterogeneity, and full backbone fine-tuning is computationally prohibitive for GFMs. We evaluate a fallow detection pipeline combining two parameter-efficient fine-tuning (PEFT) schemes: Low-Rank Adaptation (LoRA) and a hybrid PEFT, with three neck designs: pseudo multi-scale, Lite ViT-Adapter, and Full ViT-Adapter. Our best configuration, Lite ViT-Adapter with a one-stage head, achieves a mAP@50 of 0.9479 with the Diou loss, suggesting the effectiveness of center-aware localization for irreg-ular fallow field detection. ViT-Adapter free one-stage detection under LoRA improves the adapter-free anchor-based approach by 6.42%, and the best configuration improves baseline adapter-free anchor-based approach by 25.70%. These results demonstrate that lightweight spatial prior fusion and selective backbone unfreezing enable Prithvi-EO to capture local fallow patterns more effectively, outperforming approaches that rely on reshaped single-stride ViT tokens. 
+
+CCS Concepts 
+
+• Information systems → Geographic information systems ;
+
+• Computing methodologies → Object detection ; • Applied computing → Agriculture .
+
+Keywords 
+
+fallow detection, agricultural land management, food-water nexus, GeoFM, Prithvi-EO, PEFT, LoRA, Vit-Adapter, object detection 
+
+1 Introduction 
+
+Food–water (FW) nexus is a burgeoning research area that ad-dresses the emerging trade-offs between food and water resources, thereby providing a scientific basis for integrated, cross-sectoral policy making [ 1]. Fallowing, intentional extension of non-cropped periods of crop lands [ 12 ], is deemed as a critical lever in boosting agricultural productivity [ 46 ], and for centuries it has been an in-tegral part of agriculture [ 43 ]. Fallowing further serves as a water conservation measure, operating directly through soil moisture retention [ 47 ] and indirectly through reduced irrigation pressure in water-stressed regions [ 34 ]. Due to fallowing’s dual role in the intersection of two important resources, namely food and water, it has been integrated into policies for sustainable food-water (FW) nexus management [ 19 ]. Internationally, as part of the National Food Security Mission (NFSM) by the United Nations, rice fallow-ing is proposed in regions where post-monsoon cultivation is lim-ited due to water scarcity [ 17 ]. Locally, fallowing is incorporated into policy in the USA, as observed in the Upper Colorado River Basin, where water allocations are adjusted to address emerging water scarcity for farming communities [ 16 ]. At the policy level, large-scale monitoring of fallow extent is therefore a prerequisite for equitable water-sharing agreements and reliable assessment of multi-cropping patterns while simultaneously supporting sustain-able agricultural productivity and freshwater availability [32]. Despite its agronomic and hydrological importance, fallow land is difficult to monitor accurately at scale [ 39 ]. We encounter three fundamental challenges in the literature. Firstly, unlike various crop types, fallow fields do not have a specific spectral signature, and domain-adaptation problems with them are more pronounced compared to other crops [ 27 ]. Fallow fields exhibit highly vari-able spectral signatures depending on their age, environmental conditions, and management practices [ 3 ] thereby, historically re-maining an ambiguous category in the official USDA CDL [ 21 ]. Variations in fallow terminology or nomenclature ambiguity is another issue that further complicates the challenges related to fallow mapping [ 36 ]. Daskalova et al. [ 9] mention the absence of concrete definitions in land abandonment practices and distinguish land abandonment from fallow lands with a temporal threshold of 5 years. Conversely, some studies identify long abandonment as long-term fallow [ 20 , 30 ]. Thirdly, temporal variability: a par-cel may cycle in and out of fallow status within a single growing season, limiting the utility of single-date observations [ 45 ]. Exist-ing approaches address some of these challenges through super-vised classification of multispectral time series [ 39 ], phenological compositing [ 10 ], or multi-temporal segmentation [ 39 ]. However, these pixel- or segmentation-oriented approaches primarily empha-size class assignment and boundary delineation, while less directly capturing fallow fields as discrete spatial units; prior Sentinel-2 cropland-mapping work has shown that object-based representa-tions can be more computationally efficient and better suited for field-level vector outputs [4]. 
+
+> arXiv:2606.12218v1 [cs.CV] 10 Jun 2026 Asif and Aydin
+
+Geospatial foundation models (GFMs), large-scale vision trans-formers pre-trained on satellite image archives [ 41 ] offer a promis-ing route to more robust fallow detection. Because GFMs encode spectral and phenological patterns from globally diverse scenes [ 13 ], they are better positioned than task-specific models to handle the spectral ambiguity and geographic variability that confound fallow classification [ 23 ]. Yet the application of GFMs to fallow land detec-tion, localising and bounding individual parcels, remains largely unexplored. The shapes and size of fallow lands vary widely across geographic regions [ 26 ] and time [ 33 ]. Additionally, fallow is treated as a part of crop rotation in different crop systems across USA [ 2]. Object detection is a natural fit for policy-relevant fallow moni-toring: it yields spatially grounded parcel-level summaries [ 48 ], and directly supports field-scale crop-rotation inference [ 40 ] and irrigation-allocation estimates [7]. In this paper, we present an end-to-end fallow detection pipeline built on Prithvi-EO-2.0 [ 37 ], a GFM pre-trained on Harmonized Landsat Sentinel-2 (HLS) imagery. Using a single HLS tile over eastern Colorado (T13TGE, 2022) with USDA Cropland Data Layer (CDL) ground truth [ 5], we systematically evaluate how backbone adaptation strategy, multi-scale neck design, and detection head choice affect detection accuracy under realistic computational con-straints. Our principal contributions are: 
+
+• End-to-end fallow detection pipeline over six-band HLS Sentinel-2 imagery, combining CDL-derived bounding-box annotations with a Prithvi-EO-2.0 backbone. 
+
+• A systematic comparison of two parameter-efficient adap-tation schemes (LoRA-only and Hybrid PEFT) across three multi-scale neck architectures (pseudo multi-scale, Lite ViT-Adapter, Full ViT-Adapter) and two detection heads (Faster R-CNN and fully convolutional one stage (FCOS)). 
+
+• Identification of the accuracy–efficiency trade-off and propos-ing the best configuration under computational bottleneck. 
+
+2 Related Work 
+
+Large-scale self-supervised pretraining on satellite imagery has established GFMs as the dominant paradigm for Earth observation. Jakubik et al. [ 18 ] introduced Prithvi-EO-1.0, a masked-autoencoder ViT pre-trained on over 1 TB of HLS imagery across six spectral bands, demonstrating strong data efficiency on flood mapping, wild-fire segmentation, and crop classification. Szwarcman et al. [ 37 ]scaled this to Prithvi-EO-2.0 (300M parameters), expanding the training corpus to 4.2 million global HLS time-series samples and introducing temporal and geographic location embeddings, yield-ing an 8% improvement over its predecessor across tasks at multiple spatial resolutions. Nguyen et al. [ 25 ] utilized four foundation mod-els including Prithvi-EO-2.0 for cloud masking evaluating their impact of cloud segmentation. Gao et al. [ 11 ] compiled contribu-tions dedicated towards advancing the state of the art GFMs and their applications. Plain ViT backbones generate token embeddings at a single spatial scale, mismatching object detection heads that require multi-scale feature pyramids [ 37 ]. Hsu et al. [ 14 ] addressed this for Prithvi-EO-1.0 by constructing a multi-scale feature generation module, then evaluating a Mask R-CNN-based pipeline across four remote sensing benchmarks including EuroCrops [ 31 ]. Their best results used full backbone fine-tuning; the present study departs from this by exploring parameter-efficient adaptation to reduce the number of trainable parameters. Hu et al. [15] proposed LoRA, which injects trainable low-rank decomposition matrices into frozen transformer weight projections, matching full fine-tuning performance with orders-of-magnitude fewer trainable parameters. Marti-Escofet et al. [ 24 ] conducted the first systematic evaluation of parameter-efficient fine-tuning (PEFT) methods on GFMs across five Earth observation datasets, finding that LoRA and ViT-Adapter-based techniques match or exceed full fine-tuning on in-distribution data while improving generalisation to geographically unseen regions. Plain ViTs lack local spatial inductive biases critical for dense prediction. Chen et al. [ 8] proposed ViT-Adapter, which augments a frozen ViT with a convolutional spatial prior module and bidi-rectional injector-extractor cross-attention at multiple backbone depths, achieving 60.9 box AP on COCO without additional detec-tion data. Ren et al. [ 28 ] introduced Faster R-CNN, in which an RPN gen-erates candidate regions refined by per-proposal classification and regression heads; paired with Feature Pyramid Network (FPN), it remains a standard benchmark in remote sensing detection. Tian et al. [ 38 ] proposed FCOS, an anchor-free detector that predicts class scores, box offsets, and centerness densely at each FPN pyramid level, eliminating anchor design and the proposal stage. Generalised IoU (GIoU) [ 29 ] and Distance IoU (DIoU) [ 49 ] box regression losses are two widely adopted loos functions in object detection work-flows. XiaoFan et al. [ 44 ] adopted GIoU to improve the location of predicted bounding box. Cao [ 6 ] evaluated the effect of GIoU and DIoU losses for different object detection algorithms. 
+
+3 Methodology 3.1 System overview 
+
+We design an end-to-end fallow detection pipeline built on Prithvi-EO-2.0, a geospatial foundation model (GFM) pretrained on six-band Harmonized Landsat and Sentinel-2 (HLS) imagery, to support food-water nexus optimization through spatially explicit mapping of fal-low agricultural land. As depicted in Figure 1, the pipeline consists of three stages: a data module that converts USDA Cropland Data Layer (CDL) masks into bounding box labels; a backbone stage that applies one of two parameter-efficient fine-tuning (PEFT) schemes to the Prithvi-EO-2.0 encoder while introducing ViT-Adapter; and a detection head (either FCOS or Faster-RCNN) that operates over multi-scale feature maps. All pipeline variants share the same data pipeline and six-band HLS input: B02, B03, B04, B8A, B11, and B12. 
+
+3.2 Data and label generation 
+
+As no hand-labeled bounding box annotations exist for fallow parcels at the scale of this study, we derive ground truth auto-matically from the USDA Cropland Data Layer (CDL), an annually updated, 30 m resolution crop classification mask covering the contiguous United States. Our mask-to-bounding-box workflow proceeds in four steps. First, CDL pixels classified as fallow/idle cropland are extracted as a binary foreground mask. Second, a mor-phological opening (with a 3 ×3 square kernel) removes isolated Adapting Prithvi-EO for Fallow Detection HLS 
+
+Sentinel -2
+
+(30m)  
+
+> DATAMODULE
+> (Input & CDL) =
+> Combines and
+> generates BBox
+
+Cropland 
+
+Data Layer 
+
+Mask (30m) 
+
+> Prithvi -EO (PEFT+
+> No Adapter)
+> Prithvi -EO
+> (PEFT+Vit  Adapter)
+> Head
+> Faster -
+> RCNN/
+> FCOS
+> Water
+> Security
+> Optimize Irrigation
+> Allocation
+> Food
+> Security
+> Assess Multi -
+> cropping pattern
+
+Figure 1: End-to-end fallow land detection pipeline. Data sources → label generation → backbone adaptation → detec-tion heads → predictions → food–water nexus applications. 
+
+noise pixels. Third, connected components are identified under 8-connectivity, grouping edge- and corner-adjacent fallow pixels into individual parcels. Fourth, each component’s axis-aligned minimum bounding rectangle is recorded as a ground truth box. Components with fewer than 5 pixels or bounding boxes smaller than 25 pixels 2
+
+are discarded; no upper-size filter is applied, preserving large con-tiguous fallow blocks. Figure 2 illustrates the full pipeline from raw HLS chip to generated bounding boxes. (a) HLS RGB chip 
+
+> (B04/B03/B02 true color)
+> (b) CDL fallow mask
+> (class 61 -> binary)
+> (c) Connected components
+> (14 components, 8-connectivity)
+> (d) Generated boxes
+> (14 boxes for training)
+
+Figure 2: CDL-based bounding-box generation. Fallow pixels are extracted from the CDL layer, grouped into connected parcels, and converted to bounding boxes. 
+
+3.3 Prithvi as detection backbone 
+
+Prithvi-EO-2.0 was pretrained as a masked autoencoder on HLS time series, producing a sequence of patch token embeddings at a single spatial stride. This design is well-suited for classification and segmentation tasks but is misaligned with the requirements of object detection heads such as Faster R-CNN and FCOS, which expect multi-scale spatial feature maps at strides 4, 8, 16, 32 [ 22 ]. Hsu et al. [ 14 ] previously adapted Prithvi-EO-1.0 for object detection, including on the EuroCrops agricultural benchmark, by reshaping intermediate token sequences into spatial maps and fine-tuning all modules end-to-end. We depart from this in two respects: we replace full fine-tuning with PEFT (section 3.5), and we evaluate three neck designs to observe which design performs the best in addressing single-stride limitation (section 3.4). 
+
+3.4 Multi-Scale Feature Construction 
+
+To address the lack of true multi-scale feature discussed in sec-tion 3.3, we evaluate three neck designs of increasing complexity: pseudo multi-scale (token reshaping and interpolation), Lite ViT-Adapter (output-level spatial fusion), and Full ViT-Adapter (bidi-rectional injector/extractor interaction). The pseudo multi-scale neck is used with Faster R-CNN and as the FCOS baseline; both ViT-Adapter variants are evaluated with FCOS only. 
+
+3.4.1 Pseudo Multi-Scale. We select intermediate token sequences from Prithvi-EO-2.0 blocks 5, 11, 17, 23, reshape each from token-sequence to 2D spatial form, and pass them through a learned pyramidal interpolation module to produce four FPN-compatible feature maps at 256 channels. Because all four token sequences share the same spatial stride of 16 before interpolation, the resulting pyramid is synthesised rather than natively multi-scale — hence the term pseudo multi-scale. Figure 3 illustrates the pipeline generating feature pyramids from single stride tokens of Prithvi-EO. Block 5 
+
+> tokens
+> Bilinear x 0.5
+> +conv2d(learned)
+> Smallest
+> spatial
+> resolution
+> P4
+> H/32xW/32
+> Reshape
+> tokens to 2D →
+> H/16 x W/16
+> Block 11
+> tokens
+> Bilinear x 1
+> +conv2d(learned)
+> Identity
+> scale P4
+> H/16xW/16
+> Reshape
+> tokens to 2D →
+> H/16 x W/16
+> Block 17
+> tokens
+> Bilinear x 2
+> +conv2d(learned)
+> 2x spatial
+> resolution P4
+> H/8xW/8
+> Reshape
+> tokens to 2D →
+> H/16 x W/16
+> Block 23
+> tokens
+> Bilinear x 4
+> +conv2d(learned)
+> Largest
+> spatial
+> resolution
+> P4
+> H/4xW/4
+> Reshape
+> tokens to 2D →
+> H/16 x W/16
+
+Figure 3: Pseudo multi-scale feature generation. Four to-ken sequences taken from four ViT blocks, reshaped to H/16 ×W/16 and interpolated to four target resolutions. 
+
+3.4.2 Lite ViT-Adapter: Output-Only Additive Fusion. Unlike the pseudo multi-scale neck, which generates FPN-compatible fea-ture maps through a learned pyramidal interpolation module (sec-tion 3.4.1), the Lite ViT-Adapter replaces that trainable component with a convolutional Spatial Prior Module (SPM) combined with parameter-free bilinear resize. The SPM is a fully trainable CNN of approximately 3.5 M parameters that runs in parallel with the Prithvi-EO-2.0 encoder, generating a hierarchy of convolutional feature maps (𝑐 1, 𝑐 2, 𝑐 3, 𝑐 4) at strides {4, 8, 16 , 32 }. The final Prithvi-EO-2.0 block’s token embedding is bilinearly resized without any learned parameters to match each SPM scale and fused elementwise: 
+
+F𝑖 = C𝑖 + R 𝑖 (V), 𝑖 ∈ { 1, 2, 3, 4}, (1) where C𝑖 denotes the SPM feature map at scale 𝑖 , V denotes the reshaped ViT feature map from the final Prithvi block, R𝑖 (·) 
+
+denotes bilinear resizing to the spatial resolution of C𝑖 , and F𝑖 is the fused feature map. Asif and Aydin 
+
+Finally, the four generated fused maps are passed directly to the FPN. No injector or extractor modules are introduced, keeping the adapter lightweight and straightforward to optimise. Figure 4 demonstrates the operation for both Lite and Full ViT-Adapter. Feature Pyramid Network (FPN) 
+
+Stride 32 
+
+Stride 16 
+
+Stride 8 
+
+Stride 4 
+
+0
+
+1
+
+10 
+
+11 
+
+22 
+
+23 
+
+…
+
+…    
+
+> fused i= c i+Resize (vit features, size_of_c i)
+
+c1 c2 c3 c4
+
++ + + +  
+
+> SPM -Ci
+> Multi -Scale
+> Feature Maps
+> Spatial Prior Module:
+> Small CNN  fully
+> traina bl e
+> Prithvi -EO -v2 -300
+> Vit Backbone
+> Selected ViT
+> layer = 24 th block
+> 6-band HLS
+> image patch
+> 256x256 pixels
+
+Stride 32 
+
+Stride 16 
+
+Stride 8 
+
+Stride 4 
+
+0
+
+1
+
+10 
+
+11 
+
+12 
+
+23 
+
+…         
+
+> Feature Pyramid Network (FPN)
+> Injector
+> (cross attention
+> and learnable ϒ)
+> Input:
+> Q=ViT tokens
+> K,V = SPM tokens
+> Extractor
+> (cross -attn +FFN)
+> Multi -Scale
+> Feature Maps
+> Output:
+> ϒ. Attn (Q, K, V)
+> residual added to
+> further vit stream
+> ViT enriched SPM tokens)
+> Input:
+> Q= SPM tokens
+> K,V = injected ViT
+> tokens
+> Two parallel pipeline
+> with no interaction
+> Spatial Prior Module:
+> Small CNN fully
+> trainable
+> 6-band HLS
+> image patch
+> 256x256 pixels
+
+Figure 4: ViT-Adapter-based multi-scale feature generation. (Left ) Additive spatial fusion based Lite ViT-Adapter. ( Right )Bidirectional interaction based Full ViT-Adapter. 
+
+3.4.3 Full ViT-Adapter: Injector/Extractor Cross-Attention. The Full ViT-Adapter replaces output-level fusion with repeated bidirec-tional interaction between the Prithvi token stream and the SPM at transformer block 11. Dedicated injector modules use cross-attention to incorporate SPM spatial priors into the ViT token stream; extractor modules use cross-attention in the reverse di-rection to update the SPM branch with intermediate transformer representations. This bidirectional coupling allows the final feature pyramid to carry both the global context learned during Prithvi-EO-2.0 pretraining and the local spatial structure captured by the convolutional branch. Relative to the Lite variant, the Full adapter is more expressive but incurs substantially higher engineering com-plexity, computational cost, and optimisation difficulty; block 11 is selected as the interaction point to balance semantic depth against computational budget. 
+
+3.5 Backbone Adaptation Schemes 
+
+We evaluate two PEFT schemes that control how much of the Prithvi-EO-2.0 encoder is updated during training. Both schemes keep the majority of backbone weights frozen and differ only in whether the final transformer blocks receive full gradient updates. 
+
+3.5.1 LoRA-Only. Low-Rank Adaptation (LoRA) [ 24 ] injects train-able rank-32 decomposition matrices into the query and value pro-jections of every transformer block while keeping all original back-bone weights frozen. For a projection weight 𝑊 ∈ R1024 ×1024 , the adapted output is: 
+
+ℎ = 𝑊 · 𝑥 +
+
+ 𝛼 𝑟 
+
+
+
+· 𝐵 · 𝐴 · 𝑥 (2) where 𝐴 ∈ R32 ×1024 and 𝐵 ∈ R1024 ×32 are the trainable low-rank matrices and 𝛼 /𝑟 = 1.0. Applied across all 24 Prithvi blocks, LoRA introduces approximately 3.15 M backbone-trainable parameters while adding no inference latency [15]. Block 23 (Full FT) 
+
+Block 22 (Full FT) 
+
+Block 21 (Full FT) 
+
+Block 20 (Full FT) 
+
+Block 19 (Full FT) 
+
+Block 18 (Full FT) 
+
+Block 17 
+
+Block 16 
+
+Block 2 -15 
+
+Block 1 
+
+Block 0 
+
+Fine tuning boundary 
+
+Zone 1 — Blocks 0 –17 · LoRA -adapted (base frozen )
+
+LoRA on Q,V projections — rank -32 adapters.≈ 2.36 
+
+M trainable params; base ViT weights frozen. 
+
+Zone 2 — Blocks 18 –23 · Fully unfrozen Last 6 
+
+blocks and fully fine -tuned ≈ 75.5 M trainable 
+
+params; deepest, most task -specific layers get full 
+
+capacity . No LoRA here — the whole block trains 
+
+A. Inside one transformer block (0 -17) Tinput token from 
+
+> previous block
+
+LayerNorm 
+
+Multi -Head Self -
+
+Attention 
+
+MLP (feed 
+
+forward) 
+
++
+
+LayerNorm 
+
+Output to next block 
+
+Q
+
+1024x102 
+
+4
+
+LoRA 
+
+V
+
+1024x102 
+
+4
+
+LoRA 
+
+K
+
+1024x102 
+
+4
+
+frozen 
+
+Output 
+
+1024x102 
+
+4
+
+frozen 
+
+B. LoRA injection – Q /V projection (rank 32) 
+
+> ZONE 2: UNFROZEN ZONE 1:  LoRA
+
+Input d 
+
+=1024 
+
+W . 1024 x 102 4
+
+Pretrained base -
+
+Frozen 
+
+A ↓ down -proj 
+
+1024 → r  (r = 
+
+32) 
+
+B ↑ up -proj 
+
+r → 1024 
+
+x
+
+α/ r = 
+
+1.0 
+
++
+
++
+
+• h = adapter projection output = W·x + ( α/ r)· B·A·x = (W +  ΔW)·x ,
+
+where  ΔW = B·A. 
+
+h 
+
+> LoRA
+> Q,V
+> Trainable LoRa Frozen Pretrained Fully Unfrozen
+> LoRA
+> Q,V
+> LoRA
+> Q,V
+> LoRA
+> Q,V
+> LoRA
+> Q,V
+
+Output Features 
+
+Figure 5: Hybrid PEFT adaptation strategy. Under Hybrid PEFT, blocks 0–17 applies the LoRA adapters while blocks 18–23 (Zone 2) are kept fully unfrozen. 
+
+3.5.2 Hybrid-PEFT. The Hybrid PEFT scheme splits the backbone into two zones. Zone 1 (blocks 0–17) retains LoRA-only adaptation as in section 3.5.1. Zone 2 (blocks 18–23) is fully unfrozen, allowing the deepest, most task-specific representations to adapt without low-rank constraints as shown in Figure 5. The motivation is that FPN-based detection heads depend on semantically diverse feature maps across pyramid levels; fully unfreezing the final blocks allows higher-level Prithvi-EO-2.0 features to adapt more directly to fallow parcel geometry and texture. Table 1 summarises the parameter budget for LoRA-only scheme and for each zone of Hybrid-PEFT scheme. Adapting Prithvi-EO for Fallow Detection 
+
+Table 1: Backbone adaptation strategy and trainable parame-ters.                
+
+> Zone Blocks Adaptation Trainable
+> LoRA-only 0–23 LoRA rank-32 on Q, V ≈3.15 M Hybrid Zone 1 0–17 LoRA rank-32 on Q, V ≈2.36 M Hybrid Zone 2 18–23 Full fine-tune ≈75.5 M Hybrid Total 0–23 Mixed ≈77.9 M
+
+3.6 Detection Heads 
+
+3.6.1 Faster-RCNN. We adopt Faster R-CNN [ 28 ] as the primary baseline which is a two-stage detector. The pseudo multi-scale neck (section 3.4.1) produces four 256-channel FPN feature maps, over which a Region Proposal Network (RPN) generates candidate object regions. ROI-aligned features from each proposal are then classified and their bounding boxes regressed by dedicated detection heads. The detector is trained for a single foreground category namely the fallow field with background handled implicitly by the Faster R-CNN formulation. No ViT-Adapter variants are evaluated with this head to treat it as a traditional baseline approach and comparing the effects of modification with respect to this baseline. 
+
+3.6.2 FCOS. We adopt FCOS [ 38 ] as the anchor-free one-stage detector and the primary testbed for evaluating neck and tuning scheme choices. FCOS predicts class scores, bounding box offsets, and a centerness score densely at every spatial location across all FPN pyramid levels, eliminating anchor design and the proposal generation stage entirely. Centerness down-weights off-center pre-dictions, which is particularly beneficial for fallow parcels that are often irregular or elongated. The baseline FCOS configuration uses the pseudo multi-scale neck (section 3.4.1); we additionally evaluate all three neck designs under both tuning schemes, yielding the five FCOS configurations summarised in section 3.7. 
+
+3.7 Experimental Setup 
+
+Table 2 enumerates all six configurations evaluated in this study. Configurations 2–6 share the FCOS head and are used for the controlled comparison of neck design and tuning scheme; Con-figuration 1 (Faster R-CNN) serves as the two-stage anchor-based reference. All six configurations are trained under identical hyperparame-ters (Table 3). The dataset is derived from a single HLS v2.0 Sentinel-2 tile (tile id: T13TGE, year: 2022) covering agricultural cropland in eastern Colorado, processed at 30 m resolution using six spec-tral bands (B02= Blue, B03= Green, B04= Red, B8A= NIR_Narrow, B11= SWIR_1, B12= SWIR_2). Ground truth bounding boxes are generated from the 2022 USDA CDL layer via 3.2. The HLS tile is partitioned spatially into 70 % / 15 % / 15 % training, validation, and test zones using a fixed split seed of 42. From within each zone, a TorchGeo [ 35 ] Random Batch GeoSampler independently draws 256 𝑥 256 -pixel patches, yielding 5,000 training, 500 validation patches per epoch and all mAPs are calculated on the validation set. We train all models on a single NVIDIA A100 GPU with 16 CPU cores and 80 GB of system RAM. Table 3 summarises the remaining training hyperparameters. 
+
+Table 3: Shared training hyperparameters used across all configurations. Hyperparameter Value 
+
+Optimizer AdamW Weight decay 1 × 10 −4
+
+Initial learning rate 1 × 10 −4
+
+LR schedule CosineAnnealingLR, 𝑇 max = 200 ,
+
+𝜂 min = 1 × 10 −6
+
+Batch size 64 Max epochs 200 Train / Val / Test split 0.70 / 0.15 / 0.15 Split seed 42 Global random seed 2
+
+3.8 Evaluation Metrics 
+
+We evaluate all configurations using mean Average Precision (mAP) at IoU thresholds of 0.50 (mAP@50) and 0.75 (mAP@75) as primary metrics. For a predicted box to count as a true positive, its Inter-section over Union (IoU) with the matched ground truth box must meet or exceed the threshold. We report one extra mAP which denotes average precision over IoU thresholds 0.50:0.05:0.95. We additionally report results under two bounding box regression loss functions: GIoU [29] and DIoU loss [49]. GIoU is defined as: 
+
+LGIoU = 1 − IoU + |C| − | 𝑏 ∪ 𝑏 gt ||C| (3) where 𝑏 and 𝑏 gt are the predicted and ground-truth boxes, and C is the smallest enclosing box of both. Distance IoU (DIoU) augments this with a center-point penalty: 
+
+LDIoU = 1 − IoU + 𝜌 2 (𝑏 𝑐 , 𝑏 gt  
+
+> 𝑐
+
+)
+
+𝑐 2 (4) where 𝑏 𝑐 and 𝑏 gt  
+
+> 𝑐
+
+are the centers of the predicted and ground-truth boxes, 𝜌 (·) is the Euclidean distance, and 𝑐 is the diagonal length of C.GIoU penalises the gap between predicted and ground truth boxes even when they do not overlap; DIoU additionally minimises the normalised center-point distance, which is particularly relevant for fallow parcels whose irregular shapes make center-aware re-gression beneficial. Both loss variants are trained and evaluated independently. To characterise detection quality at the image level, we further evaluate the trained model on 300 held-out test patches and report per-patch F1 scores in Section 4.5.. For each 256 × 256 patch, a predicted box is counted as a true positive if its IoU with a ground-truth box meets or exceeds 0.5; precision and recall are derived from all boxes in the patch, and F1 is their harmonic mean. Unlike mAP, which aggregates over the full validation set and multiple IoU thresholds, per-patch F1 exposes localized failure modes — missed detections and false positives — that aggregate statistics can obscure. This metric is used for error analysis only; all model comparisons and rankings are based on mAP@50 and mAP@75. Asif and Aydin 
+
+Table 2: Summary of object detection configurations evaluated in this study. Detection heads, necks, and backbone adaptation regimes are described in Sections 3.6, 3.4, and 3.5, respectively.                                           
+
+> #Configuration Head Neck Adaptation Trainable Total
+> 1Faster R-CNN + LoRA Faster R-CNN Pseudo LoRA-only 25.44 M 329.33 M 2FCOS + LoRA FCOS Pseudo LoRA-only 15.68 M 319.57 M 3FCOS + LoRA + Lite ViT-Adapter FCOS Lite ViT-Adapter LoRA-only 14.38 M 318.27 M 4FCOS + LoRA + Full ViT-Adapter FCOS Full ViT-Adapter LoRA-only 26.99 M 330.87 M 5FCOS + Hybrid PEFT + Lite ViT-Adapter FCOS Lite ViT-Adapter Hybrid PEFT 89.17 M 317.48 M 6FCOS + Hybrid PEFT + Full ViT-Adapter FCOS Full ViT-Adapter Hybrid PEFT 101.78 M 330.09 M
+
+Table 4: Detection results across configurations. Bold indi-cates the best result within each loss setting.                                        
+
+> Configuration mAP 50 mAP 75 mAP
+> GIoU Loss
+> Faster R-CNN + LoRA 0.7603 0.5310 0.4825 FCOS + LoRA 0.7954 0.6549 0.6119 FCOS + LoRA + Lite VA 0.8301 0.6865 0.6430 FCOS + LoRA + Full VA 0.9156 0.7973 0.7469 FCOS + H-PEFT + Lite VA 0.9464 0.8643 0.8166
+> FCOS + H-PEFT + Full VA 0.9277 0.8211 0.7765
+> DIoU Loss
+> Faster R-CNN + LoRA 0.7541 0.5309 0.4808 FCOS + LoRA 0.8025 0.6568 0.6124 FCOS + LoRA + Lite VA 0.8370 0.6857 0.6423 FCOS + LoRA + Full VA 0.9154 0.7964 0.7501 FCOS + H-PEFT + Lite VA 0.9479 0.8614 0.8172
+> FCOS + H-PEFT + Full VA 0.9321 0.8228 0.7767
+
+4 Results 4.1 Overall Detection Performance 
+
+Table 4 reports results for all six configurations trained with GIoU and DIoU box regression losses. The top-performing configura-tion across both loss paradigms is FCOS with Hybrid PEFT and Lite ViT-Adapter: mAP@50 = 0.9479 (DIoU-trained), a 25.70% rel-ative improvement over the anchor-based Faster-RCNN baseline (DIoU-trained). The GIoU-trained variant of the same configuration achieves the highest mAP@75 = 0.8643. Sections 4.2–4.4 analyse the contribution of head choice, adapter design, and PEFT schemes in turn. 
+
+4.2 Effect of Detection Head 
+
+Holding backbone (Prithvi-EO-2.0), neck (pseudo multi-scale), and adaptation scheme fixed (LoRA-only), switching from Faster R-CNN to FCOS yields a clear mAP@50 gain. Faster R-CNN achieves mAP@50 = 0.7603 (GIoU) and 0.7551 (DIoU), with mAP@75 of 0.5310 and 0.5309 respectively. Switching to FCOS improves perfor-mance across both losses and both metrics: the DIoU-trained FCOS variant reaches mAP@50 = 0.8025 (+6.42% relative over the FR-CNN DIoU baseline) and mAP@75 = 0.6568, while the GIoU-trained vari-ant achieves 0.7954 and 0.6549. Unlike the two-stage RPN pipeline, anchor-free centerness prediction under the same pseudo multi-scale neck produces consistently better-localised detections even without spatial priors, suggesting that FCOS’s per-pixel regression is better suited to the irregular geometry of fallow parcels than proposal refinement at this neck complexity. DIoU configurations lead marginally at mAP@50 for FCOS, while GIoU leads marginally for Faster R-CNN; this loss–head interaction persists through all adapter configurations. DIoU trained FCOS + H-PEFT + Lite VA ultimately reaches mAP@75 = 0.8643, approximately 33 pp above the Faster R-CNN baseline, confirming that the FCOS heads cap-tures substantially more localization gain from spatial prior fusion (section 4.3). 
+
+4.3 Effect of Adapter Design 
+
+Within the LoRA adaptation scheme, introducing a ViT-Adapter neck progressively improves detection across all metrics. Under DIoU training, adding the Lite ViT-Adapter raises mAP@50 from 0.8025 (no adapter) to 0.8370, a 4.30% relative gain; the Full ViT-Adapter advances this to 0.9154, a further 9.37% over Lite and 14.07% over no adapter. The GIoU-trained configurations follow the same progression: 0.7954 → 0.8301 → 0.9156. Gains at mAP@75 are more pronounced: no-adapter to Full under DIoU training spans nearly 14 pp (0.6568 → 0.7964), reflecting improvement in both box tightness and detection count. The Full ViT-Adapter advantage under LoRA is consistent with its design: with backbone weights largely frozen, the bidirectional injector–extractor cross-attention supplies spatial context that a frozen backbone cannot produce on its own. Lite VA’s output-level fusion receives only the unmodified single-stride backbone output and cannot compensate for the absence of inter-mediate spatial adaptation. This ordering reverses under Hybrid PEFT, as shown in Section 4.4. 
+
+4.4 Effect of Tuning Scheme 
+
+Replacing LoRA-only adaptation with Hybrid PEFT produces quali-tatively different gains for Lite and Full ViT-Adapter configurations, reversing the ordering established in Section 4.3. Under LoRA, Full VA led Lite VA by 7.84 pp at mAP@50 (DIoU); under Hybrid PEFT, Lite VA overtakes Full VA by 1.58 pp (0.9479 vs. 0.9321). The gain magnitudes diverge substantially. For the Lite ViT-Adapter, Hybrid PEFT adds 11.09 pp at mAP@50 (DIoU: 0.8370 → 0.9479) and 17.57 Adapting Prithvi-EO for Fallow Detection 
+
+pp at mAP@75 (DIoU: 0.6857 → 0.8614), a 13.25% relative mAP@50 improvement. For the Full ViT-Adapter, the same scheme change yields only 1.67 pp at mAP@50 (0.9154 → 0.9321) and 2.64 pp at mAP@75 (0.7964 → 0.8228), a 1.82% relative gain. Lite VA gains approximately 7 × more from Hybrid PEFT than Full VA does. The GIoU-trained configurations mirror this pattern: Lite gains 14.01% (0.8301 → 0.9464) while Full gains only 1.32% (0.9156 → 0.9277). Under Hybrid PEFT, GIoU-trained Lite VA achieves the high-est mAP@75 across all configurations (0.8643), marginally above its DIoU-trained counterpart (0.8614), while DIoU-trained Lite VA leads at mAP@50 (0.9479 vs. 0.9464). The mechanistic basis for this asymmetric response is discussed in Section 5.2. 
+
+4.5 Qualitative Results and Error Analysis 
+
+Figure 6 illustrates representative detection outcomes across two patches; Table 5 provides per-patch F1 statistics aggregated over 215 test patches (out of 300) containing at least one fallow bounding box. Per-patch F1 is computed at IoU ≥ 0.50 as defined in Section 3.8; it complements mAP by revealing localized failure modes that ag-gregate statistics can obscure. According to per-patch F1 analysis, Hybrid+FullVA achieves the highest mean F1 of 0.939, with 82 of 215 patches detected perfectly and zero complete failures. Hy-brid+LiteVA follows at 0.912, also with zero complete failures and 62 perfect patches. FR-CNN+LoRA records a mean F1 of 0.831 with one complete failure; FCOS+LoRA lags substantially at 0.549, with six patches on which it produces no detections whatsoever—every box missed. Crucially, both Hybrid PEFT configurations recover de-tections on all six of these hard patches, and FR-CNN recovers five of the six. The gap between FCOS+LoRA (0.549) and Hybrid+FullVA (0.939) on a per-patch basis is larger than the mAP@50 gap (0.802 vs 0.932), indicating that the baseline’s failures are concentrated rather than diffuse. 
+
+Table 5: Per-patch F1 analysis over 215 test patches.                
+
+> Configuration Mean F1 F1 =0F1 =1
+> Hybrid PEFT + Full ViT-Adapter 0.939 082 Hybrid PEFT + Lite ViT-Adapter 0.912 062 Faster R-CNN + LoRA 0.831 148 FCOS + LoRA 0.549 66
+
+5 Discussions 5.1 System Design Implications 
+
+The results establish FCOS + Hybrid PEFT + Lite ViT-Adapter with DIoU loss as the recommended configuration for fallow detection with Prithvi-EO-2.0 as a backbone. Three design decisions jointly account for its performance. First, anchor-free centerness prediction is better suited to the irregular, variable-size geometry of fallow fields than RPN-based proposal generation [ 42 ]; the head choice matters most once spatial priors are available, explaining why the mAP@75 advantage Faster R-CNN holds under the adapter-free setting reverses substantially with adapter introduction. Second, DIoU regression consistently improves mAP@50 over GIoU across 
+
+Table 6: Peak training VRAM, trainable parameters, and best mAP@50; bold indicates the best overall result.                            
+
+> Configuration VRAM (GB) Trainable (M) mAP@50
+> Faster R-CNN + LoRA (GIoU) 18.4 ≈25 0.7603 FCOS + LoRA (DIoU) 21.7 ≈16 0.8025 FCOS + LoRA + Lite VA (DIoU) 22.5 ≈14 0.8370 FCOS + LoRA + Full VA (DIoU) 29.9 ≈27 0.9154 FCOS + H-PEFT + Lite VA (DIoU) 24.3 ≈89 0.9479
+> FCOS + H-PEFT + Full VA (DIoU) 30.8 ≈101 0.9321
+
+all configurations by enforcing center-point alignment in addition to overlap area, which is particularly relevant for fields whose bounding boxes only approximate their true spatial extent. Third, output-level spatial prior fusion via the Lite Adapter enables cleaner interaction with partial backbone unfreezing than more complex bidirectional injection, for reasons examined in Section 5.2. 
+
+5.2 Adapter–PEFT Interaction 
+
+The most consequential finding is the asymmetric response of Lite and Full ViT-Adapters to Hybrid PEFT: Full VA’s 7.84 pp LoRA-scheme advantage inverts to a 1.58 pp deficit under Hybrid PEFT, with Lite VA gaining approximately 7 × more from backbone un-freezing. We interpret this as a functional substitution effect. Full VA’s bidirectional injector–extractor cross-attention and Hybrid PEFT’s selective backbone unfreezing address the same representa-tional bottleneck: extracting spatially heterogeneous features from a globally-pooling ViT. Applied together, they provide redundant capacity targeting the same gap. Lite VA’s output-only additive fusion does not modify internal backbone computations, making it structurally complementary to backbone unfreezing: the two mech-anisms operate at different points in the network and reinforce rather than substitute for each other. Loss curve behaviour is con-sistent with this interpretation. Lite VA + Hybrid PEFT converges faster in early epochs, reflecting the unlocking of a previously bottlenecked learning signal rather than destabilised optimisation. Similar final training losses alongside divergent mAP outcomes indicate a generalisation difference rather than a fitting difference. This interpretation is mechanistically consistent with the observed data but is not supported by formal gradient analysis, which is outside the scope of this work. 
+
+5.3 Parameter Efficiency 
+
+Table 6 compares peak training VRAM and trainable parameters against best mAP@50. FCOS + H-PEFT + Lite VA achieves the highest mAP@50 at the lowest VRAM among Hybrid PEFT config-urations (24.3 GB), using 6.5 GB less than FCOS + H-PEFT + Full VA while outperforming it. For settings where trainable parame-ter count is the binding constraint, FCOS + LoRA + Full VA (27M trainable) achieves mAP@50 = 0.9154 with 62M fewer trainable parameters than Hybrid + Lite VA, sacrificing 3.25 pp at higher peak VRAM. Asif and Aydin 
+
+Figure 6: Qualitative detection results on representative patches from tile T13TGE. Each column shows the same 256 × 256 chip for ground truth and four different configurations. 
+
+5.4 Contextual Comparison with Existing System 
+
+The most directly comparable prior work using Prithvi-EO-2.0 for agricultural parcel detection is Hsu et al. [ 14 ], who evaluated Prithvi-EO-1.0 on the EuroCrops dataset using a Mask R-CNN head with full end-to-end backbone fine-tuning. Their best result on EuroCrops achieves mAP@50 = 0.607. We use this as a conceptual reference point rather than a direct benchmark. Two observations from our results are informative. Our Faster R-CNN + LoRA (GIoU-trained) configuration, the closest architectural analogue to Hsu et al. [ 14 ]pipeline, achieves mAP@50 = 0.7603, a 15.3 percentage point ab-solute improvement over their result (25.26% relative). Critically, our approach replaces full end-to-end backbone fine-tuning with LoRA, reducing trainable backbone parameters from 300M to 25M while achieving higher mAP. This aligns with the broader PEFT literature showing that selective adaptation can match or exceed full fine-tuning on in-distribution geospatial data [ 24 ]. Our best configuration, FCOS (DIoU-trained) with Hybrid PEFT and Lite ViT-Adapter, reaches mAP@50 = 0.948, a a 34 percentage point absolute improvement (56% relative). The comparison suggests that targeted spatial adaptation with Prithvi-EO-2.0 outperforms the full-fine-tuning approach of Hsu et al. [ 14 ], though domain differences preclude a direct attribution. 
+
+5.5 Implications for the Food-Water Nexus 
+
+Fallow land is a historically ambiguous class in CDL [ 21 ], limiting accuracy of regional water-use estimates tied to irrigation cessation and crop rotation monitoring. Automated detection at the HLS tile scale provides a step toward minimizing this ambiguity: bounding-box predictions identify the spatial extent of fallow patches and can inform irrigation allocation models and multi-cropping pattern assessments without manual digitization. All results derive from a single HLS tile (T13TGE, eastern Colorado, 2022 growing season). We do not assert generalizability across regions, soil types, or grow-ing seasons; translating these findings into operational FW nexus monitoring requires multi-tile validation and temporal consistency analysis, which we identify as priorities in section 5.6. 
+
+5.6 Limitations and Future Work 
+
+Several limitations bound these conclusions. The analysis is con-fined to a single HLS tile, a single growing season (2022), and treats fallow detection purely as a spatial object detection problem, leav-ing temporal dynamics and multi-tile generalisability unaddressed. Additionally, CDL ground truth itself is less accurate in terms of fallow labelling, introducing label noise into both training and eval-uation. Axis-aligned bounding boxes cannot capture the rotational extent of diagonal field boundaries, overapproximating patch area for elongated fields. The mechanistic interpretation in Section 5.2 derives from performance observations and loss curve behaviour on this single-tile dataset; whether the adapter–PEFT complemen-tarity holds for other GFM architectures (SatMAE, ScaleMAE) or across regions and seasons remains untested. Future work should prioritise: (1) multi-tile and multi-region evaluation to assess geo-graphic transferability; (2) multi-temporal analysis across growing seasons; (3) testing the adapter–PEFT interaction on other geospa-tial foundation models; and (4) instance segmentation to replace bounding-box detection, reducing area estimation error from box looseness and enabling polygon-level fallow inventories. 
+
+6 Conclusions 
+
+In this paper, we showcase efficient PEFT approaches and ViT-Adapters to enable using the Prithvi-EO-2.0 model to monitor fal-low fields, a historically ambiguous category in USDA CDL. We efficiently build on Prithvi-EO-2.0 for fallow object detection by evaluating two PEFT schemes, three multi-scale neck designs, and Adapting Prithvi-EO for Fallow Detection 
+
+two detection heads on a single HLS tile (T13TGE, eastern Col-orado, 2022). The best configuration, FCOS with Hybrid PEFT and Lite ViT-Adapter under DIoU loss, achieves mAP@50 = 0.9479, a 25.70% relative improvement over the anchor-based, adapter-free baseline. Per GIoU, the best configuration achieves mAP@50 = 0.9464. A slightly higher accuracy for DIoU shows the effectiveness of center-aware localization for irregular fallow field detection. The best configuration also achieves a high F1 value of 0.912 without any failure on test set. The central finding is that adapter design and backbone adaptation scheme interact non-trivially: Full ViT-Adapter and Hybrid PEFT are functionally substitutable and yield diminishing returns when combined, while Lite ViT-Adapter and Hybrid PEFT are complementary, producing a 7 × larger gain from backbone unfreezing. For practitioners with constrained GPU bud-gets, FCOS + H-PEFT + Lite VA achieves the highest mAP@50 at the lowest peak VRAM among all Hybrid configurations tested. Re-sults demonstrate a feasible workflow for detecting an agricultural land-use type with significant impact on food and water security. 
+
+Generative AI Usage Disclosure 
+
+During the preparation of this work, generative AI tools (e.g. Google Gemini) are used for language editing, grammar improvement, and formatting assistance. These tools are not used to generate exper-imental results, create datasets, or perform quantitative analysis. All AI-assisted text and formatting suggestions are reviewed and revised by the authors to ensure technical accuracy, originality, and consistency with the paper’s contributions. 
+
+References 
+
+[1] Tamee R Albrecht, Arica Crootof, and Christopher A Scott. 2018. The Water-Energy-Food Nexus: A systematic review of methods for nexus assessment. 
+
+Environmental Research Letters 13, 4 (2018), 043002. [2] RL Anderson, RA Bowman, DC Nielsen, MF Vigil, RM Aiken, and JG Benjamin. 1999. Alternative crop rotations for the central Great Plains. Journal of Production Agriculture 12, 1 (1999), 95–99. [3] Agnès Bégué, Damien Arvor, Beatriz Bellon, Julie Betbeder, Diego De Abelleyra, Rodrigo PD Ferraz, Valentine Lebourgeois, Camille Lelong, Margareth Simões, and Santiago R. Verón. 2018. Remote sensing and cropping practices: A review. 
+
+Remote Sensing 10, 1 (2018), 99. [4] Mariana Belgiu and Ovidiu Csillik. 2018. Sentinel-2 cropland mapping using pixel-based and object-based time-weighted dynamic time warping analysis. 
+
+Remote sensing of environment 204 (2018), 509–523. [5] Claire Boryan, Zhengwei Yang, Rick Mueller, and Mike Craig. 2011. Monitoring US agriculture: the US department of agriculture, national agricultural statistics service, cropland data layer program. Geocarto International 26, 5 (2011), 341–358. [6] Qianyu Cao. 2021. Experimental study on the effect of loss function on object de-tection. In Proceedings of the 2021 International Conference on Pattern Recognition and Intelligent Systems . 81–87. [7] Fen Chen, Haojie Zhao, Dar Roberts, Tim Van de Voorde, Okke Batelaan, Tao Fan, and Wenbo Xu. 2023. Mapping center pivot irrigation systems in global arid regions using instance segmentation and analyzing their spatial relationship with freshwater resources. Remote Sensing of Environment 297 (2023), 113760. [8] Zhe Chen, Yuchen Duan, Wenhai Wang, Junjun He, Tong Lu, Jifeng Dai, and Yu Qiao. 2022. Vision transformer adapter for dense predictions. arXiv preprint arXiv:2205.08534 (2022). [9] Gergana N Daskalova and Johannes Kamp. 2023. Abandoning land transforms biodiversity. Science 380, 6645 (2023), 581–583. [10] Saskia Foerster, Klaus Kaden, Michael Foerster, and Sibylle Itzerott. 2012. Crop type mapping using spectral–temporal profiles and phenological information. 
+
+Computers and Electronics in Agriculture 89 (2012), 30–40. [11] Song Gao, Dalton Lunga, Lexie Yang, Shawn Newsam, and Bruno Martins. 2026. Introduction to the Special Issue on GeoAI Foundation Models and Their Appli-cations, Part I. 4 pages. [12] BW Greb. 1979. Reducing drought effects on croplands in the west-central Great Plains . Number 420. US Department of Agriculture, Science and Education Administration. [13] Danfeng Hong, Bing Zhang, Xuyang Li, Yuxuan Li, Chenyu Li, Jing Yao, Naoto Yokoya, Hao Li, Pedram Ghamisi, Xiuping Jia, et al . 2024. SpectralGPT: Spectral remote sensing foundation model. IEEE transactions on pattern analysis and machine intelligence 46, 8 (2024), 5227–5244. [14] Chia-Yu Hsu, Wenwen Li, and Sizhe Wang. 2025. Geospatial foundation models for image analysis: Evaluating and enhancing NASA-IBM Prithvi’s domain adapt-ability. International Journal of Geographical Information Science 39, 9 (2025), 2096–2125. [15] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Liang Wang, Weizhu Chen, et al . 2022. Lora: Low-rank adaptation of large language models. Iclr 1, 2 (2022), 3. [16] Fengwei Hung, Kyongho Son, and YC Ethan Yang. 2022. Investigating uncertain-ties in human adaptation and their impacts on water scarcity in the Colorado river Basin, United States. Journal of hydrology 612 (2022), 128015. [17] Sharad K Jain, Alok K Sikka, and Mohammad Faiz Alam. 2023. Water-energy-food-ecosystem nexus in India—A review of relevant studies, policies, and pro-grammes. Frontiers in Water 5 (2023), 1128198. [18] Johannes Jakubik, Sujit Roy, CE Phillips, Paolo Fraccaro, Denys Godwin, Bianca Zadrozny, Daniela Szwarcman, Carlos Gomes, Gabby Nyirjesy, Blair Edwards, et al . 2023. Foundation models for generalist geospatial artificial intelligence. 
+
+arXiv preprint arXiv:2310.18660 (2023). [19] Luguang Jiang, Ye Liu, and Cheng Yang. 2024. Trade-off between the future water resource utilization and grain production in a water-deficient region from the perspective of the Water- Land- Grain nexus. Journal of Hydrology 640 (2024), 131697. [20] Małgorzata Kozak and Rafał Pudełko. 2021. Impact assessment of the long-term fallowed land on agricultural soils and the possibility of their return to agriculture. Agriculture 11, 2 (2021), 148. [21] Tyler J Lark, Richard M Mueller, David M Johnson, and Holly K Gibbs. 2017. Measuring land-use and land-cover change using the US department of agricul-ture’s cropland data layer: Cautions and recommendations. International journal of applied earth observation and geoinformation 62 (2017), 224–235. [22] Tsung-Yi Lin, Piotr Dollár, Ross Girshick, Kaiming He, Bharath Hariharan, and Serge Belongie. 2017. Feature pyramid networks for object detection. In Proceed-ings of the IEEE conference on computer vision and pattern recognition . 2117–2125. [23] Yuchi Ma, Yawen Shen, Anu Swatantran, and David B Lobell. 2026. Harvesting AlphaEarth: Benchmarking the geospatial foundation model for agricultural downstream tasks. International Journal of Applied Earth Observation and Geoin-formation 149 (2026), 105258. [24] Francesc Marti Escofet, Benedikt Blumenstiel, Linus Scheibenreif, Paolo Fraccaro, and Konrad Schindler. 2025. Fine-tune smarter, not harder: Parameter-efficient fine-tuning for geospatial foundation models. In Joint European Conference on Machine Learning and Knowledge Discovery in Databases . Springer, 516–532. [25] Calvin Nguyen and Ranga Raju Vatsavai. 2025. Foundation Models for Semantic Segmentation of Thick/Thin Clouds and Cloud-shadows: A Comparative Study. In Proceedings of the 33rd ACM International Conference on Advances in Geographic Information Systems . 549–552. [26] Adam J Oliphant, Prasad S Thenkabail, Pardhasaradhi G Teluguntla, Itiya P Aneece, Daniel J Foley, and Richard L McCormick. 2024. Automated Cropland Fallow Algorithm (ACFA) for the Northern Great Plains of USA. International Journal of Digital Earth 17, 1 (2024), 2337221. [27] Jiangtao Peng, Yi Huang, Weiwei Sun, Na Chen, Yujie Ning, and Qian Du. 2022. Domain adaptation in remote sensing image classification: A survey. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing 15 (2022), 9842–9859. [28] Shaoqing Ren, Kaiming He, Ross Girshick, and Jian Sun. 2015. Faster R-CNN: To-wards Real-Time Object Detection with Region Proposal Networks. In Advances in Neural Information Processing Systems , Vol. 28. 91–99. [29] Hamid Rezatofighi, Nathan Tsoi, JunYoung Gwak, Amir Sadeghian, Ian Reid, and Silvio Savarese. 2019. Generalized intersection over union: A metric and a loss for bounding box regression. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 658–666. [30] Jörg-Alfred Salamon, Janet Wissuwa, Stephan Jagos, Monika Koblmüller, Oxana Ozinger, Christine Winkler, and Thomas Frank. 2011. Plant species effects on soil macrofauna density in grassy arable fallows of different age. European Journal of Soil Biology 47, 2 (2011), 129–137. [31] Maja Schneider, Tobias Schelte, Felix Schmitz, and Marco Körner. 2023. Euro-Crops: The largest harmonized open crop dataset across the European Union. 
+
+Scientific Data 10, 1 (2023), 612. [32] Stefan Siebert, Felix Portmann, and Petra Doell. 2010. Global Patterns of Cropland Use Intensity. Remote Sensing 2 (06 2010), 1625–1643. doi:10.3390/rs2071625 [33] Wen Song, Alexander V Prishchepov, and Wei Song. 2022. Mapping the spatial and temporal patterns of fallow land in mountainous regions of China. Interna-tional Journal of Digital Earth 15, 1 (2022), 2148–2167. [34] Wen Song and Wei Song. 2023. Cropland fallow reduces agricultural water consumption by 303 million tons annually in Gansu Province, China. Science of the Total Environment 879 (2023), 163013. Asif and Aydin 
+
+[35] Adam J Stewart, Caleb Robinson, Isaac A Corley, Anthony Ortiz, Juan M Lav-ista Ferres, and Arindam Banerjee. 2025. Torchgeo: deep learning with geospatial data. ACM Transactions on Spatial Algorithms and Systems 11, 4 (2025), 1–28. [36] Yuba Raj Subedi, Paul Kristiansen, and Oscar Cacho. 2022. Drivers and con-sequences of agricultural land abandonment and its reutilisation pathways: A systematic review. Environmental Development 42 (2022), 100681. [37] Daniela Szwarcman, Sujit Roy, Paolo Fraccaro, Orsteinn Eli Gislason, Benedikt Blumenstiel, Rinki Ghosal, Pedro Henrique De Oliveira, Joao Lucas de Sousa Almeida, Rocco Sedona, Yanghui Kang, Srija Chakraborty, Sizhe Wang, Car-los Gomes, Ankur Kumar, Vishal Gaur, Myscon Truong, Denys Godwin, Sam Khallaghi, Hyunho Lee, Chia Yu Hsu, Ata Akbari Asanjan, Besart Mujeci, Disha Shidham, Rufai Omowunmi Balogun, Venkatesh Kolluru, Trevor Keenan, Paulo Arevalo, Wenwen Li, Hamed Alemohammad, Pontus Olofsson, Timothy Mayer, Christopher Hain, Robert Kennedy, Bianca Zadrozny, David Bell, Gabriele Caval-laro, Campbell Watson, Manil Maskey, Rahul Ramachandran, and Juan Bernabe Moreno. 2025. Prithvi-EO-2.0: A Versatile Multi-Temporal Foundation Model for Earth Observation Applications. IEEE Transactions on Geoscience and Remote Sensing (2025). doi:10.1109/TGRS.2025.3642610 [38] Zhi Tian, Chunhua Shen, Hao Chen, and Tong He. 2019. Fcos: Fully convolutional one-stage object detection. In Proceedings of the IEEE/CVF international conference on computer vision . 9627–9636. [39] Xiaoye Tong, Martin Brandt, Pierre Hiernaux, Stefanie Herrmann, Laura Vang Rasmussen, Kjeld Rasmussen, Feng Tian, Torbern Tagesson, Wenmin Zhang, and Rasmus Fensholt. 2020. The forgotten land use class: Mapping of fallow fields across the Sahel using Sentinel-2. Remote Sensing of Environment 239 (2020), 111598. [40] Emily V Upcott, Peter A Henrys, John W Redhead, Susan G Jarvis, and Richard F Pywell. 2023. A new approach to characterising and predicting crop rotations using national-scale annual crop maps. Science of the Total Environment 860 (2023), 160471. [41] Ranga Raju Vatsavai. 2024. Geospatial foundation models: Recent advances and applications. In Proceedings of the 12th ACM SIGSPATIAL International Workshop on Analytics for Big Geospatial Data . 30–33. [42] Long Wen, Yu Cheng, Yi Fang, and Xinyu Li. 2023. A comprehensive survey of oriented object detection in remote sensing images. Expert Systems with Applications 224 (2023), 119960. [43] Kenneth D White. 1970. Fallowing, crop rotation, and crop yields in Roman times. Agricultural History 44, 3 (1970), 281–290. [44] Li XiaoFan, Pu HaiBo, Wei Yi, Liu JiangChuan, and Xu HongXiang. 2019. Intro-duce GIoU into RFB net to optimize object detection bounding box. In Proceedings of the 5th International Conference on Communication and Information Processing .108–113. [45] He Yin, Amintas Brandão Jr, Johanna Buchner, David Helmers, Benjamin G Iuliano, Niwaeli E Kimambo, Katarzyna E Lewińska, Elena Razenkova, Afag Rizayeva, Natalia Rogova, et al . 2020. Monitoring cropland abandonment with Landsat time series. Remote Sensing of Environment 246 (2020), 111873. [46] Piotr Jarosław Żarczyński, Sławomir Józef Krzebietke, Stanisław Sienkiewicz, and Jadwiga Wierzbowska. 2023. The role of fallows in sustainable development. 
+
+Agriculture 13, 12 (2023), 2174. [47] Ketema Tilahun Zeleke. 2017. Fallow management increases soil water and nitrogen storage. Agricultural Water Management 186 (2017), 12–20. [48] Juepeng Zheng, Zi Ye, Yibin Wen, Jianxi Huang, Zhiwei Zhang, Qingmei Li, Qiong Hu, Baodong Xu, Lingyuan Zhao, and Haohuan Fu. 2026. A comprehensive review of agricultural parcel and boundary delineation from remote sensing images: Recent progress and future perspectives. IEEE Geoscience and Remote Sensing Magazine (2026). [49] Zhaohui Zheng, Ping Wang, Wei Liu, Jinze Li, Rongguang Ye, and Dongwei Ren. 2020. Distance-IoU loss: Faster and better learning for bounding box regression. In Proceedings of the AAAI conference on artificial intelligence , Vol. 34. 12993– 13000.
