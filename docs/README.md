@@ -6,35 +6,41 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-12
-- 运行时间：2026-06-12 22:07:51 UTC
+- 最新运行日期：2026-06-13
+- 运行时间：2026-06-13 20:16:14 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：0
+- 本次总论文数：7
+- 精读区：3
 - 速读区：4
 
 ### 今日简报（AI）
-1) 今天速读了3篇论文，涵盖无人机多目标追踪、AI图像检测与空间生物学领域。
-2) 最值得关注的是SciCore-Omics多模态模型，它统一了组织学、空间转录组学和语言，为空间生物学研究提供新工具。
-3) 建议普通读者优先了解AI生成图像检测相关方法，其应用前景与日常生活关联更紧密。
-- 详情：[/202606/12/README](/202606/12/README)
+今日精读2篇高分论文，速读4篇，聚焦农业问答系统与开放词汇检测两大方向。最值得关注的是时空图神经网络用于作物推荐，以及跨模态外推的开放域检测新方法。建议优先精读这2篇论文，快速掌握图神经网络农业应用和开放域检测前沿进展。
+- 详情：[/202606/13/README](/202606/13/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [Crop Recommendation and Agricultural Query Answering System Using Spatio-Temporal Graph Neural Networks and Hybrid Retrieval Augmentation](/202606/13/2606.09160v1-crop-recommendation-and-agricultural-query-answering-system-using-spatio-temporal-graph-neural-networks-and-hybrid-retrieval-augmentation)  
+   标签：评分：9.0/10、query:stm
+   evidence：时空图神经网络用于天气预报
+2. [ExDet: Open-Domain Open-Vocabulary Detection with Cross-modal Extrapolation and Rectification](/202606/13/2606.09360v1-exdet-open-domain-open-vocabulary-detection-with-cross-modal-extrapolation-and-rectification)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：面向开放域开放词汇的检测与领域泛化方法
+3. [RT-SDGOD: Real-Time Single-Domain Generalized Object Detection](/202606/13/2606.09367v1-rt-sdgod-real-time-single-domain-generalized-object-detection)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：单域泛化目标检测，应对域偏移
 
 ### 速读区论文标签
-1. [HDST-GNN: Heterogeneous Dynamic Spatiotemporal Graph Neural Networks for Multi-Object Tracking in UAV Aerial Imagery](/202606/12/2606.05587v1-hdst-gnn-heterogeneous-dynamic-spatiotemporal-graph-neural-networks-for-multi-object-tracking-in-uav-aerial-imagery)  
-   标签：评分：7.0/10、query:stm
-   evidence：异质动态时空图用于无人机航拍多目标跟踪
-2. [DRIFT: From Robustness Gaps to Invariance Manifolds for AI-Generated Image Detection](/202606/12/2606.06918v1-drift-from-robustness-gaps-to-invariance-manifolds-for-ai-generated-image-detection)  
+1. [Zero-Parameter Geometric Gating for Temporally Stable Low-Altitude UAV Video Semantic Segmentation](/202606/13/2606.09162v1-zero-parameter-geometric-gating-for-temporally-stable-low-altitude-uav-video-semantic-segmentation)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：低空无人机视频语义分割，遥感任务
+2. [A Large Scale Open-Source Image and Video Dataset for Robust Wildfire Detection and Classification](/202606/13/2606.10174v1-a-large-scale-open-source-image-and-video-dataset-for-robust-wildfire-detection-and-classification)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：学习不变流形进行分布外AI图像检测，与计算机视觉域泛化相关
-3. [SciCore-Omics: a tri-modal foundation model unifying histology, spatial transcriptomics and language for spatial biology](/202606/12/biorxiv-10-64898-2026-05-30-728937-v2-scicore-omics-a-tri-modal-foundation-model-unifying-histology-spatial-transcriptomics-and-language-for-spatial-biology)  
+   evidence：跨数据集泛化基准用于野火检测
+3. [Vector Map as Language: Toward Unified Remote Sensing Vector Mapping](/202606/13/2606.10701v1-vector-map-as-language-toward-unified-remote-sensing-vector-mapping)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：利用语言表示的统一遥感矢量制图
+4. [Adapting Vision-Language Models from Iconic to Inclusive for Multi-Label Recognition Without Labels](/202606/13/2606.11626v1-adapting-vision-language-models-from-iconic-to-inclusive-for-multi-label-recognition-without-labels)  
    标签：评分：7.0/10、query:world-models
-   evidence：三模态基础模型用于空间生物学
-4. [Lighting-Aware Representation Learning under Controllable Lighting Variation](/202606/12/2606.06899v1-lighting-aware-representation-learning-under-controllable-lighting-variation)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：光照感知表示学习以应对光照变化
+   evidence：视觉语言模型的多标签识别适应
 
 
 <div class="dpr-home-promo-card">
