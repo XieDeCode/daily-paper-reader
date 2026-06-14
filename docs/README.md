@@ -6,41 +6,49 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-13
-- 运行时间：2026-06-13 20:16:14 UTC
+- 最新运行日期：2026-06-14
+- 运行时间：2026-06-14 21:24:49 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：3
+- 本次总论文数：9
+- 精读区：5
 - 速读区：4
 
 ### 今日简报（AI）
-今日精读2篇高分论文，速读4篇，聚焦农业问答系统与开放词汇检测两大方向。最值得关注的是时空图神经网络用于作物推荐，以及跨模态外推的开放域检测新方法。建议优先精读这2篇论文，快速掌握图神经网络农业应用和开放域检测前沿进展。
-- 详情：[/202606/13/README](/202606/13/README)
+今日焦点：实时单域泛化目标检测与地理空间多模态基础模型新进展。  
+重点精读《RT-SDGOD》实现实时单域泛化目标检测，以及《Emerging Flexible Designs》探索地理空间多模态基础模型的灵活架构。  
+建议关注单域泛化在实时应用中的潜力，以及地理空间AI中多模态融合的设计思路。
+- 详情：[/202606/14/README](/202606/14/README)
 
 ### 精读区论文标签
-1. [Crop Recommendation and Agricultural Query Answering System Using Spatio-Temporal Graph Neural Networks and Hybrid Retrieval Augmentation](/202606/13/2606.09160v1-crop-recommendation-and-agricultural-query-answering-system-using-spatio-temporal-graph-neural-networks-and-hybrid-retrieval-augmentation)  
-   标签：评分：9.0/10、query:stm
-   evidence：时空图神经网络用于天气预报
-2. [ExDet: Open-Domain Open-Vocabulary Detection with Cross-modal Extrapolation and Rectification](/202606/13/2606.09360v1-exdet-open-domain-open-vocabulary-detection-with-cross-modal-extrapolation-and-rectification)  
+1. [RT-SDGOD: Real-Time Single-Domain Generalized Object Detection](/202606/14/2606.09367v1-rt-sdgod-real-time-single-domain-generalized-object-detection)  
    标签：评分：9.0/10、query:cross-domain
-   evidence：面向开放域开放词汇的检测与领域泛化方法
-3. [RT-SDGOD: Real-Time Single-Domain Generalized Object Detection](/202606/13/2606.09367v1-rt-sdgod-real-time-single-domain-generalized-object-detection)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：单域泛化目标检测，应对域偏移
+   evidence：提出实时单域广义目标检测方法解决跨域泛化问题
+2. [Emerging Flexible Designs for Geospatial Multimodal Foundation Models](/202606/14/2606.12595v1-emerging-flexible-designs-for-geospatial-multimodal-foundation-models)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：地理空间多模态基础模型比较
+3. [One Stone, Three Birds: Self-adaptive Optimal Transport for Multi-VLM Selection, Adaptation, and Ensembling](/202606/14/2606.08126v1-one-stone-three-birds-self-adaptive-optimal-transport-for-multi-vlm-selection-adaptation-and-ensembling)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：多视觉语言模型的自适应最优传输选择、适应与集成，解决跨域部署问题
+4. [Crop Recommendation and Agricultural Query Answering System Using Spatio-Temporal Graph Neural Networks and Hybrid Retrieval Augmentation](/202606/14/2606.09160v1-crop-recommendation-and-agricultural-query-answering-system-using-spatio-temporal-graph-neural-networks-and-hybrid-retrieval-augmentation)  
+   标签：评分：8.0/10、query:stm
+   evidence：提出时空图卷积网络用于天气预报
+5. [RoVE: Rotary Value Embeddings Attention for Relative Position-dependent Value Pathways](/202606/14/2606.11275v1-rove-rotary-value-embeddings-attention-for-relative-position-dependent-value-pathways)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：提升分布外困惑度，与分布外泛化相关
 
 ### 速读区论文标签
-1. [Zero-Parameter Geometric Gating for Temporally Stable Low-Altitude UAV Video Semantic Segmentation](/202606/13/2606.09162v1-zero-parameter-geometric-gating-for-temporally-stable-low-altitude-uav-video-semantic-segmentation)  
-   标签：评分：7.0/10、query:rs-fm
-   evidence：低空无人机视频语义分割，遥感任务
-2. [A Large Scale Open-Source Image and Video Dataset for Robust Wildfire Detection and Classification](/202606/13/2606.10174v1-a-large-scale-open-source-image-and-video-dataset-for-robust-wildfire-detection-and-classification)  
+1. [Shift-Dependent Asymmetry: Orthogonal Inverse Low-Rank Adaptation for Federated Medical Segmentation](/202606/14/2606.08687v1-shift-dependent-asymmetry-orthogonal-inverse-low-rank-adaptation-for-federated-medical-segmentation)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：跨数据集泛化基准用于野火检测
-3. [Vector Map as Language: Toward Unified Remote Sensing Vector Mapping](/202606/13/2606.10701v1-vector-map-as-language-toward-unified-remote-sensing-vector-mapping)  
-   标签：评分：7.0/10、query:rs-fm
-   evidence：利用语言表示的统一遥感矢量制图
-4. [Adapting Vision-Language Models from Iconic to Inclusive for Multi-Label Recognition Without Labels](/202606/13/2606.11626v1-adapting-vision-language-models-from-iconic-to-inclusive-for-multi-label-recognition-without-labels)  
-   标签：评分：7.0/10、query:world-models
-   evidence：视觉语言模型的多标签识别适应
+   evidence：通过低秩适应处理联邦医学分割中的域偏移问题
+2. [Empowering Feed-Forward Reconstruction Models with Metric Scale via Satellite Images](/202606/14/2606.08205v1-empowering-feed-forward-reconstruction-models-with-metric-scale-via-satellite-images)  
+   标签：评分：6.0/10、query:rs-fm
+   evidence：利用卫星图像为前向3D重建提供度量参考，与地理空间模型相关
+3. [Scalable Deep Learning Framework for Global High-Resolution Land Use Reconstruction](/202606/14/2606.11793v2-scalable-deep-learning-framework-for-global-high-resolution-land-use-reconstruction)  
+   标签：评分：6.0/10、query:rs-fm
+   evidence：土地利用重建深度学习框架，U-Net，遥感应用
+4. [ECA: Efficient Continual Alignment for Open-Ended Image-to-Text Generation](/202606/14/2606.12633v1-eca-efficient-continual-alignment-for-open-ended-image-to-text-generation)  
+   标签：评分：6.0/10、query:world-models
+   evidence：高效持续对齐方法用于多模态基础模型的增量学习
 
 
 <div class="dpr-home-promo-card">
