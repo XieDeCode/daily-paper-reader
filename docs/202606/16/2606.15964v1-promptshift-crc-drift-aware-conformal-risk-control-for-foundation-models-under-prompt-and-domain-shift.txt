@@ -1,0 +1,590 @@
+Title: PromptShift-CRC: Drift-Aware Conformal Risk Control for Foundation Models Under Prompt and Domain Shift
+
+URL Source: https://arxiv.org/pdf/2606.15964v1
+
+Published Time: Tue, 16 Jun 2026 01:24:25 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# PromptShift-CRC: Drift-Aware Conformal Risk Control for Foundation Models Under Prompt and Domain Shift 
+
+Jeffery Opoku The University of Texas Rio Grande Valley, Edinburg, TX, USA 
+
+jeffery.opoku01@utrgv.edu 
+
+David Banahene Florida International University, Miami, FL, USA 
+
+abanahene54@gmail.com 
+
+Abstract 
+
+Foundation models are now used in settings where the prompts they receive can change quickly. Users change, topics change, policies change, and the model may suddenly face a kind of request that was rare in the calibration data. This makes fixed calibration risky. Conformal prediction and conformal risk control give model-agnostic ways to control error, but they work best when the calibration data still look like the future data. This paper develops PromptShift-CRC, a drift-aware conformal risk control method for foundation-model outputs under prompt and domain shift. The method embeds prompts and responses, measures how far the current prompt stream has moved from the calibration pool, gives more weight to relevant or recent calibration examples, and updates the risk level online after observed violations. It reports three practical diagnostics: realized risk error, prompt drift, and effective calibration size. We give conditions under which the method controls risk up to terms for distribution mismatch and weighted quantile uncertainty. In a synthetic prompt-shift benchmark, static conformal risk control fails sharply after drift, while PromptShift-CRC gives the best coverage among the adaptive baselines considered. We then evaluate the same calibration layer on public benchmark-derived streams for question answering, toxicity, summarization factuality, and long-context hallucination risk. 
+
+Keywords and phrases: conformal risk control; foundation models; large language models; distribution shift; prompt drift; uncertainty quantification. 
+
+2020 Mathematics Subject Classification: Primary 62G15; secondary 62L12, 68T50, 62M10. 
+
+# 1 Introduction 
+
+Large language models and other foundation models are used in open-ended environments. A model that works well on one group of prompts may later face new users, new topics, new policies, new time periods, or new domains. In that setting, uncertainty quantification cannot rely only on a static validation set. A calibration set collected yesterday may not describe the prompts the model sees tomorrow. Conformal prediction has become a central tool for distribution-free uncertainty quantification. Conformal risk control extends this idea from ordinary coverage to broader risks chosen by the user, such as factuality errors, toxicity violations, wrong answers, or unsafe responses. These tools are attractive because they can wrap around complicated black-box models. The weakness is also 1
+
+> arXiv:2606.15964v1 [stat.ML] 14 Jun 2026
+
+clear: if the calibration data no longer match the current prompt stream, the stated risk level may no longer match the risk we actually see. We study this problem as prompt and domain drift. Prompt drift means that the model inputs change in wording, topic, intent, difficulty, or user population. Domain drift means that the task environment changes more broadly, for example from general questions to medical, legal, financial, or scientific prompts. Both kinds of drift can change how model confidence, generated content, and downstream error relate to one another. This is a timely problem because many current uses of language models are no longer static benchmarks. They are live systems that see changing user behavior, new tasks, and shifting safety requirements. We propose PromptShift-CRC, a drift-aware conformal risk control method for foundation mod-els. It has four parts. First, it represents prompts and outputs with embeddings or other features. Second, it computes a drift score comparing the current prompt window with the weighted cali-bration data. Third, it gives more weight to calibration examples that are relevant or recent when drift appears. Fourth, it updates the risk threshold online after observed violations. The method is built around a practical question: when can a model still trust its old calibration data, and when should it treat the current prompt stream as a new regime? 
+
+Contributions. This paper makes four contributions. (i) We formalize prompt drift and domain drift for conformal risk control with foundation models. (ii) We introduce PromptShift-CRC, a drift-aware conformal risk control method based on em-bedding similarity, transport drift, effective calibration size, and online risk adaptation. (iii) We derive a risk-control bound that separates realized risk error, distributional drift, residual risk mismatch, and weighted calibration uncertainty. (iv) We evaluate the method on controlled prototypes and public benchmark-derived streams where prompt/domain shift is natural: question answering, summarization, toxicity detection, and hallucination-sensitive generation. 
+
+# 2 Related Work 
+
+The paper connects four areas: conformal risk control, foundation-model uncertainty, hallucination and safety evaluation, and prompt/domain shift. 
+
+Conformal prediction and conformal risk control. Conformal prediction provides distribution-free prediction sets under exchangeability and has become a standard framework for uncertainty quantification [Vovk et al., 2005, Angelopoulos and Bates, 2021]. Conformal risk control extends this logic from ordinary coverage to broader user-specified risks, such as false discovery, classifica-tion error, or unsafe output rates [Angelopoulos et al., 2024]. This extension is especially relevant for foundation models because the quantity to control is often not a prediction-set error but a task-specific violation: an untruthful answer, a toxic continuation, a factuality failure, or a response that should have been escalated. The main limitation is that conformal guarantees are clearest when calibration examples and future examples are exchangeable or at least representative. Weighted conformal prediction ad-dresses covariate shift by changing the calibration distribution through importance weights [Tib-shirani et al., 2019]. Adaptive conformal inference adjusts the target level online after observing 2errors [Gibbs and Candes, 2021]. PromptShift-CRC combines these two ideas but adds an explicit drift diagnostic for prompt and response representations. This diagnostic is meant to detect when the calibration evidence itself has become stale. 
+
+Uncertainty and risk for large language models. Recent work has begun to adapt confor-mal and risk-control methods to language generation. Conformal approaches have been studied for multiple-choice question answering with large language models [Kumar et al., 2023], natural language generation uncertainty [Wang et al., 2025], and generative-model uncertainty beyond pre-viously seen outputs [Noorani et al., 2025]. These papers show that conformal ideas can be useful for language systems, but they also highlight a harder issue: the space of possible prompts and responses is open-ended, and calibration data may stop representing the current use case. PromptShift-CRC focuses directly on this deployment problem. It does not assume that the calibration prompt distribution stays fixed. Instead, it treats the calibration pool as something that must be checked over time. The method asks a simple question: do the examples supporting the current conformal threshold still look like the prompts arriving now? 
+
+Truthfulness, hallucination, and safety benchmarks. Several public benchmarks make it possible to study foundation-model risks in a concrete way. TruthfulQA measures whether models generate truthful answers to questions designed around common human falsehoods [Lin et al., 2021]. RealToxicityPrompts evaluates toxic degeneration from naturally occurring prompts [Gehman et al., 2020]. SummEval provides human judgments of machine-generated summaries, including consistency scores that are useful for studying factuality-sensitive summarization risk [Fabbri et al., 2021]. SelfCheckGPT detects hallucination by comparing multiple sampled responses from a black-box language model [Manakul et al., 2023], while SAC3 studies semantic-aware cross-check consistency for hallucination detection [Zhang et al., 2023]. G-Eval uses large language mod-els as evaluators for natural language generation tasks such as summarization and dialogue [Liu et al., 2023]. LongHalQA provides a long-context hallucination benchmark with discrimination and completion tasks [Qiu et al., 2024]. These benchmarks motivate the risk scores used here. In question answering, risk may mean an untruthful or wrong answer. In summarization, it may mean factual inconsistency. In safety screen-ing, it may mean toxicity. In long-context generation, it may mean hallucination. PromptShift-CRC is designed as a calibration layer that can sit above any of these evaluators. 
+
+Prompt drift and model behavior under shift. The most direct motivation for this paper is the recent evidence that prompt distributions and model behavior can shift in deployed en-vironments. Work on code distribution shifts shows that uncertainty behavior can vary sharply across shifted programming tasks [Li et al., 2024]. Prompt-based semantic shift studies show that semantically equivalent rewordings can induce model-level response instability [Li et al., 2025]. Non-deterministic drift studies report that repeated runs can vary even under fixed prompting con-ditions [Nicholson, 2026]. Most directly, recent work on natural prompt shift reports that changes in user prompts over time, user groups, and geography can be associated with large performance drops in deployed models [Seegmiller and Preum, 2026]. Taken together, this literature suggests that static calibration is not enough for long-running foundation-model systems. PromptShift-CRC turns prompt drift into a statistical quantity that can be measured, monitored, and used inside conformal risk control. 3Table 1: Main notation. Symbol Meaning 
+
+Xt Prompt or input at time tAt = M (Xt) Foundation-model response 
+
+Zt = ( Xt, A t) Prompt-response pair 
+
+Yt Reference answer, verifier signal, or human evaluation 
+
+Rt = ℓ(Zt, Y t) Risk score, scaled to [0 , 1] 
+
+α Target risk violation level 
+
+qt Risk threshold used before observing Yt
+
+Ct Calibration pool available before time t
+
+Wt Recent window used to represent the current prompt stream Φ( Zt) Representation of prompt-response pair 
+
+wi,t Calibration weight assigned to example i at time tDt Drift score between current and preliminary calibration distributions 
+
+neff ,t Effective calibration size, 1 / P 
+
+> i
+
+w2
+
+> i,t
+
+# 3 Problem Setup 
+
+Let Xt denote the prompt or input at time t, and let At = M (Xt) be the response generated by a foundation model M . Let 
+
+Zt = ( Xt, A t)denote the prompt-response pair. A task-specific loss or risk score is written as 
+
+Rt = ℓ(Zt, Y t) ∈ [0 , 1] ,
+
+where Yt may be a reference answer, human judgment, automated verifier output, retrieval audit, or external evaluation signal. Large values of Rt indicate greater risk. For example, Rt may encode incorrectness in question answering, factual inconsistency in summarization, toxicity violation, failure to abstain, or hallucination severity. The aim is to construct a data-dependent threshold qt before observing Yt such that Pr {Rt > q t} ≤ α
+
+or, more generally, such that the realized risk violation process 
+
+Et(qt) = 1{Rt > q t}
+
+is controlled around a user-specified level α ∈ (0 , 1), despite changes in the prompt distribution. In deployment, qt can be used to decide whether the model should answer directly, abstain, retrieve more evidence, ask for clarification, route to a stronger model, or request human review. 
+
+# 4 Prompt and Domain Drift 
+
+Let Φ( Zt) be a representation of the prompt-response pair. This representation may be built from sentence embeddings, hidden states, verifier features, retrieval scores, uncertainty scores, or prompt 4metadata. Given a current window Wt and a calibration pool Ct, start with nonnegative preliminary similarity weights si,t satisfying P 
+
+> i∈C t
+
+si,t = 1. Define empirical distributions 
+
+bPt = 1
+
+|W t|
+
+X
+
+> i∈W t
+
+δΦ( Zi) and bQ(0)  
+
+> t
+
+= X
+
+> i∈C t
+
+si,t δΦ( Zi).
+
+The drift score is 
+
+Dt = Wp( bPt, bQ(0)  
+
+> t
+
+),
+
+where Wp is a Wasserstein or entropic transport discrepancy. Large Dt indicates that the current prompt-response distribution is poorly represented by the representation-weighted calibration pool before any recent-window fallback is applied. This definition separates two ideas that are often blurred in practice. Similarity weighting asks which old calibration points look relevant to the present. Drift monitoring asks whether that similarity-weighted pool still represents the present well enough to support a risk statement. The final calibration weights are then allowed to react to the drift score. 
+
+# 5 Drift-Aware Conformal Risk Control 
+
+At each time t, the method computes calibration weights using representation similarity, measures drift between the current window and weighted calibration distribution, tempers the calibration pool when drift is elevated, and chooses a threshold for controlling the target risk. After the true loss or verifier signal is observed, the method updates the target risk parameter online. For each calibration point i ∈ C t, let 
+
+di,t = ∥Φ( Zi) − ¯Φt∥2, ¯Φt = 1
+
+|W t|
+
+X
+
+> j∈W t
+
+Φ( Zj ),
+
+where ¯Φt summarizes the current prompt-response window. Preliminary representation weights are 
+
+ewi,t = exp {− d2
+
+> i,t
+
+/h 2 
+
+> t
+
+},
+
+where ht > 0 is a bandwidth. Normalize them as 
+
+si,t = ewi,t 
+
+P 
+
+> j∈C t
+
+ewj,t 
+
+.
+
+The drift score Dt is computed from these preliminary weights as in the previous section. A drift gate then tempers the final calibration weights: 
+
+gt(Dt) = exp {− ρD t}, ρ ≥ 0.
+
+One convenient implementation is to mix similarity weights with recent-window weights according to the drift gate, 
+
+wi,t = gt(Dt)si,t + {1 − gt(Dt)} 1{i ∈ R t}|R t| ,
+
+where Rt ⊆ C t is a nonempty recent calibration window. These weights are nonnegative and sum to one. Thus, when drift is low, the method can borrow broadly from representation-similar past examples. When drift is high, the method relies more heavily on recent data. 5The effective calibration size is 
+
+neff ,t = 1
+
+P 
+
+> i∈C t
+
+w2
+
+> i,t
+
+.
+
+This quantity is large when the conformal threshold is supported by many calibration examples and small when only a few examples dominate the weighted quantile. Let bFw,t be the weighted empirical distribution of calibration risks, 
+
+bFw,t (r) = X
+
+> i∈C t
+
+wi,t 1{Ri ≤ r}.
+
+The drift-aware conformal risk threshold is 
+
+qt = inf {r : bFw,t (r) ≥ 1 − αt},
+
+where αt may be fixed at α or updated online. A more conservative implementation can replace 1 − αt by 1 − αt + ϵt(η), capped at one, when the user wants to spend calibration uncertainty directly in the threshold rather than in the reported bound. 
+
+Algorithm sketch. 
+
+1. Embed current prompts and responses using Φ. 2. Weight calibration examples according to representation similarity to the current window. 3. Compute a transport drift score Dt between the current window and the preliminary similarity-weighted calibration distribution. 4. Gate or temper the calibration weights when Dt is elevated. 5. Compute a weighted conformal risk threshold. 6. Apply the threshold to decide whether to answer, abstain, retrieve, escalate, or flag uncer-tainty. 7. Update the risk target after observing correctness, verifier feedback, or human review. 
+
+# 6 Theory 
+
+This section gives the mathematical target for the proposed method. The main point is not that drift can be made to disappear. Rather, the coverage or risk-control error should be decomposed into interpretable pieces: drift in representation space, residual mismatch not captured by that representation, and uncertainty from using a finite weighted calibration sample. 
+
+Definition 1 (Conditional risk distribution) . Let Ft(r) = Pr( Rt ≤ r | H t−1, Z t) denote the condi-tional distribution of the risk score for the current prompt-response pair, where Ht−1 is the infor-mation available before observing Yt.
+
+Definition 2 (Weighted calibration law) . The weighted empirical calibration risk distribution is 
+
+bFw,t (r) = X
+
+> i∈C t
+
+wi,t 1{Ri ≤ r}.
+
+6Its empirical quantile at level 1 − αt is 
+
+qt = inf {r : bFw,t (r) ≥ 1 − αt}.
+
+We write F ⋆w,t for the population risk law that the weighted calibration sample is meant to estimate after the weights are fixed. 
+
+Assumption 1 (Representation-stability of risk) . There exist constants Lt ≥ 0 and δt ≥ 0 such that, for all thresholds r ∈ [0 , 1] ,
+
+|Ft(r) − F ⋆w,t (r)| ≤ LtDt + δt,
+
+where F ⋆w,t is the population version of the weighted calibration risk law after the final weights have been chosen. The term LtDt measures drift explained by the representation, while δt measures residual mismatch not captured by the representation. 
+
+Assumption 2 (Weighted calibration concentration) . Conditional on the weights and the past in-formation used to choose them, the weighted empirical calibration distribution satisfies a Bernstein-Dvoretzky-Kiefer-Wolfowitz type bound: for every η ∈ (0 , 1) ,
+
+Pr 
+
+(
+
+sup 
+
+> r∈[0 ,1]
+
+| bFw,t (r) − F ⋆w,t (r)| > ϵ t(η)
+
+)
+
+≤ η, 
+
+where 
+
+ϵt(η) = 
+
+s
+
+log(2 /η )2neff ,t 
+
+.
+
+This assumption is not automatic for every adaptive data stream. It is a conditional concentra-tion requirement on the weighted calibration sample. It is reasonable when the calibration risks are independent or weakly dependent after conditioning on the information used to form the weights, but it should be checked or stress-tested in deployment. 
+
+Proposition 1 (A finite-sample route to weighted concentration) . Let Gt contain the information used to choose the weights, including the prompt-response representations, the current window, and the calibration indices. Suppose the weights are Gt-measurable, nonnegative, and sum to one. Suppose also that, conditional on Gt, the calibration risk variables {Ri : i ∈ C t} are independent. Define the conditional population law 
+
+F ⋆w,t (r) = X
+
+> i∈C t
+
+wi,t Pr( Ri ≤ r | G t).
+
+Then, for every η ∈ (0 , 1) , with conditional probability at least 1 − η,
+
+sup 
+
+> r∈[0 ,1]
+
+| bFw,t (r) − F ⋆w,t (r)| ≤ 
+
+s
+
+log {2( |C t| + 1) /η }
+
+2neff ,t 
+
+.
+
+Proof. Fix a threshold r. Conditional on Gt, the variables 
+
+Xi(r) = wi,t {1(Ri ≤ r) − Pr( Ri ≤ r | G t)}
+
+7are independent, mean zero, and bounded in intervals of length wi,t . Hoeffding’s inequality gives Pr 
+
+( X
+
+> i∈C t
+
+Xi(r) > ϵ | G t
+
+)
+
+≤ 2 exp 
+
+(
+
+− 2ϵ2
+
+P 
+
+> i
+
+w2
+
+> i,t
+
+)
+
+.
+
+The weighted empirical CDF is a step function with jumps only at the observed calibration risks. Between two adjacent ordered calibration risks the value of the supremum cannot increase, so it is enough to check at most |C t| + 1 threshold regions. A union bound over these regions gives Pr 
+
+
+
+sup 
+
+> r
+
+| bFw,t (r) − F ⋆w,t (r)| > ϵ | G t
+
+
+
+≤ 2( |C t| + 1) exp −2ϵ2neff ,t .
+
+Solving the right side equal to η proves the claim. 
+
+Corollary 1 (Weakly dependent calibration streams) . Suppose the calibration stream can be divided into Bt blocks such that blocks are approximately independent after conditioning on Gt. Let 
+
+ωb,t = X
+
+> i∈Bb
+
+wi,t , nblock ,t = 1
+
+PBt 
+
+> b=1
+
+ω2
+
+> b,t
+
+.
+
+If the total coupling error between the actual block process and an independent-block copy is at most 
+
+κt, then, with probability at least 1 − η − κt,
+
+sup 
+
+> r∈[0 ,1]
+
+| bFw,t (r) − F ⋆w,t (r)| ≤ 
+
+s
+
+log {2( Bt + 1) /η }
+
+2nblock ,t 
+
+.
+
+Proof. Apply Proposition 1 to the independent-block copy, treating each block as one weighted unit with weight ωb,t . The effective sample size becomes nblock ,t . The coupling error adds at most κt to the failure probability. This is the standard blocking logic: dependence lowers the useful sample size from the point-level effective size to the block-level effective size. 
+
+Remark 1 (How to use the deeper bound) . Proposition 1 and Corollary 1 justify the weighted concentration assumption under concrete data-generating conditions. In an independent calibration pool, one may use 
+
+ϵind  
+
+> t
+
+(η) = 
+
+s
+
+log {2( |C t| + 1) /η }
+
+2neff ,t 
+
+.
+
+In a dependent stream, one can replace neff ,t by the block effective size and add the coupling error to the failure probability. The message is simple: strong drift weighting is useful only when it does not make the effective calibration size too small. 
+
+Lemma 1 (Weighted quantile calibration error) . Under the weighted calibration concentration assumption, with probability at least 1 − η,
+
+F ⋆w,t (qt) ≥ 1 − αt − ϵt(η).
+
+Proof. By definition, bFw,t (qt) ≥ 1 − αt. On the concentration event, 
+
+F ⋆w,t (qt) ≥ bFw,t (qt) − sup 
+
+> r
+
+| bFw,t (r) − F ⋆w,t (r)| ≥ 1 − αt − ϵt(η).
+
+8Theorem 1 (Approximate drift-aware risk control) . Suppose the representation-stability and weighted concentration assumptions hold. Then, with probability at least 1 − η,
+
+Pr( Rt > q t | H t−1, Z t) ≤ αt + LtDt + δt + ϵt(η).
+
+Equivalently, 
+
+Pr( Rt > q t | H t−1, Z t) ≤ αt + LtDt + δt +
+
+s
+
+log(2 /η )2neff ,t 
+
+.
+
+Proof. The violation probability is Pr( Rt > q t | H t−1, Z t) = 1 − Ft(qt).
+
+By representation stability, 
+
+Ft(qt) ≥ F ⋆w,t (qt) − LtDt − δt.
+
+The weighted quantile lemma gives 
+
+F ⋆w,t (qt) ≥ 1 − αt − ϵt(η)with probability at least 1 − η. Combining these displays gives 
+
+Ft(qt) ≥ 1 − αt − ϵt(η) − LtDt − δt.
+
+Rearranging proves the result. 
+
+Remark 2 (Interpretation) . The bound is useful because every term has a diagnostic meaning. The target risk level is αt. The term Dt measures whether the current prompt stream has moved away from the preliminary similarity-weighted calibration distribution. The residual term δt records what the representation fails to explain. The effective-size term shows the price of concentrating the final calibration weights on too few examples. 
+
+Proposition 2 (When drift gating helps) . Compare two calibration rules: an ungated rule with drift Dut and effective size nu
+
+> eff ,t
+
+, and a gated rule with drift Dgt and effective size ng
+
+> eff ,t
+
+. Ignoring common residual mismatch terms, the gated rule has a smaller upper bound whenever 
+
+Lt(Dut − Dgt ) >
+
+s
+
+log(2 /η )2ng
+
+> eff ,t
+
+−
+
+s
+
+log(2 /η )2nu
+
+> eff ,t
+
+.
+
+Proof. Subtract the theorem’s upper bound for the gated rule from the corresponding bound for the ungated rule. The gated rule is favored when the reduction in drift bias is larger than the increase in weighted quantile uncertainty. 
+
+Online risk update. The preceding theorem is a one-step statement. To stabilize long-run behavior, the target level can be updated after observing Rt:
+
+αt+1 = Π [αmin ,α max ] {αt + γ (α − 1{Rt > q t})} ,
+
+where γ > 0 is a learning rate and Π denotes projection. If violations occur too often, the update decreases αt and widens future thresholds. If violations are too rare, it increases αt and allows sharper decisions. 9Table 2: Synthetic prompt-shift pilot. The target coverage is 0 .90. Static CRC fails after prompt/domain drift. PromptShift-CRC gives the closest coverage among the adaptive meth-ods while using a smaller effective calibration pool. Method Coverage Mean threshold Mean drift Mean neff 
+
+Static CRC 0.344 0.505 2.641 300.0 Rolling CRC 0.851 0.768 2.383 300.0 Adaptive CRC 0.882 0.761 2.383 300.0 Representation-weighted CRC 0.828 0.735 2.617 297.6 PromptShift-CRC 0.892 0.757 2.621 232.3 
+
+# 7 Empirical Design 
+
+The empirical section will focus on tasks where prompt shift is easy to explain and practically important. (i) Multiple-choice and open-domain question answering under topic shift. (ii) Summarization under source-domain shift. (iii) Toxicity or safety classification under user-population shift. (iv) Hallucination-sensitive generation with retrieval changes. The main comparisons will include static conformal risk control, rolling calibration, adaptive conformal risk control, representation-weighted calibration, and the full drift-aware method. 
+
+# 8 Synthetic Prompt-Shift Pilot 
+
+As a first diagnostic experiment, we construct a synthetic prompt stream with recurring prompt regimes, abrupt domain shifts, and localized bursts of higher risk. Each prompt-response pair is represented by a low-dimensional embedding. The risk score is larger in harder regimes and during drift bursts. This pilot is deliberately simple: its purpose is to verify that static calibration breaks under prompt shift and that drift-aware calibration can recover useful risk control. The compared methods are static conformal risk control, rolling conformal risk control, adap-tive conformal risk control, representation-weighted conformal risk control, and PromptShift-CRC. Static CRC calibrates once and keeps the same threshold. Rolling CRC uses a moving calibration window. Adaptive CRC updates the target risk level after observed violations. Representation-weighted CRC weights calibration examples by embedding similarity. PromptShift-CRC combines representation weighting, drift gating, recent-window fallback, effective calibration size monitoring, and online risk adaptation. 
+
+# 9 LLM-Style Prompt-Shift Benchmark Prototypes 
+
+To move beyond a single synthetic stream, we also build three LLM-style benchmark prototypes. These prototypes do not replace public LLM benchmark outputs. They give us a controlled test bed that looks like common deployment settings, and the same code can later be connected to real model outputs without changing the calibration layer. 10 Figure 1: Synthetic prompt/domain shift benchmark. Vertical dashed lines indicate regime changes. Static CRC under-covers after drift, while adaptive and drift-aware methods recover risk control more effectively. PromptShift-CRC combines drift monitoring with online adaptation. The three prototype tasks are question answering under topic shift, summarization under source-domain shift, and safety screening under user-intent shift. Each task contains a sequence of prompt-response embeddings, latent domain labels, and bounded risk scores. The shift pattern includes stable periods, abrupt domain changes, recurring regimes, and local bursts of elevated risk. The same five methods are compared in all tasks: static CRC, rolling CRC, adaptive CRC, representation-weighted CRC, and PromptShift-CRC. 
+
+# 10 TruthfulQA Prompt-Shift Experiment 
+
+We next add a public benchmark experiment using TruthfulQA [Lin et al., 2021]. TruthfulQA con-tains 817 questions across 38 categories, including health, law, finance, politics, misconceptions, con-spiracies, science, and statistics. These categories provide a natural way to study prompt/domain shift: a deployed question-answering system may move across topical regimes whose risk profiles differ substantially. In this experiment, we evaluate the calibration layer on the TruthfulQA generation split from Hugging Face. We use the question text and category labels to build prompt embeddings and a deterministic proxy risk score based on category difficulty, question form, and category transitions. This is not yet a full model-output truthfulness evaluation. It is a public-dataset calibration 11 Table 3: LLM-style prompt-shift benchmark prototypes. The target coverage is 0 .90. PromptShift-CRC is closest to the target across all three tasks, while static CRC fails under prompt/domain shift. Task Method Coverage Mean neff 
+
+QA topic shift Static CRC 0.312 300.0 QA topic shift Rolling CRC 0.849 280.0 QA topic shift Adaptive CRC 0.887 280.0 QA topic shift Rep-weighted CRC 0.865 278.7 QA topic shift PromptShift-CRC 0.895 197.2 Summarization shift Static CRC 0.318 300.0 Summarization shift Rolling CRC 0.848 280.0 Summarization shift Adaptive CRC 0.885 280.0 Summarization shift Rep-weighted CRC 0.851 297.4 Summarization shift PromptShift-CRC 0.893 199.1 Safety intent shift Static CRC 0.318 300.0 Safety intent shift Rolling CRC 0.857 280.0 Safety intent shift Adaptive CRC 0.889 280.0 Safety intent shift Rep-weighted CRC 0.861 279.1 Safety intent shift PromptShift-CRC 0.897 198.4 Table 4: TruthfulQA prompt-shift experiment using the public generation split. The target coverage is 0 .90. Adaptive CRC is slightly closest to target, while PromptShift-CRC remains close and avoids the strong conservatism of static and representation-only calibration. Method Coverage Mean neff |coverage − 0.90 |
+
+Static CRC 0.994 160.0 0.094 Rolling CRC 0.916 160.0 0.016 Adaptive CRC 0.904 160.0 0.004 Representation-weighted CRC 0.979 255.1 0.079 PromptShift-CRC 0.907 169.5 0.007 experiment that tests whether PromptShift-CRC can operate on a recognized benchmark with real prompt categories. A later version can replace the proxy risk score with model-specific correctness or truthfulness labels. 
+
+# 11 RealToxicityPrompts Safety-Shift Experiment 
+
+We also evaluate PromptShift-CRC on RealToxicityPrompts [Gehman et al., 2020], a public bench-mark of naturally occurring prompts paired with toxicity scores. This experiment studies a safety-oriented version of prompt shift: the prompt stream moves across regions with different prompt toxicity, continuation toxicity, and safety-relevant lexical structure. The risk score is constructed from the public continuation toxicity, severe toxicity, threat, and insult scores. This experiment moves the paper from general reliability to a concrete AI-safety use case. In deployment, a language-model monitor may need to control how often high-risk toxic continuations 12 Figure 2: Coverage across three LLM-style prompt-shift benchmark prototypes. PromptShift-CRC is the closest method to the target coverage level in each task. pass through without escalation. A static calibration set may not be enough if the prompt stream shifts toward more challenging or safety-sensitive content. 
+
+# 12 SummEval Factuality-Shift Experiment 
+
+We add a third public benchmark experiment using SummEval [Fabbri et al., 2021], a summa-rization evaluation dataset with human ratings for machine-generated summaries. Summarization factuality is a natural place to study calibrated risk: a summary can sound fluent and still be unreliable if it is inconsistent with the source document. For each source article and machine summary, we build a risk score from the human consistency rating, with smaller contributions from relevance and coherence. The main risk component is 1 − consistency after rescaling the SummEval 1–5 scores to [0 , 1]. The stream moves from shorter and higher-consistency regimes into longer and lower-consistency regimes before returning to mixed traffic. This creates a source-domain and summary-quality shift while keeping the risk score tied to public human annotations. 
+
+# 13 LongHalQA Long-Context Hallucination Experiment 
+
+We finally add a long-context hallucination experiment based on the public LongHalQA description-discrimination benchmark [Qiu et al., 2024]. LongHalQA was designed to test hallucination behav-ior in longer and more complex multimodal descriptions. We use the public LongHalQA description-binary test split hosted under the QHQK namespace, which contains 1,372 examples with long 13 Figure 3: TruthfulQA prompt-shift experiment. Static and representation-only calibration are overly conservative in this public benchmark setting. Adaptive CRC and PromptShift-CRC are both close to the target coverage level. description-matching questions and binary yes/no labels. This experiment is different from a full multimodal model evaluation. We do not run a new vision-language model. Instead, we use the public LongHalQA benchmark labels to construct a long-context hallucination-risk stream. Descriptions judged not to match the image receive high risk, and the score is made continuous using smaller penalties for description length, numerical detail, and visual complexity. This is a calibration-layer experiment: it asks whether the proposed conformal machinery can keep risk control stable when the monitored examples move from shorter matching descriptions into longer hallucination-heavy descriptions. 
+
+# 14 Ablation Study 
+
+We next isolate the contribution of the main components in PromptShift-CRC. The ablation study removes one ingredient at a time: representation weighting, the drift gate, the recent-window fallback, or the online update. We also include a rolling-only baseline. The target coverage remains 0.90. The ablation results have two useful implications. First, the online update is not cosmetic; without it, the method under-covers after drift. Second, the recent-window fallback matters be-cause representation similarity can overtrust older examples that look related but have stale risk behavior. The representation-only ablation remains close to target in this particular stream. That is informative: when embeddings already separate easy and hard regimes, representation weighting can be strong. The full method is meant for the broader case where representation similarity, drift 14 Table 5: RealToxicityPrompts safety-shift experiment using the public 
+
+allenai/real-toxicity-prompts dataset. The target coverage is 0.90. Adaptive CRC and PromptShift-CRC both reach the target; PromptShift-CRC does so with the largest effective calibration size among the adaptive methods. Method Coverage Mean neff |coverage − 0.90 |
+
+Static CRC 0.891 600.0 0.009 Rolling CRC 0.896 500.0 0.004 Adaptive CRC 0.900 500.0 0.000 Representation-weighted CRC 0.897 548.7 0.003 PromptShift-CRC 0.900 618.0 0.000 Table 6: SummEval factuality-shift experiment using the public mteb/summeval test split. The target coverage is 0 .90. Adaptive CRC is closest to target, rolling CRC is also very close, and PromptShift-CRC remains within about 0 .0015 of the target while retaining representation and drift diagnostics. Method Coverage Mean neff |coverage − 0.90 |
+
+Static CRC 0.890 320.0 0.010 Rolling CRC 0.899 260.0 0.001 Adaptive CRC 0.900 260.0 0.000 Representation-weighted CRC 0.883 187.4 0.017 PromptShift-CRC 0.899 203.1 0.001 monitoring, and online adaptation must work together. 15 Figure 4: RealToxicityPrompts safety-shift experiment. PromptShift-CRC reaches the target cov-erage level while maintaining a large effective calibration size. Table 7: LongHalQA long-context hallucination-shift experiment using the public description-binary split. The target coverage is 0 .90. Static CRC fails badly after the shift, while PromptShift-CRC is closest to target. Method Coverage Mean neff |coverage − 0.90 |
+
+Static CRC 0.585 300.0 0.315 Rolling CRC 0.784 240.0 0.116 Adaptive CRC 0.875 240.0 0.025 Representation-weighted CRC 0.854 185.9 0.046 PromptShift-CRC 0.901 179.8 0.001 Table 8: Ablation study for PromptShift-CRC. The online update and recent-window fallback are especially important in this prompt-shift stream. Representation weighting alone is not sufficient; it must be paired with diagnostics and adaptation. Variant Coverage Mean neff |coverage − 0.90 |
+
+Rolling only 0.846 300.0 0.054 No representation weighting 0.893 185.1 0.007 No drift gate 0.891 349.0 0.009 No recent fallback 0.871 446.0 0.029 No online update 0.858 244.3 0.042 Full PromptShift-CRC 0.892 244.3 0.008 16 Figure 5: SummEval factuality-shift experiment. The target coverage is 0 .90. Adaptive CRC and PromptShift-CRC are both close to target, while representation weighting alone under-covers in this summarization stream. 17 Figure 6: LongHalQA long-context hallucination-shift experiment. Static calibration under-covers after the stream moves into harder hallucination-heavy descriptions. PromptShift-CRC is closest to the target coverage level. 18 Figure 7: Ablation summary. Lower bars indicate coverage closer to the target level 0 .90. Removing the online update or recent-window fallback causes the largest degradation in this stream. 19 15 Scope and Limitations 
+
+The experiments should be read as evidence about the calibration layer, not as a complete bench-mark of one particular foundation model. The synthetic and prototype streams are controlled stress tests. The public experiments use recognized datasets, but they turn benchmark fields into risk streams for studying drift-aware conformal calibration. TruthfulQA uses question text and category information to create a proxy risk stream rather than model-specific truthfulness labels. RealToxicityPrompts and SummEval use public toxicity and human summarization ratings. Long-HalQA uses public binary hallucination-discrimination labels, but it does not run a new multimodal model. This scope is deliberate. The main statistical question is whether a conformal risk-control layer can remain useful when the current prompt distribution moves away from the calibration distribution. A full deployment study would also require fixed model outputs, human or verifier labels, and pre-specified risk definitions for each application. PromptShift-CRC is designed to accept those signals when they are available. The scripts are written so that proxy risk columns can be replaced by model-specific correctness, factuality, toxicity, or hallucination scores. The theory also has limits. The risk bound depends on representation stability: drift in the chosen features must tell us something about drift in the risk distribution. If the embedding or verifier features miss the relevant failure mode, the residual mismatch term can dominate. For that reason, PromptShift-CRC should be used with diagnostics, effective calibration-size monitoring, and task-specific validation. It should not be treated as an automatic guarantee under every possible shift. 
+
+# 16 Discussion 
+
+The main contribution is not only a new conformal thresholding rule. It is also a diagnostic view of calibration for deployed foundation models. A useful uncertainty system should say more than whether the model is uncertain. It should also say whether the calibration evidence behind that uncertainty estimate still resembles the prompts arriving now. The benchmark results support a clear statistical message: fixed calibration can fail badly when prompt distributions change, while adaptive and drift-aware calibration can recover much of the intended risk control. The public experiments now cover question answering, toxicity/safety risk, summarization factuality, and long-context hallucination risk. The next empirical step is to add model-specific correctness scores where they are available. 
+
+# 17 Conclusion 
+
+This paper develops PromptShift-CRC, a drift-aware conformal risk control method for foundation models under prompt and domain shift. The method is built for settings where calibration data are useful but not permanently trustworthy. By combining representation-aware calibration, drift diagnostics, effective calibration size, and online risk updates, PromptShift-CRC makes conformal risk control better suited to language-model systems that face changing prompts over time. 20 A Reproducibility and Code Structure 
+
+The accompanying reproducibility package is organized around executable scripts, generated result files, and manuscript figures. The current code base contains the following main scripts. Table 9: Reproducibility scripts. 
+
+Script Purpose 
+
+run prompt shift simulation.py Synthetic prompt/domain shift pilot and Figure 1 
+
+run real promptshift benchmarks.py LLM-style benchmark prototypes and Figure 2 
+
+run ablation study.py Component ablation study and Figure 7 
+
+run truthfulqa promptshift.py Public TruthfulQA prompt-shift experiment and Figure 3 
+
+run realtoxicity promptshift.py Public RealToxicityPrompts safety-shift experiment and Figure 4 
+
+run summeval promptshift.py Public SummEval factuality-shift experiment and Figure 5 
+
+run longhalqa promptshift.py Public LongHalQA hallucination-shift experiment and Fig-ure 6 
+
+prepare public benchmark adapters.py Public benchmark manifest for TruthfulQA, RealToxici-tyPrompts, summarization factuality, and LongHalQA 
+
+run all experiments.py One-command regeneration of all current result files and figures 
+
+The generated result files are: 
+
+• results/prompt shift pilot summary.csv ;
+
+• results/real promptshift summary.csv ;
+
+• results/ablation summary.csv ;
+
+• results/truthfulqa promptshift summary.csv ;
+
+• results/realtoxicity promptshift summary.csv ;
+
+• results/summeval promptshift summary.csv ;
+
+• results/longhalqa promptshift summary.csv ;
+
+• results/public benchmark manifest.csv .The generated figure files are: 
+
+• figures/figure1 promptshift crc pilot.png ;
+
+• figures/figure2 real promptshift summary.png ;
+
+• figures/figure3 ablation summary.png ;
+
+• figures/figure4 truthfulqa promptshift.png ;
+
+• figures/figure5 realtoxicity promptshift.png ;
+
+• figures/figure6 summeval promptshift.png ;
+
+• figures/figure7 longhalqa promptshift.png .21 One-command regeneration. All current experiments and figures can be regenerated by run-ning 
+
+python scripts/run all experiments.py .
+
+The scripts use fixed random seeds for the prototype streams. Results are therefore deterministic conditional on the Python environment. 
+
+Public benchmark extension. The benchmark prototypes are designed so they can be replaced or supplemented by public LLM benchmark outputs. The public benchmark manifest maps target datasets to risk scores and shift axes: TruthfulQA for question answering, RealToxicityPrompts for safety risk, SummEval and related summarization outputs for factuality, and LongHalQA for long-context hallucination evaluation. 
+
+Data and code availability. All code needed to reproduce the prototype experiments, tables, and figures is included in the project directory. The public benchmark adapter layer records the intended external datasets and risk-score mappings. A final release should archive the code, generated outputs, and manuscript figures in a DOI-linked repository. 22 References 
+
+Anastasios N. Angelopoulos and Stephen Bates. A gentle introduction to conformal prediction and distribution-free uncertainty quantification. arXiv preprint arXiv:2107.07511 , 2021. Anastasios N. Angelopoulos, Stephen Bates, Adam Fisch, Lihua Lei, and Tal Schuster. Conformal risk control. International Conference on Learning Representations , 2024. Alexander R. Fabbri, Wojciech Kry´ sci´ nski, Bryan McCann, Caiming Xiong, Richard Socher, and Dragomir Radev. Summeval: Re-evaluating summarization evaluation. Transactions of the Association for Computational Linguistics , 9:391–409, 2021. Samuel Gehman, Suchin Gururangan, Maarten Sap, Yejin Choi, and Noah A. Smith. Realtoxici-typrompts: Evaluating neural toxic degeneration in language models. Findings of the Association for Computational Linguistics: EMNLP 2020 , 2020. Isaac Gibbs and Emmanuel Candes. Adaptive conformal inference under distribution shift. Ad-vances in Neural Information Processing Systems , 2021. Bhawesh Kumar, Charlie Lu, Gauri Gupta, Anil Palepu, David Bellamy, Ramesh Raskar, and Andrew Beam. Conformal prediction with large language models for multi-choice question an-swering. arXiv preprint arXiv:2305.18404 , 2023. Xiao Li, Joel Kreuzwieser, and Alan Peters. When meaning stays the same, but models drift: Evaluating quality of service under token-level behavioral instability in llms. arXiv preprint arXiv:2506.10095 , 2025. Yufei Li, Simin Chen, Yanghong Guo, Yue Dong, and Cong Liu. Uncertainty awareness of large language models under code distribution shifts: A benchmark study. arXiv preprint arXiv:2402.05939 , 2024. Stephanie Lin, Jacob Hilton, and Owain Evans. Truthfulqa: Measuring how models mimic human falsehoods. arXiv preprint arXiv:2109.07958 , 2021. Yang Liu, Dan Iter, Yichong Xu, Shuohang Wang, Ruochen Xu, and Chenguang Zhu. G-eval: Nlg evaluation using gpt-4 with better human alignment. arXiv preprint arXiv:2303.16634 , 2023. Potsawee Manakul, Adian Liusie, and Mark J. F. Gales. Selfcheckgpt: Zero-resource black-box hallucination detection for generative large language models. arXiv preprint arXiv:2303.08896 ,2023. Claire Nicholson. Quantifying non deterministic drift in large language models. arXiv preprint arXiv:2601.19934 , 2026. Sima Noorani, Shayan Kiyani, George Pappas, and Hamed Hassani. Conformal prediction beyond the seen: A missing mass perspective for uncertainty quantification in generative models. arXiv preprint arXiv:2506.05497 , 2025. Han Qiu, Jiaxing Huang, Peng Gao, Qin Qi, Xiaoqin Zhang, Ling Shao, and Shijian Lu. Longhalqa: Long-context hallucination evaluation for multimodal large language models. arXiv preprint arXiv:2410.09962 , 2024. 23 Parker Seegmiller and Sarah Masud Preum. Measuring distribution shift in user prompts and its effects on llm performance. arXiv preprint arXiv:2604.17650 , 2026. Ryan J. Tibshirani, Rina Foygel Barber, Emmanuel Candes, and Aaditya Ramdas. Conformal prediction under covariate shift. Advances in Neural Information Processing Systems , 2019. Vladimir Vovk, Alex Gammerman, and Glenn Shafer. Algorithmic learning in a random world. 
+
+Springer , 2005. Sean Wang, Yicheng Jiang, Yuxin Tang, Lu Cheng, and Hanjie Chen. Copu: Conformal prediction for uncertainty quantification in natural language generation. arXiv preprint arXiv:2502.12601 ,2025. Jiaxin Zhang, Zhuohang Li, Kamalika Das, Bradley A. Malin, and Sricharan Kumar. Sac3: Reliable hallucination detection in black-box language models via semantic-aware cross-check consistency. 
+
+arXiv preprint arXiv:2311.01740 , 2023. 24

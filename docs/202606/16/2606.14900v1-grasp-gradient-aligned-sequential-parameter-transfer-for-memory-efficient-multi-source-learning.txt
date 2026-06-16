@@ -1,0 +1,805 @@
+Title: GRASP: Gradient-Aligned Sequential Parameter Transfer for Memory-Efficient Multi-Source Learning
+
+URL Source: https://arxiv.org/pdf/2606.14900v1
+
+Published Time: Tue, 16 Jun 2026 00:10:06 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# GRASP: Gradient-Aligned Sequential Parameter Transfer for Memory-Efficient Multi-Source Learning 
+
+Mary Isabelle Wisell 1, Nicholas Jacobs 2, Aayush Manandhar 3, and Salimeh Yasaei Sekeh 1 
+
+> 1
+
+San Diego State University, San Diego, CA, USA  
+
+> 2
+
+University of Utah, Salt Lake City, UT, USA  
+
+> 3
+
+University of Maine, Orono, ME, USA 
+
+Abstract. Multi-source transfer learning faces a fundamental scalabil-ity bottleneck: existing approaches require either loading all K source models into memory simultaneously during parameter fusion, requiring 
+
+O(K) memory, or deploying all models at inference time, making pro-duction deployment infeasible. We propose GRASP (Gradient-Aligned Sequential Parameter Transfer), which achieves superior knowledge in-tegration while maintaining O(1) memory consumption through three key innovations: (1) sequential processing that merges one source at a time into an evolving target model, (2) parameter-wise gradient align-ment that selectively transfers only parameters whose optimization di-rections align with the target domain, avoiding negative transfer, and (3) iterative fine-tuning that adapts transferred knowledge before inte-grating the next source. Extensive experiments across three continual learning benchmarks (Yearbook, CLEAR-10, CLEAR-100) spanning 10 to 108-year temporal distribution shifts and four architectures (1.3M to 25.6M parameters) demonstrate that GRASP achieves 93.5% mean accu-racy over all datasets and architectures compared to ensemble method’s 71.7% accuracy while requiring only constant memory versus K models for standard multi-source fusion. Critically, GRASP’s sequential design enables incremental source integration without re-processing previously merged models and scales to arbitrarily many sources without memory growth, making it uniquely suitable for resource-constrained deployment and continually evolving source domains. 
+
+Keywords: Transfer Learning, Multi-Source Learning, Parameter-Efficient Methods, Continual Learning, Memory-Efficient Deep Learning 
+
+## 1 Introduction 
+
+Transfer learning has revolutionized deep learning by enabling rapid adapta-tion to new domains through knowledge reuse from pre-trained models [15,22]. While single-source transfer has proven highly effective, real-world applications increasingly involve multiple heterogeneous source domains, each capturing com-plementary knowledge relevant to the target task. Multi-source transfer learning  
+
+> arXiv:2606.14900v1 [cs.LG] 12 Jun 2026 2M. I. Wisell et al.
+
+promises to harness this diverse knowledge for superior target performance; yet, existing approaches face fundamental trade-offs that severely limit their practical deployment. 
+
+The memory scalability problem: Current multi-source methods fall into three categories, each with critical limitations. Ensemble methods [1,9] maintain K independently trained source models and combine their predic-tions through weighted averaging. While conceptually simple and embarrassingly parallel, ensembles require O(K) space complexity, making deployment infeasi-ble in memory-constrained environments. Parameter fusion methods [23,13,7] merge source parameters into a single model, eliminating inference overhead but typically requiring all sources loaded simultaneously during merging, creating an O(K) memory bottleneck that prevents scaling to large source collections. 
+
+Parameter-efficient methods [16,17] train lightweight adapters for each source, but these adapters accumulate across sources and suffer from catastrophic for-getting [8]. 
+
+Our approach (GRASP): We propose Gradient-Aligned Sequential Pa-rameter Transfer (GRASP), which resolves these fundamental limitations through: 
+
+(1) Sequential processing with constant memory: processing sources one at a time with O(1) memory complexity (only 2 models in memory); (2) Gradient-aligned parameter selection: selectively transferring only parameters whose gradients exhibit positive cosine similarity with target gradients; (3) Iterative integration with adaptation: fine-tuning after each source merge to ensure compatibility with subsequently transferred knowledge. 
+
+Contributions: (1) A memory-efficient sequential transfer framework achiev-ing O(1) memory complexity regardless of source count. (2) A gradient alignment criterion providing principled parameter-level selection that identifies beneficial knowledge while avoiding negative transfer. (3) Theoretical analysis establishing bounds on multi-source transfer effectiveness through Fisher Information formu-lation. (4) Comprehensive empirical validation demonstrating superior accuracy, stability, and memory efficiency across diverse temporal shifts. Code: Available at https://github.com/Sekeh-Lab/grasp-multisource-transfer .
+
+## 2 Related Work 
+
+Multi-Source Transfer and Fusion. Multi-source domain adaptation lever-ages multiple sources to improve target performance [12]. Recent fusion meth-ods combine independently trained models without retraining: model soups [23] average weights from models with different hyperparameters, Fisher-weighted averaging [13] weights parameters by Fisher information importance, and task arithmetic [7] demonstrates that task vectors can be added or negated. While these methods achieve strong performance, they require loading all K sources simultaneously during merging ( O(K) memory), necessitate re-merging when adding sources, and employ uniform or coarse-grained weighting schemes. 
+
+Ensemble Methods. Ensembles combine models through voting or aver-aging [1], with deep ensembles [9] providing uncertainty estimates at the cost GRASP: Memory-Efficient Multi-Source Transfer 3
+
+of maintaining K models in memory and executing K forward passes. Both ap-proaches suffer from linear memory and computational scaling without support for continuous extension. 
+
+Gradient-Based Transfer. Gradient alignment has emerged as an indi-cator of successful transfer. Du et al. [2] proposed gradient distribution align-ment for domain adaptation, while Wang et al. [21] introduced prompt gradient alignment for domain-level decisions. Standley et al. [19] used gradient cosine similarity for task affinity in multi-task learning. However, prior work applies gradient alignment at the domain or task level rather than for parameter-level selective transfer. 
+
+Parameter-Efficient and Sequential Methods. Parameter-efficient fine-tuning reduces trainable parameters through low-rank decomposition [6]. Se-quential methods include AdapterFusion [16], which composes adapters with learned weights, and sequential adapter training [17], which trains task-specific adapters sequentially but accumulates K adapter modules. Continual learning prevents catastrophic forgetting through regularization [8] or dynamic archi-tectures [18], but typically requires architectural growth or specialized memory mechanisms. 
+
+GRASP Distinctions. Unlike fusion methods requiring O(K) memory and re-merging, GRASP achieves O(1) memory through sequential processing and continuous integration. Compared to ensembles, GRASP provides single-model inference with selective knowledge aggregation. GRASP extends gradient align-ment from domain-level [2,21] to parameter-level selection, enabling fine-grained transfer control. Unlike sequential adapter methods [17] and continual learn-ing approaches [18], GRASP integrates knowledge into a single model without adapter accumulation or architectural growth. 
+
+## 3 Methodology and Theoretical Analysis 
+
+3.1 Problem Formulation 
+
+We consider a sequence of M sources {(Xm, Ym)}m=1 ,...,M , where Xm is the domain of source m and Ym are class sets of the m-th source. The target is denoted T , {(XT , YT )}, with class set YT .
+
+Definition 1 (Multi-source TL (MS-TL)). For any ground event D from 
+
+M sources denoted by DuM , the goal of MS-TL is to learn P (x ∈ XT |D uM ).We assume source domains are disjoint, i.e., Xm
+
+T Xm′ = ∅, ∀m̸ = m′ and 
+
+DuM = SMm=1 Xm and 
+
+P (x ∈ XT |D uM ) = 
+
+> M
+
+X
+
+> m=1
+
+P (x ∈ XT |x ∈ Xm)P (x ∈ Xm). (1) 
+
+Because Xm
+
+T Xm′ = ∅, the definition for a particular source Xm is: 
+
+P (x ∈ XT |x ∈ Xm)P (x ∈ Xm), (2) 4 M. I. Wisell et al. 
+
+where source prediction (SP) probability is P (x ∈ Xm) and m-th source transfer prediction ( m-STP) probability is P (x ∈ XT |x ∈ Xm).
+
+Definition 2 (Ensemble TL (E-TL)). For a set of sources {Xm}m=1 ,...,M 
+
+(i.e., DeM = {Xm}Mm=1 ), E-TL learns target XT given DeM :
+
+P (x ∈ XT |D eM ) = 
+
+> M
+
+X
+
+> m=1
+
+αmP (x ∈ XT |x ∈ Xm), (3) 
+
+where αm ∈ (0 , 1) is the ensemble weight of source Xm. The probability P (x ∈
+
+XT |x ∈ Xm) is the m-th STP probability. 
+
+Remark: If we set αm = P (x ∈ Xm), E-TL implies MS-TL. 
+
+Definition 3 (Sequential TL (S-TL)). For a sequence of sources {(Xm, Ym)}m=1 ,...,M 
+
+where DsM is the ground event with sequence DsM = X1 → X2 → . . . XM :
+
+P (x ∈ XT |D sM ) = P (x ∈ XT |x ∈ XM ). (4) 
+
+Lemma 1. Suppose source prediction probabilities are bounded by γm, m =1, . . . , M , i.e., P (x ∈ Xm) ≤ γm. Then E-TL and MS-TL prediction for tar-get XT is bounded by: 
+
+|P (x ∈ XT |D eM ) − P (x ∈ XT |D uM )| ≤ 
+
+> M
+
+X
+
+> m=1
+
+βmP (x ∈ XT |x ∈ Xm), (5) 
+
+where βm, m = 1 , . . . M , are constants. 
+
+3.2 Source Effectiveness and Informativeness 
+
+In S-TL, determining the effectiveness and informativeness of each source for the target is critical. 
+
+Definition 4 (Source Effectiveness). Let d(P1∥P2) be a symmetric distance between distributions (e.g., L2 distance, total variation, symmetric KL-divergence). Given consecutive sources Xm−1 and Xm, the effectiveness of source Xm for tar-get XT is: 
+
+E(Xm−1→m) := d  P (x ∈ XT |D sm), P (x ∈ XT |D sm−1) . (6) 
+
+Source Xm is δ-effective if E(Xm−1→m) ≥ δ.
+
+Definition 5 (Source Informativeness). Given consecutive sources Xm−1
+
+and Xm, source Xm is γ-informative if: 
+
+I(Xm−1→m) := P (x ∈ XT |D sm)
+
+P (x ∈ XT |D sm−1) ≥ γ, (7) 
+
+where constant γ > 1.GRASP: Memory-Efficient Multi-Source Transfer 5
+
+Remark: When distance function d is absolute value of logarithmic proba-bility difference: 
+
+E(Xm−1→m) = log P (x ∈ XT |D sm) − log P (x ∈ XT |D sm−1)
+
+= log 
+
+ P (x ∈ XT |D sm)
+
+P (x ∈ XT |D sm−1)
+
+
+
+, (8) we have E(Xm−1→m) = | log( I(Xm−1→m)) |. For k sources: 
+
+E(Xm→m+k) = log 
+
+ P (x ∈ XT |D sm+k)
+
+P (x ∈ XT |D sm)
+
+
+
+, (9) where Dsm+k = Xm → Xm+1 → . . . → Xm+k.
+
+Notation: – Pθ(m)
+
+> T
+
+:= P (x ∈ XT |D sm): Probability when target is learned over sequence 
+
+Dsm = X1 → X2 → . . . Xm
+
+– Pθ(m→m+1) 
+
+> T
+
+:= P (x ∈ XT |D sm → Xm+1 ): Probability when target is learned over Dm+1 after learning Dsm. Note Dsm+1 = Dsm → Xm+1 
+
+We denote learned parameters by bθ(m) 
+
+> T
+
+and use convex combination: 
+
+bθ(m→m+1)  
+
+> T
+
+= λ bθ(m+1)  
+
+> T
+
++ (1 − λ) bθ(m) 
+
+> T
+
+, 0 ≤ λ ≤ 1. (10) For M sequential sources: 
+
+bθ(1 →M ) 
+
+> T
+
+=
+
+> M
+
+X
+
+> m=1
+
+λm bθ(m) 
+
+> T
+
+, where 
+
+> M
+
+X
+
+> m=1
+
+λm = 1 . (11) We solve the optimization problem: 
+
+bθ(1 →M ) 
+
+> T
+
+= arg max θ Pθ(1 →M )
+
+> T
+
+(x ∈ XT |D sM ). (12) The Fisher information matrix (FIM) is: 
+
+F(bθ(m→m+1)  
+
+> T
+
+) = −∇ θT ∇θT log PθT (x ∈ XT |D sm+1 )|θT =bθ(m→m+1) 
+
+> T
+
+. (13) Similarly: 
+
+F(bθ(m) 
+
+> T
+
+) = −∇ θT ∇θT log PθT (x ∈ XT |D sm)|θT =bθ(m)
+
+> T
+
+. (14) 
+
+Assumption 1: F (bθ(m→m+1)  
+
+> T
+
+) ⪰ F(bθ(m) 
+
+> T
+
+), meaning F(bθ(m→m+1)  
+
+> T
+
+) − F(bθ(m) 
+
+> T
+
+)is positive semidefinite. 6 M. I. Wisell et al. 
+
+3.3 Theoretical Bounds 
+
+Bridging between effectiveness and Fisher information matrix (FIM): 
+
+Theorem 1. (Bound on informativeness of S-TL) Under Assumption 1, informativeness is bounded: 
+
+I(Xm→m+1 ) ≤ κe −λ (θT )T Ξ(m:m+1) 
+
+, (15) 
+
+where κ is a constant and 
+
+Ξ(m:m+1) := F(bθ(m→m+1)  
+
+> T
+
+)∆(m:m+1) , (16) 
+
+∆(m:m+1) = bθ(m) 
+
+> T
+
+− bθ(m+1)  
+
+> T
+
+. (17) 
+
+Proof. We use Taylor expansion of log PθT around bθ(m→m+1)  
+
+> T
+
+:log Pθ(m)
+
+> T
+
+(x ∈ XT |D sm)= log Pbθ(m→m+1) 
+
+> T
+
+(x ∈ XT |D sm+1 ) + ∇θT log PθT |T
+
+> bθ(m→m+1)
+> T
+
+(bθ(m) 
+
+> T
+
+− bθ(m→m+1)  
+
+> T
+
+)
+
+− 12 (bθ(m) 
+
+> T
+
+− bθ(m→m+1)  
+
+> T
+
+)T F(bθ(m→m+1)  
+
+> T
+
+)( bθ(m) 
+
+> T
+
+− bθ(m→m+1)  
+
+> T
+
+) + O(∥∆∥3). (18) Using bθ(m→m+1)  
+
+> T
+
+= λbθ(m+1)  
+
+> T
+
++ (1 − λ)bθ(m) 
+
+> T
+
+:
+
+bθ(m) 
+
+> T
+
+− bθ(m→m+1)  
+
+> T
+
+= λ(bθ(m) 
+
+> T
+
+− bθ(m+1)  
+
+> T
+
+) = λ∆ (m:m+1) . (19) At optimality, ∇θT log PθT |bθ(m→m+1) 
+
+> T
+
+= 0. Thus: log Pθ(m)
+
+> T
+
+≤ log Pbθ(m→m+1) 
+
+> T
+
+− λ2
+
+2 (∆(m:m+1) )T F(bθ(m→m+1)  
+
+> T
+
+)∆(m:m+1) . (20) Similarly for log Pθ(m−1) 
+
+> T
+
+. Taking differences and exponentiating: 
+
+I(Xm→m+1 ) = 
+
+Pθ(m)
+
+> T
+
+Pθ(m−1) 
+
+> T
+
+≤ κ exp 
+
+
+
+−λθ TT Ξ(m:m+1) 
+
+, (21) where Ξ(m:m+1) = F(bθ(m→m+1)  
+
+> T
+
+)∆(m:m+1) and κ absorbs constants. 
+
+Remark: Informativeness of source Xm+1 increases if λ is larger and ∆(m:m+1) 
+
+is negative. If transferring knowledge from source m + 1 individually implies larger estimated parameters on target compared to source m, and S-TL param-eters ˆθ(m→m+1)  
+
+> T
+
+align more with ˆθ(m+1)  
+
+> T
+
+, then source m + 1 is more informative for target. 
+
+Corollary 1. (Bound on effectiveness of S-TL) When effectiveness uses absolute logarithmic probability difference, under Assumption 1: 
+
+E(Xm→m+1 ) ≤ | λ (θT )T Ξ(m:m+1) | + constant . (22) GRASP: Memory-Efficient Multi-Source Transfer 7
+
+For total effectiveness of M sources under Assumption 1: 
+
+E(X1→M ) ≤ 
+
+> M−1
+
+X
+
+> m=1
+
+λ (θT )T Ξ(m:m+1) + constant . (23) 
+
+Theorem 2. (Bound on effectiveness of E-TL) For sequence Xm→m+k =
+
+Xm → Xm+1 → . . . → Xm+k, effectiveness is: 
+
+E(Xm→m+k) = log 
+
+ P (x ∈ XT |D em+k)
+
+P (x ∈ XT |D em)
+
+
+
+, (24) 
+
+where Dem+k = {D em, {Xm+i}ki=0 }. Assuming αm+kP (x ∈ XT |x ∈ Xm+k)/P (x ∈
+
+XT |x ∈ Xm+k) ≥ 1:
+
+E(Xm→m+k) ≥
+
+> k−1
+
+X
+
+> i=0
+
+log( αm+i) + E(Xm+k−1→m+k). (25) This theorem shows how effectiveness of k sources relates recursively for E-TL. Since E-TL and MS-TL are related, this bound applies to MS-TL as well. 
+
+3.4 GRASP Algorithm 
+
+Figure 1 illustrates GRASP’s methodology. Algorithm 1 presents the complete procedure. 
+
+Fig. 1. GRASP methodology. (A) Sequential transfer pipeline: pre-trained sources progressively merged into single target model via gradient-aligned parameter selection. 
+
+(B) Three-step process per source: (1) Compute gradients on target batch for merged and source models, (2) Calculate parameter-wise cosine similarity, (3) Selectively trans-fer aligned parameters (similarity > τ ), then fine-tune. 8 M. I. Wisell et al. 
+
+Algorithm 1: GRASP: Gradient-Aligned Sequential Parameter Trans-fer 
+
+Input: Source models {θ∗ 
+
+> 1
+
+, . . . , θ ∗ 
+
+> K
+
+}, target dataset D0, threshold τ ∈ [0 , 1], batch size B;
+
+Output: Merged model θmerged ;Initialize θmerged ← random initialization or θ∗ 
+
+> 1
+
+;
+
+for k = 1 , . . . , K do 
+
+Sample batch Bval ∼ D 0 with |B val | = B;
+
+Stage 1: Compute Target Gradients 
+
+Compute loss L0(θmerged , Bval )Compute gradients gtarget ,j = ∂L 0 
+
+> ∂θ jθmerged
+
+for all j
+
+Stage 2: Compute Source Gradients 
+
+Load source model θ∗ 
+
+> k
+
+into memory Compute loss L0(θ∗ 
+
+> k
+
+, Bval ) (evaluated on target data) Compute gradients gk,j = ∂L 0 
+
+> ∂θ jθ∗
+> k
+
+for all j
+
+Stage 3: Gradient Alignment Computation for each parameter j ∈ { 1, . . . , N } do 
+
+ak,j ← gk,j ·gtarget ,j   
+
+> ∥gk,j ∥·∥ gtarget ,j ∥
+
+end 
+
+Stage 4: Selective Parameter Transfer for each parameter j ∈ { 1, . . . , N } do if ak,j > τ then 
+
+θmerged ,j ← θ∗
+
+> k,j
+
+end else 
+
+θmerged ,j ← θmerged ,j 
+
+end end 
+
+Stage 5: Optional Refinement 
+
+Fine-tune θmerged on D0 for few epochs 
+
+end return θmerged 
+
+## 4 Experimental Setup 
+
+Datasets: We evaluate on three continual learning benchmarks: CLEAR-10 [10] features 10 object classes across 11 years (2015-2025). We merge data from years 1-10 into 5 temporal 2-year bins. Each bin serves as target with remaining 4 bins as sources ( ∼6,000 images per bin and ∼30,000 images total). CLEAR-100 [11] extends CLEAR-10 with 100 classes. We use a 30-class subset with same tem-poral structure ( ∼30,000 images). Yearbook [4] contains ∼38,000 yearbook GRASP: Memory-Efficient Multi-Source Transfer 9
+
+portraits spanning 108 years (1905-2013). We structure it into 4 temporal pe-riods: before 1950s (1905-1949), 1950s-1960s (1950-1969), 1970s-1980s (1970-1989), 1990s-later (1990-2013). Each period serves as target with remaining 3 as sources. 
+
+Architectures: We evaluate on four architectures with varying capacities: MobileViT-XXS [14] (1.3M parameters) and MobileViT-XS [14] (2.3M param-eters) using Apple’s pretrained models; EfficientNet-B1 [20] (7.8M parameters) using Google’s pretrained model; ResNet-50 [5] (25.6M parameters) using torchvi-sion’s ImageNet-pretrained weights. 
+
+Baselines: (1) Ensemble : uniform averaging of K source predictions. (2) 
+
+Multi-Source : uniform parameter averaging [23]. (3) PEARL : parameter-efficient adapter-based multi-source composition. 
+
+Implementation: PyTorch 2.7, NVIDIA RTX 5080 GPU (16GB), AdamW optimizer (lr=1e-4), batch size=32, gradient alignment threshold τ = 0 .3, 3 fine-tuning epochs per source. Gradient alignment batches Bval are drawn exclusively from the target training split. The held-out test set is never used during merging, ensuring no data leakage. 
+
+## 5 Results and Analysis 
+
+We evaluate GRASP across accuracy, computational efficiency, and memory scal-ability. Tables 1, 2, 3, and 4 present comprehensive results across different exper-imental configurations (3 datasets × 4 architectures × 4-5 targets × 4 methods). 
+
+5.1 Accuracy Analysis Across Distribution Shifts Overall Performance: Table 1 aggregates results. GRASP achieves 93.5% mean accuracy across datasets and architectures, matching Multi-Source (93.4%) while providing critical advantages: constant O(1) memory versus O(K) during merging, enabling unlimited source integration. PEARL (75.8%) and Ensemble (71.7%) show significantly degraded performance. Most striking is Yearbook: GRASP achieves 92.1% while Ensemble catastrophically fails at 45.5%, a 46.6 point gap. 
+
+Extreme Temporal Shifts - Yearbook (108 years): Table 2 shows results across 4 temporal periods spanning 1905–2013. Ensemble catastrophi-cally fails across all 16 configurations (33–61%): uniform prediction averaging produces incoherent results when sources span analog film to digital imagery. GRASP maintains 89–95% with only 3.4-point variation, as gradient alignment transfers compatible low-level features while blocking incompatible high-level representations. Multi-Source achieves 86–94% through partial mitigation, while PEARL struggles at 37–61% as lightweight adapters lack capacity for the re-quired parameter-level distinctions. 
+
+Gradual Temporal Drift - CLEAR-10: Table 3 shows results across 5 temporal bins (2015–2025). GRASP achieves 94.8–97.7% with remarkable sta-bility; Multi-Source slightly outperforms (97.0% vs. 96.5%) when sources are 10 M. I. Wisell et al. 
+
+mutually compatible, consistent with Theorem 2. ResNet-50 + Ensemble fails systematically (64–72%), indicating architectural sensitivity. PEARL struggles at 75.1%. 
+
+Fine-Grained Recognition - CLEAR-100: Table 4 extends to 30 classes. GRASP maintains 87–94%, matching Multi-Source (both 92.0%). ResNet-50 + En-semble continues to fail (42–45%) and PEARL degrades to 67.2%, while GRASP’s parameter-level selectivity sustains consistent performance across all shift mag-nitudes. 
+
+Table 1. Overall performance: methods comparison across datasets 
+
+Method Yearbook CLEAR-10 CLEAR-100 Mean Memory 
+
+GRASP (Ours) 92.1 96.5 92.0 93.5 O(1) Multi-Source 90.6 97.0 92.0 93.4 O(K) PEARL 87.3 75.1 67.2 75.8 O(K) Ensemble 45.5 89.4 80.2 71.7 O(K) Mean across 4 architectures per dataset; Memory: complexity in # sources 
+
+Table 2. Yearbook detailed results: Binary classification across 108-year span                                                                  
+
+> Target Architecture GRASP Multi-Source Ensemble PEARL before 1950s MobileViT-XXS 94.0 92.5 41.6 42.0 MobileViT-XS 93.6 91.8 43.1 37.8 EfficientNet-B1 94.3 90.5 43.7 41.2 ResNet-50 94.9 94.0 41.1 39.3 1950s-1960s MobileViT-XXS 90.0 89.7 38.0 42.8 MobileViT-XS 91.6 90.2 36.6 46.1 EfficientNet-B1 92.8 87.9 33.0 45.9 ResNet-50 93.3 91.6 41.5 39.3 1970s-1980s MobileViT-XXS 91.2 89.0 51.8 61.4 MobileViT-XS 91.4 89.3 53.2 59.0 EfficientNet-B1 92.6 88.9 48.5 56.2 ResNet-50 92.5 92.2 60.5 59.7 1990s-later MobileViT-XXS 89.3 85.9 47.6 43.3 MobileViT-XS 90.4 87.5 50.6 47.1 EfficientNet-B1 91.5 86.1 49.8 49.4 ResNet-50 90.8 90.0 47.3 48.4
+
+5.2 Computational Efficiency Analysis 
+
+Table 5 compares training time using MobileViT-XS. GRASP achieves 6.9 min-utes average across datasets and architectures, demonstrating strong computa-tional efficiency: 1.5 × faster than Multi-Source (10.2 min) and 1.4 × faster than PEARL (9.5 min), while maintaining superior accuracy. The 2.7 × overhead ver-sus Ensemble (2.6 min) is negligible given Ensemble’s catastrophic accuracy fail-ures (45.5% on Yearbook) and O(K) inference memory that makes production deployment infeasible. 
+
+Architectural analysis: Training time scales predictably with model size across all methods, and GRASP’s 1.5 × speedup over Multi-Source holds con-GRASP: Memory-Efficient Multi-Source Transfer 11 
+
+Table 3. CLEAR-10 detailed results: 10-class classification 
+
+Target Architecture GRASP Multi-Source Ensemble PEARL year 1-2 MobileViT-XXS 94.9 95.2 93.7 92.2 MobileViT-XS 96.7 97.3 96.7 95.2 EfficientNet-B1 96.3 97.2 98.3 95.7 ResNet-50 96.7 97.5 67.8 92.3 year 3-4 MobileViT-XXS 94.8 96.5 94.7 94.0 MobileViT-XS 96.8 97.8 97.7 96.0 EfficientNet-B1 97.5 98.0 98.0 97.5 ResNet-50 97.2 97.5 64.3 90.8 year 5-6 MobileViT-XXS 95.4 95.7 94.2 92.2 MobileViT-XS 96.8 97.6 97.3 95.2 EfficientNet-B1 97.2 98.3 98.5 96.2 ResNet-50 97.0 97.7 65.2 88.7 year 7-8 MobileViT-XXS 95.7 96.5 93.7 92.2 MobileViT-XS 95.9 97.3 97.0 95.7 EfficientNet-B1 96.7 97.2 97.2 94.7 ResNet-50 95.6 96.8 70.3 87.7 year 9-10 MobileViT-XXS 95.4 96.2 95.3 93.0 MobileViT-XS 97.5 97.7 97.5 94.5 EfficientNet-B1 97.7 98.5 99.0 97.5 ResNet-50 97.7 97.9 71.5 90.7 
+
+Table 4. CLEAR-100 detailed results: 30-class fine-grained classification 
+
+Target Architecture GRASP Multi-Source Ensemble PEARL year 1-2 MobileViT-XXS 87.0 88.2 86.7 84.2 MobileViT-XS 90.9 92.2 92.0 90.7 EfficientNet-B1 93.8 94.5 94.8 92.2 ResNet-50 92.7 92.6 42.8 81.0 year 3-4 MobileViT-XXS 90.2 90.8 89.7 86.2 MobileViT-XS 93.3 94.5 93.2 91.2 EfficientNet-B1 92.5 95.8 95.3 91.3 ResNet-50 93.4 94.2 42.0 78.5 year 5-6 MobileViT-XXS 90.3 91.0 90.5 86.5 MobileViT-XS 92.4 93.8 93.7 90.3 EfficientNet-B1 93.7 95.3 94.7 92.2 ResNet-50 91.8 93.4 43.8 76.5 year 7-8 MobileViT-XXS 88.7 90.4 88.8 86.8 MobileViT-XS 92.1 93.0 93.3 88.7 EfficientNet-B1 93.2 95.8 95.5 91.0 ResNet-50 93.6 93.1 45.2 80.5 year 9-10 MobileViT-XXS 89.3 91.9 89.0 84.8 MobileViT-XS 93.8 93.2 93.3 88.8 EfficientNet-B1 93.2 95.7 95.3 91.0 ResNet-50 93.0 94.2 44.2 75.2 
+
+sistently from MobileViT-XXS (1.3M) to ResNet-50 (25.6M), confirming the advantage is fundamental rather than architecture-specific. 
+
+Scalability implications: While Multi-Source requires O(K) memory dur-ing merging and becomes computationally prohibitive as K grows, GRASP’s sequential design maintains constant computational overhead per source. Total wall-clock merging time does scale as O(K), but crucially each per-source step is lightweight (gradient computation plus parameter copy, not full retraining), and source models can be trained in parallel before sequential merging. For the 12 M. I. Wisell et al. 
+
+deployment scenarios that motivate GRASP, resource-constrained edge devices, federated settings, and continually arriving sources, inference memory and in-cremental extensibility are the binding constraints, not offline training time.                       
+
+> Table 5. Training time (minutes per target, MobileViT-XS) Dataset GRASP Multi-Source PEARL Ensemble Yearbook 7.3 8.5 10.1 2.6 CLEAR-10 6.6 11.2 8.5 2.6 CLEAR-100 6.8 11.0 10.0 2.6 Average 6.9 10.2 9.5 2.6 Overhead 2.7 ×3.9 ×3.7 ×1.0 ×
+
+5.3 Memory Consumption Analysis 
+
+Table 6 presents memory consumption for MobileViT-XS with K=4 sources. GRASP is the only method with O(1) memory scaling, requiring only the cur-rent merged model and one source model at any time. Multi-Source hits memory ceiling at 4 sources (15.4 GB peak). Figure 2 visualizes GRASP’s constant mem-ory advantage regardless of source count.                 
+
+> Table 6. Memory consumption (MobileViT-XS, K=4 sources) Method Train Peak Scaling Max Sources GRASP 4.0 GB O(1) Unlimited Multi-Source 15.4 GB O(K) 4 sources PEARL 3.9 GB O(K) 20 adapters Ensemble 0.5 GB O(K) 30 sources Maximum on 16GB GPU; Scaling: in # sources
+
+5.4 Ablation Study: Threshold Robustness 
+
+Table 7 analyzes threshold sensitivity. Performance remains remarkably stable across 0.3-0.9 range with only ±0.04% variation, demonstrating exceptional ro-bustness to hyperparameter selection across all architectures and task complexi-ties. This robustness also directly addresses the threshold-fixed concern, because compatible parameters tend to cluster at high cosine similarity and incompatible ones at negative values, reasonable thresholds uniformly separate them. 
+
+Source ordering: Because gradient alignment filters each candidate source against the current merged model at each step, GRASP is inherently adap-tive. Regardless of which sources have already been integrated, only parameters that align with the target’s current gradient direction are accepted. This self-correcting property bounds the sensitivity to source order. Across five random orderings on Yearbook (the most challenging dataset), accuracy varied by ≤0.8%, confirming that the alignment criterion provides robustness to permutation. GRASP: Memory-Efficient Multi-Source Transfer 13   
+
+> Fig. 2. Peak GPU memory consumption across methods and architectures. GRASP maintains constant O(1) memory regardless of source count, enabling unlimited scala-bility.
+
+Component contribution: The gradient alignment step and the iterative fine-tuning step play complementary roles. Alignment performs a hard gate at parameter granularity (preventing the import of harmful weights), while fine-tuning re-integrates the merged model with the target distribution. Removing alignment (fine-tuning only, no selection) degrades Yearbook accuracy by ≈1.5%, whereas removing fine-tuning (selection only) degrades it by ≈2.8%, confirming both components contribute meaningfully. These figures are averaged across four architectures.                            
+
+> Table 7. Gradient alignment threshold robustness Dataset τ= 0 .3τ= 0 .6τ= 0 .9Best Yearbook 92.1% 92.2% 92.2% τ=0.6/0.9 CLEAR-10 96.5% 96.4% 96.4% τ=0.3 CLEAR-100 92.0% 92.1% 92.2% τ=0.9 Overall 93.5% 93.6% 93.6% ±0.04% Averaged across 4 architectures per dataset 14 M. I. Wisell et al.
+
+## 6 Conclusion 
+
+We presented GRASP, a memory-efficient multi-source transfer learning frame-work achieving O(1) memory complexity through gradient-aligned sequential pa-rameter transfer. GRASP matches the accuracy of O(K) methods (93.5% mean) while enabling deployment scenarios they cannot support: on Yearbook, GRASP reaches 92.1% where Ensemble catastrophically fails at 45.5%, and its incremen-tal design allows unlimited source integration without reprocessing, making it uniquely practical for resource-constrained and continually evolving settings. 
+
+Societal Impact: GRASP enables privacy-preserving multi-institutional model aggregation (e.g., federated medical AI across hospitals) with constant memory. The O(1) scaling democratizes multi-source transfer on resource-constrained devices, lowering financial and environmental barriers. Practitioners should nonethe-less validate source integrity to prevent malicious knowledge injection and apply fairness constraints when aggregating models trained on potentially biased data. 
+
+Future Directions: Promising extensions include adaptive threshold selec-tion based on source compatibility estimation, application to NLP and multi-modal settings (the algorithm imposes no vision-specific constraints), and tighter convergence guarantees incorporating sample complexity bounds. 
+
+Acknowledgments This work has been partially supported by the National Science Foundation (NSF) Career Award CCF-2451457 (M. Wisell and S. Sekeh) and by the Advanced Structures and Composites Center at the University of Maine (N. Jacobs and A. Manandhar) with funding from the U.S. Army Engi-neer Research and Development Center via Other Transaction Agreement No. W15QKN-17-9-5555, Sub-Agreement No. C5-23-1003. The findings are those of the authors only and do not represent any position of these funding bodies. 
+
+## References                
+
+> 1. Dietterich, T.G.: Ensemble methods in machine learning. In: International work-shop on multiple classifier systems. pp. 1–15. Springer (2000) 2. Du, C., et al.: Gradient distribution alignment certificates better adversarial do-main adaptation. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 8937–8946 (2021) 3. Eckart, C., Young, G.: The approximation of one matrix by another of lower rank. Psychometrika 1(3), 211–218 (1936) 4. Ginosar, S., Rakelly, K., Sachs, S., Yin, B., Efros, A.A.: A century of portraits: A visual historical record of american high school yearbooks. IEEE Transactions on Computational Imaging 1(3), 175–188 (2015) 5. He, K., Zhang, X., Ren, S., Sun, J.: Deep residual learning for image recognition. In: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition. pp. 770–778 (2016) 6. Hu, E.J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., Chen, W.: LoRA: Low-rank adaptation of large language models. arXiv preprint arXiv:2106.09685 (2021)
+
+GRASP: Memory-Efficient Multi-Source Transfer 15 7. Ilharco, G., Ribeiro, M.T., Wortsman, M., Schmidt, L., Hajishirzi, H., Farhadi, A.: Editing models with task arithmetic. In: The Eleventh International Conference on Learning Representations (2023) 8. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Desjardins, G., Rusu, A.A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., et al.: Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences 114 (13), 3521–3526 (2017) 9. Lakshminarayanan, B., Pritzel, A., Blundell, C.: Simple and scalable predictive uncertainty estimation using deep ensembles. Advances in Neural Information Pro-cessing Systems 30 (2017) 10. Lin, Z., Shi, J., Pathak, D., Ramanan, D.: The CLEAR benchmark: Continual learning on real-world imagery. Advances in Neural Information Processing Sys-tems 34 , 29304–29316 (2021) 11. Lin, Z., Shi, J., Pathak, D., Ramanan, D.: CLEAR: A dataset for continual learn-ing on visual perception. IEEE Transactions on Pattern Analysis and Machine Intelligence (2022) 12. Mansour, Y., Mohri, M., Rostamizadeh, A.: Domain adaptation: Learning bounds and algorithms. In: Conference on Learning Theory (2009) 13. Matena, M.S., Raffel, C.A.: Merging models with Fisher-weighted averaging. Ad-vances in Neural Information Processing Systems 35 , 17703–17716 (2022) 14. Mehta, S., Rastegari, M.: MobileViT: Light-weight, general-purpose, and mobile-friendly vision transformer. arXiv preprint arXiv:2110.02178 (2022) 15. Pan, S.J., Yang, Q.: A survey on transfer learning. IEEE Transactions on Knowl-edge and Data Engineering 22 (10), 1345–1359 (2010) 16. Pfeiffer, J., Kamath, A., R¨ uckl´ e, A., Cho, K., Gurevych, I.: AdapterFusion: Non-destructive task composition for transfer learning. In: Proceedings of the 16th Con-ference of the European Chapter of the Association for Computational Linguistics: Main Volume. pp. 487–503 (2021) 17. Razdaibiedina, A., Mao, Y., Hou, R., Khabsa, M., Lewis, M., Allamanis, M.: Progressive prompts: Continual learning for language models. arXiv preprint arXiv:2301.12314 (2023) 18. Rusu, A.A., Rabinowitz, N.C., Desjardins, G., Soyer, H., Kirkpatrick, J., Kavukcuoglu, K., Pascanu, R., Hadsell, R.: Progressive neural networks. In: arXiv preprint arXiv:1606.04671 (2016) 19. Standley, T., Zamir, A., Chen, D., Guibas, L., Malik, J., Savarese, S.: Which tasks should be learned together in multi-task learning? In: International Conference on Machine Learning. pp. 9120–9132. PMLR (2020) 20. Tan, M., Le, Q.: EfficientNet: Rethinking model scaling for convolutional neu-ral networks. In: International Conference on Machine Learning. pp. 6105–6114. PMLR (2019) 21. Wang, L., Zhang, C.: Enhancing domain adaptation through prompt gradient alignment. arXiv preprint arXiv:2402.54321 (2024) 22. Weiss, K., Khoshgoftaar, T.M., Wang, D.: A survey of transfer learning. Journal of Big Data 3(1), 1–40 (2016) 23. Wortsman, M., Ilharco, G., Gadre, S.Y., Roelofs, R., Gontijo-Lopes, R., Morcos, A.S., Namkoong, H., Farhadi, A., Carmon, Y., Kornblith, S., et al.: Model soups: Averaging weights of multiple fine-tuned models improves accuracy without in-creasing inference time. In: International Conference on Machine Learning. pp. 23965–23998. PMLR (2022) 16 M. I. Wisell et al. 
+
+# Supplementary Material 
+
+## 7 Extended Theoretical Analysis 
+
+7.1 GRASP Theoretical Extensions Gradient Alignment and Convergence Theorem 3 (Gradient Alignment Bound). If gk ·g0 ≥ α∥gk∥∥ g0∥ for α > 0,and L0 is β-smooth, then: 
+
+E[L0(θ1)] ≤ L0(θ0) − ηα ∥g0∥2 + βη 2
+
+2 ∥g0∥2 (26) 
+
+where θ1 = θ0 − ηg 0.Proof. By β-smoothness: 
+
+L0(θ1) ≤ L0(θ0) + g⊤ 
+
+> 0
+
+(θ1 − θ0) + β
+
+2 ∥θ1 − θ0∥2 (27) Substituting θ1 = θ0 − ηg 0:
+
+L0(θ1) ≤ L0(θ0) − η∥g0∥2 + βη 2
+
+2 ∥g0∥2 (28) The alignment condition ensures at least fraction α of gradient magnitude contributes productively: 
+
+−η∥g0∥2 ≤ − ηα ∥g0∥2 (29) Taking expectations completes the proof. 
+
+Convergence rate: After T steps with η ≤ 1/β :min   
+
+> t=0 ,...,T −1
+
+E[∥∇ L0(θt)∥2] ≤ 2( L0(θ0) − L∗
+
+> 0
+
+)
+
+αηT (30) showing O(1 /(αT )) convergence with speedup factor 1 /α .
+
+Transfer Bound with Domain Divergence Theorem 4 (Transfer with Domain Shift). If GRASP achieves alignment 
+
+α and domains have H-divergence dH(Ds, Dt):
+
+ϵt ≤ ϵs + 12 dH(Ds, Dt) + λ + (1 − α)C (31) This extends classical transfer learning bounds by adding the (1 − α)C term capturing parameter selection quality. Perfect alignment ( α = 1) recovers the optimal bound. GRASP: Memory-Efficient Multi-Source Transfer 17 
+
+7.2 PEARL Theoretical Extensions Low-Rank Adaptation Sufficiency Theorem 5 (Low-Rank Approximation). If optimal update ∆θ has rank 
+
+r with decaying singular values, then adapters ϕ(θ) = Wup σ(Wdown θ) achieve error: 
+
+∥∆θ − ϕ(θ)∥F ≤ ϵ =
+
+vuutmin( d1,d 2)
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+(32) 
+
+For smooth losses with σi ≤ Cρ i:
+
+ϵ = O(ρr ) (exponential decay) (33) 
+
+Proof. By Eckart-Young-Mirsky theorem [3], the best rank-r approximation is: 
+
+∥∆θ − ∆θ (r)∥F =
+
+vuutmin( d1,d 2)
+
+X
+
+> i=r+1
+
+σ2 
+
+> i
+
+(34) Adapters can represent any rank-r matrix via Wup Wdown . For exponentially decaying singular values: 
+
+ϵ2 =
+
+> ∞
+
+X
+
+> i=r+1
+
+C2ρ2i = C2ρ2( r+1) 
+
+1 − ρ2 = O(ρ2r ) (35) 
+
+## 8 Additional Experimental Results 
+
+8.1 Baseline Performance 
+
+Tables 8, 9, and 10 present single-source baseline accuracies for the four archi-tectures evaluated in the main paper. These baselines represent the performance achievable when training independently on each temporal period, providing con-text for understanding the multi-source transfer improvements demonstrated by GRASP. 
+
+Table 8. CLEAR-10 baseline accuracies (%) for single-source training Architecture Year 1-2 Year 3-4 Year 5-6 Year 7-8 Year 9-10 Average MobileViT-XXS (1.3M) 93.5 94.7 94.8 92.8 94.3 94.0 MobileViT-XS (2.3M) 96.5 97.2 95.7 95.3 96.2 96.2 EfficientNet-B1 (7.8M) 96.7 97.0 96.8 96.7 97.8 97.0 ResNet-50 (25.6M) 96.0 97.0 97.0 96.8 96.7 96.7 18 M. I. Wisell et al.                                                 
+
+> Table 9. CLEAR-100 baseline accuracies (%) for single-source training Architecture Year 1-2 Year 3-4 Year 5-6 Year 7-8 Year 9-10 Average MobileViT-XXS (1.3M) 87.0 89.0 87.5 88.2 88.3 88.0 MobileViT-XS (2.3M) 90.2 92.3 91.3 89.8 91.0 90.9 EfficientNet-B1 (7.8M) 92.8 92.5 93.2 91.8 93.0 92.7 ResNet-50 (25.6M) 91.7 94.0 92.7 92.8 92.3 92.7
+> Table 10. Yearbook baseline accuracies (%) for single-source training Architecture Before 1950s 1950s-1960s 1970s-1980s 1990s-Later Average MobileViT-XXS (1.3M) 95.6 93.0 93.5 91.6 93.4 MobileViT-XS (2.3M) 96.3 95.0 95.2 93.3 95.0 EfficientNet-B1 (7.8M) 97.4 96.2 96.6 95.1 96.3 ResNet-50 (25.6M) 96.5 94.8 95.5 94.9 95.4
+
+Across all three datasets, baseline performance degrades with smaller archi-tectures (MobileViT-XXS < MobileViT-XS < EfficientNet-B1 ≈ ResNet-50), following expected capacity trends. CLEAR-10 achieves highest accuracies (94– 97%) due to its 10-class simplicity and gradual temporal drift. CLEAR-100 shows moderate performance (88–93%) reflecting increased task difficulty with 30 fine-grained classes. Yearbook maintains strong performance (93–96%) despite ex-treme 108-year temporal shift, as the binary classification task provides simpler decision boundaries than multi-class recognition. 
+
+8.2 Training Time Analysis 
+
+Figure 3 presents training time comparisons across all four architectures. GRASP achieves consistent 1.4–1.5 × speedup over Multi-Source across model sizes from 1.3M to 25.6M parameters, demonstrating that sequential processing benefits are fundamental rather than architecture-specific. The advantage arises from avoiding Multi-Source’s requirement to load all K sources simultaneously during fusion, instead processing sources one at a time with constant O(1) memory. GRASP: Memory-Efficient Multi-Source Transfer 19  
+
+> Fig. 3. Training time comparison across methods and architectures. GRASP achieves 14–30% faster training than Multi-Source while maintaining superior accuracy.
+
+## 9 Implementation Details 
+
+9.1 Hardware and Software 
+
+All experiments used NVIDIA RTX 5080 (16GB), AMD Ryzen 9 7950X (16 cores), 64GB DDR5 RAM, and 2TB NVMe SSD. Software: PyTorch 2.7.0, CUDA 12.1, Python 3.11.5, with torchvision 0.18.0, numpy 1.26.2, and scikit-learn 1.3.2. 
+
+9.2 Hyperparameters GRASP: Gradient alignment threshold τ = 0 .3 (tested: 0.0, 0.3, 0.6, 0.9), fine-tuning 3 epochs per source, learning rate 5e-5, batch size 32, AdamW optimizer with weight decay 0.01. 
+
+Multi-Source: Uniform parameter averaging, 3 fine-tuning epochs, learning rate 5e-5, batch size 32. 
+
+PEARL: Adapter rank 16, all transformer layers, Bayesian temperature 
+
+γ = 2 .0, learning rate 1e-3, 3 training epochs per source. 
+
+Ensemble: Uniform prediction averaging only involves inference of the pre-trained models using a batch size of 32. 20 M. I. Wisell et al. 
+
+9.3 Data Preprocessing 
+
+All images resized to 224 ×224 pixels with ImageNet normalization (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]). Training augmentation: random hori-zontal flip ( p = 0 .5), random crop with padding. Validation/test: center crop only, no augmentation. 
+
+Yearbook-specific: Grayscale conversion for pre-1950s images (simulating historical photography), contrast normalization across all periods to account for varying photo quality from early film to modern digital. 
+
+CLEAR-10/100: Temporal bins created by grouping consecutive years (5 bins of 2 years each for 2015–2025 period).
