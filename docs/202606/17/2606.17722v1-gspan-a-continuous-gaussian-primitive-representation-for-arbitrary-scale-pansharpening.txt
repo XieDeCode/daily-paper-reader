@@ -1,0 +1,419 @@
+Title: GSPan: A Continuous Gaussian Primitive Representation for Arbitrary-Scale Pansharpening
+
+URL Source: https://arxiv.org/pdf/2606.17722v1
+
+Published Time: Wed, 17 Jun 2026 01:06:49 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# GSPan: A Continuous Gaussian Primitive Representation for Arbitrary-Scale Pansharpening 
+
+## Fangyi Li a, Xiaoyuan Yang a, Yixiao Li a, Zongyang Sui a, Kangqing Shen b,∗ and Gemine Vivone c
+
+> a
+
+Beihang University, School of Mathematical Sciences, Beijing, 102206, China 
+
+> b
+
+Tsinghua University, Department of Automation, Beijing, 100084, China 
+
+> c
+
+National Research Council - Institute of Methodologies for Environmental Analysis, CNR-IMAA, Tito, 85050, Italy 
+
+A R T I C L E I N F O 
+
+Keywords :Pansharpening Gaussian Splatting Arbitrary Scale Image Fusion 
+
+A B S T R A C T 
+
+Pansharpening aims to generate high-resolution multispectral (HRMS) images by preserving spectral content from low-resolution multispectral (LRMS) observations while incorporating spatial details guided by a panchromatic (PAN) image. Although deep learning has advanced this task, most existing methods formulate pansharpening as fixed-grid HRMS prediction, which limits scale adaptation. To address this limitation, we propose GSPan, a framework that introduces 2D Gaussian Splatting (GS) into pansharpening. Instead of directly predicting HRMS pixels on a predefined grid, GSPan represents band-wise residual details as continuous and learnable 2D Gaussian primitives. To estimate these primitives from complementary PAN and MS observations, we design a Dual-Stream Hierarchical Interaction (DSHI) architecture with a Spatial-Spectral Interactive Attention (SSIA) module for cross-stream feature interaction. The predicted primitives are rendered as a residual detail field and injected into the upsampled MS image. This continuous representation allows GSPan to render fused images on arbitrary target sampling grids without scale-specific retraining. It further enables a Scale-Decoupled Asymmetric Inference (SDAI) strategy, which estimates primitives at a reduced resolution and renders the fused image at the target resolution for efficient large-scene pansharpening. Experiments on QuickBird, GaoFen-2, WorldView-3, and the large-scene WorldView-3-4K dataset show that GSPan delivers state-of-the-art fusion performance across both cropped-patch and large-scene evaluations. Moreover, SDAI markedly accelerates large-scene inference by decoupling primitive estimation from target-grid rendering, achieving a favorable trade-off between computational efficiency and fusion quality. These results demonstrate the potential of continuous Gaussian residual representations as a flexible and scale-decoupled alternative to fixed-grid HRMS prediction, enabling more efficient large-scene pansharpening. 
+
+## 1. Introduction 
+
+Pansharpening is a fundamental problem in remote sens-ing image fusion, aiming to overcome the intrinsic trade-off between spatial and spectral resolutions in satellite imaging. Panchromatic (PAN) sensors provide high-spatial-resolution observations with limited spectral information, whereas multispectral (MS) sensors capture richer spectral responses at a lower spatial resolution. Accordingly, pansharpening seeks to generate high-resolution multispectral (HRMS) im-ages by preserving the spectral content of low-resolution multispectral (LRMS) observations while incorporating fine spatial details guided by the PAN image [1–3]. Histori-cally, this domain has been explored through three major paradigms [4]: component substitution (CS), multiresolution analysis (MRA), and variational optimization (VO) . These methods rely on physical models or statistical assumptions, generally achieve good spectral or spatial fidelity, and do not require large training datasets. However, their performance degrade in large-scene or complex scenes due to limitations in modeling intricate nonlinear interactions between PAN and MS images. Deep learning (DL) has significantly propelled the field of pansharpening by establishing complex nonlinear map-pings between PAN and MS images. A diverse range of 
+
+> ∗
+
+Corresponding author.  
+
+> shenkq@mail.tsinghua.edu.cn
+
+(K. Shen) 
+
+Figure 1: Conceptual comparison of different representation paradigms. (a) CNN Feature Map: Discrete grid-based repre-sentation, illustrated by a CNN feature map as a representative example: features are organized on a regular pixel lattice, mak-ing reconstruction dependent on predefined output grids. (b) INR Feature Map: representation is achieved via coordinate-based queries on a latent grid. (c) GS Feature Map (Ours): explicit Gaussian primitives adaptively align with the natural geometric structures. 
+
+architectures has been explored, from early convolutional neural network (CNN)-based frameworks [5–7] and gen-erative adversarial network (GAN)-based models [8, 9] to Transformer-driven architectures [10, 11]. More recently, diffusion-based approaches [12] and state-space models [13] have further enhanced fusion performance. Despite their success, most existing learning-based methods still formu-late pansharpening as a grid-wise reconstruction problem at a predefined output resolution. Although their architectures 
+
+F. Li: Preprint submitted to Elsevier Page 1 of 16 
+
+> arXiv:2606.17722v1 [cs.CV] 16 Jun 2026 GSPan for Arbitrary-Scale Pansharpening
+
+differ, most existing DL pansharpening methods ultimately predict HRMS images on a predefined discrete grid, often with a fixed scale factor determined by the training or evalu-ation protocol. Fig. 1(a) uses a CNN feature map as a repre-sentative example of such grid-based representations, where features are organized on a regular pixel lattice. This formu-lation does not naturally support arbitrary-scale rendering, since changing the output scale usually requires modifying the upsampling strategy, decoder design, or training setting, offering limited flexibility for real-world scenarios. To accommodate the diverse resolution requirements in practical scenarios, pansharpening at arbitrary resolu-tions has emerged as a novel research focus [14–16]. A prominent paradigm in this direction is the implicit neural representation (INR), which models images as continuous functions of coordinates [17]. As depicted in Fig. 1(b), INRs reconstruct high-resolution textures by querying latent codes at continuous sub-pixel locations, a mechanism that has been successfully applied to various tasks including arbitrary-scale image super-resolution and image fusion [18–20]. However, the coordinate-based query mechanism of INRs typically relies on point-wise multi-layer perceptron (MLP) evaluations, which can lead to increased computational over-head as the target resolution grows. Such characteristics present practical challenges in terms of inference efficiency, particularly when dealing with large scene satellite images prevalent in remote sensing applications. As a more efficient and geometrically aware alternative, gaussian splatting (GS) [21–23] has shown strong potential. GS represents details through a collection of learnable 2D Gaussian primitives, each characterized by explicit attributes including location, scaling, orientation, residual coefficient, and spectral coefficient vector. As illustrated in Fig. 1(c), these overlapping primitives form a continuous geometric field, allowing for precise querying at any sub-pixel coor-dinate. By replacing conventional point-wise interpolation with explicit geometric representation, Gaussian primitives can better preserve structural continuity by explicitly param-eterizing spatial extent and orientation. Despite its important impact on 3D reconstruction and super-resolution, the inte-gration of GS into pansharpening paradigm remains an open and promising frontier. Building upon the explicit geometric modeling advan-tages of GS, we propose GSPan, the first framework that adapts Gaussian Splatting to pansharpening task. The core of GSPan lies in representing residual detail field as a con-tinuous field of learnable 2D Gaussian primitives. Specif-ically, we design a Dual-Stream Hierarchical Interaction (DSHI) architecture to generate refined Gaussian primitives: the panchromatic stream provides high-frequency structural guidance, while the multispectral stream supplies the spec-tral context. These two complementary streams are inte-grated via a Spatial-Spectral Interactive Attention (SSIA) module, facilitating mutual feature interaction to estimate precise Gaussian attributes. By adding the rendered Gaus-sian residuals to the upsampled MS image, GSPan recon-structs sharp spatial details while preserving spectral fidelity. The continuous nature of the proposed Gaussian rep-resentation further enables arbitrary-scale rendering. Once the Gaussian primitive attributes are estimated from a given PAN-MS input pair, the residual detail field can be ren-dered on different target sampling grids by adjusting the sampling density in the continuous coordinate space. In this way, GSPan can produce HRMS outputs at user-specified spatial scales without modifying the network architecture or retraining the model. This arbitrary-scale rendering property naturally leads to a Scale-Decoupled Asymmetric Inference (SDAI) strategy for large-scene processing. In standard in-ference, Gaussian primitive attributes are estimated from the full-resolution PAN-MS inputs and then rendered on the corresponding full-resolution grid, which better exploits fine PAN-guided structures but incurs a high computational cost. In contrast, SDAI estimates the Gaussian primitive attributes at a reduced resolution and renders the fused image on the desired high-resolution grid using the same continuous Gaussian representation. In this way, SDAI decouples the resolution used for primitive attribute estimation from the final rendering resolution. This inference mode substantially improves efficiency, while sacrificing part of the spatial fidelity because fine structures available only in the full-resolution PAN image are not fully used during primitive estimation. Therefore, standard GSPan is more suitable for quality-oriented full-resolution reconstruction, whereas SDAI provides an efficiency-oriented option for large-scene satellite image fusion. The main contributions of this work are summarized as follows: 1. We propose GSPan, which, to the best of our knowl-edge, represents the first attempt to introduce Gaus-sian Splatting into the pansharpening task. 2. Leveraging the continuous representation of Gaussian primitives, GSPan supports flexible rendering at ar-bitrary pansharpening scales. This scale-continuous rendering capability further enables the proposed Scale-Decoupled Asymmetric Inference (SDAI) strat-egy, which performs primitive estimation at a reduced resolution and renders the fused image at the target resolution for efficient large-scene inference. 3. We design a Dual-Stream Hierarchical Interaction (DSHI) block along with a Spatial-Spectral Interactive Attention (SSIA) module to synergistically couple panchromatic structural guidance with multispectral content, providing precise guidance for primitive at-tribute estimation. 4. We construct a specialized large-scene dataset WV3-4K to evaluate fusion quality and inference efficiency in 4096 × 4096 scenarios. Extensive experiments on QB, GF2, WV3 and WV3-4K datasets demonstrate that GSPan achieves state-of-the-art performance un-der standard inference, while SDAI provides an effi-cient solution for large-scene satellite image fusion.   
+
+> F. Li: Preprint submitted to Elsevier Page 2 of 16 GSPan for Arbitrary-Scale Pansharpening
+
+## 2. Related Work 
+
+2.1. Deep-Learning-Based Pansharpening at Fixed Resolutions 
+
+Over the past decade, deep learning has significantly advanced pansharpening. Early representative methods, pri-marily based on Convolutional Neural Networks (CNNs) such as APNN [24] and TFNet [25], established the end-to-end nonlinear mapping paradigm. Subsequently, researchers focused on enhancing the network’s ability to model com-plex spatial textures through feature-level multi-scale mod-eling and global context reasoning. For instance, LPPN [26] utilizes Laplacian pyramids to decompose spatial details across different frequency bands. MSAN [11] and MARNet [27] employ multi-receptive-field attention mechanisms to aggregate hierarchical features. Model-driven and hybrid learning methods have been explored to integrate model-based priors with deep networks. For instance, CSLP [28] incorporates compressed sensing into a neural framework to enhance feature fidelity. To further push the boundaries of spatial-spectral modeling, state-space models like Pan-Mamba [13] and 𝑆 3Mamba [29] leverage Mamba’s linear complexity to capture long-range dependencies. Similarly, diffusion-based methods such as PanDiff [12] introduce gen-erative denoising processes into pansharpening, while low-rank diffusion models [30] have also been explored in re-lated hyperspectral pansharpening tasks. Beyond backbone design, several studies focus on data efficiency and scale gen-eralization. ZS-Pan [31] and Zero-Sharpen [32] investigate zero-shot or image-specific pansharpening schemes, while continual-learning-guided training [33] and DocsNet [34] address robustness across reduced- and full-resolution set-tings. Despite their sophisticated feature extraction modules, their output formulation is usually tied to a predefined dis-crete grid or fixed scale factor. This lacks the flexibility to generate arbitrary-resolution products beyond the specific scale used during training. 
+
+2.2. Arbitrary-Scale Pansharpening via continuous representation 
+
+To meet the emerging demand for flexible spatial recon-struction in diverse remote sensing applications, the con-cept of Arbitrary-Scale Pansharpening has recently gained attention. This paradigm was formally established by He et al. [14]. While their study primarily addressed hyperspectral data, the underlying principles are directly applicable to the Arbitrary-Scale Multispectral (ASMS) pansharpening task explored in this work. He et al. presents two fundamental challenges that traditional fixed-scale models are not de-signed to handle. First, since target resolutions in practical scenarios can involve a wide range of potential integer or non-integer scales, it is practically infeasible to train a specific model for every candidate resolution. Second, the model must guarantee spectral fidelity at any arbitrary spatial resolution, especially when the target scale deviates signifi-cantly from the training scale. To tackle these issues, ARHS-CNN [14] introduced a two-step relay optimization that decouples feature enhancement from spatial rescaling. By first fusing features at the PAN resolution and subsequently tuning them to target scales via a rescaling subnetwork, this framework enables a versatile paradigm for multi-scale fusion. Recent efforts have moved beyond traditional discrete convolutional frameworks toward continuous representation paradigms. Implicit Neural Representations (INRs) have emerged as a powerful approach for continuous signal modeling, representing images as coordinate-based func-tions, 𝑓 (𝐱 ), where signal values are queried via Multi-Layer Perceptrons (MLPs). This paradigm was pioneered by the Local Implicit Image Function (LIIF) [17], and has since evolved through various architectural enhance-ments—such as frequency-domain encoding and attention mechanisms—to better capture fine textures [18–20]. In the domain of pansharpening, INR-based models provide an effective framework for arbitrary-scale fusion [35]. Despite their flexibility, the coordinate-based "point-query" mecha-nism of most INRs typically relies on exhaustive MLP evalu-ations for every sub-pixel location, which lead to substantial computational overhead when rendering large satellite im-ages. This characteristic have motivated the quest for a more efficient explicit representation to achieve a superior balance between efficiency and fidelity. Originally developed for 3D radiance fields [21, 22], Gaussian Splatting (GS) has been successfully adapted to 2D image tasks, achieving ultra-fast representation and high-fidelity compression [36]. The application of GS in arbitrary-scale super-resolution [37, 23, 38] highlights its advantages over the INR paradigm. Unlike the implicit coordinate-to-pixel mapping of INRs, GS-based frameworks represent image through explicit Gaussian primitives, allowing adap-tively stretch and align with complex textures and directional edges. Furthermore, GS replaces the repetitive, point-wise MLP queries of INRs with a single-pass primitive field construction and efficient differentiable rasterization. In this work, we propose GSPan to exploit these explicit geomet-ric modeling for more efficient and precise satellite image fusion. 
+
+## 3. Methodology 
+
+In this section, we present the proposed GSPan, a dual-stream spatial-spectral interaction framework for arbitrary-scale pansharpening. 
+
+3.1. Continuous Residual Representation with 2D Gaussian Splatting 
+
+The proposed framework represents the residual detail field of a pansharpened image as a collection of continuous 2D Gaussian primitives. Specifically, we represent the scene using 𝑁 learnable 2D Gaussians  = { 𝐺 1, 𝐺 2, … , 𝐺 𝑁 },where the 𝑖 -th primitive is defined by five attributes: center position 𝝁 𝑖 = { 𝜇 𝑥,𝑖 , 𝜇 𝑦,𝑖 }, scaling factors 𝝈 𝑖 = { 𝜎 𝑥,𝑖 , 𝜎 𝑦,𝑖 },correlation factor 𝜌 𝑖 ∈ (−1 , 1) , residual coefficient 𝛼 𝑖 ∈(−1 , 1) , and a spectral coefficient vector 𝐜 𝑖 ∈ ℝ𝐶 with   
+
+> F. Li: Preprint submitted to Elsevier Page 3 of 16
+
+GSPan for Arbitrary-Scale Pansharpening 
+
+Figure 2: Overall architecture of the proposed GSPan framework. The pipeline consists of three primary stages: (A) Feature Encoder and Primitive Seed Embedding, which anchors spatial and spectral features into raw embeddings via window cross-attention. (B) Dual-Stream Hierarchical Interaction (DSHI) Block, where Swin Transformer and Spatial-Spectral Interactive Attention (SSIA) modules facilitate intra-stream evolution and inter-stream coupling. W-MSA and SW-MSA are multi-head self attention modules with regular and shifted windowing configurations, respectively. (C) Gaussian Estimation and Rendering, where Gaussian primitives are predicted to synthesize the high-resolution residual field for final image reconstruction. 
+
+𝐶 being the number of multispectral bands. For any sub-pixel coordinate 𝐱 = ( 𝑥, 𝑦 ) in the continuous 2D space, the contribution of a single Gaussian 𝐺 𝑖 is formulated as: 
+
+𝐺 𝑖 (𝐱 ) = 𝑎 𝑖 ⋅ 𝐜 𝑖 ⋅ exp 
+
+(
+
+− 12 (𝐱 − 𝝁 𝑖 )⊤Σ−1  
+
+> 𝑖
+
+(𝐱 − 𝝁 𝑖 )
+
+)
+
+, (1) where Σ𝑖 is the covariance matrix that determines the spatial extent and orientation of the Gaussian, defined as: 
+
+Σ𝑖 =
+
+[ 𝜎 2 
+
+> 𝑥,𝑖
+
+𝜌 𝑖 𝜎 𝑥,𝑖 𝜎 𝑦,𝑖 
+
+𝜌 𝑖 𝜎 𝑥,𝑖 𝜎 𝑦,𝑖 𝜎 2
+
+> 𝑦,𝑖
+
+]
+
+. (2) Here, 𝑎 𝑖 controls the overall intensity of the residual contribution, while 𝐜 𝑖 = [𝑐 (1)  
+
+> 𝑖
+
+, 𝑐 (2)  
+
+> 𝑖
+
+, … , 𝑐 (𝐶 ) 
+
+> 𝑖
+
+]⊤ modulates the contribution across spectral bands independently. This formulation allows each Gaussian primitive to adaptively adjust its spatial extent, orientation, and spectral profile. 
+
+3.2. Network Architecture 
+
+The overall architecture of the proposed GSPan frame-work is illustrated in Fig. 2. To learn the primitive-level representation, our network takes the PAN image 𝐈 𝑃 𝐴𝑁 ∈
+
+ℝ1× 𝐻 ×𝑊 and the upsampled MS image 𝐈 ̃ 𝑀𝑆 ∈ ℝ𝐶 ×𝐻 ×𝑊 
+
+as source inputs, where 𝐻 and 𝑊 denote the height and width of the image respectively. Initially, respective spatial and spectral feature maps are first extracted via encoders and then projected into a set of learnable spatial and spectral embeddings (Fig. 2(a)). These embeddings are iteratively refined through stacked Dual-Stream Hierarchical Interac-tion (DSHI) blocks (Fig. 2(b)) to produce 𝑁 𝑑 -dimensional Gaussian Embeddings 𝐸 𝐺𝑆 ∈ ℝ𝑁 ×𝑑 . Finally, Gaussian Primitive Heads decode these embeddings into explicit Gaussian attributes {𝝁 , 𝝈 , 𝜌, 𝛼, 𝐜 } in a canonical normalized coordinate space Ω ∈ [−1 , 1] 2, enabling them to be rendered into a residual map through an efficient differentiable raster-izer (Fig. 2(c)). The final fused image 𝐼 HRMS ∈ ℝ𝐶 ×𝐻 ×𝑊 is recon-structed using a residual synthesis strategy, where the ren-dered Gaussian field serves as the detail increment: 
+
+𝐈 𝐻𝑅𝑀𝑆 (𝑥, 𝑦, 𝑐 ) = 𝐈 ̃𝑀𝑆 (𝑥, 𝑦, 𝑐 ) + 
+
+> 𝑁
+
+∑
+
+> 𝑖 =1
+
+𝐺 𝑖 (𝑥, 𝑦, 𝑐 ), (3) where 𝐺 𝑖 (𝑥, 𝑦, 𝑐 ) denotes the 𝑐 -th component of the vector-valued output from the 𝑖 -th Gaussian primitive evaluated at spatial coordinate (𝑥, 𝑦 ).By encouraging the Gaussians to model the sparse resid-ual map rather than the entire image, this strategy helps 
+
+F. Li: Preprint submitted to Elsevier Page 4 of 16 GSPan for Arbitrary-Scale Pansharpening 
+
+preserve spectral consistency and reduces the Gaussian primitive density. 
+
+3.2.1. Primitive Seed Embedding 
+
+The Window Cross Attention (WCA) module serves as the critical interface that projected pixel-level spatial and spectral features into learnable spatial and spectral embed-dings. A fundamental challenge in primitive-based represen-tation is determining the optimal number of Gaussians 𝑁 .To ensure that the model maintains sufficient representation capacity across variable input sizes, we design 𝑁 to be adaptively coupled with the input size, specifically setting 
+
+𝑁 = 𝑚 × 𝐻 × 𝑊 , where 𝑚 is a predefined density hyperparameter that controls the quantity of Gaussian prim-itives. This ensures that even for large scenes, a high density of Gaussian primitives is maintained to reconstruct fine-grained textures. In practical implementation, we partition the feature maps of size 𝐻 × 𝑊 into non-overlapping windows of size 
+
+𝑘 × 𝑘 . The content within each local window is modeled by a learnable base embedding 𝐸 𝑏𝑎𝑠𝑒 ∈ ℝ𝑘 2×𝑑 , where 𝑑 denotes the embedding dimension. The complete raw embeddings 
+
+𝐸 is then constructed by duplicating 𝐸 𝑏𝑎𝑠𝑒 for 𝐻 𝑘 × 𝑊 𝑘 times to cover the entire spatial domain. Within each window, we perform cross-attention where the base embedding acts as the Query ( 𝑄 ), while the extracted image features serve as the Key ( 𝐾 ) and Value ( 𝑉 ). The operation is formulated as: Attention (𝑄, 𝐾, 𝑉 ) = SoftMax 
+
+(
+
+𝑄𝐾 𝑇 
+
+√𝑑 
+
++ 𝐵 
+
+)
+
+𝑉 , (4) where 𝐵 represents the learnable relative position bias. Through this window-based cross-attention strategy, WCA transforms pixel-level features into a structured set of spatial and spectral embeddings, providing a foundation for the subsequent hierarchical refinement. 
+
+3.2.2. Dual-Stream Hierarchical Interaction Block 
+
+The refinement phase is centered around stacked Dual-Stream Hierarchical Interaction (DSHI) Blocks. These blocks refine source-specific embeddings while enabling cross-stream information flow between the spatial and spec-tral embeddings. Structurally, each DSHI block comprises Swin Transformer layers for intra-stream representation learning and an SSIA module for inter-stream coupling. 
+
+Intra-stream Context Evolution. Initially, the spatial and spectral embeddings are processed by independent Swin Transformer layers [39] to capture long-range dependencies and global contextual information. By utilizing the shifted window mechanism, the model enables Gaussian seeds to perceive structural continuity beyond local windows. 
+
+Spatial-Spectral Interactive Attention (SSIA). To al-low one stream 𝑖 to adaptively retrieve and integrate com-plementary features from the other stream 𝑗 , we propose the SSIA module as the key fusion mechanism. As illustrated in Fig. 2(B), SSIA facilitates a deep exchange of information by treating one stream as the query and the other as the reference. For instance, to inject rich spatial details into the spectral stream, the spectral embedding 𝐸 𝑠𝑝𝑒𝑐 acts as the Query ( 𝑄 𝑖 ), while the spatial embedding 𝐸 𝑠𝑝𝑎𝑡 provides the Key ( 𝐾 𝑗 ) and Value ( 𝑉 𝑗 ). The cross-attention operation is mathematically formulated as: 
+
+𝑄 𝑖 = 𝐸 𝑖 𝑊 𝑄 , 𝐾 𝑗 = 𝐸 𝑗 𝑊 𝐾 , 𝑉 𝑗 = 𝐸 𝑗 𝑊 𝑉 ,
+
+MHCA( 𝐸 𝑖 , 𝐸 𝑗 ) = Sof tMax 
+
+( 𝑄 𝑖 𝐾 𝑇 𝑗 
+
+√𝑑 
+
++ 𝐵 
+
+)
+
+𝑉 𝑗 , (5) where 𝐸 𝑖 , 𝐸 𝑗 ∈ { 𝐸 𝑠𝑝𝑎𝑡 , 𝐸 𝑠𝑝𝑒𝑐 } denote the input embeddings from the two streams, and 𝑊 𝑄 , 𝑊 𝐾 , 𝑊 𝑉 are learnable pro-jection matrices. Following the multi-head cross-attention (MHCA) layer, a residual addition, Layer Normalization (LN), and a Feed-Forward Network (FFN) are applied to further refine the fused representation: 
+
+𝐸 out  
+
+> 𝑖
+
+= FFN (LN(MHCA( 𝐸 𝑖 , 𝐸 𝑗 ) + 𝐸 𝑖 )) + 𝐸 res  
+
+> 𝑖
+
+, (6) where 𝐸 𝑟𝑒𝑠 𝑖 denotes the residual bypass from the input. In dual-stream architecture, SSIA is performed symmetrically. This symmetric interaction encourages the final Gaussian embeddings to incorporate both geometric and spectral in-formation. 
+
+3.2.3. Gaussian Estimation and Rendering 
+
+The final stage of GSPan transforms the refined rep-resentations into explicit Gaussian primitives. The refined spatial and spectral embeddings are fused by a convolution block. To achieve the target primitive density, the fused Gaussian embeddings 𝐸 𝑔𝑎𝑢𝑠𝑠𝑖𝑎𝑛 is subsequently upsampled to 𝐸 ↑ 
+
+> 𝑔𝑎𝑢𝑠𝑠𝑖𝑎𝑛
+
+∈ ℝ𝑚𝑘 2×𝑑 through a sub-pixel convolution layer, ensuring that the number of Gaussian seeds is expanded by a factor of 𝑚 . This high-capacity 𝐸 ↑ 
+
+> 𝑔𝑎𝑢𝑠𝑠𝑖𝑎𝑛
+
+then serves as the input for the Gaussian Primitive Heads, which consists of MLP branches to predict the geometric and spectral attributes {𝜇, 𝜎, 𝜌, 𝛼, 𝑐 } for the 𝑁 primitives in a canonical normalized coordinate space. A key advantage of this primitive-based representation is its scale-continuous rendering capability. The predicted Gaussian field exists in a continuous coordinate space, al-lowing the Gaussian primitive attribute estimation process to remain independent of the final rendering scale. To render the fused result at an arbitrary target resolution scale 𝐻 𝑠 ×
+
+𝑊 𝑠 , we modulate the sampling density by adjusting the sampling interval within the continuous coordinate space. This mechanism, which will be further illustrate in Sec.4.4, enables flexible reconstruction without the need for model retraining. To synthesize the high-resolution residual map, we uti-lize an efficient differentiable 2D rasterization rendering method [23]. In contrast to the original implementation, we have incorporated engineering enhancements to support parallel batch rendering, allowing for simultaneous pro-cessing across large image patches to drastically accelerate inference. By restricting the rendering to a localized range 𝑟 
+
+around each Gaussian center, the computational complexity is effectively maintained at (𝑟 2𝐻 𝑠 𝑊 𝑠 𝑁 ).                                                                                                                                                
+
+> F. Li: Preprint submitted to Elsevier Page 5 of 16 GSPan for Arbitrary-Scale Pansharpening
+> Table 1
+> Illustration of datasets. Item Sub-item QB GF2 WV3 WV3-4K Training sets Number of samples 17,139 19,809 9,714 9,895 MS shape 16 ×16 ×416 ×16 ×416 ×16 ×816 ×16 ×8PAN shape 64 ×64 ×164 ×64 ×164 ×64 ×164 ×64 ×1Reduced testing sets Number of samples 20 20 20 4MS shape 64 ×64 ×464 ×64 ×464 ×64 ×8256 ×256 ×8PAN 256 ×256 ×1256 ×256 ×1256 ×256 ×11024 ×1024 ×1Full testing sets Number of samples 20 20 20 4MS shape 128 ×128 ×4128 ×128 ×4128 ×128 ×81024 ×1024 ×8PAN shape 512 ×512 ×1512 ×512 ×1512 ×512 ×14096 ×4096 ×1Bit Depth -11 10 11 11
+
+## 4. Experiment 
+
+4.1. Datasets 
+
+To verify the effectiveness of the proposed GSPan, ex-periments are conducted on two data sources: the public PanCollection [40] and our self-built WV3-4K dataset. Pan-Collection aggregates satellite data from QuickBird (QB), GaoFen-2 (GF2) and WorldView-3 (WV3). For large-scene inference validation, we further construct the WV3-4K dataset based on 8-band WorldView-3 satellite data. Follow-ing Wald’s protocol [41], reduced-resolution data are gen-erated from the original full-resolution scenes. Specifically, the details of our datasets are presented in Table 1. The training set contains 9,895 64×64 PAN patch pairs, and four 
+
+4096 × 4096 full-size PAN scenes serve for test. The details of our datasets are presented in Table 1. Compared with the PanCollection used in this work, where reduced-resolution (RR) and full-resolution (FR) test samples are not strictly paired from the same spatial regions, the proposed WV3-4K test set provides spatially matched RR-FR scenes. The RR samples have a PAN size of 1024 × 1024 , while the corresponding FR scenes reach 4096 × 4096 
+
+(PAN). This paired design allows us to evaluate not only the full-resolution fusion quality, but also the ability of GSPan to infer Gaussian primitives at a lower resolution and render them to a higher-resolution output under the proposed Scale-Decoupled Asymmetric Inference strategy. Quantitative evaluation is performed using both reduced-resolution (RR) and full-resolution (FR) metrics. For the RR assessment, we use three reference evaluation metrics including SAM [42], ERGAS [43], and 𝑄 2𝑛 [44]. For the FR experiments in real-world scenes, we use three non-reference evaluation metrics including the HQNR [45] index, along with its spectral distortion index 𝐷 𝜆 and the spatial distortion index 𝐷 𝑠 to evaluate the fusion quality without a reference image. 
+
+4.2. Implementation details 
+
+The GSPan framework is implemented in PyTorch and trained on one NVIDIA Tesla V100 (32GB) GPU. We utilize the Adam optimizer with an initial learning rate of 2 × 10 −4 ,which is regulated by a 5-epoch linear warmup followed by a cosine annealing schedule decreasing to 1 × 10 −7 .The model is trained for 300 epochs on WV3 and GF2, 180 epochs on QB with batch size 24 and optimized via the pixel-wise 1 loss between fused HRMS outputs and the corresponding ground truth. Regarding the architectural configuration, the local processing window is set to 8×8 with 64 Gaussian seeds. To facilitate deep feature interaction and primitive refinement, the model incorporates 4 DSHI blocks (each containing 4 layers). The density 𝑚 is configured as 4, which means that each pixel is represented by 4 Gaussian primitives on average. 
+
+4.3. Comparison with Representative Pansharpening Methods 
+
+We compare GSPan against a diverse set of represen-tative pansharpening methods, which are categorized into two groups: traditional methods and deep learning (DL) methods. 
+
+• Traditional Methods : This category includes classi-cal benchmarks based on different physical and math-ematical paradigms, such as the component substi-tution (CS) method BDSD [46], the multi-resolution analysis (MRA) method AWLP [47], and the varia-tional optimization (VO) based approach TV [48]. 
+
+• Deep Learning Methods : To provide a comprehen-sive evaluation, we incorporate a broad spectrum of representative deep-learning methods. These in-clude representative CNN-based models (PNN [5] and FusionNet [7], LAGConv [49]), the generative ad-versarial network (PSGAN [8]), the attention-driven frameworks (MSAN [11], and MARNet [27]), and the state-space model (SSM) based approach (PanMamba [13]). 
+
+4.3.1. Evaluation on reduced-resolution scenes 
+
+The quantitative results on reduced-resolution scenes are summarized in Table 2. Overall, GSPan achieves the best or highly competitive performance across the three datasets. On the QB dataset, GSPan obtains the best SAM and 𝑄 2𝑛   
+
+> F. Li: Preprint submitted to Elsevier Page 6 of 16
+
+GSPan for Arbitrary-Scale Pansharpening 
+
+Table 2 
+
+Quantitative comparison on the Pancollection datasets. The best results are highlighted in red. The second best results are highlighted in blue. ↑ indicates that the larger the value, the better the performance, and ↓ indicates that the smaller the value, the better the performance. 
+
+Dataset Method Reference Metrics Non-reference Metrics 
+
+SAM ↓ ERGAS ↓ 𝑄 2𝑛 ↑ 𝐷 𝜆 ↓ 𝐷 𝑠 ↓ HQNR ↑
+
+QB AWLP 8.2935 ±1.8497 8.3823 ±0.9594 0.7979 ±0.0880 0.0392 ±0.0101 0.1211 ±0.0236 0.8446 ±0.0307 TV 7.6422 ±1.5925 8.6806 ±0.9108 0.7742 ±0.0903 0.0564 ±0.0153 0.0527 ±0.0052 0.8938 ±0.0149 BDSD 8.5243 ±1.9965 7.7426 ±0.6308 0.8236 ±0.0962 0.1907 ±0.0267 0.1162 ±0.0346 0.7158 ±0.0452 PNN 5.7045 ±0.8974 5.3349 ±0.3015 0.8930 ±0.1054 0.0457 ±0.0164 0.0501 ±0.0312 0.9070 ±0.0433 FusionNet 4.8920 ±0.8092 4.1573 ±0.2492 0.9208 ±0.0994 0.0550 ±0.0165 0.0246 ±0.0269 0.9222 ±0.0396 LAGConv 4.7207 ±0.7631 3.8398 ±0.3075 0.9292 ±0.0936 0.0661 ±0.0108 0.0623 ±0.0202 0.8756 ±0.0133 PSGAN 4.9338 ±0.8063 4.0294 ±0.2863 0.9292 ±0.0870 0.0289 ±0.0104 0.0478 ±0.0142 0.9247 ±0.0113 MSAN 4.6787 ±0.7731 3.8670 ±0.2814 0.9267 ±0.0954 0.0385 ±0.0120 0.0302 ±0.0166 0.9326 ±0.0256 PanMamba 6.3613 ±1.1749 6.5144 ±0.5475 0.9013 ±0.0746 0.0477 ±0.0122 0.0246 ±0.0216 0.9291 ±0.0308 MARNet 5.2920 ±0.7456 4.4376 ±0.3360 0.9168 ±0.1048 0.0983 ±0.0197 0.1095 ±0.0235 0.8034 ±0.0350 GSPan 4.5566 ±0.7531 3.8593 ±0.2670 0.9317 ±0.0874 0.0282 ±0.0078 0.0201 ±0.0133 0.9524 ±0.0178 GF2 AWLP 1.9461 ±0.4823 1.6753 ±0.3342 0.8687 ±0.0288 0.0338 ±0.0153 0.1263 ±0.0293 0.8444 ±0.0377 TV 1.6687 ±0.3083 1.6269 ±0.3445 0.9076 ±0.0272 0.0509 ±0.0411 0.0846 ±0.0166 0.8688 ±0.0400 BDSD 1.8009 ±0.3143 1.7291 ±0.3863 0.8859 ±0.0311 0.0694 ±0.0213 0.1142 ±0.0210 0.8244 ±0.0256 PNN 1.2024 ±0.2047 1.2605 ±0.1884 0.9382 ±0.0214 0.0145 ±0.0055 0.0266 ±0.0115 0.9594 ±0.0157 FusionNet 1.0064 ±0.1962 1.0704 ±0.2137 0.9580 ±0.0111 0.0261 ±0.0063 0.0480 ±0.0117 0.9272 ±0.0160 LAGConv 0.8926 ±0.1448 0.8155 ±0.1102 0.9726 ±0.0110 0.0177 ±0.0050 0.0164 ±0.0107 0.9662 ±0.0142 PSGAN 0.8332 ±0.1608 0.7522 ±0.1384 0.9761 ±0.0109 0.0117 ±0.0035 0.0203 ±0.0062 0.9683 ±0.0086 MSAN 0.8529 ±0.1448 0.7858 ±0.1169 0.9737 ±0.0132 0.0153 ±0.0088 0.0163 ±0.0068 0.9687 ±0.0130 PanMamba 1.4601 ±0.2602 1.7170 ±0.3085 0.9337 ±0.0151 0.0225 ±0.0058 0.0213 ±0.0087 0.9567 ±0.0119 MARNet 0.9185 ±0.1445 0.8996 ±0.1571 0.9702 ±0.0152 0.0174 ±0.0097 0.0165 ±0.0069 0.9664 ±0.0140 GSPan 0.7027 ±0.1294 0.6470 ±0.1176 0.9820 ±0.0087 0.0111 ±0.0031 0.0162 ±0.0063 0.9729 ±0.0083 WV3 AWLP 5.2545 ±1.4044 4.8476 ±1.3298 0.8006 ±0.0959 0.0151 ±0.0065 0.0451 ±0.0252 0.9406 ±0.0306 TV 5.5975 ±1.6839 4.7675 ±1.2667 0.7916 ±0.1155 0.0234 ±0.0061 0.0393 ±0.0227 0.9384 ±0.0269 BDSD 6.0381 ±1.7072 5.0489 ±1.6048 0.7861 ±0.1193 0.1138 ±0.0174 0.0903 ±0.0189 0.8060 ±0.0171 PNN 4.2827 ±0.7839 3.1521 ±0.7638 0.8554 ±0.1021 0.0263 ±0.0108 0.0344 ±0.0183 0.9404 ±0.0275 FusionNet 3.3692 ±0.6340 2.4950 ±0.5813 0.8896 ±0.0954 0.0195 ±0.0087 0.0274 ±0.0158 0.9537 ±0.0221 LAGConv 3.2724 ±0.5495 2.3797 ±0.5423 0.8901 ±0.0986 0.0205 ±0.0086 0.0323 ±0.0138 0.9479 ±0.0202 PSGAN 3.2393 ±0.5830 2.3468 ±0.4727 0.8952 ±0.0950 0.0190 ±0.0086 0.0281 ±0.0098 0.9535 ±0.0174 MSAN 3.0496 ±0.5384 2.2590 ±0.4787 0.8973 ±0.0933 0.0177 ±0.0077 0.0371 ±0.0147 0.9460 ±0.0212 PanMamba 5.5342 ±1.6583 4.9042 ±1.1529 0.8500 ±0.0925 0.0312 ±0.0141 0.0322 ±0.0249 0.9379 ±0.0360 MARNet 3.7290 ±0.6196 2.7701 ±0.8265 0.8657 ±0.1124 0.0277 ±0.0130 0.0479 ±0.0198 0.9260 ±0.0309 GSPan 2.9104 ±0.5313 2.1701 ±0.4561 0.9016 ±0.0939 0.0140 ±0.0064 0.0289 ±0.0132 0.9575 ±0.0174 
+
+scores, while its ERGAS ranks second, slightly behind LAG-Conv. On the GF2 and WV3 dataset, GSPan consistently achieves the best results in all three reduced-resolution metrics, including SAM, ERGAS, and 𝑄 2𝑛 . These results indicate that the proposed continuous Gaussian residual rep-resentation is effective under the Wald-protocol evaluation, providing high spectral fidelity and accurate spatial detail reconstruction. The consistent improvements across differ-ent sensors suggest that GSPan does not depend on dataset-specific favorable bias, but achieves strong generalization on reduced-resolution pansharpening test configurations. Qualitatively, Fig. 3, Fig. 4, and Fig. 5 illustrate that GSPan produces superior visual results with sharper edges and fewer artifacts compared to competing methods. In the zoomed-in patches of the QB and WV3 datasets, our method accurately restores complex spatial structures, such as building contours and fine roof textures. Furthermore, the absolute error maps in the bottom rows reveal that GSPan yields the most uniform and darkest blue regions, indicating the smallest residuals relative to the ground truth. These vi-sual results suggest that our Gaussian synthesis mechanism effectively leverages spatial guidance from the PAN image to refine the MS bands while maintaining a high degree of spectral fidelity. 
+
+4.3.2. Evaluation on full-resolution scenes 
+
+For full-resolution evaluation, GSPan also demonstrates strong overall performance in terms of HQNR and its dis-tortion components. On the QB and GF2 datasets, GSPan achieves the best results across all three full-resolution met-rics, including 𝐷 𝜆 , 𝐷 𝑠 , and HQNR. On the WV3 dataset, GSPan obtains the lowest spectral distortion 𝐷 𝜆 and the highest HQNR, while its spatial distortion 𝐷 𝑠 is slightly higher than the best-performing competing method. This result suggests that GSPan tends to preserve spectral con-sistency well, while maintaining competitive spatial fidelity in real-world full-resolution scenes. Fig. 6, Fig. 7, and Fig. 8 present the visual fusion results and the corresponding HQNR index maps for the QB, GF2, and WV3 datasets. The HQNR maps provide a localized quality assessment, where colors closer to dark red (value 1.0) represent higher fidelity, while blue and cyan tones signify significant distortion. Across all datasets, the HQNR maps of GSPan are dominated by deep red tones, indi-cating that our method preserves local spectral and spatial information more effectively than its competitors. Visually, the fused images produced by GSPan exhibit the sharpest textures and the most natural color reproduction, as seen in the building boundaries of the QB dataset and the dense 
+
+F. Li: Preprint submitted to Elsevier Page 7 of 16 GSPan for Arbitrary-Scale Pansharpening 
+
+AWLP TV BDSD PNN FusionNet LAGConv 
+
+PSGAN MSAN PanMamba MARNet GSPan GT 
+
+Figure 3: Qualitative comparison between the proposed GSPan and other methods on the QB dataset. Rows 1 and 3 show pansharpened fused images, and Rows 2 and 4 show corresponding absolute error maps against the ground truth (GT). 
+
+AWLP TV BDSD PNN FusionNet LAGConv 
+
+PSGAN MSAN PanMamba MARNet GSPan GT 
+
+Figure 4: Qualitative comparison between the proposed GSPan and other methods on the GF2 dataset. Rows 1 and 3 show pansharpened fused images, and Rows 2 and 4 show corresponding absolute error maps against the ground truth (GT). F. Li: Preprint submitted to Elsevier Page 8 of 16 GSPan for Arbitrary-Scale Pansharpening 
+
+AWLP TV BDSD PNN FusionNet LAGConv 
+
+PSGAN MSAN PanMamba MARNet GSPan GT 
+
+Figure 5: Qualitative comparison between the proposed GSPan and other methods on the WV3 dataset. Rows 1 and 3 show pansharpened fused images, and Rows 2 and 4 show corresponding absolute error maps against the ground truth (GT). 
+
+Table 3 
+
+Evaluation on the WV3-4K dataset. GSPan ∗ denotes the proposed SDAI mode. Params denotes the number of learnable parameters. Best results are highlighted in red, second-best ones in blue.                                                                         
+
+> Methods AWLP TV BDSD PNN FusionNet LAGConv PSGAN MSAN PanMamba MARNet GSPan GSPan ∗
+> 𝐷 𝜆 0.0412 0.0710 0.2880 0.117 0.1321 0.3531 0.348 0.0732 0.2297 0.2191 0.0527 0.0136
+> 𝐷 𝑠 0.0918 0.1200 0.1844 0.0379 0.1425 0.0697 0.0691 0.0794 0.0508 0.1963 0.0247 0.1106 HQNR 0.8708 0.8175 0.5807 0.8496 0.7445 0.6018 0.607 0.8532 0.7317 0.6291 0.9239 0.8772 Inference Time(s) ---2.89 2.03 16.72 3.05 9.76 20.64 81.7 76.48 6.89 Params(M) ---0.1044 0.0786 0.1514 2.2515 2.6236 0.4744 1.7873 2.6241 2.6241
+
+agricultural structures in the GF2 dataset (Fig. 7). These visual results, together with the HQNR maps, suggest that GSPan maintains robust full-resolution fusion performance across different sensors. 
+
+4.3.3. Evaluation on Large-Scene Full-Resolution Inference 
+
+Real-world satellite images are usually delivered as large continuous scenes rather than small cropped patches. There-fore, we further evaluate the proposed method on the WV3-4K dataset to examine its large-scene inference capability under 4096 × 4096 settings. Although the WV3-4K dataset is captured by the identical WorldView-3 sensor as the WV3 dataset, it is more challenging because large scenes cover a larger spatial extent and contain more complex heteroge-neous land-cover distributions. As reported in Table 3, under full-resolution inference, GSPan achieves the highest HQNR and the lowest spatial distortion 𝐷 𝑠 among the compared methods. This indicates that the main advantage of GSPan is not an isolated im-provement in one metric, but a better overall spatial-spectral fidelity in large-scene inference. The qualitative results in Fig. 10 further support the quantitative observations. Compared with competing meth-ods, GSPan produces clearer structural boundaries and more coherent textures over the large continuous scene. Some conventional and DL-based methods tend to generate over-smoothed regions, local artifacts, or visually inconsistent details when applied to the 4096 × 4096 image. In contrast, GSPan preserves sharper spatial structures while maintain-ing a relatively natural spectral appearance. The correspond-ing HQNR map also contains broader high-quality regions and fewer low-quality local areas, suggesting that GSPan maintains more stable fusion quality across heterogeneous land-cover regions. 
+
+F. Li: Preprint submitted to Elsevier Page 9 of 16 GSPan for Arbitrary-Scale Pansharpening 0  0  0  0  0   0 ̃𝑀𝑆 /PAN AWLP TV BDSD PNN FusionNet 
+
+LAGConv PSGAN MSAN PanMamba MARNet GSPan 
+
+Figure 6: Qualitative comparison on the QB dataset under full-resolution testing. The top and third rows show the fused images, while the second and fourth rows display the HQNR maps. 0  0  0  0  0   0 ̃𝑀𝑆 /PAN AWLP TV BDSD PNN FusionNet 
+
+LAGConv PSGAN MSAN PanMamba MARNet GSPan 
+
+Figure 7: Qualitative comparison on the GF2 dataset under full-resolution testing. The top and third rows show the fused images, while the second and fourth rows display the HQNR maps. F. Li: Preprint submitted to Elsevier Page 10 of 16 GSPan for Arbitrary-Scale Pansharpening 0  0  0  0  0   0 ̃𝑀𝑆 /PAN AWLP TV BDSD PNN FusionNet        
+
+> LAGConv PSGAN MSAN PanMamba MARNet GSPan
+> Figure 8: Qualitative comparison on the WV3 dataset under full-resolution testing. The top and third rows show the fused images, while the second and fourth rows display the HQNR maps.
+> Figure 9: Illustration of Scale-Decoupled Asymmetric Inference (SDAI). Unlike standard full-resolution inference, which estimates Gaussian primitive attributes and renders the output on the same full-resolution grid, SDAI estimates primitive attributes at a reduced resolution and renders the fused image on the target high-resolution grid. This design reduces large-scene inference cost by decoupling primitive attribute estimation from final-resolution rendering.
+
+The favorable large-scene performance of GSPan is at-tributed to its continuous Gaussian primitive representation. Most CNN-, Transformer-, GAN-, and SSM-based methods directly learn discrete pixel-level mappings. When applied to 4K scenes, their learned fusion rules are tightly coupled with the output grid, which may increase the risk of PAN over-injection, local spectral drift, or window-wise inconsis-tency in large-scene inference. In contrast, GSPan predicts Gaussian primitives and renders the fused image in a con-tinuous coordinate space. Moreover, the residual synthesis formulation uses the upsampled MS image as the spectral base and lets Gaussian primitives model only the residual details field, which helps preserve spectral consistency while restoring sharp spatial structures. 
+
+4.4. Arbitrary-Scale Rendering and Scale-Decoupled Asymmetric Inference 
+
+Arbitrary-scale rendering. The arbitrary-scale render-ing ability of GSPan comes from its continuous Gaussian primitive representation. GSPan predicts a set of Gaussian attributes that define a continuous residual field in a normal-ized coordinate space, rather than directly producing a fused image on a fixed output grid. Given a target sampling grid 
+
+Ω𝑠 corresponding to an arbitrary output scale 𝑠 , the fused result ̂ 𝐈 𝑠 can be obtained by rendering the Gaussian residual field on Ω𝑠 and adding it to the MS base upsampled to the same grid: ̂
+
+𝐈 𝑠 = 𝑠 (𝐌𝐒 ) + (Ω 𝑠 ), (7)   
+
+> F. Li: Preprint submitted to Elsevier Page 11 of 16 GSPan for Arbitrary-Scale Pansharpening
+
+## 0  0  0  0  0   0                             
+
+> AWLP TV BDSD PNN FusionNet LAGConv
+> PSGAN MSAN PanMamba MARNet GSPan GSPan ∗
+> Figure 10: Qualitative comparison on the WV3-4K dataset. The first and third rows show fused images and the second and fourth rows show HQNR maps.
+> Scale ×1.5 Scale ×2Scale ×3Scale ×4FR fused result
+> Figure 11: Arbitrary-scale pansharpening results on WV3-4K. Images from ×1.5 to ×4 are rendered from RR inputs by changing the target sampling grid, and are compared with the FR fused result obtained from original-scale inputs. Zoomed-in patches show that our method provides stable reconstruction quality and high-fidelity textures across different spatial resolutions.
+
+where 𝑠 (⋅) denotes the upsampling operation for the MS observation and (Ω 𝑠 ) denotes the rendered Gaussian residual field. Therefore, changing the output resolution only requires changing the target sampling grid during rendering, without modifying the network architecture or retraining the model. For any given PAN-MS input pair, including the original full-resolution inputs and reduced-resolution inputs, GSPan can render the fused HRMS image at a user-specified target grid. Fig. 11 visualizes the arbitrary-scale rendering behavior of GSPan. The results from ×1 .5 to ×4 are produced from reduced-resolution inputs, by changing only the target ren-dering grid. The results show that a single trained model can generate visually stable fused images at different out-put scales without scale-specific retraining. The comparison between the ×4 result generated from reduced-resolution inputs and the “FR fused result” generated from the original-scale inputs further clarifies the role of input information. Although these two results have the same spatial size, the FR fused result contains sharper and richer structures because it is guided by the original full-resolution PAN image. 
+
+Scale-Decoupled Asymmetric Inference. The above property further enables the Scale-Decoupled Asymmetric   
+
+> F. Li: Preprint submitted to Elsevier Page 12 of 16 GSPan for Arbitrary-Scale Pansharpening
+
+Inference (SDAI) strategy. In standard full-resolution infer-ence, GSPan performs primitive attribute estimation at the target full resolution, and then renders the fused image on the same grid (Fig. 9). This quality-oriented mode fully exploits the full-resolution PAN structures but incurs relatively high computational cost for large scenes. In contrast, SDAI decouples the resolution used for Gaussian primitive attribute estimation from the final render-ing resolution. Specifically, it estimates Gaussian primitive parameters at a reduced estimation resolution and then ren-ders the fused image at the target high-resolution grid using the same model weights. Thus, SDAI is an inference mode derived from arbitrary-scale Gaussian rendering. Since the reduced-resolution estimation stage cannot fully perceive fine PAN structures at the target resolution, SDAI is expected to sacrifice part of the spatial fidelity, reflected by a higher 
+
+𝐷 𝑠 . In return, it substantially reduces the computational burden and provides an efficiency-oriented option for large-scene processing. The quantitative results of SDAI are reported in the last two columns of Table 3, where GSPan ∗ denotes the proposed SDAI mode. Compared with standard GSPan, 
+
+GSPan ∗ achieve approximately 11 .1× acceleration with the same model parameters. Meanwhile, GSPan ∗ obtains the lowest spectral distortion 𝐷 𝜆 = 0.0136 and an HQNR value of 0.8772 , which is higher than all competing baseline methods, though lower than standard GSPan. The main cost of SDAI lies in spatial fidelity. Its 𝐷 𝑠 increases to 0.1106 ,which is higher than that of standard GSPan. Qualitatively, Fig. 10 further reveals the visual difference between standard GSPan and GSPan ∗. The fused image produced by standard GSPan preserves sharper edges and richer fine-scale textures across the large scene, especially in regions with dense structural patterns. In comparison, 
+
+GSPan ∗ maintains a relatively natural spectral appearance and overall scene consistency, but its local structures appear smoother and less detailed. This visual difference is consis-tent with the quantitative results in Table 3: standard GSPan achieves lower spatial distortion, whereas GSPan ∗ yields lower spectral distortion and much higher inference effi-ciency. The corresponding HQNR maps also show that stan-dard GSPan contains broader high-quality regions, while the map of GSPan ∗ still remains more favorable than those of all competing baseline methods. This result is consistent with the design goal of SDAI: it trades part of the fine spatial detail restoration for a substan-tial gain in inference efficiency. Therefore, standard GSPan is more suitable for quality-oriented large-scene recon-struction, whereas GSPan ∗ provides a practical efficiency-oriented mode for rapid large-scene fusion, previewing, or resource-constrained applications. 
+
+4.5. Visual Analysis of Gaussian Primitive Distribution 
+
+To examine how GSPan organizes the learned Gaussian primitives for residual detail reconstruction, we visualize their spatial distribution and geometric characteristics in Fig. 12. To analyze the spatial arrangement of the primitives independently of their learned anisotropic shapes and appearance-related attributes, we fix the scale, covariance-related parameter, residual coefficient, and spectral coeffi-cient vector to constant values, and render each Gaussian as an isotropic white spot at its predicted center location 𝜇 .The resulting Gaussian density map is shown in Fig. 12(c). Brighter regions indicate higher primitive density. Com-pared with the residual map in Fig. 12(b), the primitive distribution is clearly non-uniform and content-adaptive. The Gaussians tend to concentrate in regions with pro-nounced residual responses and dense structural details, such as bridge contours, building boundaries, and field furrows. In contrast, smooth regions show a relatively sparse prim-itive distribution. This observation suggests that the model learns to allocate more representational capacity to spatially complex areas. To further inspect the geometric flexibility of individual primitives, we randomly select 0.2% of the Gaussians and render them in red for visualization, as shown in Fig. 12(d). The zoomed-in view shows that the learned primitives are not simply isotropic points. Instead, their anisotropic co-variance parameters allow them to adjust spatial extent and orientation according to local image structures. For exam-ple, the highlighted primitives along the bridge deck are elongated and aligned with nearby directional edges. This behavior indicates that GSPan can model local anisotropic textures through explicit Gaussian primitives, providing an interpretable representation of residual details field. 
+
+4.6. Ablation Study 
+
+4.6.1. Effectiveness of Architectural Designs 
+
+To validate our architectural choices, we evaluate three configurations as summarized in Table 4. Comparing the single-stream baseline (Config I) with our full model reveals that early concatenation of PAN and MS images fails to pre-serve source-specific features, leading to suboptimal spectral and spatial fidelity. While the dual-stream structure with-out interaction (Config II) improves spectral consistency, it results in the highest spatial distortion ( 𝐷 𝑠 = 0 .0448 ), as the two streams evolve independently without structural guidance. The proposed model, equipped with the Spatial-Spectral Interactive Attention (SSIA) module, achieves the best performance across all metrics. This validates that SSIA serves as the effective bridge that enables the model to effectively fit spatial details by coupling panchromatic structural guidance with multi-spectral content, confirming the necessity of our hierarchical interaction design. 
+
+4.6.2. Impact of Gaussian Primitive Density 
+
+The primitive density factor 𝑚 , where the total number of Gaussians 𝑁 = 𝑚 × 𝐻 × 𝑊 , represents a fundamental trade-off between representation capacity and efficiency. As reported in Table 5, a low density ( 𝑚 = 1 ) is insufficient to capture complex 4K textures, while the best performance in our evaluation is achieved at 𝑚 = 4 . Interestingly, further                                                     
+
+> F. Li: Preprint submitted to Elsevier Page 13 of 16 GSPan for Arbitrary-Scale Pansharpening
+> (a) Fused Image (FR) (b) Residual Map (c) Gaussian density Map (d) Gaussian Highlight Map
+> Figure 12: Visual analysis of the learned Gaussian primitives on the GaoFen-2 dataset. (a) Full-resolution fused image; (b) residual map representing the residual detail field; (c) Gaussian density map illustrating the spatial distribution of primitives, where each Gaussian is rendered as a uniform circular spot at its predicted position 𝜇 to reveal content-adaptive clustering; (d) Gaussian highlight map where red dots ( 0.2% sampled primitives) demonstrate the anisotropic structural alignment of individual primitives within areas of high spatial complexity.
+> Table 4
+> Ablation results of architectural designs on the WV3-4K dataset. Best results are highlighted in red. config Dual-Steam SSIA 𝐷 𝜆 𝐷 𝑠 HQNR I××0.0473 0.0273 0.9267 II ✓×0.0369 0.0448 0.9200 GSPan ✓✓0.0450 0.0226 0.9334
+> Table 5
+> Performance comparison across different Gaussian primitive densities ( 𝑚 ). Best results are highlighted in red.
+> 𝑚 𝐷 𝜆 𝐷 𝑠 HQNR Time(s) 10.0855 0.0354 0.8822 74.95 40.0450 0.0226 0.9334 81.47 90.0613 0.0372 0.9038 93.75
+
+increasing the density to 𝑚 = 9 does not yield performance gains but instead leads to slight degradation ( 𝐷 𝜆 rises to 0.0613) and increased inference latency. This phenomenon suggests that an excessive number of primitives increase optimization difficulty. Consequently, we set 𝑚 = 4 as the default configuration. 
+
+4.7. Inference Efficiency Analysis 
+
+To assess the practical feasibility of GSPan, we analyze its computational efficiency in terms of parameter count and inference latency on the WV3-4K dataset. Results are summarized in Table 3. The efficiency benefit of SDAI is reflected in its in-ference latency. Standard full-resolution inference (GSPan) requires 76.48 seconds to process a 4K image. However, by performing primitive attributes estimation in a 1K reduced-resolution space and rendering the output directly in a 4K continuous coordinate space, GSPan ∗ reduces the latency to just 6.89 seconds—achieving an 11-fold acceleration using the exact same model weights. This speedup shows that our framework provides an efficiency-oriented solution with favorable spectral fidelity for large-scene satellite image processing. 
+
+## 5. Conclusion 
+
+This paper presented GSPan, a continuous Gaussian splatting framework for arbitrary-scale pansharpening. In-stead of directly predicting HRMS pixels on a predefined discrete grid, GSPan represents the residual detail field with learnable anisotropic 2D Gaussian primitives and recon-structs the fused image by rendering these primitives as the residual details field over the upsampled MS base. The proposed Dual-Stream Hierarchical Interaction (DSHI) ar-chitecture and Spatial-Spectral Interactive Attention (SSIA) module integrate PAN-derived structural cues with MS spectral features, providing effective guidance for Gaussian primitive attribute estimation. Benefiting from the continuous primitive representation, GSPan supports rendering on arbitrary target sampling grids without scale-specific retraining. This property further en-ables the Scale-Decoupled Asymmetric Inference (SDAI) strategy, which estimates Gaussian primitive attributes at a reduced resolution and renders the fused image at the desired output resolution. Experiments on QB, GF2, WV3 and the WV3-4K large-scene dataset demonstrated that standard GSPan achieves strong and consistent fusion performance, while SDAI provides an efficiency-oriented inference mode with substantially reduced latency and favorable spectral fidelity, at the cost of partial spatial detail loss. These results indicate that explicit Gaussian residual modeling offers a flexible and practical representation for pansharpening, es-pecially for scenarios requiring adjustable output resolution or efficient large-scene processing. Despite these promising results, several limitations re-main. First, although GSPan supports arbitrary-scale ren-dering, the recoverable spatial details are still bounded by the information content of the input PAN image; rendering on a denser target grid cannot introduce fine structures that are not sufficiently captured during primitive attribute estimation. Second, the proposed SDAI strategy improves   
+
+> F. Li: Preprint submitted to Elsevier Page 14 of 16
+
+GSPan for Arbitrary-Scale Pansharpening 
+
+inference efficiency by estimating Gaussian primitives at a reduced resolution, but this efficiency gain comes at the cost of partial spatial fidelity compared with standard full-resolution inference. Future work will explore adaptive primitive density allocation, more efficient rasterization, and scale-aware primitive estimation to further improve fusion quality and computational efficiency. 
+
+## CRediT authorship contribution statement 
+
+Fangyi Li : Conceptualization, Methodology, Investiga-tion, Writing – original draft, Writing – review & editing. 
+
+Xiaoyuan Yang : Supervision, Writing – review & edit-ing. Yixiao Li : Methodology, Writing – review & editing. 
+
+Zongyang Sui : Methodology. Kangqing Shen : Investiga-tion, Methodology, Supervision, Writing – review & editing. 
+
+Gemine Vivone : Writing – review & editing. 
+
+## Declaration of competing interest 
+
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper. 
+
+## Data availability 
+
+The QB, GF2, and WV3 datasets used in this study are available from the PanCollection repository at https: //github.com/liangjiandeng/PanCollection . The WV3-4K dataset cannot be publicly released due to redistribution restrictions. 
+
+## Acknowledgement 
+
+This work was supported by the National Natural Sci-ence Foundation of China under grant 62371017. This re-search was supported by the high performance computing (HPC) resources at Beihang University and the Supercom-puting Platform of School of Mathematical Sciences at Beihang University. 
+
+## References 
+
+[1] G. Vivone, M. Dalla Mura, A. Garzelli, R. Restaino, G. Scarpa, M. O. Ulfarsson, L. Alparone, J. Chanussot, A new benchmark based on recent advances in multispectral pansharpening: Revisiting pansharpening with classical and emerging pansharpening methods, IEEE Geoscience and Remote Sensing Magazine 9 (1) (2020) 53–81. [2] J. Li, D. Hong, L. Gao, J. Yao, K. Zheng, B. Zhang, J. Chanussot, Deep learning in multimodal remote sensing data fusion: A compre-hensive review, International Journal of Applied Earth Observation and Geoinformation 112 (2022) 102926. [3] H. Zhang, H. Xu, X. Tian, J. Jiang, J. Ma, Image fusion meets deep learning: A survey and perspective, Information Fusion 76 (2021) 323–336. [4] G. Vivone, L. Alparone, J. Chanussot, M. Dalla Mura, A. Garzelli, G. A. Licciardi, R. Restaino, L. Wald, A critical comparison among pansharpening algorithms, IEEE Transactions on Geoscience and Remote Sensing 53 (5) (2015) 2565–2586. [5] G. Masi, D. Cozzolino, L. Verdoliva, G. Scarpa, Pansharpening by convolutional neural networks, Remote Sensing 8 (7) (2016) 594. [6] J. Yang, X. Fu, Y. Hu, Y. Huang, X. Ding, J. Paisley, Pannet: A deep network architecture for pan-sharpening, in: Proceedings of the IEEE international conference on computer vision, 2017, pp. 5449–5457. [7] L.-J. Deng, G. Vivone, C. Jin, J. Chanussot, Detail injection-based deep convolutional neural networks for pansharpening, IEEE Trans-actions on Geoscience and Remote Sensing 59 (8) (2020) 6995–7010. [8] Q. Liu, H. Zhou, Q. Xu, X. Liu, Y. Wang, Psgan: A generative adversarial network for remote sensing image pan-sharpening, IEEE Transactions on Geoscience and Remote Sensing 59 (12) (2020) 10227–10242. [9] J. Ma, W. Yu, C. Chen, P. Liang, X. Guo, J. Jiang, Pan-gan: An un-supervised pan-sharpening method for remote sensing image fusion, Information Fusion 62 (2020) 110–120. [10] H. Zhou, Q. Liu, Y. Wang, Panformer: A transformer based model for pan-sharpening, in: 2022 IEEE international conference on multime-dia and expo (ICME), IEEE, 2022, pp. 1–6. [11] H. Lu, Y. Yang, S. Huang, R. Liu, H. Guo, Msan: Multiscale self-attention network for pansharpening, Pattern Recognition 162 (2025) 111441. [12] Q. Meng, W. Shi, S. Li, L. Zhang, Pandiff: A novel pansharpen-ing method based on denoising diffusion probabilistic model, IEEE Transactions on Geoscience and Remote Sensing 61 (2023) 1–17. [13] X. He, K. Cao, J. Zhang, K. Yan, Y. Wang, R. Li, C. Xie, D. Hong, M. Zhou, Pan-mamba: Effective pan-sharpening with state space model, Information Fusion 115 (2025) 102779. [14] L. He, J. Zhu, J. Li, A. Plaza, J. Chanussot, Z. Yu, Cnn-based hyper-spectral pansharpening with arbitrary resolution, IEEE Transactions on Geoscience and Remote Sensing 60 (2022) 1–21. [15] L. He, Z. Fang, J. Li, H. Ye, A. Plaza, Arbitrary-resolution hy-perspectral pansharpening neural operators, IEEE Transactions on Geoscience and Remote Sensing 63 (2025) 1–19. [16] T. Wang, Z. Yan, J. Li, X. Zhao, C. Wang, M. Ng, Hyperspectral and multispectral image fusion with arbitrary resolution through self-supervised representations, International Journal of Computer Vision 133 (11) (2025) 7515–7535. [17] Y. Chen, S. Liu, X. Wang, Learning continuous image representation with local implicit image function, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 2021, pp. 8628–8638. [18] J. Cao, Q. Wang, Y. Xian, Y. Li, B. Ni, Z. Pi, K. Zhang, Y. Zhang, R. Timofte, L. Van Gool, Ciaosr: Continuous implicit attention-in-attention network for arbitrary-scale image super-resolution, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, 2023, pp. 1796–1807. [19] J. Lee, K. H. Jin, Local texture estimator for implicit representation function, in: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, 2022, pp. 1929–1938. [20] Y.-J. Liang, Z. Cao, S. Deng, H.-X. Dou, L.-J. Deng, Fourier-enhanced implicit neural fusion network for multispectral and hyper-spectral image fusion, Advances in Neural Information Processing Systems 37 (2024) 63441–63465. [21] B. Kerbl, G. Kopanas, T. Leimkühler, G. Drettakis, 3d gaussian splatting for real-time radiance field rendering, ACM Transactions on Graphics 42 (4) (2023). [22] G. Chen, W. Wang, A survey on 3d gaussian splatting, ACM Com-puting Surveys 58 (12) (2026). [23] D. Chen, L. Chen, Z. Zhang, L. Zhang, Generalized and efficient 2d gaussian splatting for arbitrary-scale super-resolution, in: Proceedings of the IEEE/CVF International Conference on Computer Vision, 2025, pp. 26435–26445. [24] G. Scarpa, S. Vitale, D. Cozzolino, Target-adaptive cnn-based pan-sharpening, IEEE Transactions on Geoscience and Remote Sensing 56 (9) (2018) 5443–5457. [25] X. Liu, Q. Liu, Y. Wang, Remote sensing image fusion based on two-stream fusion network, Information Fusion 55 (2020) 1–15. [26] C. Jin, L.-J. Deng, T.-Z. Huang, G. Vivone, Laplacian pyramid net-works: A new approach for multispectral pansharpening, Information Fusion 78 (2022) 158–170. 
+
+F. Li: Preprint submitted to Elsevier Page 15 of 16 GSPan for Arbitrary-Scale Pansharpening 
+
+[27] I. Pereira-Sánchez, E. Sans, J. Navarro, J. Duran, Multi-head attention residual unfolded network for model-based pansharpening, Interna-tional Journal of Computer Vision 134 (2) (2026) 55. [28] Y. Chen, Z. Wan, Z. Chen, M. Wei, Cslp: A novel pansharpening method based on compressed sensing and l-pnn, Information Fusion 118 (2025) 103002. [29] Y. Yan, Y. Wang, W. Tu, J. Wang, B. Cai, Q. Zhuang, X. Zuo, Y. Chen, H. Zhang, Z. Shao, S 3mamba: Pan-sharpening via spatial–spectral synergistic state space model, IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing 19 (2026) 12820– 12834. [30] X. Rui, X. Cao, L. Pang, Z. Zhu, Z. Yue, D. Meng, Unsupervised hy-perspectral pansharpening via low-rank diffusion model, Information Fusion 107 (2024) 102325. [31] Q. Cao, L.-J. Deng, W. Wang, J. Hou, G. Vivone, Zero-shot semi-supervised learning for pansharpening, Information Fusion 101 (2024) 102001. [32] H. Wang, H. Zhang, X. Tian, J. Ma, Zero-sharpen: A universal pansharpening method across satellites for reducing scale-variance gap via zero-shot variation, Information Fusion 101 (2024) 102003. [33] K. Shen, X. Yang, S. Lolli, G. Vivone, A continual learning-guided training framework for pansharpening, ISPRS Journal of Photogram-metry and Remote Sensing 196 (2023) 45–57. [34] K. Shen, X. Yang, Z. Li, J. Jiang, F. Jiang, H. Ren, Y. Li, Docsnet: a dual-output and cross-scale strategy for pan-sharpening, International Journal of Remote Sensing 43 (5) (2022) 1609–1629. [35] Z. Yang, S. Yin, J. Liang, L.-J. Deng, G-zap: A generalizable zero-shot framework for arbitrary-scale pansharpening, arXiv preprint arXiv:2603.14412 (2026). [36] X. Zhang, X. Ge, T. Xu, D. He, Y. Wang, H. Qin, G. Lu, J. Geng, J. Zhang, Gaussianimage: 1000 fps image representation and com-pression by 2d gaussian splatting, in: European Conference on Com-puter Vision, Springer, 2024, pp. 327–345. [37] L. Peng, A. Wu, W. Li, P. Xia, X. Dai, X. Zhang, X. Di, H. Sun, R. Pei, Y. Wang, et al., Pixel to gaussian: Ultra-fast continu-ous super-resolution with 2d gaussian modeling, arXiv preprint arXiv:2503.06617 (2025). [38] J. Hu, B. Xia, B. Chen, W. Yang, L. Zhang, Gaussiansr: High fi-delity 2d gaussian splatting for arbitrary-scale image super-resolution, in: Proceedings of the AAAI Conference on Artificial Intelligence, Vol. 39, 2025, pp. 3554–3562. [39] Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, B. Guo, Swin transformer: Hierarchical vision transformer using shifted windows, in: Proceedings of the IEEE/CVF international conference on com-puter vision, 2021, pp. 10012–10022. [40] L.-J. Deng, G. Vivone, M.E. Paoletti, G. Scarpa, J. He, Y. Zhang, J. Chanussot, A. Plaza, Machine learning in pansharpening: A bench-mark, from shallow to deep networks, IEEE Geoscience and Remote Sensing Magazine 10 (3) (2022) 279–315. [41] L. Wald, T. Ranchin, M. Mangolini, Fusion of satellite images of different spatial resolutions: Assessing the quality of resulting images, Photogrammetric engineering and remote sensing 63 (6) (1997) 691– 699. [42] L. Alparone, S. Baronti, A. Garzelli, F. Nencini, A global quality mea-surement of pan-sharpened multispectral imagery, IEEE Geoscience and Remote Sensing Letters 1 (4) (2004) 313–317. [43] L. Alparone, L. Wald, J. Chanussot, C. Thomas, P. Gamba, L. M. Bruce, Comparison of pansharpening algorithms: Outcome of the 2006 grs-s data-fusion contest, IEEE Transactions on Geoscience and Remote Sensing 45 (10) (2007) 3012–3021. [44] A. Garzelli, F. Nencini, Hypercomplex quality assessment of multi/hyperspectral images, IEEE Geoscience and Remote Sensing Letters 6 (4) (2009) 662–665. [45] A. Arienzo, G. Vivone, A. Garzelli, L. Alparone, J. Chanussot, Full-resolution quality assessment of pansharpening: Theoretical and hands-on approaches, IEEE Geoscience and Remote Sensing Maga-zine 10 (3) (2022) 168–201. [46] A. Garzelli, F. Nencini, L. Capobianco, Optimal mmse pan sharpen-ing of very high resolution multispectral images, IEEE Transactions on Geoscience and Remote Sensing 46 (1) (2007) 228–236. [47] X. Otazu, M. González-Audícana, O. Fors, J. Núñez, Introduction of sensor spectral response into image fusion methods. application to wavelet-based methods, IEEE Transactions on Geoscience and Remote Sensing 43 (10) (2005) 2376–2385. [48] F. Palsson, J. R. Sveinsson, M. O. Ulfarsson, A new pansharpening algorithm based on total variation, IEEE Geoscience and Remote Sensing Letters 11 (1) (2013) 318–322. [49] Z.-R. Jin, T.-J. Zhang, T.-X. Jiang, G. Vivone, L.-J. Deng, Lagconv: Local-context adaptive convolution kernels with global harmonic bias for pansharpening, in: Proceedings of the AAAI conference on artificial intelligence, Vol. 36, 2022, pp. 1113–1121. 
+
+F. Li: Preprint submitted to Elsevier Page 16 of 16
