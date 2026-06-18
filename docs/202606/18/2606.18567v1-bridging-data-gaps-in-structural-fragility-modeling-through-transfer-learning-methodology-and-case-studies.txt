@@ -1,0 +1,593 @@
+Title: Bridging Data Gaps in Structural Fragility Modeling through Transfer Learning: Methodology and Case Studies
+
+URL Source: https://arxiv.org/pdf/2606.18567v1
+
+Published Time: Thu, 18 Jun 2026 00:21:59 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# Bridging Data Gaps in Structural Fragility Modeling through Transfer Learning: Methodology and Case Studies 
+
+## Narges Saeednejad a, Jamie Ellen Padgett a,b ,∗
+
+> a
+
+Department of Civil and Environmental Engineering, Rice University, Houston, TX, USA 
+
+> b
+
+Ken Kennedy Institute, Rice University, Houston, TX, USA 
+
+A R T I C L E I N F O 
+
+Keywords :structural fragility transfer learning domain shift Bayesian updating class imbalance hurricane earthquake data limitation 
+
+A B S T R A C T 
+
+Fragility functions underpin catastrophe modeling, risk analysis, and resilience assessments by relating hazard and structural variables to the probability of structural damage or failure. In practice, fragility model libraries are highly uneven: data-rich regions and well-studied hazards enable detailed model development, while many domains remain data-scarce, heterogeneous, and subject to distributional mismatch between available training data and target portfolios. This paper presents a methodology-centered transfer learning framework for fragility adaptation under domain shift, class imbalance, and scarce target labels while preserving engineering inter-pretability and supporting decision-making under uncertainty. Four transfer learning strategies (instance-based, parameter-based, hierarchical Bayesian, and multi-source) are demonstrated through three complementary case studies: (i) instance-based transfer learning via importance weighting, demonstrated on coastal bridge fragility using Hurricane Katrina observations; (ii) parameter-based transfer learning together with hierarchical Bayesian transfer learning, enabling partial pooling across strata and posterior uncertainty quantification, demonstrated on residential building fragility using Hurricane Ian observations; and (iii) multi-source transfer learning that fuses multiple analytical fragility models with learned source weights and regularized target-domain adaptation, demonstrated on seismic bridge fragility using observations from the 2001 Nisqually earthquake. Across these case studies, direct transfer of source models (i.e. using existing state-of-the-art models) fails under domain shift and severe class imbalance, while targeted adaptation substantially improves failure detection and predictive stability in low-data regimes. These findings highlight the need for systematic guidance on diagnostics, strategy selection, and uncertainty reporting when developing and adapting fragility models. 
+
+## 1. Introduction 
+
+Fragility functions are essential tools for probabilistic risk analysis because they quantify the conditional probability of reaching or exceeding a damage state as a function of hazard intensity and structural parameters. As such, they are foundational to performance-based engineering, regional risk assessment, catastrophe modeling, and resilience-informed decision-making across the disaster lifecycle, from mitigation and design to emergency response and recovery planning (Ellingwood et al., 2004; Lallemant et al., 2015). In coastal storm and seismic settings, where infrastructure systems are exposed to low-frequency but high-consequence hazards, the need for reliable fragility models is especially pressing. This need is further amplified by growing hazard exposure in coastal communities, increasing concentration of assets in vulnerable regions, and the cascading societal consequences that follow infrastructure disruption (Crossett et al., 2004; Neumann et al., 2015; Webster et al., 2005). Classical analytical approaches remain important because they provide interpretable relationships between struc-tural demand, capacity, and damage (Porter et al., 2007). At the same time, physics-based and simulation-driven approaches have enabled richer representation of nonlinear structural behavior, hazard uncertainty, and system-level response (Ataei and J. E. Padgett, 2015; Baker, 2015; Lindt and Dao, 2009; Karamlou and Bocchini, 2015). Statistical procedures for deriving fragility curves from analytical, empirical, or hybrid datasets have also become increasingly rigorous (Porter et al., 2007; Lallemant et al., 2015; Zentner et al., 2017). For structural systems with multiple interacting components, fragility methods have increasingly been extended to capture component correlations and system dependencies through multicomponent and system-level formulations, including coupled demand-based and mixture-based representations, or Bayesian networks (Conde Bandini et al., 2022; Gehl and D’Ayala, 2016). Bayesian formulations have further expanded the fragility toolbox by supporting calibration, model updating, and 
+
+> ∗
+
+Corresponding author 
+
+jamie.padgett@rice.edu (J.E. Padgett) 
+
+Saeednejad and Padgett: Preprint submitted to Elsevier Page 1 of 24 
+
+> arXiv:2606.18567v1 [stat.ML] 17 Jun 2026 Transfer Learning for Fragility Adaptation
+
+uncertainty quantification as new evidence becomes available.(Kennedy and O’Hagan, 2001; Li et al., 2013; Zhang and Tien, 2022; Yan et al., 2024; Mishra et al., 2017; Lei et al., 2021). Furthermore, approaches for representing the fragility of heterogenous structural portfolios (Rincon and J. E. Padgett, 2024) have evolved from the use of archetypes (or representative structures) (Federal Emergency Management Agency, 2024), to increasingly refined sub-class representations (Chen et al., 2025), to parameterized fragilities intended to afford tailored estimates across a range of inventory characteristics (Balomenos et al., 2020), to the potential for structure specific fragilities derived directly from surrogates (Lee et al., 2025). Despite this methodological progress, the practical use of fragility models remains constrained by highly uneven data and model availability across hazards, regions, structural systems, and design configurations. Consequently, important gaps persist in fragility libraries for many hazard–structure combinations, particularly in understudied systems and new application settings. In these cases, practitioners are often left to either apply models outside their intended context or undertake the long and tedious process of rebuilding fragility models from scratch for each new setting. This limitation motivates strategies that can transfer knowledge from existing fragility models and damage data to fill such gaps more rapidly and efficiently. In other cases, best-estimate models are calibrated using post-event observations and reconnaissance data (Cremen and Baker, 2019), insurance records (Wing et al., 2020), remote-sensing products (Forte et al., 2025), or synthetic simulation datasets generated through analytical or numerical modeling (Baker, 2015). These calibration efforts can improve regional realism, but they are often limited by sparse observations, inconsistent inventory attributes, and missing data (Little and Rubin, 2019). For example, post-disaster bridge damage datasets are typically small and strongly imbalanced, with failure cases remaining rare even after major events (J. Padgett et al., 2008; Ranf et al., 2001). Similar challenges arise in broader fragility and vulnerability modeling, where limited real-world observations often force analysts to rely on simplified assumptions, numerical surrogates, or archetype-based approximations (Nofal and van de Lindt, 2020; Reis et al., 2022; Harirchian et al., 2024). As a result, fragility models developed in data-rich source settings are frequently transferred informally to data-scarce target settings without sufficient validation of whether the underlying distributions remain compatible. This limitation is fundamentally a domain shift problem. From a statistical and machine-learning perspective, direct transfer becomes unreliable when the source and target domains differ in their feature distributions and, more generally, in their joint predictor–outcome structure. Under such mismatch, a model that is well calibrated in one region or inventory may yield biased predictions in another. This issue has been widely studied in the transfer-learning and domain-adaptation literature, where standard classifiers are known to degrade when training and testing data are not drawn from the same distribution (S. J. Pan and Yang, 2010; Zhuang et al., 2021; Kouw and Loog, 2019). In particular, covariate-shift theory formalizes the need to reweight source samples by the density ratio 𝑝 𝑇 (𝑥 )∕ 𝑝 𝑆 (𝑥 ) to reduce target-domain bias, although estimating these weights robustly remains difficult when target data are scarce (Sugiyama et al., 2007; Kouw and Loog, 2019). For fragility modeling, this means that physically informed base models are not automatically transferable: they must be checked for compatibility and, when necessary, adapted to the target domain rather than deployed unchanged. Transfer learning provides a principled framework to address this challenge by reusing information learned in data-rich source domains to improve inference in related but data-scarce target domains (S. J. Pan and Yang, 2010; Zhuang et al., 2021). Broadly speaking, transfer can occur through reweighting or selecting source instances, adapting parameters of an existing model, transferring informative priors within a Bayesian framework, or combining information from multiple source models. Related ideas have already shown promise in civil-engineering applications beyond fragility modeling. Transfer learning has been used for image-based structural damage recognition under limited labeled data (Gao and Mosalam, 2018), structural health monitoring and anomaly detection across different structures (Ierimonti et al., 2021; Q. Pan et al., 2023; Bao et al., 2023), and hurricane damage classification from imagery (Calton and Wei, 2022). These studies collectively demonstrate the value of transferring learned knowledge when labeled target data are limited or when source and target domains are related but not identical. However, most of this literature focuses on classification, detection, or condition identification tasks rather than on the adaptation of fragility functions themselves. Accordingly, an important gap remains in fragility modeling: how to adapt existing fragility models when target-region data are scarce, class imbalance is severe, and the source and target domains are not statistically aligned. Comparatively less attention has been paid to diagnosing when direct transfer is likely to fail, selecting an adaptation strategy that matches the available data regime, and producing updated fragility relationships that preserve engineering interpretability while also quantifying uncertainty. This gap is especially important for safety-critical applications, where false confidence in an unadapted model can be more harmful than admitting limited information.   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 2 of 24 Transfer Learning for Fragility Adaptation
+
+To address this need, this paper develops a transfer learning framework for fragility model adaptation under data scarcity, domain shift, and class imbalance. The proposed framework formulates adaptation as a systematic knowledge-transfer task. The study presents and demonstrates four complementary transfer learning strategies (instance-based, parameter-based, hierarchical Bayesian, and multi-source) through three case studies: (i) instance-based transfer learning for fragility adaptation under covariate shift, illustrated through a coastal bridge hurricane fragility case study using data from Hurricane Katrina in 2005; (ii) parameter-based transfer learning combined with hierarchical Bayesian transfer learning for residential building fragility under sparse and heterogeneous observations, illustrated using residential damage data from Hurricane Ian in 2022; and (iii) multi-source transfer learning for seismic bridge fragility adaptation when multiple analytical source models are available but none transfers reliably in isolation, illustrated using bridge damage observations from the 2001 Nisqually earthquake. Through these case studies, the paper provides methodological guidance and empirical evidence demonstrating that transfer learning can bridge persistent data gaps in fragility modeling while preserving the interpretability and uncertainty quantification required for risk-informed engineering decision-making. 
+
+## 2. Methodology 
+
+2.1. Transfer learning framework for fragility model adaptation 
+
+Rather than developing fragility models independently for every data-scarce region, this study formulates the problem as one of model adaptation: given sufficient labeled data in a source domain, or a base fragility model trained on source-domain data, the goal is to develop a reliable target-domain model by leveraging the limited damage observations available in the target region.Let the source domain be 𝑆 = {( 𝐱 𝑆 𝑖 , 𝑦 𝑆 𝑖 )} 𝑛 𝑆  
+
+> 𝑖 =1
+
+and the target domain be 
+
+𝑇 = {( 𝐱 𝑇 𝑗 , 𝑦 𝑇 𝑗 )} 𝑛 𝑇 
+
+> 𝑗 =1
+
+, where each labeled observation consists of a predictor vector and its corresponding observed damage outcome. Here, 𝐱 denotes the vector of hazard intensities and structural parameters, and 𝑦 denotes the observed damage outcome, represented either as a binary failure indicator or as an assigned damage state. For multi-state fragility formulations, let 𝐷𝑆 𝑘 denote the 𝑘 th damage-state threshold, so that fragility is written as 𝑃 (𝐷𝑆 ≥ 𝐷𝑆 𝑘 ∣ 𝐱 ). The fundamental challenge arises when the joint distribution differs across domains, i.e., 𝑝 𝑆 (𝐱 , 𝑦 ) ≠ 𝑝 𝑇 (𝐱 , 𝑦 ), so that direct deployment of a source fragility model may produce biased risk estimates and degraded failure detection in the target region (S. J. Pan and Yang, 2010; Zhuang et al., 2021). Throughout the adaptation process, two objectives must be maintained simultaneously: preserving engineering interpretability and improving predictive reliability and stability under data scarcity, severe class imbalance, and domain shift. The transfer learning approaches proposed for fragility adaptation and implemented in this study fall into four complementary categories, summarized in Table 1. In instance-based transfer learning , source samples are selected or reweighted to align with the target feature distribution, providing a practical approximation of importance weighting under covariate shift; this strategy is most effective when a labeled source dataset is available (i.e. original data used in base fragility derivation) but only limited labeled target observations can be obtained. In parameter-based transfer learning , a trusted source fragility functional form is retained while model coefficients are recalibrated using limited target data, and target-specific covariates may be incorporated through regularized model augmentation to capture local vulnerability characteristics without overfitting. Bayesian transfer learning encodes source-domain knowledge through informative priors, or hyperpriors in hierarchical formulations, and updates them with target observations, enabling partial pooling of information across strata and rigorous uncertainty quantification through posterior predictive distributions (Karbalayghareh et al., 2018; Shwartz-Ziv et al., 2022). Finally, in multi-source transfer learning , multiple existing fragility models are combined through learned source weights, while target-specific adjustments are regularized to reduce over-reliance on any single source and to mitigate negative transfer (Sun et al., 2011). 
+
+2.2. Recommended workflow for fragility adaptation 
+
+Building on the framework above, a five-stage workflow is proposed for adapting fragility models to new regions under limited damage observations and potential domain shift. The workflow synthesizes the methodological strategies demonstrated in the case studies and is designed to integrate into standard fragility modeling pipelines (whether analytical, simulation-based, empirical, expert-judgement-driven, or hybrid) while preserving engineering interpretability. Figure 1 summarizes the five stages and the decision tree that maps the available data regime to an adaptation strategy; the case studies illustrating each strategy are indicated in the figure as CS1, CS2, and CS3.                                            
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 3 of 24 Transfer Learning for Fragility Adaptation
+> Table 1
+> Summary of transfer learning strategies for fragility model adaptation. Strategy Mechanism Key assumptions Case study Instance-based Reweight or select source samples by similarity to the target feature distribution Labeled source dataset available; covariate shift is the primary barrier to transfer CS I: coastal bridges (Hurricane Katrina) Parameter-based Retain source functional form; recalibrate coefficients with regularized fine-tuning on target data Trusted, physically grounded source model; target data sufficient for local coefficient adjustment CS II: residential buildings (Hurricane Ian) Bayesian Encode source knowledge as informative priors; update with target data via hierar-chical models Prior/hyperprior structure can represent source knowledge; subgroup partial pooling beneficial CS II: residential buildings (Hurricane Ian) Multi-source Fuse multiple source models through learned weights with regularized target-specific deviations Multiple candidate source models available; no single source expected to transfer reliably alone CS III: seismic bridges (Nisqually earthquake)
+
+The first stage is start with a trusted base fragility model or source-domain data . The workflow opens by assembling the source-domain knowledge available for adaptation. This may take the form of a trusted base fragility model 
+
+𝑆 (𝐱 ; 𝜽 𝑆 ) (for example, a fitted logistic or lognormal fragility relationship from a prior study) or, when no such model is available, a raw labeled source dataset 𝑆 from a related region or component class. Both routes anchor the subsequent adaptation in pre-existing fragility knowledge and reduce the labeled-data requirement in the target region. The second stage is identify labeled data in the target domain . The labeled target-domain dataset 𝑇 ={( 𝐱 𝑇 𝑖 , 𝑦 𝑇 𝑖 )} 𝑛 𝑇  
+
+> 𝑖 =1
+
+is then characterized. Both the sample size 𝑛 𝑇 and the class composition matter: small samples and an imbalanced ratio between failure ( 𝑛 1) and non-failure ( 𝑛 0) observations, with 𝑛 1 ≪ 𝑛 0 in many post-event datasets, restrict which adaptation strategies are viable.When labeled target data are entirely unavailable, adaptation must rely on unsupervised mechanisms that use labeled source data and unlabeled target data (predictor features without failure observations), as indicated in the decision tree in Figure 1 indicates. The third stage is harmonize data between source and target domain . Once the source and target inputs are identified, the predictor vectors 𝐱 𝑆 and 𝐱 𝑇 are mapped to a unified feature space that preserves the meaning of hazard, structural, and contextual variables, and the damage states 𝑦 𝑆 and 𝑦 𝑇 are made comparable. Because fragility relationships from prior studies may take different functional forms, such as logistic, lognormal cumulative, or other parametric shapes, this harmonization step ensures that downstream adaptation operates on comparable representations. The fourth stage is perform domain shift diagnostic . Once the data are harmonized, the statistical compatibility between the source and target domains is assessed. Transfer may be unreliable when the joint distributions differ, 
+
+𝑝 𝑆 (𝐱 , 𝑦 ) ≠ 𝑝 𝑇 (𝐱 , 𝑦 ),
+
+or, more specifically, when the feature distributions 𝑝 𝑆 (𝐱 ) and 𝑝 𝑇 (𝐱 ) are not aligned. Such mismatch may arise from geographic, structural, or hazard-related differences and can significantly degrade model transferability. Recommended diagnostics include comparisons of marginal feature distributions, correlation structures, and multivariate distance measures; kernel-based metrics such as Maximum Mean Discrepancy (MMD) are particularly useful for quantifying divergence between the source and target feature spaces (Zhuang et al., 2021). The diagnostic identifies the covariates driving the mismatch and informs whether adaptation mechanisms such as instance-based approach, parameter adaptation or source-model fusion are required.   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 4 of 24 Transfer Learning for Fragility Adaptation
+
+The fifth and final stage is select the adaptation strategy . With the available source knowledge, target labels, harmonized inputs, and domain-shift evidence in hand, this stage chooses how the target-domain counterpart 
+
+𝑇 (𝐱 ; 𝜽 𝑇 ) is constructed. The decision tree in Figure 1 traces the strategy based on three binary checks: whether labeled target data are available, whether labeled source data are available, and whether multiple base fragility models are at hand. When both labeled target and labeled source data are available, instance-based transfer learning (selecting or reweighting source rows that are closest to the target distribution) becomes feasible, with a Bayesian variant providing principled uncertainty (Case Study I, CS1). When labeled target data are available with no labeled source data and only a single trusted base model exists, parameter-based fine-tuning updates 𝜽 𝑆 toward 𝜽 𝑇 under regularization, with a hierarchical Bayesian formulation when uncertainty quantification is required (Case Study II, CS2). When multiple credible base fragility models are available, parameter-based multi-source transfer learning (MSTL) fuses them through learned source weights, with a Bayesian counterpart available for uncertainty-aware predictions (Case Study III, CS3). When labeled target data are entirely unavailable, unsupervised instance-based transfer learning remains an option, with the understanding that target-region validation is limited until target labels are observed.  
+
+> Figure 1: Workflow and decision tree for selecting a transfer learning strategy in fragility model adaptation. The case studies illustrating each strategy are indicated as CS1, CS2, and CS3.
+
+## 3. Case studies for fragility adaptation 
+
+The workflow presented in Section 2.2 is now demonstrated through three case studies, each targeting a common fragility-adaptation challenge: distributional mismatch and covariate shift between source and target feature spaces, limited labeled target observations with heterogeneous subgroups, and source-model heterogeneity and negative-transfer risk. For each case study, the general methodological formulation is presented first, followed by an illustrative implementation using real infrastructure data and post-event observations. 
+
+3.1. Case Study I: Instance-based transfer learning under covariate shift 
+
+3.1.1. Methodology 
+
+Problem setting. This case study addresses the transfer setting in which a labeled source dataset 𝑆 = {( 𝐱 𝑆 𝑖 , 𝑦 𝑆 𝑖 )} 𝑛 𝑆 
+
+> 𝑖 =1
+
+is available together with only limited labeled observations from the target domain 𝑇 = {( 𝐱 𝑇 𝑗 , 𝑦 𝑇 𝑗 )} 𝑛 𝑇 
+
+> 𝑗 =1
+
+, with 𝑛 𝑇 ≪ 𝑛 𝑆 .  
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 5 of 24
+
+Transfer Learning for Fragility Adaptation 
+
+This setting is common in fragility practice when the labeled records used to fit an existing fragility model can be reused, while only sparse post-event damage observations are accessible in a related target domain. Direct deployment of the source fragility model under covariate shift is biased in proportion to the density-ratio mismatch 𝑝 𝑇 (𝐱 )∕ 𝑝 𝑆 (𝐱 )
+
+(Sugiyama et al., 2007). The instance-based transfer learning (TL) strategy proposed here layers three complementary mechanisms on top of standard similarity weighting (S. J. Pan and Yang, 2010; Zhuang et al., 2021), so that the contribution of each source row is governed simultaneously by similarity to the target, by distribution-level covariate-shift correction, and by label-level consistency with the target’s decision boundary. 
+
+Source model. The source model of Balomenos et al. (2020), fit to the Houston–Galveston simulation dataset 𝑆 ,is the logistic regression 
+
+𝑃 𝑓 (𝐱 ) = 11 + exp[− 𝓁 (𝐱 )] , (1) with polynomial logit 
+
+𝓁 (𝐱 ) = − 14 .08 − 6 .15 𝑍 𝑐 + 4 .46 𝐻 max + 0 .02 𝐿 𝑠𝑝 + 19 .22 |𝑠 𝑝 | + 221 .17 |𝑚 𝑠𝑝 |
+
++ 0 .97 ( 𝑍 𝑐 𝐻 max ) + 25 .39 ( 𝑍 𝑐 |𝑚 𝑠𝑝 |) − 39 .37 ( 𝐻 max |𝑚 𝑠𝑝 |) − 0 .67 ( 𝑠 𝑝 𝑚 𝑠𝑝 )− 174 .17 ( |𝑠 𝑝 | | 𝑚 𝑠𝑝 |) − 0 .96 𝑍 2 
+
+> 𝑐
+
+− 0 .45 𝐻 2max − 12 .30 |𝑠 𝑝 |2
+
+− 9 .20 × 10 −5 (𝐿 𝑠𝑝 𝑊 𝑠𝑝 ℎ) − 2 .38 × 10 −4 (𝐿 𝑠𝑝 𝑊 𝑔𝑑 𝑛 𝑔𝑑 ),
+
+(2) where the predictors are defined in Table 2. Eq. (2) is deployed without modification as the direct-transfer baseline on the Hurricane Katrina target inventory. 
+
+Table 2 
+
+Case Study I: predictors of the source model of Balomenos et al. (2020) used in Eq. (2) .Variable Description 
+
+𝑍 𝑐 Relative surge elevation at bridge deck (m) 
+
+𝐻 max Maximum wave height at bridge location (m) 
+
+𝐿 𝑠𝑝 Span length (m) 
+
+𝑊 𝑠𝑝 Bridge deck width (m) 
+
+ℎ Deck slab thickness (m) 
+
+𝑠 𝑝 Wave spatial variability ( −)
+
+𝑚 𝑠𝑝 Span slope ( −)
+
+𝑊 𝑔𝑑 Girder weight (kN/m) 
+
+𝑛 𝑔𝑑 Number of girders ( −)
+
+Similarity-feature reweighting. Source samples are first reweighted by their radial basis function (RBF) similarity to the target centroid in a standardized similarity space 𝐳 ,
+
+𝑤 (rbf)  
+
+> 𝑖
+
+= exp 
+
+(
+
+− ‖𝐳 𝑆 𝑖 −̄ 𝐳 𝑇 ‖2
+
+2𝜎 2
+
+)
+
+, (3) with bandwidth 𝜎 from the median-distance heuristic. The matching is performed class-conditionally, so that source failures are compared against target failures and non-failures against non-failures; this preserves the target’s class structure when the two domains have different class priors. 
+
+Density-ratio importance weighting. A logistic domain classifier 𝑔 𝜂 (𝐱 ) is fit on 𝑆 ∪ 𝑇 with class-balanced weights that neutralize the imbalance 𝑛 𝑆 ≫ 𝑛 𝑇 , and its class posterior is used to estimate the covariate-shift importance weight 
+
+𝑤 (dr)  
+
+> 𝑖
+
+=̂ 𝑃 (target ∣ 𝐱 𝑆 𝑖 )1 − ̂ 𝑃 (target ∣ 𝐱 𝑆 𝑖 ) , (4) 
+
+Saeednejad and Padgett: Preprint submitted to Elsevier Page 6 of 24 Transfer Learning for Fragility Adaptation 
+
+which is the standard density-ratio estimator of 𝑝 𝑇 ∕𝑝 𝑆 (Sugiyama et al., 2007). The raw ratio is normalized so its median equals unity and capped symmetrically to prevent any single outlier from dominating the pool. 
+
+Pseudo-label consistency filter. A target-only logistic regression is fit on 𝑇 and used to assign a pseudo-label probability ̂ 𝑝 𝑖 to each candidate source row. Source rows are retained only when their pseudo-label agrees with the recorded label 𝑦 𝑆 𝑖 with confidence above a margin 𝛿 :
+
+ =
+
+{
+
+𝑖 ∶ ( 𝑦 𝑆 𝑖 = 1 ∧ ̂𝑝 𝑖 ≥ 0.5 + 𝛿 ) ∨ ( 𝑦 𝑆 𝑖 = 0 ∧ ̂𝑝 𝑖 ≤ 0.5 − 𝛿 )
+
+}
+
+, (5) with 𝛿 = 0 .20 in the present study. The pseudo-label model is deliberately fit at the target’s natural class prior rather than with class-balanced weights; otherwise the decision boundary would shift toward the minority (failure) class and reject most borderline source non-failures, breaking the symmetry that the margin in Eq. (5) is intended to enforce. A safeguard returns the unfiltered pool when fewer than 30% of candidate rows would survive, so that the filter cannot silently collapse the pool when the target sample is too small to define a reliable boundary. 
+
+Target fragility specification and pooled fitting. To define a target-domain fragility model, the predictor vector is augmented with two physics-informed features related to wave-induced deck uplift (Douglass et al., 2006; Bradner et al., 2011; AASHTO, 2008). The first feature is the absolute freeboard, 𝜙 1(𝐱 ) = |𝑍 𝑐𝑏 − 𝐻 max |, which measures how close the maximum wave height is to the bridge deck soffit. Smaller values of this term indicate that the wave crest is closer to the deck level, a condition associated with stronger uplift demand. The second feature is the wave-to-slab thickness ratio, 𝜙 2(𝐱 ) = 𝐻 max ∕ℎ, which represents the wave height relative to the deck slab thickness. Using these features, the target-domain fragility logit is written as 
+
+𝓁 𝑇 (𝐱 ) = 𝛽 0 + 𝛽 1𝐻 max + 𝛽 2|𝑍 𝑐𝑏 − 𝐻 max | + 𝛽 3𝐻 max ∕ℎ. (6) The logit 𝓁 𝑇 (𝐱 ) is then converted to a failure probability through the sigmoid, function: 
+
+𝑃 𝑓 = 𝜎 (𝓁 𝑇 ) = 11 + exp[− 𝓁 𝑇 (𝐱 )] . (7) This transformation maps the logit value to a probability between 0 and 1, where larger values of 𝓁 𝑇 (𝐱 ) correspond to higher predicted probability of failure. The model is fit using both the target training data and the selected source samples. The selected source samples are included to augment the limited target data, but their influence is controlled by transfer weights so that source rows more consistent with the target domain contribute more strongly to the fit. The model parameters are estimated by minimizing the regularized weighted empirical risk 
+
+min 
+
+> 𝜃
+
+⎡⎢⎢⎢⎣∑
+
+> 𝑗 ∈(− 𝑘 )
+> 𝑇
+
+𝜔 𝑦 𝑇 𝑗 
+
+𝓁 
+
+(
+
+𝑦 𝑇 𝑗 , 𝑓 𝜃 (𝐱 𝑇 𝑗 ; 𝝓 )
+
+)
+
++ ∑
+
+> 𝑖 ∈̃𝑆
+
+𝑤 𝑖 𝜔 𝑦 𝑆 𝑖 
+
+𝓁 (𝑦 𝑆 𝑖 , 𝑓 𝜃 (𝐱 𝑆 𝑖 ; 𝝓 )) + 𝜆 ‖𝜃 ‖22
+
+⎤⎥⎥⎥⎦
+
+, (8) where ̃ 𝑆 is the selected source pool, 𝑤 𝑖 is the transfer weight assigned to source sample 𝑖 , 𝜔 𝑐 is the class weight for class 𝑐 , and 𝜆 controls the strength of 𝐿 2 regularization. The class weights reduce the effect of imbalance between failure and non-failure observations, while the regularization term helps prevent overfitting. Model evaluation is performed using stratified five-fold cross-validation, with the class weights and regularization strength selected within the training fold. 
+
+3.1.2. Illustrative example: Hurricane fragility adaptation for steel-girder bridges 
+
+Data, imputation, and domain shift. In the present application, the full target dataset comprises 29 observed steel-girder spans affected by Hurricane katrina across the Gulf Coast (J. Padgett et al., 2008), paired with hindcast hazard intensities from the ADCIRC/SWAN coupled storm-surge–wave model (Kaiser et al., 2023). For each bridge, the lowest span, representing the most hydraulically vulnerable section of the crossing, is used as the reference location for extracting deck elevation, surge, and wave-height values. Deck elevations are obtained from USGS 3DEP LiDAR, while surge and wave-height samples are taken at the corresponding span location rather than at the structure-level NBI   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 7 of 24 Transfer Learning for Fragility Adaptation
+
+centroid, which may be several kilometers away from the actual failure-prone deck region for long causeway crossings. Where span-level structural attributes were unavailable in the post-event inventory, missing values were imputed using similarity-based information from the simulation dataset to obtain a complete target feature matrix. Two records with inconsistent relative surge-elevation conventions were then removed prior to model fitting, reducing the target dataset from 𝑛 𝑇 = 29 (raw inventory) to 𝑛 𝑇 = 27 steel-girder spans used for model fitting, including five observed failures and an empirical failure rate of approximately 19%. The corresponding source pool contains 𝑛 𝑆 = 237 simulated steel-girder spans, with an approximately 54% failure rate. This difference indicates a substantial class-prior shift between the source and target domains, in addition to the marginal feature-distribution mismatch shown in Figure 2. Similarity diagnostics were used to identify a subset of structural features with adequate overlap between the source and target domains for source-sample selection. The selected similarity space includes slab thickness ℎ, girder cross-section 𝐴 𝑔𝑑 , and girder unit weight 𝑊 𝑔𝑑 .       
+
+> Figure 2: Case Study I: source ( 𝑛 𝑆 = 237 ) versus target ( 𝑛 𝑇 = 29 raw inventory; 𝑛 𝑇 = 27 after removing two surge-elevation outliers) marginal feature distributions.
+
+Figure 2 shows clear marginal differences between the source and target domains across several hazard and structural variables. The source and target inventories also differ in their multivariate dependence structure, as shown by the Pearson correlation matrices in Figure 3. In the source domain, geometric variables such as 𝐿 𝑠𝑝 and 𝑊 are only weakly correlated with structural variables such as ℎ, 𝐴 𝑔𝑑 , and 𝑊 𝑔𝑑 , whereas the target inventory exhibits stronger geometric–structural coupling. These differences indicate that the source and target domains are not aligned in either marginal feature distributions or joint predictor relationships. Direct reuse of the source fragility model is   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 8 of 24 Transfer Learning for Fragility Adaptation
+
+therefore unlikely to provide reliable target predictions without adaptation, motivating the instance-based reweighting and filtering strategy used in this case study.     
+
+> (a) Source domain (b) Target domain
+> Figure 3: Case Study I: Pearson correlation matrices of the predictor set in the source and target inventories.
+
+Pool construction and domain-shift diagnostic. Figure 4(a) summarizes the source-sample selection process. Starting from 237 candidate steel-girder source spans, the class-conditional RBF similarity step retains 139 samples, and the pseudo-label consistency filter further reduces the final transferable source pool to 52 samples. The density-ratio weights of Eq. (4) are then applied to adjust the contribution of the retained source samples during model fitting, rather than to remove additional samples. The final source pool contains 28 failure cases and 24 non-failure cases, providing a more balanced and target-relevant training set than the original source catalogue. Importantly, the pseudo-label model is used only as a filtering mechanism to identify source samples that are consistent with the target-domain decision structure; it does not replace the original simulation-derived source labels used for training. Figure 4(b) shows the retained and excluded source samples in the engineered feature space used for fragility fitting. 
+
+Quantitative alignment via MMD. The effectiveness of the source-selection pipeline is further evaluated using Maximum Mean Discrepancy (MMD), a kernel-based measure of distributional discrepancy commonly used in transfer learning (Gretton et al., 2012; Zhuang et al., 2021). The unbiased MMD 2 is computed between the source and target samples in the structural similarity space {ℎ, 𝐴 𝑔𝑑 , 𝑊 𝑔𝑑 } using a Gaussian RBF kernel with bandwidth selected by the median-distance heuristic. Before selection, the full source pool yields MMD 2 = 0 .063 relative to the target data. After applying the selection pipeline and the combined RBF–density-ratio weights, the weighted MMD 2 decreases to approximately zero, indicating substantial improvement in source–target alignment within the similarity space. The same trend is observed within each outcome class, with MMD 2 decreasing from 0.070 to approximately zero for non-failures and from 0.012 to approximately zero for failures. An ablation study further confirms the importance of the pseudo-label consistency filter. When the filter is removed and only the RBF and density-ratio steps are retained, the selected pool increases to 𝑛 𝑆 = 139 , but predictive performance deteriorates substantially (AUC = 0 .52 , Brier = 0 .29 , log-loss = 1 .38 ). These results indicate that distributional similarity alone is insufficient in this small-sample setting; label-level consistency is also needed to avoid transferring source samples that are feature-similar but inconsistent with the target-domain decision structure. 
+
+Models compared and predictive performance. Three models are evaluated on the cleaned target dataset using stratified five-fold cross-validation. The first, denoted direct transfer , is the source fragility model of Balomenos et al. (2020) deployed without adaptation. The second, the target-only model , is a logistic regression on the engineered   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 9 of 24
+
+Transfer Learning for Fragility Adaptation                 
+
+> (a) Number of steel-girder source rows retained after each se-lection stage; the final pool applies the pseudo-label consistency filter ( 𝛿 = 0 .20 ) and density-ratio weighting. (b) Selected source pool, 52 of 237 rows, shown in the engineered feature space (|𝑍 𝑐𝑏 −𝐻 max |,𝐻 max ∕ℎ)used to fit the fragility model.
+
+Figure 4: Case Study I: instance-based TL source pool. 
+
+Table 3 
+
+Case Study I: probabilistic metrics on the cleaned Katrina target, aggregated over five-fold stratified cross-validation with 1000-resample bootstrap 95% confidence intervals. Best per metric in bold .Method AUC ( ↑) AP ( ↑) Brier ( ↓) log-loss ( ↓)Direct transfer 0.514 [0 .18 , 0.83] 0.322 0.340 1.825 
+
+Target model without adaptation 0.655 [0 .41 , 0.88] 0.334 0.226 0.644 
+
+Target model with selected source samples 𝟎 .𝟕𝟐𝟓 [𝟎 .𝟓𝟑 , 0.91] 𝟎 .𝟑𝟖𝟑 𝟎 .𝟏𝟗𝟎 𝟎 .𝟔𝟎𝟖 
+
+feature set of Eq. (7) trained on 𝑇 alone. The third, the target model with selected source samples , is the proposed instance-based TL formulation of Eq. (8) using the same engineered features as the target-only model. Holding the feature representation constant between the second and third models isolates the contribution of the selected source samples from the contribution of the feature engineering itself. Table 3 compares the probabilistic performance of the direct-transfer baseline, the target-only model, and the proposed target model trained with selected source samples. Direct transfer performs near chance, with AUC = 0 .514 
+
+and a wide bootstrap confidence interval whose lower bound falls well below 0.5. This poor performance is consistent with the substantial source–target mismatch identified earlier, including both feature-distribution differences and class-prior shift. The target-only model improves performance (AUC = 0 .655 ), but its confidence interval still overlaps the chance level, indicating limited stability under the small target sample size. The proposed model with selected source samples achieves the strongest overall performance, with the highest AUC ( 0.725 ), lowest Brier score ( 0.190 ), and lowest log-loss ( 0.608 ). Relative to the target-only baseline, the selected-source model reduces the Brier score by approximately 16% and the log-loss by approximately 6%; relative to direct transfer, the reductions are approximately 44% and 67%, respectively. The improvement obtained from selected source samples can be interpreted as a form of targeted sample-size augmentation. The target-only model in Eq. (7) contains four fitted parameters but is trained with only five observed failure cases, making coefficient estimation unstable. Although the 𝐿 2 penalty in Eq. (8) helps control overfitting, it also shrinks the fitted coefficients toward zero when target data alone are used. By contrast, adding 52 source samples that are aligned with the target domain provides additional information for estimating the engineered-feature effects 
+
+Saeednejad and Padgett: Preprint submitted to Elsevier Page 10 of 24 Transfer Learning for Fragility Adaptation 
+
+while retaining regularization. This allows the adapted model to recover a stronger and more physically meaningful response surface than the target-only fit. Table 4 reports the fitted coefficients of the two models: the selected-source fit recovers coefficient magnitudes that are roughly an order of magnitude larger than the target-only fit (for example, 
+
+𝛽 2 shifts from −0 .0643 to −0 .634 ), consistent with the regularization-induced shrinkage of the target-only baseline.            
+
+> Table 4
+> Case Study I: fitted coefficients of the target-domain fragility logit (Eq. (7) ) for the target-only and selected-source models. Coefficient Target-Only Target with Selected Source Samples
+> 𝛽 0−0 .496 −5 .27
+> 𝛽 1+0 .311 +2 .11
+> 𝛽 2−0 .0643 −0 .634
+> 𝛽 3+0 .0902 +0 .539
+
+Figure 5 further illustrates the differences among the three models by showing the distributions of predicted failure probability, stratified by observed outcome. For the target-only model, the predicted probabilities for failures and non-failures are concentrated in a narrow range around the ̂ 𝑃 𝑓 = 0 .5 decision threshold, indicating weak separation between classes. Direct transfer produces highly dispersed probabilities for both classes, reflecting unstable extrapolation of the source fragility surface to the target inventory. In contrast, the selected-source model shifts non-failure predictions toward lower probabilities while moving failure predictions upward, improving both class separation and probabilistic calibration. Because the target dataset contains only a small number of observed failures, conventional classification metrics may provide an incomplete assessment of model performance. The evaluation therefore emphasizes threshold-free and probability-sensitive metrics, including AUC, Brier score, and log-loss, which quantify discriminative ability, calibration, and predicted probability quality under severe data scarcity. 
+
+Discussion. The results of Case Study I highlight the importance of targeted adaptation under simultaneous domain shift and data scarcity. Direct transfer of the source fragility model performs poorly for the cleaned target inventory of 27 spans with five observed failures, yielding the lowest performance across all metrics in Table 3. Although the target-only model benefits from the proposed wave-uplift feature representation, its predictions remain weakly separated because the limited number of failure observations provides insufficient information for stable parameter estimation. In contrast, the target model trained with selected source samples provides a more reliable probabilistic fragility estimate. The 52 retained source rows, selected through similarity weighting, density-ratio correction, and label-consistency filtering, act as a target-relevant augmentation of the limited training set. This adapted model achieves the strongest overall performance, including the only AUC confidence interval that excludes chance-level discrimination, while reducing the Brier score and log-loss by 16% and 6%, respectively, relative to the target-only baseline. Relative to direct transfer, the corresponding reductions are 44% and 67%. These results demonstrate that source information can improve target-domain fragility estimation when it is selectively transferred rather than reused without adaptation. 
+
+3.2. Case Study II: Parameter-based and hierarchical Bayesian transfer learning 
+
+3.2.1. Methodology 
+
+Problem setting. This case study addresses a different transfer setting from Case Study I. There, a labeled source dataset was available, allowing transfer through instance selection and reweighting. Here, by contrast, the original labeled source data are not assumed to be available; instead, transfer must proceed from an existing source fragility formulation whose functional form and parameter values are known. This setting is common in fragility practice, where published or previously developed models are available for reuse, but the underlying simulation or empirical datasets used to build them are not accessible. In such cases, adaptation cannot rely on source-instance reweighting and must instead proceed by recalibrating the source model parameters using the limited observations available in the target region. A further challenge in this case study is that the target observations are sparse and heterogeneous across meaningful subgroups. In practical terms, this occurs when post-event observations are distributed unevenly across categories such as structural classes or other strata. Under these conditions, direct subgroup-specific recalibration may be unstable, particularly when some groups contain only a small number of damage observations. This motivates a complementary      
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 11 of 24 Transfer Learning for Fragility Adaptation
+> Figure 5: Case Study I: distribution of predicted failure probability ̂𝑃 𝑓 , stratified by observed outcome and model. Boxplots summarize the predicted probability distributions for non-failure and failure observations for the three models reported in Table 3.
+
+hierarchical Bayesian transfer learning formulation, which allows subgroup-specific parameters to borrow strength from one another while preserving uncertainty quantification. 
+
+Fine-tuning formulation. Let 𝜽 ∗src denote the fitted coefficient vector of the source fragility model, and let 𝑇 denote the labeled target dataset. Here, 𝜽 refers to the model coefficients (e.g., intercept and regression weights in the fragility function). The fine-tuned coefficient vector is expressed as 𝜽 = ( 𝜽 b, 𝜽 e), where 𝜽 b contains the updated coefficients associated with the original base-model terms and 𝜽 e contains optional target-specific extension coefficients associated with additional local covariates not included in the original fragility function. Model adaptation is performed by minimizing the regularized objective 
+
+(𝜽 ) = w(𝜽 ; 𝑇 ) + 𝜇 b
+
+2 ‖‖𝜽 b − 𝜽 ∗src ‖‖22 + 𝜇 e
+
+2 ‖‖𝜽 e‖‖22 , (9) where w is a class-weighted binary cross-entropy loss, 𝜇 b controls the penalty on deviations from the source-model parameters, and 𝜇 e controls shrinkage of target-specific extension parameters toward zero. This formulation enables the fine-tuned model to benefit from source-domain knowledge while limiting overfitting under sparse target observations. 
+
+3.2.2. Illustrative example: Hurricane fragility adaptation for residential buildings 
+
+Base model. The base model considered herein is the multi-hazard residential-building fragility formulation developed by Do et al. (2020) for wood-framed, single-story buildings under combined storm surge and wave loading. The failure probability is expressed as 
+
+𝑃 𝑓 (𝑑, 𝑤 ) = 𝑍 (𝑑, 𝑤 )𝛽 
+
+𝑍 (𝑑, 𝑤 )𝛽 + 1 , (10)   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 12 of 24 Transfer Learning for Fragility Adaptation
+
+where the combined hazard index 𝑍 (𝑑, 𝑤 ) is defined as 
+
+𝑍 (𝑑, 𝑤 ) = 𝑑 𝐴 + 𝑤 𝐵 + 𝐶 
+
+( 𝑑 𝐴 
+
+) ( 𝑤 𝐵 
+
+)
+
+. (11) In Equations (10) and (11), 𝑑 denotes storm-surge depth, 𝑤 denotes wave height, 𝐴 and 𝐵 are scaling parameters controlling the influence of surge and wave intensity respectively, 𝐶 is an interaction parameter capturing the coupled surge–wave effect, and 𝛽 is a shape parameter controlling the steepness of the fragility response. The parameter set 
+
+(𝐴, 𝐵, 𝐶, 𝛽 ) varies across First-Floor Elevation (FFE) categories in the base model, and this subgroup-specific structure is preserved in the adaptation. 
+
+Target region, data, and challenges. The target domain comprises Hurricane Ian (2022) residential-building damage observations from Fort Myers, Florida (Figueira et al., 2025), paired with ADCIRC/SWAN numerical model hindcast estimates of surge depth and wave height (Kaiser et al., 2023). To maintain consistency with source model assumptions, the analysis is restricted to single-story wood-framed residences. The target dataset is stratified by First-Floor Elevation (FFE) category, with the response variable defined as complete structural failure. The target data present several simultaneous challenges: stratification by FFE category with unequal subgroup sizes, strong class imbalance with differing failure proportions across FFE bins, and limited sample sizes within several elevation categories. FFE categories with fewer than 10 observations are excluded from the analysis to reduce estimation instability. 
+
+Hyperparameter tuning and cross-validation. Because class balance and sample size vary substantially across FFE categories, hyperparameter tuning accounts for subgroup heterogeneity. Stratified 𝐾 -fold cross-validation is employed for categories with sufficient and reasonably balanced samples, whereas leave-one-out cross-validation is used for sparse categories to maximize use of limited observations. To prevent data-rich FFE groups from dominating the results, overall performance is aggregated using sample-weighted metrics across categories. This stratified procedure is essential because the fragility model parameters are FFE-dependent, and transfer learning benefits vary across elevation bins. 
+
+Extended covariates and feature selection. Beyond the two hazard variables (surge depth and wave height) used in the source model, the target dataset includes building-specific attributes (building age, distance to shoreline, and footprint area) that may capture local vulnerability characteristics not represented in the simulation-derived source model. Rather than including all variables by default, a structured feature-selection procedure is performed prior to model fine-tuning: candidate feature subsets are evaluated within each FFE category using cross-validation, and performance is aggregated across categories using sample-weighted F1 scores. The feature subset achieving the highest weighted F1 is selected for the extended model. When local covariates are included, the hazard index is augmented as 
+
+𝑍 ext (𝑑, 𝑤, 𝑥 1, 𝑥 2, 𝑥 3) = 𝑍 (𝑑, 𝑤 ) + 𝛾 1𝑥 1 + 𝛾 2𝑥 2 + 𝛾 3𝑥 3, (12) where 𝑥 1, 𝑥 2, and 𝑥 3 denote standardized building age, distance to shoreline, and footprint area, respectively, and 
+
+𝛾 1, 𝛾 2, 𝛾 3 are the corresponding extension coefficients. Depending on feature selection results, only a subset of these terms is retained in the final model. 
+
+Hierarchical Bayesian formulation. Although deterministic fine-tuning substantially improves predictive per-formance, some FFE categories remain too sparse for stable independent calibration. Following the approach of Saeednejad and J. E. Padgett (2025), hierarchical Bayesian transfer learning addresses this limitation by enabling partial pooling across FFE categories and providing rigorous uncertainty quantification. The central principle is to treat subgroup-specific fragility parameters as related but not identical, allowing data-rich groups to inform estimation in data-poor groups through shared hyperdistributions. Let 𝑔 𝑖 ∈ {1 , … , 𝐺 } denote the FFE category of observation 𝑖 . For each category, the parameter vector 𝜽 𝑔 ={𝐴 𝑔 , 𝐵 𝑔 , 𝐶 𝑔 , 𝛽 𝑔 } is modeled hierarchically, with group-level parameters drawn from common hyperdistributions whose means are informed by the source fragility model. The failure probability for observation 𝑖 is expressed as 
+
+𝑃 𝑓 ,𝑖 = 𝜎 
+
+(
+
+𝛽 𝑔 𝑖 ln 𝑍 𝑖 
+
+)
+
+, (13)   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 13 of 24 Transfer Learning for Fragility Adaptation
+
+where 𝜎 (⋅) denotes the standard logistic (sigmoid) function 𝜎 (𝑡 ) = 1∕(1 + 𝑒 −𝑡 ), and 
+
+𝑍 𝑖 = 𝑑 𝑖 
+
+𝐴 𝑔 𝑖 
+
++ 𝑤 𝑖 
+
+𝐵 𝑔 𝑖 
+
++ 𝐶 𝑔 𝑖 
+
+( 𝑑 𝑖 
+
+𝐴 𝑔 𝑖 
+
+) ( 𝑤 𝑖 
+
+𝐵 𝑔 𝑖 
+
+)
+
+. (14) In Equations (13) and (14), 𝑑 𝑖 and 𝑤 𝑖 denote surge depth and wave height for observation 𝑖 , while 𝐴 𝑔 𝑖 , 𝐵 𝑔 𝑖 , 𝐶 𝑔 𝑖 ,and 𝛽 𝑔 𝑖 are the FFE-specific fragility parameters for the subgroup to which observation 𝑖 belongs. To preserve physical interpretability, all parameters are constrained to remain positive through appropriate prior specifications (e.g., log-normal priors). Hyperpriors on subgroup means are centered on source-model values, thereby encoding transferable knowledge into the Bayesian hierarchy. 
+
+Weighted likelihood and posterior inference. To address class imbalance within the Bayesian framework, the Bernoulli likelihood is weighted so that failure observations contribute more strongly to posterior updating. Let 
+
+𝑦 𝑖 ∈ {0 , 1} denote the observed binary damage outcome for observation 𝑖 , and let 𝑃 𝑓 ,𝑖 denote the corresponding modeled failure probability. The likelihood for each observation is 
+
+𝑦 𝑖 ∼ Bernoulli( 𝑃 𝑓 ,𝑖 ), (15) and the weighted log-likelihood is 
+
+ln w = ∑
+
+> 𝑖
+
+𝜔 𝑖 
+
+[𝑦 𝑖 ln 𝑃 𝑓 ,𝑖 + (1 − 𝑦 𝑖 ) ln(1 − 𝑃 𝑓 ,𝑖 )], (16) where 𝜔 𝑖 in Equation (16) denotes the observation weight for sample 𝑖 , derived from inverse class frequency to up-weight the minority (failure) class; the per-observation Bernoulli likelihood of Equation (15) is reweighted accordingly. Posterior inference is performed using Markov Chain Monte Carlo sampling with the No-U-Turn Sampler (NUTS) (Hoffman and Gelman, 2014), yielding posterior distributions for FFE-specific parameter sets and posterior predictive uncertainty. This formulation is particularly valuable for sparse categories where deterministic point estimates may be unstable. 
+
+Results and discussion. The FFE-specific class imbalance in the target dataset is illustrated in Figure 6a, highlighting the uneven distribution of failures and non-failures across elevation bins. Figure 6b summarizes the weighted-F1 comparison of candidate extended-feature subsets. In particular, Figure 6b shows how predictive performance changes as different combinations of candidate local covariates are added to the base model during feature-selection testing. Higher weighted-F1 values indicate a better balance between correctly identifying both failure and non-failure classes while accounting for class imbalance. The superior performance of the subset including building age and distance to shoreline indicates that these variables provide the most useful complementary local information among the candidates considered, motivating their inclusion in the extended fine-tuned model. Fine-tuning is performed by minimizing Equation (9), with the extended hazard index of Equation (12) substituted in the objective when local covariates are included, using bound-constrained optimization to enforce physically meaningful parameter ranges. To evaluate data efficiency, model performance is examined as a function of target training sample size within each FFE category. Figure 7 shows the trend for five representative FFE categories (0, 3, 6, 7, and 8) spanning the available sample-size range: direct application of the source model yields near-zero F1 scores in every panel, indicating poor transferability without adaptation. A model trained from scratch on target data alone improves gradually as more target observations become available, whereas transfer learning achieves substantially faster gains. Fine-tuning the source parameters improves performance even in low-data settings, and incorporating selected extended covariates yields further improvements in the better-sampled categories. Each panel’s x-axis explicitly marks the maximum available target training sample count for that category. A pooled comparison of four modeling scenarios is reported using confusion matrices (Figure 8) and aggregated classification metrics (Table 5): (i) direct application of the base model, (ii) a model trained from scratch using target data only, (iii) transfer learning with fine-tuning of source parameters only, and (iv) transfer learning with both source and extended parameters. The confusion matrices demonstrate that the source model without adaptation fails to identify        
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 14 of 24 Transfer Learning for Fragility Adaptation
+> (a) Failures and non-failures by FFE category. (b) Weighted F1 scores for candidate feature subsets.
+> Figure 6: Case Study II: target-data imbalance and extended-feature selection diagnostics.
+> Figure 7: Case Study II: incremental F1 score versus target training sample size for five representative FFE categories (0, 3, 6, 7, 8).
+
+failures, whereas transfer-learning formulations substantially improve failure detection. Table 5 confirms this trend quantitatively: the extended fine-tuned model achieves the highest overall accuracy, precision, recall, and F1 score, indicating that selected local building attributes contribute valuable information beyond the original surge–wave hazard representation.         
+
+> (a) Base Model (b) Target-Only (c) Fine-tuned (d) Extended Fine-tuned
+> Figure 8: Case Study II: confusion matrices for the four modeling scenarios (NF: not failed; F: failed).
+
+The hierarchical Bayesian variant stabilizes estimation in sparse FFE categories and quantifies predictive uncer-tainty. Calibration performance is summarized in Figure 9, where posterior predictive probabilities are compared                        
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 15 of 24 Transfer Learning for Fragility Adaptation
+> Table 5
+> Case Study II: pooled classification metrics across FFE categories ( 𝑛 = 324 ). Method Accuracy Precision Recall F1 Base Model 0.685 0.000 0.000 0.000 Target-Only 0.481 0.372 0.941 0.533 Fine-tuned 0.799 0.691 0.657 0.673
+> Extended Fine-tuned 0.917 0.838 0.912 0.873
+
+against observed failure proportions and the 95% credible band reflects epistemic uncertainty arising from limited and heterogeneous target data. Relative to deterministic fine-tuning, this Bayesian formulation provides a more comprehensive representation of uncertainty and is therefore particularly valuable when fragility estimates support risk-informed decision-making.  
+
+> Figure 9: Case Study II: Bayesian calibration curve with posterior draws and 95% credible band.
+
+3.3. Case Study III: Multi-source transfer learning for seismic fragility adaptation 
+
+3.3.1. Methodology 
+
+Problem setting. This case study addresses a third transfer setting that is distinct from those considered in Case Studies I and II. Here, multiple candidate source fragility models are available for the same structural class, yet none can be assumed a priori to transfer reliably to the target domain in isolation. This situation commonly arises when fragility libraries have been developed across different studies, regions, or modeling assumptions, yielding several plausible source models without a clear basis for selecting a single best model for the target setting. Under these conditions, direct adoption of any one source model may result in biased or unstable predictions, while selecting a single source model in advance may forfeit complementary information contained in the remaining models.   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 16 of 24 Transfer Learning for Fragility Adaptation
+
+Multi-source transfer learning is therefore introduced to combine information across candidate source fragility models through learned relative weights, while permitting regularized target-specific adjustments. The resulting formulation enables the target model to leverage complementary source knowledge while limiting over-reliance on any single source and controlling overfitting under limited target observations. 
+
+Multi-source fusion formulation. Although fragility models in the literature may be expressed in different forms, the proposed fusion framework is not limited to lognormal fragilities. Its main requirement is that source-model information be mapped into a common parameterized representation so that multiple sources can be combined consistently. In this case study, that common representation is taken to be lognormal fragility parameters. Accordingly, assume that 𝑚 source fragility models provide lognormal fragility parameters {𝜆 (𝑖 ) 
+
+> 𝑘
+
+, 𝜁 (𝑖 ) 
+
+> 𝑘
+
+} for each damage-state threshold 𝑘 . Source contributions are governed by softmax-constrained weights: 
+
+𝑤 𝑖 = exp( 𝛼 𝑖 )
+
+∑𝑚 𝑗 =1 exp( 𝛼 𝑗 ) . (17) To preserve parameter positivity and physical plausibility, fusion is performed on the log scale and augmented by learnable deviation terms: 
+
+ln( 𝜆 𝑘, TL ) = 
+
+> 𝑚
+
+∑
+
+> 𝑖 =1
+
+𝑤 𝑖 ln( 𝜆 (𝑖 ) 
+
+> 𝑘
+
+) + Δ 𝜆 𝑘 , (18) 
+
+ln( 𝜁 𝑘, TL ) = 
+
+> 𝑚
+
+∑
+
+> 𝑖 =1
+
+𝑤 𝑖 ln( 𝜁 (𝑖 ) 
+
+> 𝑘
+
+) + Δ 𝜁 𝑘 . (19) The softmax weights 𝑤 𝑖 of Equation (17) provide transparent interpretation of how the framework allocates trust across imperfect sources, while the deviation terms Δ𝜆 𝑘 and Δ𝜁 𝑘 in Equations (18) and (19) capture target-specific corrections beyond the weighted combination of source models. 
+
+Regularized optimization. Weights and deviation terms are estimated by minimizing a regularized negative log-likelihood: 
+
+MS = − ln 𝑝 (𝑇 ∣ { 𝜆 𝑘, TL , 𝜁 𝑘, TL }) + 𝑅 1(Δ 𝜆, Δ𝜁 ) + 𝑅 2(Δ 𝜆, Δ𝜁 ) + 𝑅 3(𝐰 ), (20) where, in Equation (20), 𝐰 = [ 𝑤 1, … , 𝑤 𝑚 ]⊤ denotes the vector of source-fusion weights, 𝑅 1 penalizes large deviations to ensure stability, 𝑅 2 promotes parsimonious corrections across damage states to enhance interpretability, and 𝑅 3
+
+discourages over-reliance on a single source by regularizing the fusion weights. Regularization strengths are tuned via cross-validation on the target data. 
+
+3.3.2. Illustrative example: Seismic fragility adaptation for reinforced concrete bridges 
+
+Base models. Three base fragility models are considered, derived from prior simulation-based seismic fragility studies for reinforced concrete bridge classes (Mangalathu et al., 2017; Mangalathu, 2017; Chen et al., 2025).The base fragility models used in this study were developed through related but distinct simulation-based workflows. Mangalathu (2017) develops fragility relationships through a performance-based grouping framework in which bridge subclasses are identified from nonlinear analytical response and then used for fragility estimation. By contrast, Mangalathu et al. (2017) uses ANOVA-based grouping specifically to refine HAZUS bridge classes and then constructs component- and system-level lognormal fragility curves for the grouped classes. Accordingly, both studies rely on nonlinear analysis and statistical grouping, but they differ in methodological emphasis: one is centered on fragility development after subclass identification, while the other is centered on HAZUS class refinement and explicit system-fragility construction from component responses. This heterogeneity motivates the use of multi-source transfer learning to integrate multiple prior fragility sources while retaining flexibility for target-domain adjustment. Each source model provides lognormal fragility parameters for Era 1 (pre-1970) bridges. The fragility functions follow the standard form 
+
+𝑃 (𝐷𝑆 ≥ 𝑘 ∣ IM) = Φ 
+
+( ln(IM) − 𝜆 𝑘 
+
+𝜁 𝑘 
+
+)
+
+, (21)   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 17 of 24 Transfer Learning for Fragility Adaptation
+
+where, in Equation (21), Φ( ⋅) is the standard normal cumulative distribution function, 𝜆 𝑘 and 𝜁 𝑘 are the lognormal median and dispersion parameters for damage-state threshold 𝑘 , and IM = 𝑆 𝑎 (𝑇 = 1 .0 s) is the spectral acceleration at 1.0-second period, selected for compatibility across source models and the target inventory. Table 6 lists the base fragility parameters used in multi-source fusion. 
+
+Target region, data, and challenges. The target domain comprises empirical damage observations from the 2001 Nisqually earthquake for Era 1 (pre-1970) reinforced concrete bridges in Washington State (Ranf et al., 2001). These observations represent real post-earthquake inspections with documented damage states, providing valuable empirical evidence for validating and adapting analytical fragility models. Several challenges are present: the three analytical source models differ in their calibration assumptions and regional biases, none is expected to transfer reliably in isolation, the target region offers only limited empirical observations, and damage state classifications from post-earthquake inspections carry inherent uncertainty and potential misclassification.                                   
+
+> Table 6
+> Case Study III: base and adapted fragility parameters for Era 1 (pre-1970) bridges, 𝑆 𝑎 (𝑇 = 1 .0 s) .Slight Moderate Complete Source model 𝜆 𝜁 𝜆 𝜁 𝜆 𝜁
+> Base Model 1 (Mangalathu, 2017) 0.05 0.62 0.11 0.62 0.31 0.59 Base Model 2 (Mangalathu et al., 2017) 0.09 0.52 0.20 0.53 0.58 0.53 Base Model 3 (Mangalathu et al., 2017) 0.09 0.51 0.19 0.52 0.56 0.52 Adapted 0.02 0.54 0.27 0.57 1.17 0.54
+
+Results and discussion. Learned source weights presented in Table 7 provide transparent evidence of how the method allocates trust across imperfect analytical models while retaining a stable, physically meaningful baseline. In data-scarce regimes, this interpretability is valuable because it reveals whether adaptation relies primarily on a single source or benefits from balanced fusion across multiple sources. Performance comparison across base models, a target-only baseline trained without transfer learning, and the adapted multi-source model is presented in Figure 10 and Table 8. The adapted model achieves substantially improved macro-averaged precision, recall, and F1 scores relative to both the strongest individual source model and the target-only baseline, demonstrating the benefit of multi-source fusion with regularized target-specific corrections under limited empirical observations.           
+
+> (a) Base Model 1 (b) Base Model 2 (c) Base Model 3 (d) Target-Only (e) Adapted
+> Figure 10: Case Study III: confusion matrices for Era 1 (Pre-1970) bridges across the five models (damage-state classes
+> 0–3).
+
+The fragility-curve overlay in Figure 11 clarifies the mechanism behind the classification-metric gains reported above. The three same-era source curves disagree substantially, particularly at lower intensities for the Slight state, reflecting the variability among existing analytical fragility models for Pre-1970 inventory. The target-only baseline tracks the empirical exceedances more closely than any individual source, confirming that the Era 1 observations do contain identifiable failure-rate information, but its curves remain visibly unsmoothed and shift abruptly between damage states owing to the small sample size. The multi-source adapted model, by contrast, retains the physically motivated shape inherited from the source library while adjusting median intensities to align with the observed exceedances, producing curves that interpolate cleanly across damage states and intensity levels. This visual evidence                                     
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 18 of 24 Transfer Learning for Fragility Adaptation
+> Table 7
+> Case Study III: learned multi-source fusion weights for Era 1 bridges. Source model Weight Base Model 1 0.293 Base Model 2 0.322 Base Model 3 0.385
+> Table 8
+> Case Study III: macro-averaged classification metrics for Era 1 bridges. Method Accuracy Precision Recall F1 Base Model 1 0.387 0.426 0.310 0.284 Base Model 2 0.613 0.511 0.438 0.463 Base Model 3 0.548 0.565 0.274 0.306 Target-Only 0.742 0.650 0.622 0.631
+> Adapted 0.806 0.747 0.747 0.747
+> (a) Slight (b) Moderate (c) Complete
+> Figure 11: Case Study III: marginal fragility curves for Era 1 (Pre-1970) bridges.
+
+supports the interpretation that the regularized softmax fusion provides a principled middle ground between rigid source reuse and overfitting to scarce target data. Figure 12 summarizes how sharply each model separates exceeded from not-exceeded observations across all damage states. For the three base models the two distributions overlap heavily; Base Models 1 and 2 in particular assign large failure probabilities to many non-exceeded cases, confirming that no single source transfers reliably to the Era 1 target. The Target-Only and Adapted models show the cleanest separation, collapsing the not-exceeded group toward 𝑃 𝑓 ≈ 0 and the exceeded group toward 𝑃 𝑓 ≈ 1 , with only a handful of misranked high-intensity points. The Adapted model achieves this separation while preserving the smooth, physically grounded fragility shape inherited from the source library, consistent with its higher classification metrics in Table 8.           
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 19 of 24 Transfer Learning for Fragility Adaptation
+> Figure 12: Case Study III: predicted failure probability 𝑃 𝑓 =𝑃 (𝐷𝑆 ≥𝑠 )for Era 1 (Pre-1970) bridges, pooled over damage states and split by observed outcome (light box: not exceeded; dark box: exceeded).
+
+## 4. Discussion: Strategy selection for fragility adaptation 
+
+Across the three case studies, fragility adaptation challenges rarely stem from a single limitation. Failures of direct transfer typically arise from coupled mechanisms: limited labeled target observations with sparse failure cases, domain shift between source and target feature distributions, heterogeneity across meaningful subgroups such as FFE categories or design eras, and variability among existing source fragility models. The appropriate adaptation strategy therefore depends jointly on the source and target data regime, the availability and credibility of source functional forms, and the severity of distributional mismatch. A direct manifestation of these coupled limitations is the failure of unadapted source models in the target domain. Even a physically grounded, simulation-derived fragility model can yield zero predicted failures when deployed without adaptation in a target region exhibiting distributional mismatch and extreme class imbalance (Case Study II, Table 5), and the analogous source surface for the coastal-bridge inventory of Case Study I produces near-chance discriminative power (AUC ≈ 0.51 , Table 3). In such settings the headline accuracy may appear acceptable while the model provides no practical value for failure detection. Straightforward pre-transfer diagnostics, such as marginal distribution comparisons and correlation-structure analysis, offer actionable screening tools for identifying when direct transfer is likely unreliable; combined with distribution-level metrics such as MMD computed before and after reweighting, they provide quantitative evidence of whether the selected transfer mechanism meaningfully improves source–target alignment. When target labels are limited, instance-based and parameter-based adaptation offer two complementary pathways. Instance-based adaptation is most effective when a labeled source dataset exists, target labels are scarce but target features are available, and covariate shift represents the primary barrier to transfer; by reweighting or selecting   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 20 of 24 Transfer Learning for Fragility Adaptation
+
+source instances that are most similar to the target feature distribution, this approach focuses learning on target-relevant regions of the source domain and mitigates negative transfer. Parameter-based adaptation, by contrast, is most appropriate when the functional form of the source fragility model is considered structurally credible but its coefficients require local adjustment due to changes in inventory characteristics or hazard representation. Case Study II shows that regularized fine-tuning produces substantial gains under limited target data when deviations from the source model are explicitly constrained, and that systematic extended-feature selection further improves performance while preserving interpretability when additional target-region descriptors are available, provided evaluation relies on failure-sensitive metrics and stratified validation protocols that account for subgroup heterogeneity. Hierarchical Bayesian transfer learning extends parameter-based adaptation when target observations are not only scarce but also heterogeneous across subgroups. Partial pooling lets data-rich strata inform estimation in data-limited strata (in Case Study II, across FFE categories), while posterior predictive distributions and credible intervals deliver explicit uncertainty quantification suitable for calibration-oriented diagnostics. These benefits come at the cost of additional modelling choices, including prior and hyperprior specification, and increased computational effort, but Case Study II indicates that the added complexity is warranted when subgroup-level inference is required and when the decision context demands calibrated probabilities rather than deterministic outputs. Multi-source transfer learning addresses a different regime, in which several candidate source fragility models exist but none is expected to transfer reliably to the target domain in isolation. Case Study III illustrates that softmax-constrained fusion yields an interpretable allocation of trust across candidate sources, while regularized deviation terms enable empirical correction without overfitting to limited target observations. This scenario is increasingly common as fragility libraries expand across regions, hazards, and structural design eras, making scalable multi-source updating a practical pathway for maintaining library consistency while enabling data-driven refinement whenever empirical evidence becomes available. 
+
+## 5. Conclusions 
+
+This paper presents a unified transfer learning framework for bridging persistent data gaps in fragility modelling. The framework covers four complementary strategies (instance-based, parameter-based, hierarchical Bayesian, and multi-source) and pairs them, through an explicit decision tree, with the available source knowledge, the size and composition of the target observations, and the severity of source–target mismatch. The strategies are demonstrated through three case studies spanning coastal bridges and residential buildings under hurricane loading and reinforced concrete bridges under seismic loading. Across all three applications, direct deployment of source fragility models without adaptation proves unreliable when domain shift and severe class imbalance are present, while appropriately selected transfer strategies substantially improve failure detection and predictive stability in low-data regimes. On the Hurricane Katrina coastal-bridge inventory, instance-based reweighting and selection lift the cross-validated AUC from 0.51 (direct transfer of the source model) to 0.72 (Table 3) and recover physically meaningful coefficients from a target dataset with only five observed failures. On the Hurricane Ian residential-building inventory, parameter-based fine-tuning of the source coefficients combined with extended local covariates raises the pooled F1 score from 0.00 (direct transfer) and 0.53 (target-only) to 0.87 (Table 5), and the hierarchical Bayesian variant additionally returns calibrated uncertainty bounds in sparse FFE categories. On the Pre-1970 Nisqually seismic-bridge inventory, multi-source fusion of three analytical fragility models with regularised target-specific correction lifts the macro-averaged F1 from 0.46 for the strongest individual source and 0.63 for the target-only baseline to 0.75 (Table 8). These results support a systematic workflow that couples domain-shift diagnostics, imbalance-aware training, and interpretable transfer mechanisms tailored to each adaptation challenge. Several directions remain for future work. Extending the proposed workflow to multi-target settings, where adaptation is performed simultaneously across multiple regions, would improve scalability for regional and portfolio-level risk assessments. Validation across additional hazards and infrastructure classes would broaden the framework’s applicability and help fill gaps in existing fragility libraries used for risk and resilience-informed decision-making. Integration with reconnaissance pipelines and remote-sensing damage indicators could further enable closed-loop fragility updating as new post-event evidence accumulates.   
+
+> Saeednejad and Padgett: Preprint submitted to Elsevier Page 21 of 24
+
+Transfer Learning for Fragility Adaptation 
+
+## Acknowledgments 
+
+This material is based upon work supported by the National Science Foundation under Award Nos. 2227467 and 2429680. 
+
+## CRediT authorship contribution statement 
+
+Narges Saeednejad: Conceptualization, Methodology, Coding, Investigation, Data collection and curation, Visualization, Writing. Jamie Ellen Padgett: Conceptualization, Methodology, Resources, Supervision, Funding acquisition, Review & editing. 
+
+## Declaration of generative AI and AI-assisted technologies in the manuscript preparation process 
+
+During the preparation of this work the authors used Claude (Anthropic) in order to perform spelling and grammar checks and to help refine the writing. After using this tool, the authors reviewed and edited the content as needed and take full responsibility for the content of the published article. 
+
+## References 
+
+AASHTO (2008). Guide Specifications for Bridges Vulnerable to Coastal Storms . Tech. rep. Washington, D.C.: American Association of State Highway and Transportation Officials. Ataei, N. and J. E. Padgett (2015). “Fragility surrogate models for coastal bridges in hurricane prone zones”. In: Engineering Structures 103, pp. 203–213. DOI : 10.1016/j.engstruct.2015.07.002 .Baker, J. W. (2015). “Efficient Analytical Fragility Function Fitting Using Dynamic Structural Analysis”. In: Earthquake Spectra 31.1, pp. 579–599. 
+
+> DOI
+
+: 10.1193/021113EQS025M .Balomenos, G. P., S. Kameshwar, and J. E. Padgett (2020). “Parameterized fragility models for multi-bridge classes subjected to hurricane loads”. In: Engineering Structures 208, p. 110213. DOI : 10.1016/j.engstruct.2020.110213 .Bao, N., T. Zhang, R. Huang, S. Biswal, J. Su, and Y. Wang (2023). “A Deep Transfer Learning Network for Structural Condition Identification with Limited Real-World Training Data”. In: Structural Control and Health Monitoring 2023, p. 8899806. DOI : 10.1155/2023/8899806 .Bradner, C., T. Schumacher, D. Cox, and C. Higgins (2011). “Experimental Setup for a Large-Scale Bridge Superstructure Model Subjected to Waves”. In: Journal of Waterway, Port, Coastal, and Ocean Engineering 137.1, pp. 3–11. DOI : 10.1061/(ASCE)WW.1943-5460.0000059 .Calton, L. and Z. Wei (2022). “Using Artificial Neural Network Models to Assess Hurricane Damage through Transfer Learning”. In: Applied Sciences 12.3, p. 1466. DOI : 10.3390/app12031466 .Chen, S., Y. Xie, C. Wu, H. V. Burton, J. E. Padgett, and Á. Zsarnóczay (2025). “Second-generation Component- and System-level Seismic Fragility Models for Reinforced Concrete Bridges in California”. In: Earthquake Spectra 41.4, pp. 3234–3253. DOI : 10.1177/87552930251343634 .Conde Bandini, P. A., J. E. Padgett, P. Paultre, and G. H. Siqueira (2022). “Seismic Fragility of Bridges: An Approach Coupling Multiple-Stripe Analysis and Gaussian Mixture for Multicomponent Structures”. In: Earthquake Spectra 38.1, pp. 254–282. DOI : 10 . 1177 / 87552930211036164 .Cremen, G. and J. W. Baker (2019). “A Methodology for Evaluating Component-Level Loss Predictions of the FEMA P-58 Seismic Performance Assessment Methodology”. In: Earthquake Spectra 35.4, pp. 1937–1959. Crossett, K. M., T. J. Culliton, P. C. Wiley, and T. R. Goodspeed (2004). Population Trends Along the Coastal United States: 1980–2008 . Tech. rep. Silver Spring, MD: U.S. Department of Commerce, National Oceanic and Atmospheric Administration (NOAA), National Ocean Service. Do, T. Q., J. W. Van De Lindt, and D. T. Cox (2020). “Hurricane Surge-Wave Building Fragility Methodology for Use in Damage, Loss, and Resilience Analysis”. In: Journal of Structural Engineering 146.1, p. 04019177. DOI : 10.1061/(ASCE)ST.1943-541X.0002472 .Douglass, S. L., S. A. Hughes, S. Rogers, and Q. Chen (2006). “The Impact of Hurricane Ivan on the Coastal Roads of Florida and Alabama: A Preliminary Report”. In: Report to the Coastal Transportation Engineering Research and Education Center, University of South Alabama .Ellingwood, B. R., D. V. Rosowsky, Y. Li, and J. H. Kim (2004). “Fragility Assessment of Light-Frame Wood Construction Subjected to Wind and Earthquake Hazards”. In: Journal of Structural Engineering 130.12, pp. 1921–1930. DOI : 10.1061/(ASCE)0733- 9445(2004)130: 12(1921) .Federal Emergency Management Agency (2024). Hazus Earthquake Model Technical Manual . Federal Emergency Management Agency. Figueira, S. A., M. Amini, D. T. Cox, and A. R. Barbosa (2025). “Methodology for Virtual Damage Assessment and First-Floor Elevation Estimation: Application to Fort Myers Beach, Florida and Hurricane Ian (2022)”. In: Natural Hazards Review 26.2, p. 04025012. DOI : 10.1061/NHREFO. NHENG-2310 .Forte, G. et al. (2025). “Flash flood impacts and vulnerability mapping at catchment scale: developing fragility curves from post-event damage data”. In: Engineering Geology .Gao, Y. and K. M. Mosalam (2018). “Deep Transfer Learning for Image-Based Structural Damage Recognition”. In: Computer-Aided Civil and Infrastructure Engineering 33.9, pp. 748–768. DOI : 10.1111/mice.12363 .Gehl, P. and D. D’Ayala (2016). “Development of Bayesian Networks for the multi-hazard fragility assessment of bridge systems”. In: Structural Safety 60, pp. 37–46. DOI : 10.1016/j.strusafe.2016.01.006 .
+
+Saeednejad and Padgett: Preprint submitted to Elsevier Page 22 of 24 Transfer Learning for Fragility Adaptation 
+
+Gretton, A., K. M. Borgwardt, M. J. Rasch, B. Schölkopf, and A. Smola (2012). “A Kernel Two-Sample Test”. In: Journal of Machine Learning Research 13, pp. 723–773. Harirchian, E., S. E. Aghakouchaki Hosseini, V. Novelli, T. Lahmer, and S. Rasulzade (2024). “Utilizing advanced machine learning approaches to assess the seismic fragility of non-engineered masonry structures”. In: Results in Engineering 21, p. 101750. DOI : 10.1016/j.rineng. 2024.101750 .Hoffman, M. D. and A. Gelman (2014). “The No-U-Turn Sampler: Adaptively Setting Path Lengths in Hamiltonian Monte Carlo”. In: Journal of Machine Learning Research 15.47, pp. 1593–1623. Ierimonti, L., N. Cavalagli, I. Venanzi, E. García-Macías, and F. Ubertini (2021). “A Transfer Bayesian Learning Methodology for Structural Health Monitoring of Monumental Structures”. In: Engineering Structures 247, p. 113089. DOI : 10.1016/j.engstruct.2021.113089 .Kaiser, C., C. N. Dawson, E. Nikidis, and J. G. Fleming (2023). ADCIRC/SWAN Hindcasts for Historical Storms 2003–2023 . DesignSafe-CI. DOI :
+
+10.17603/DS2-B5GH-CE94 .Karamlou, A. and P. Bocchini (2015). “Computation of Bridge Seismic Fragility by Large-Scale Simulation for Probabilistic Resilience Analysis”. In: Earthquake Engineering & Structural Dynamics 44.12, pp. 1959–1978. DOI : 10.1002/eqe.2567 .Karbalayghareh, A., X. Qian, and E. R. Dougherty (2018). “Optimal Bayesian Transfer Learning”. In: IEEE Transactions on Signal Processing 
+
+66.14, pp. 3724–3739. DOI : 10.1109/TSP.2018.2839583 .Kennedy, M. C. and A. O’Hagan (2001). “Bayesian Calibration of Computer Models”. In: Journal of the Royal Statistical Society: Series B (Statistical Methodology) 63.3, pp. 425–464. DOI : 10.1111/1467-9868.00294 .Kouw, W. M. and M. Loog (2019). An Introduction to Domain Adaptation and Transfer Learning .Lallemant, D., A. Kiremidjian, and H. Burton (2015). “Statistical procedures for developing earthquake damage fragility curves”. In: Earthquake Engineering & Structural Dynamics 44.9, pp. 1373–1389. DOI : 10.1002/eqe.2522 .Lee, J., M. Lochhead, K. Zhong, and G. G. Deierlein (2025). “Systematic Training and Validation of Parameterized Probabilistic Learning on Manifolds Surrogate Model for Seismic Performance Assessment of Highway Bridges”. In: Earthquake Engineering & Structural Dynamics 
+
+54.15, pp. 3726–3745. DOI : 10.1002/eqe.70052 .Lei, X., L. Sun, and Y. Xia (2021). “Seismic fragility assessment and maintenance management on regional bridges using bayesian multi-parameter estimation”. In: Bulletin of Earthquake Engineering 19, pp. 6693–6717. DOI : 10.1007/s10518-021-01072-6 .Li, J., J. Spencer Billie F., and A. S. Elnashai (2013). “Bayesian Updating of Fragility Functions Using Hybrid Simulation”. In: Journal of Structural Engineering 139.7, pp. 1160–1171. DOI : 10.1061/(ASCE)ST.1943-541X.0000685 .Lindt, J. W. van de and T. N. Dao (2009). “Performance-Based Wind Engineering for Wood-Frame Buildings”. In: Journal of Structural Engineering 
+
+135.2, pp. 169–177. DOI : 10.1061/(ASCE)0733-9445(2009)135:2(169) .Little, R. J. A. and D. B. Rubin (2019). Statistical analysis with missing data . 3rd ed. Hoboken, NJ: Wiley. Mangalathu, S. (2017). “Performance Based Grouping and Fragility Analysis of Box-Girder Bridges in California”. PhD thesis. Atlanta, GA: Georgia Institute of Technology. Mangalathu, S., F. Soleimani, and J.-S. Jeon (2017). “Bridge classes for regional seismic risk assessment: Improving HAZUS models”. In: 
+
+Engineering Structures 148, pp. 755–766. DOI : 10.1016/j.engstruct.2017.07.019 .Mishra, S., O. A. Vanli, B. P. Alduse, and S. Jung (2017). “Hurricane loss estimation in wood-frame buildings using Bayesian model updating: Assessing uncertainty in fragility and reliability analyses”. In: Engineering Structures 135, pp. 81–94. DOI : 10.1016/j.engstruct.2016. 12.063 .Neumann, B., A. T. Vafeidis, J. Zimmermann, and R. J. Nicholls (2015). “Future Coastal Population Growth and Exposure to Sea-Level Rise and Coastal Flooding - A Global Assessment”. In: PLOS ONE 10.3. Ed. by L. Kumar, e0118571. DOI : 10.1371/journal.pone.0118571 .Nofal, O. M. and J. W. van de Lindt (2020). “Minimal Building Flood Fragility and Loss Function Portfolio for Resilience Analysis at the Community Level”. In: Water 12.8, p. 2277. DOI : 10.3390/w12082277 .Padgett, J., R. DesRoches, B. Nielson, M. Yashinsky, O.-S. Kwon, N. Burdette, and E. Tavera (2008). “Bridge damage and repair costs from Hurricane Katrina”. In: Journal of Bridge Engineering 13.1, pp. 6–14. DOI : 10.1061/(ASCE)1084-0702(2008)13:1(6) .Pan, Q., Y. Bao, and H. Li (2023). “Transfer Learning-Based Data Anomaly Detection for Structural Health Monitoring”. In: Structural Health Monitoring 22.5, pp. 3077–3091. DOI : 10.1177/14759217221142174 .Pan, S. J. and Q. Yang (2010). “A Survey on Transfer Learning”. In: IEEE Transactions on Knowledge and Data Engineering 22.10, pp. 1345–1359. 
+
+> DOI
+
+: 10.1109/TKDE.2009.191 .Porter, K., R. Kennedy, and R. Bachman (2007). “Creating Fragility Functions for Performance-Based Earthquake Engineering”. In: Earthquake Spectra 23.2, pp. 471–489. DOI : 10.1193/1.2720892 .Ranf, R. T., M. O. Eberhard, and M. P. Berry (2001). Damage to Bridges during the 2001 Nisqually Earthquake . Tech. rep. PEER Report 2001/15. Berkeley, CA: Pacific Earthquake Engineering Research Center, University of California, Berkeley. Reis, F. B. dos, P. Royer, V. H. Chalishazar, S. Davis, M. Elizondo, J. Dagle, A. Nassif, A. Sadikovic, E. Ntakou, O. Soto, and S. Bahramirad (2022). “Methodology to Calibrate Fragility Curves Using Limited Real-World Data”. In: 2022 IEEE Power & Energy Society General Meeting (PESGM) , pp. 1–5. DOI : 10.1109/PESGM48719.2022.9916809 .Rincon, R. and J. E. Padgett (2024). “Fragility Modeling Practices and Their Implications on Risk and Resilience Analysis: From the Structure to the Network Scale”. In: Earthquake Spectra 40.1, pp. 647–673. DOI : 10.1177/87552930231219220 .Saeednejad, N. and J. E. Padgett (2025). “Bridging Data Gaps in Fragility Modeling for Coastal Infrastructure Resilience”. In: Proceedings of the 14th International Conference on Structural Safety and Reliability (ICOSSAR’25) . 1–6 June 2025. Los Angeles, California, USA. Shwartz-Ziv, R., M. Goldblum, H. Souri, S. Kapoor, C. Zhu, Y. LeCun, and A. G. Wilson (2022). “Pre-train your loss: easy bayesian transfer learning with informative priors”. In: Proceedings of the 36th Conference on Neural Information Processing Systems (NeurIPS 2022) .Sugiyama, M., M. Krauledat, and K.-R. Muller (2007). “Covariate shift adaptation by importance weighted cross validation”. In: Journal of Machine Learning Research 8, pp. 985–1005. 
+
+Saeednejad and Padgett: Preprint submitted to Elsevier Page 23 of 24 Transfer Learning for Fragility Adaptation 
+
+Sun, Q., R. Chattopadhyay, S. Panchanathan, and J. Ye (2011). “A Two-Stage Weighting Framework for Multi-Source Domain Adaptation”. In: 
+
+Advances in Neural Information Processing Systems 24 , pp. 505–513. Webster, P. J., G. J. Holland, J. A. Curry, and H.-R. Chang (2005). “Changes in Tropical Cyclone Number, Duration, and Intensity in a Warming Environment”. In: Science 309.5742, pp. 1844–1846. DOI : 10.1126/science.1116448 .Wing, O. E. J., N. Pinter, P. D. Bates, and C. Kousky (2020). “New insights into US flood vulnerability revealed from flood insurance big data”. In: 
+
+Nature Communications 11, p. 1444. DOI : 10.1038/s41467-020-15264-2 .Yan, Y., Y. Xia, and L. Sun (2024). “Hierarchical and mixed uncertainty quantification for simulation-based structural seismic fragility analysis”. In: Engineering Structures 316, p. 118579. DOI : 10.1016/j.engstruct.2024.118579 .Zentner, I., M. Gündel, and N. Bonfils (2017). “Fragility analysis methods: Review of existing approaches and application”. In: Nuclear Engineering and Design 323, pp. 245–258. DOI : 10.1016/j.nucengdes.2016.12.021 .Zhang, Y. and I. Tien (2022). “Conjugate Bayesian updating of analytical fragility functions using dynamic analysis with application to corroded bridges”. In: Computers and Structures 270, p. 106832. DOI : 10.1016/j.compstruc.2022.106832 .Zhuang, F., Z. Qi, K. Duan, D. Xi, Y. Zhu, H. Zhu, H. Xiong, and Q. He (2021). “A Comprehensive Survey on Transfer Learning”. In: Proceedings of the IEEE 109.1, pp. 43–76. DOI : 10.1109/JPROC.2020.3004555 .
+
+Saeednejad and Padgett: Preprint submitted to Elsevier Page 24 of 24

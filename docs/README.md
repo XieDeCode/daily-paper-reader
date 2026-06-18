@@ -6,50 +6,40 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-17
-- 运行时间：2026-06-17 22:19:34 UTC
+- 最新运行日期：2026-06-18
+- 运行时间：2026-06-18 22:30:19 UTC
 - 运行状态：成功
-- 本次总论文数：10
-- 精读区：7
-- 速读区：3
+- 本次总论文数：6
+- 精读区：4
+- 速读区：2
 
 ### 今日简报（AI）
-今日精选10篇论文，其中7篇精读、3篇速读，重点关注音频-视频深度伪造检测的域适应方法与灾害地理智能基准两大方向。最值得看的是《Teacher-Student Structure for Domain Adaptation in Ensemble Audio-Visual Video Deepfake Detection》和《GeoDisaster: Benchmarking Orchestrated Agents for Operational Disaster Geo-Intelligence》，均获9.0高分。建议普通读者优先阅读这两篇，以快速把握多模态深度伪造检测与灾害地理智能的前沿热点。
-- 详情：[/202606/17/README](/202606/17/README)
+1) 今日6篇推荐中，滑坡检测与3D视觉语言模型两大方向亮眼，精读双星均获9分。  
+2) 最值得关注：利用地理空间基础模型辅助CNN提升滑坡识别精度，以及通过正则化微调实现3D视觉语言模型跨域泛化。  
+3) 下一步可尝试将这两种高潜力方法迁移到类似应用场景，如遥感异常检测或机器人视觉适应，以验证其通用性。
+- 详情：[/202606/18/README](/202606/18/README)
 
 ### 精读区论文标签
-1. [Teacher-Student Structure for Domain Adaptation in Ensemble Audio-Visual Video Deepfake Detection](/202606/17/2606.15117v1-teacher-student-structure-for-domain-adaptation-in-ensemble-audio-visual-video-deepfake-detection)  
+1. [Clay-CNN Hybrids: Leveraging Geospatial Foundation Models as Auxiliary Context for Landslide Detection](/202606/18/2606.14081v3-clay-cnn-hybrids-leveraging-geospatial-foundation-models-as-auxiliary-context-for-landslide-detection)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：利用地理空间基础模型Clay v1.5进行滑坡检测
+2. [Domain Generalizable Adaptation of 3D Vision-Language Models via Regularized Fine-Tuning](/202606/18/2606.18472v1-domain-generalizable-adaptation-of-3d-vision-language-models-via-regularized-fine-tuning)  
    标签：评分：9.0/10、query:cross-domain
-   evidence：提出教师-学生域适应方法用于计算机视觉深度伪造检测
-2. [GeoDisaster: Benchmarking Orchestrated Agents for Operational Disaster Geo-Intelligence](/202606/17/2606.17246v1-geodisaster-benchmarking-orchestrated-agents-for-operational-disaster-geo-intelligence)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：遥感视觉语言模型用于灾害地理智能
-3. [Geometric Consistency Protocol for Foundation Model Features in Multi-View Satellite Imagery](/202606/17/2606.17564v1-geometric-consistency-protocol-for-foundation-model-features-in-multi-view-satellite-imagery)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：针对多视角卫星影像的基础模型特征评估协议
-4. [HLS-GPT: A Generative Pretrained Transformer (GPT) for Continental-Scale NASA Harmonized Landsat and Sentinel-2 (HLS) Reflectance Reconstruction Across All Bands on Arbitrary Dates](/202606/17/2606.18115v1-hls-gpt-a-generative-pretrained-transformer-gpt-for-continental-scale-nasa-harmonized-landsat-and-sentinel-2-hls-reflectance-reconstruction-across-all-bands-on-arbitrary-dates)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：用于Landsat-Sentinel反射率重建的预训练生成Transformer
-5. [Learning a Sampling-Free Variational DNN Plugin from Tiny Training Sets to Refine OOD Segmentation With Uncertainty Estimation](/202606/17/2606.15837v1-learning-a-sampling-free-variational-dnn-plugin-from-tiny-training-sets-to-refine-ood-segmentation-with-uncertainty-estimation)  
+   evidence：提出ReFine3D框架，通过正则化微调实现3D视觉语言模型的域可泛化适应
+3. [Bridging Data Gaps in Structural Fragility Modeling through Transfer Learning: Methodology and Case Studies](/202606/18/2606.18567v1-bridging-data-gaps-in-structural-fragility-modeling-through-transfer-learning-methodology-and-case-studies)  
    标签：评分：8.0/10、query:cross-domain
-   evidence：医学图像分割的分布外泛化
-6. [Hierarchical Fine-Grained Aerial Object Detection](/202606/17/2606.16448v1-hierarchical-fine-grained-aerial-object-detection)  
+   evidence：面向域偏移适应的迁移学习框架，直接处理计算机视觉中的域适应问题
+4. [A Unified Framework for Efficient Remote Sensing Visual Question Answering: Adapting Dual, Hybrid, and Encoder-Decoder Architectures](/202606/18/2606.19277v1-a-unified-framework-for-efficient-remote-sensing-visual-question-answering-adapting-dual-hybrid-and-encoder-decoder-architectures)  
    标签：评分：8.0/10、query:rs-fm
-   evidence：用于遥感的细粒度航空目标检测结合属性建模
-7. [MVOFormer: Flow-Semantic Transformer for Robust Monocular Visual Odometry](/202606/17/2606.16474v1-mvoformer-flow-semantic-transformer-for-robust-monocular-visual-odometry)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：针对视觉里程计的跨域泛化问题
+   evidence：使用参数高效微调适配通用基础模型用于遥感视觉问答
 
 ### 速读区论文标签
-1. [MMDiff: Extending Diffusion Transformers for Multi-Modal Generation](/202606/17/2606.16673v1-mmdiff-extending-diffusion-transformers-for-multi-modal-generation)  
-   标签：评分：8.0/10、query:world-models
-   evidence：利用扩散变压器进行多模态生成
-2. [GSPan: A Continuous Gaussian Primitive Representation for Arbitrary-Scale Pansharpening](/202606/17/2606.17722v1-gspan-a-continuous-gaussian-primitive-representation-for-arbitrary-scale-pansharpening)  
-   标签：评分：7.0/10、query:rs-fm
-   evidence：遥感图像融合中的深度学习全色锐化方法
-3. [Beyond Scalar Distances: Semantic Attribute Gradients from Frozen MLLMs for Visual Embeddings](/202606/17/2606.15134v1-beyond-scalar-distances-semantic-attribute-gradients-from-frozen-mllms-for-visual-embeddings)  
-   标签：评分：6.0/10、query:world-models
-   evidence：利用冻结多模态大语言模型改进视觉嵌入用于检索
+1. [Domain-Shift Aware Neural Networks for Unbalance Characterization in Rotating Systems](/202606/18/2606.18882v1-domain-shift-aware-neural-networks-for-unbalance-characterization-in-rotating-systems)  
+   标签：评分：7.0/10、query:cross-domain
+   evidence：域偏移感知神经网络，域适应框架
+2. [Quantum Enchanced Multi-Scale CNN with Bi-directional Mamba for Crop Field Analysis](/202606/18/2606.17222v1-quantum-enchanced-multi-scale-cnn-with-bi-directional-mamba-for-crop-field-analysis)  
+   标签：评分：6.0/10、query:rs-fm
+   evidence：高光谱图像农田分析，遥感图像分析框架
 
 
 <div class="dpr-home-promo-card">
