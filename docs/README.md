@@ -6,40 +6,44 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-18
-- 运行时间：2026-06-18 22:30:19 UTC
+- 最新运行日期：2026-06-19
+- 运行时间：2026-06-19 22:03:07 UTC
 - 运行状态：成功
-- 本次总论文数：6
-- 精读区：4
-- 速读区：2
+- 本次总论文数：7
+- 精读区：0
+- 速读区：7
 
 ### 今日简报（AI）
-1) 今日6篇推荐中，滑坡检测与3D视觉语言模型两大方向亮眼，精读双星均获9分。  
-2) 最值得关注：利用地理空间基础模型辅助CNN提升滑坡识别精度，以及通过正则化微调实现3D视觉语言模型跨域泛化。  
-3) 下一步可尝试将这两种高潜力方法迁移到类似应用场景，如遥感异常检测或机器人视觉适应，以验证其通用性。
-- 详情：[/202606/18/README](/202606/18/README)
+1) 今天推荐7篇论文，涵盖多模态生成、点云地点识别与合成数据评估三个前沿方向，速读3篇均获7分。  
+2) 最值得关注的是《MMDiff》拓展扩散模型实现多模态生成，以及《Aerial-ground LiDAR place recognition》通过自监督学习提升点云地点识别精度。  
+3) 建议优先阅读多模态扩散与自监督点云方法，后续可关注无训练合成数据评估指标的实际应用效果。
+- 详情：[/202606/19/README](/202606/19/README)
 
 ### 精读区论文标签
-1. [Clay-CNN Hybrids: Leveraging Geospatial Foundation Models as Auxiliary Context for Landslide Detection](/202606/18/2606.14081v3-clay-cnn-hybrids-leveraging-geospatial-foundation-models-as-auxiliary-context-for-landslide-detection)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：利用地理空间基础模型Clay v1.5进行滑坡检测
-2. [Domain Generalizable Adaptation of 3D Vision-Language Models via Regularized Fine-Tuning](/202606/18/2606.18472v1-domain-generalizable-adaptation-of-3d-vision-language-models-via-regularized-fine-tuning)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：提出ReFine3D框架，通过正则化微调实现3D视觉语言模型的域可泛化适应
-3. [Bridging Data Gaps in Structural Fragility Modeling through Transfer Learning: Methodology and Case Studies](/202606/18/2606.18567v1-bridging-data-gaps-in-structural-fragility-modeling-through-transfer-learning-methodology-and-case-studies)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：面向域偏移适应的迁移学习框架，直接处理计算机视觉中的域适应问题
-4. [A Unified Framework for Efficient Remote Sensing Visual Question Answering: Adapting Dual, Hybrid, and Encoder-Decoder Architectures](/202606/18/2606.19277v1-a-unified-framework-for-efficient-remote-sensing-visual-question-answering-adapting-dual-hybrid-and-encoder-decoder-architectures)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：使用参数高效微调适配通用基础模型用于遥感视觉问答
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Domain-Shift Aware Neural Networks for Unbalance Characterization in Rotating Systems](/202606/18/2606.18882v1-domain-shift-aware-neural-networks-for-unbalance-characterization-in-rotating-systems)  
+1. [MMDiff: Extending Diffusion Transformers for Multi-Modal Generation](/202606/19/2606.16673v1-mmdiff-extending-diffusion-transformers-for-multi-modal-generation)  
+   标签：评分：7.0/10、query:world-models
+   evidence：多模态生成与扩散Transformer
+2. [Aerial-ground LiDAR place recognition with patch-level self-supervised learning and expanded reciprocal re-ranking](/202606/19/2606.18583v1-aerial-ground-lidar-place-recognition-with-patch-level-self-supervised-learning-and-expanded-reciprocal-re-ranking)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：域偏移感知神经网络，域适应框架
-2. [Quantum Enchanced Multi-Scale CNN with Bi-directional Mamba for Crop Field Analysis](/202606/18/2606.17222v1-quantum-enchanced-multi-scale-cnn-with-bi-directional-mamba-for-crop-field-analysis)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：高光谱图像农田分析，遥感图像分析框架
+   evidence：处理航空-地面激光雷达位姿识别中的域偏移问题
+3. [Training-Free Metrics for Synthetic Object Detection Data: A Proxy for Detector Performance](/202606/19/2606.19817v1-training-free-metrics-for-synthetic-object-detection-data-a-proxy-for-detector-performance)  
+   标签：评分：7.0/10、query:cross-domain
+   evidence：提出合成数据与真实数据之间的域匹配指标，解决域偏移问题
+4. [Evaluating and Enhancing Negation Comprehension in Remote Sensing MLLMs](/202606/19/2606.20177v1-evaluating-and-enhancing-negation-comprehension-in-remote-sensing-mllms)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：遥感多模态大语言模型否定理解基准
+5. [Distributional Loss for Robust Classification](/202606/19/2606.13223v1-distributional-loss-for-robust-classification)  
+   标签：评分：6.0/10、query:cross-domain
+   evidence：面向鲁棒分类的分布损失，提升跨域泛化性能
+6. [Sensor-Conditioned Representation Learning via Scene-Relevant Observation Quotients](/202606/19/2606.16210v1-sensor-conditioned-representation-learning-via-scene-relevant-observation-quotients)  
+   标签：评分：6.0/10、query:cross-domain
+   evidence：处理传感器条件下的表示学习，类似域偏移中的干扰因素
+7. [HilDA: Hierarchical Distillation with Diffusion for Advancing Self-Supervised LiDAR Pre-trainin](/202606/19/2606.20189v1-hilda-hierarchical-distillation-with-diffusion-for-advancing-self-supervised-lidar-pre-trainin)  
+   标签：评分：6.0/10、query:world-models
+   evidence：利用视觉基础模型和时空信息的自监督LiDAR预训练
 
 
 <div class="dpr-home-promo-card">
