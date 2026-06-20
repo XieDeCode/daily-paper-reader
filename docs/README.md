@@ -6,44 +6,36 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-19
-- 运行时间：2026-06-19 22:03:07 UTC
+- 最新运行日期：2026-06-20
+- 运行时间：2026-06-20 20:15:23 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：0
-- 速读区：7
+- 本次总论文数：4
+- 精读区：1
+- 速读区：3
 
 ### 今日简报（AI）
-1) 今天推荐7篇论文，涵盖多模态生成、点云地点识别与合成数据评估三个前沿方向，速读3篇均获7分。  
-2) 最值得关注的是《MMDiff》拓展扩散模型实现多模态生成，以及《Aerial-ground LiDAR place recognition》通过自监督学习提升点云地点识别精度。  
-3) 建议优先阅读多模态扩散与自监督点云方法，后续可关注无训练合成数据评估指标的实际应用效果。
-- 详情：[/202606/19/README](/202606/19/README)
+今日推荐4篇论文，1篇精读获9.0高分，3篇速读均7.0分。
+
+最值得关注精读《VisDom: Sparse Novel View Synthesis with Visible Domain Constraint》，聚焦稀疏新视角合成与可见域约束；速读涵盖几何域适应、开集变化检测及自监督LiDAR预训练。
+
+建议从精读论文入手，深入理解可见域约束如何提升稀疏视图合成效果；其余方向可根据兴趣选读。
+- 详情：[/202606/20/README](/202606/20/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [VisDom: Sparse Novel View Synthesis with Visible Domain Constraint](/202606/20/2606.20531v1-visdom-sparse-novel-view-synthesis-with-visible-domain-constraint)  
+   标签：评分：9.0/10、query:world-models
+   evidence：提出一种无需学习的几何约束用于新视角合成，与NeRF和神经辐射场相关
 
 ### 速读区论文标签
-1. [MMDiff: Extending Diffusion Transformers for Multi-Modal Generation](/202606/19/2606.16673v1-mmdiff-extending-diffusion-transformers-for-multi-modal-generation)  
-   标签：评分：7.0/10、query:world-models
-   evidence：多模态生成与扩散Transformer
-2. [Aerial-ground LiDAR place recognition with patch-level self-supervised learning and expanded reciprocal re-ranking](/202606/19/2606.18583v1-aerial-ground-lidar-place-recognition-with-patch-level-self-supervised-learning-and-expanded-reciprocal-re-ranking)  
+1. [Geometric Domain Adaptation via Optimal Transport for Linear Regression in R^2](/202606/20/2606.14023v1-geometric-domain-adaptation-via-optimal-transport-for-linear-regression-in-r2)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：处理航空-地面激光雷达位姿识别中的域偏移问题
-3. [Training-Free Metrics for Synthetic Object Detection Data: A Proxy for Detector Performance](/202606/19/2606.19817v1-training-free-metrics-for-synthetic-object-detection-data-a-proxy-for-detector-performance)  
-   标签：评分：7.0/10、query:cross-domain
-   evidence：提出合成数据与真实数据之间的域匹配指标，解决域偏移问题
-4. [Evaluating and Enhancing Negation Comprehension in Remote Sensing MLLMs](/202606/19/2606.20177v1-evaluating-and-enhancing-negation-comprehension-in-remote-sensing-mllms)  
+   evidence：使用最优传输的几何域自适应方法
+2. [ReA-OVCD: Reliability-Aware Open-Vocabulary Change Detection via Semantic and Spatial Refinement](/202606/20/2606.20032v1-rea-ovcd-reliability-aware-open-vocabulary-change-detection-via-semantic-and-spatial-refinement)  
    标签：评分：7.0/10、query:rs-fm
-   evidence：遥感多模态大语言模型否定理解基准
-5. [Distributional Loss for Robust Classification](/202606/19/2606.13223v1-distributional-loss-for-robust-classification)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：面向鲁棒分类的分布损失，提升跨域泛化性能
-6. [Sensor-Conditioned Representation Learning via Scene-Relevant Observation Quotients](/202606/19/2606.16210v1-sensor-conditioned-representation-learning-via-scene-relevant-observation-quotients)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：处理传感器条件下的表示学习，类似域偏移中的干扰因素
-7. [HilDA: Hierarchical Distillation with Diffusion for Advancing Self-Supervised LiDAR Pre-trainin](/202606/19/2606.20189v1-hilda-hierarchical-distillation-with-diffusion-for-advancing-self-supervised-lidar-pre-trainin)  
-   标签：评分：6.0/10、query:world-models
-   evidence：利用视觉基础模型和时空信息的自监督LiDAR预训练
+   evidence：遥感开放词汇变化检测，使用基础模型概念
+3. [HilDA: Hierarchical Distillation with Diffusion for Advancing Self-Supervised LiDAR Pre-trainin](/202606/20/2606.20189v1-hilda-hierarchical-distillation-with-diffusion-for-advancing-self-supervised-lidar-pre-trainin)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：利用视觉基础模型进行LiDAR预训练，与遥感基础模型相关
 
 
 <div class="dpr-home-promo-card">
