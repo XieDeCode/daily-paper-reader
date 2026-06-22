@@ -6,41 +6,40 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-21
-- 运行时间：2026-06-21 21:26:44 UTC
+- 最新运行日期：2026-06-22
+- 运行时间：2026-06-22 21:43:19 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：3
-- 速读区：4
+- 本次总论文数：6
+- 精读区：1
+- 速读区：5
 
 ### 今日简报（AI）
-今日精读3篇、速读4篇，聚焦地震解释中的SAM提示增强、时空预测剪枝及多模态对比学习。最值得关注的是《Domain-Guided Prompting for SAM in Seismic Interpretation》（10分），探讨属性与混合提示的作用；以及《DYNA-PRUNER》（8分），提出输入自适应数据-模型协同剪枝。建议读者重点关注领域引导的提示策略与高效剪枝方法，可迁移至图像分割与序列预测任务。
-- 详情：[/202606/21/README](/202606/21/README)
+1) 今日精选6篇论文，精读聚焦雷达-光学时序融合的樟子松分类，速读涵盖自监督LiDAR预训练与跨域迁移学习。  
+2) 最值得关注精读《ROSA-TFormer》，其雷达-光学传感器感知的时空Transformer在陕西樟子松分类中表现突出，结合GEE的Sentinel-1/2时序数据，为农业遥感提供新思路。  
+3) 普通读者可留意多模态时序模型与GEE平台结合的应用趋势，以及自监督预训练在3D感知中的效率提升。
+- 详情：[/202606/22/README](/202606/22/README)
 
 ### 精读区论文标签
-1. [Domain-Guided Prompting of the Segment Anything Model for Seismic Interpretation: The Role of Attributes, Visualization, and Hybrid Prompts](/202606/21/2606.15786v1-domain-guided-prompting-of-the-segment-anything-model-for-seismic-interpretation-the-role-of-attributes-visualization-and-hybrid-prompts)  
-   标签：评分：10.0/10、query:rs-fm
-   evidence：基础模型SAM零样本适应地震数据进行解释
-2. [DYNA-PRUNER: Input-Adaptive Data-Model Co-Pruning for Efficient and Scalable Spatio-Temporal Media Prediction](/202606/21/2606.15346v1-dyna-pruner-input-adaptive-data-model-co-pruning-for-efficient-and-scalable-spatio-temporal-media-prediction)  
-   标签：评分：8.0/10、query:stm
-   evidence：针对时空媒体预测（包括卫星临近预报）的输入自适应剪枝
-3. [MM++: Unsupervised Scale-Invariant Multilayer OOD Detection via Top-K Gated Feature Fusion](/202606/21/2606.17352v1-mm-unsupervised-scale-invariant-multilayer-ood-detection-via-top-k-gated-feature-fusion)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：无监督OOD检测方法，处理分布偏移问题
+1. [ROSA-TFormer: A Radar-Optical Sensor-Aware Temporal Transformer for Pinus sylvestris Plantation Classification in Northern Shaanxi Using GEE-Derived Sentinel-1/2 Time Series](/202606/22/2606.19204v1-rosa-tformer-a-radar-optical-sensor-aware-temporal-transformer-for-pinus-sylvestris-plantation-classification-in-northern-shaanxi-using-gee-derived-sentinel-12-time-series)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：用于遥感分类的时域Transformer
 
 ### 速读区论文标签
-1. [Semantic Robustness Certification for Vision-Language Models](/202606/21/2606.18839v1-semantic-robustness-certification-for-vision-language-models)  
+1. [HilDA: Hierarchical Distillation with Diffusion for Advancing Self-Supervised LiDAR Pre-trainin](/202606/22/2606.20189v1-hilda-hierarchical-distillation-with-diffusion-for-advancing-self-supervised-lidar-pre-trainin)  
+   标签：评分：7.0/10、query:world-models
+   evidence：使用视觉基础模型进行自监督LiDAR预训练，融合时空信息
+2. [Integrative Transfer Network: Deep Transfer Learning Across Populations and Prediction Targets](/202606/22/biorxiv-10-64898-2026-06-12-731936-v1-integrative-transfer-network-deep-transfer-learning-across-populations-and-prediction-targets)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：验证视觉语言模型在语义级别分布偏移下的鲁棒性
-2. [Connect the Dots: Training LLMs for Long-Lifecycle Agents with Cross-Domain Generalization Via Reinforcement Learning](/202606/21/2606.20002v1-connect-the-dots-training-llms-for-long-lifecycle-agents-with-cross-domain-generalization-via-reinforcement-learning)  
-   标签：评分：7.0/10、query:cross-domain
-   evidence：通过强化学习训练LLM实现跨域泛化
-3. [Multi-Modal Contrastive Learning for Implicit Earth Embeddings via Location Tying](/202606/21/2606.20167v1-multi-modal-contrastive-learning-for-implicit-earth-embeddings-via-location-tying)  
-   标签：评分：7.0/10、query:rs-fm
-   evidence：通过位置绑定进行地理空间嵌入的多模态对比学习
-4. [HilDA: Hierarchical Distillation with Diffusion for Advancing Self-Supervised LiDAR Pre-trainin](/202606/21/2606.20189v1-hilda-hierarchical-distillation-with-diffusion-for-advancing-self-supervised-lidar-pre-trainin)  
-   标签：评分：6.0/10、query:stm
-   evidence：利用时空LiDAR序列进行自监督预训练
+   evidence：跨群体和预测目标的深度迁移学习
+3. [OneCanvas: 3D Scene Understanding via Panoramic Reprojection](/202606/22/2606.19253v1-onecanvas-3d-scene-understanding-via-panoramic-reprojection)  
+   标签：评分：6.0/10、query:world-models
+   evidence：利用视觉语言模型通过全景重投影实现3D场景理解
+4. [LEAP: Layer-skipping Efficiency via Adaptive Progression for Vision Transformer Distillation](/202606/22/2606.19483v1-leap-layer-skipping-efficiency-via-adaptive-progression-for-vision-transformer-distillation)  
+   标签：评分：6.0/10、query:rs-fm
+   evidence：视觉Transformer知识蒸馏方法
+5. [Timage: A Generative Text-in-Image Paradigm for Fine-Tuning Vision-Language Models](/202606/22/2606.19944v1-timage-a-generative-text-in-image-paradigm-for-fine-tuning-vision-language-models)  
+   标签：评分：6.0/10、query:world-models
+   evidence：通过文本-图像对齐微调多模态基础模型
 
 
 <div class="dpr-home-promo-card">
