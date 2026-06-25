@@ -6,77 +6,77 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-23
-- 运行时间：2026-06-23 22:17:35 UTC
+- 最新运行日期：2026-06-25
+- 运行时间：2026-06-25 22:25:49 UTC
 - 运行状态：成功
 - 本次总论文数：19
-- 精读区：9
-- 速读区：10
+- 精读区：7
+- 速读区：12
 
 ### 今日简报（AI）
-今日聚焦9分精读论文：AlphaEarth社会经济嵌入与元提示零样本遥感，8分速读覆盖否定理解、欧洲土地覆盖数据集及异构空间对齐。重点关注AEF-Econ的即插即用社会经济嵌入和Beyond Templates的元提示方法，为遥感与跨领域应用提供新思路。建议跟进这些高效方法以提升遥感分析的实际落地效果。
-- 详情：[/202606/23/README](/202606/23/README)
+今日推荐19篇论文，精读两篇满分遥感物体检测与高效实例分割研究。 聚焦遥感领域的通用检测大模型（LEVIRDet）和线性时间状态空间蒸馏模型，以及跨域迁移与零样本泛化方法。 建议优先阅读精读榜上的LEVIRDet数据集与基础模型，对实际遥感任务部署最具参考价值。
+- 详情：[/202606/25/README](/202606/25/README)
 
 ### 精读区论文标签
-1. [AEF-Econ: Toward Plug-and-Play Socioeconomic Foundation Embeddings from AlphaEarth for Urban Remote Sensing](/202606/23/2606.20697v1-aef-econ-toward-plug-and-play-socioeconomic-foundation-embeddings-from-alphaearth-for-urban-remote-sensing)  
+1. [LEVIRDet: A Million-Scale 159-Category Dataset and Foundation Model for Universal Remote Sensing Object Detection](/202606/25/2606.25312v1-levirdet-a-million-scale-159-category-dataset-and-foundation-model-for-universal-remote-sensing-object-detection)  
+   标签：评分：10.0/10、query:rs-fm
+   evidence：遥感目标检测基础模型
+2. [Efficient Remote Sensing Instance Segmentation with Linear-Time State Space Distilled Visual Foundation Models](/202606/25/2606.25324v1-efficient-remote-sensing-instance-segmentation-with-linear-time-state-space-distilled-visual-foundation-models)  
+   标签：评分：10.0/10、query:rs-fm
+   evidence：基于蒸馏视觉基础模型的遥感实例分割，实现线性复杂度
+3. [Flood Mapping from RGB imagery using a Vision Foundation Model](/202606/25/2606.24120v1-flood-mapping-from-rgb-imagery-using-a-vision-foundation-model)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：遥感基础嵌入
-2. [Beyond Templates: Revisiting Zero-Shot Remote Sensing through Meta-Prompting](/202606/23/2606.20702v1-beyond-templates-revisiting-zero-shot-remote-sensing-through-meta-prompting)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：使用视觉语言模型的零样本遥感
-3. [Unsupervised Domain Adaptation for Sim-to-Real Object Pose Estimation with Contrastive Alignment and Pseudo-Label Refinement](/202606/23/2606.21287v1-unsupervised-domain-adaptation-for-sim-to-real-object-pose-estimation-with-contrastive-alignment-and-pseudo-label-refinement)  
+   evidence：利用视觉基础模型进行洪水制图
+4. [Learning Subset-Shared Invariances for Domain Generalization with Mixture-of-Experts](/202606/25/2606.25665v1-learning-subset-shared-invariances-for-domain-generalization-with-mixture-of-experts)  
    标签：评分：9.0/10、query:cross-domain
-   evidence：无监督域适应用于仿真到真实物体姿态估计
-4. [VT-DUDA: Visual Token Conditioning for Diffusion-guided Unsupervised Domain Adaptation](/202606/23/2606.21700v1-vt-duda-visual-token-conditioning-for-diffusion-guided-unsupervised-domain-adaptation)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：提出视觉标记条件用于无监督域适应
-5. [Adversarial Domain Prompt Tuning and Generation for Single Domain Generalization](/202606/23/2606.21736v1-adversarial-domain-prompt-tuning-and-generation-for-single-domain-generalization)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：提出对抗域提示调优用于单域泛化
-6. [Prompt-Calibrated SAM 3 for Open-Vocabulary Remote Sensing Semantic Segmentation](/202606/23/2606.21863v1-prompt-calibrated-sam-3-for-open-vocabulary-remote-sensing-semantic-segmentation)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：使用SAM 3基础模型进行遥感开放词汇语义分割
-7. [The Power of Light: Improving Synthetic-to-Real Domain Adaptation through Physically-Based Indirect Illumination](/202606/23/2606.22574v1-the-power-of-light-improving-synthetic-to-real-domain-adaptation-through-physically-based-indirect-illumination)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：合成到真实域适应
-8. [Changing Modalities: Adapting Remote Sensing Models to New Satellites and Sensors](/202606/23/2606.23356v1-changing-modalities-adapting-remote-sensing-models-to-new-satellites-and-sensors)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：适应新传感器和模态的域适应
-9. [UniverSat: Resolution- and Modality-Agnostic Transformers for Earth Observation](/202606/23/2606.23503v1-universat-resolution--and-modality-agnostic-transformers-for-earth-observation)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：用于地球观测的分辨率和模态无关Transformer，基础模型方法
+   evidence：直接面向领域泛化，提出子集共享不变性方法
+5. [Hierarchical Spatial and Channel Aggregation for Cross-domain Few-shot Segmentation](/202606/25/2606.24296v1-hierarchical-spatial-and-channel-aggregation-for-cross-domain-few-shot-segmentation)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：解决跨域小样本分割，属于领域泛化问题
+6. [Training-free Cross-domain Few-shot Segmentation via Robust Semantic Representation and Matching](/202606/25/2606.24297v1-training-free-cross-domain-few-shot-segmentation-via-robust-semantic-representation-and-matching)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：基于基础模型的无训练跨域小样本分割
+7. [State Space Models Meet Remote Sensing: A Survey](/202606/25/2606.25329v1-state-space-models-meet-remote-sensing-a-survey)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：综述SSM在遥感中的应用，SSM是基础模型架构之一
 
 ### 速读区论文标签
-1. [Evaluating and Enhancing Negation Comprehension in Remote Sensing MLLMs](/202606/23/2606.20177v2-evaluating-and-enhancing-negation-comprehension-in-remote-sensing-mllms)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：评估遥感多模态大语言模型的否定理解能力，属于基础模型能力研究
-2. [BELDE: Building a Large-scale Earth-observation Land-cover Dataset for Europe](/202606/23/2606.20909v1-belde-building-a-large-scale-earth-observation-land-cover-dataset-for-europe)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：欧洲土地覆盖遥感数据集
-3. [One Size does not Fit All: Heterogeneous Latent Space Alignment for Unsupervised Domain Adaptation](/202606/23/2606.21415v1-one-size-does-not-fit-all-heterogeneous-latent-space-alignment-for-unsupervised-domain-adaptation)  
+1. [Protocol-Guided Cross-Domain Transfer Learning for Bovine Facial Pain Recognition under Weak Dairy-Farm Labels](/202606/25/biorxiv-10-64898-2026-06-18-733162-v1-protocol-guided-cross-domain-transfer-learning-for-bovine-facial-pain-recognition-under-weak-dairy-farm-labels)  
    标签：评分：8.0/10、query:cross-domain
-   evidence：医疗图像分割中异质潜在空间对齐的无监督域适应
-4. [Convergence Analysis of Nyström Subsampling in Covariate Shift Adaptation for Misspecified case](/202606/23/2606.22259v1-convergence-analysis-of-nystrm-subsampling-in-covariate-shift-adaptation-for-misspecified-case)  
+   evidence：跨域迁移学习用于家畜面部识别，处理领域偏移
+2. [Intra-African Geographic Domain Shift in Wildlife Camera Trap Species Classification: A Comparative Study of Supervised and Zero-Shot Foundation Models](/202606/25/biorxiv-10-64898-2026-06-24-734283-v1-intra-african-geographic-domain-shift-in-wildlife-camera-trap-species-classification-a-comparative-study-of-supervised-and-zero-shot-foundation-models)  
    标签：评分：8.0/10、query:cross-domain
-   evidence：协变量偏移下非监督域适应的Nyström子采样收敛性分析
-5. [MMDiff: Extending Diffusion Transformers for Multi-Modal Generation](/202606/23/2606.16673v1-mmdiff-extending-diffusion-transformers-for-multi-modal-generation)  
-   标签：评分：7.0/10、query:world-models
-   evidence：扩展扩散变压器进行多模态生成，与多模态基础模型相关
-6. [DR-Mamba: Automatic Inference-Time Domain Adaptation for Document Image Binarization via Sample-Conditioned Detail-Background Suppression](/202606/23/2606.22625v1-dr-mamba-automatic-inference-time-domain-adaptation-for-document-image-binarization-via-sample-conditioned-detail-background-suppression)  
+   evidence：野生动物相机陷阱物种分类中的地理域偏移
+3. [T-VSS: Test-Time Visual Subspace Steering for Adversarial Robustness of Vision-Language Models](/202606/25/2606.23132v1-t-vss-test-time-visual-subspace-steering-for-adversarial-robustness-of-vision-language-models)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：文档图像的推理时域自适应
-7. [CellOS: Learning a World Model of Cellular State through Joint Embedding Prediction](/202606/23/biorxiv-10-64898-2026-06-18-733163-v1-cellos-learning-a-world-model-of-cellular-state-through-joint-embedding-prediction)  
-   标签：评分：7.0/10、query:world-models
-   evidence：学习细胞状态的世界模型
-8. [Inductive Generalization for Robotic Manipulation](/202606/23/2606.20999v1-inductive-generalization-for-robotic-manipulation)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：归纳泛化用于分布外任务
-9. [Structured Hyperedge Adaptation for Parameter-Efficient Fine-Tuning of Vision Transformers](/202606/23/2606.22383v1-structured-hyperedge-adaptation-for-parameter-efficient-fine-tuning-of-vision-transformers)  
+   evidence：视觉语言模型对抗鲁棒性的测试时适应
+4. [An iterative energy-based multimodal transformer for joint retrieval of wheat soil moisture, leaf area index, and plant height from Sentinel-1 and Sentinel-2 time series](/202606/25/2606.25174v1-an-iterative-energy-based-multimodal-transformer-for-joint-retrieval-of-wheat-soil-moisture-leaf-area-index-and-plant-height-from-sentinel-1-and-sentinel-2-time-series)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：使用Transformer处理遥感反演任务
+5. [Microscopy-informed structural connectivity mapping in the in vivohuman brain via domain adaptation](/202606/25/biorxiv-10-64898-2026-06-14-732211-v1-microscopy-informed-structural-connectivity-mapping-in-the-in-vivohuman-brain-via-domain-adaptation)  
+   标签：评分：7.0/10、query:cross-domain
+   evidence：领域自适应方法应用于脑连接图谱
+6. [HilDA: Hierarchical Distillation with Diffusion for Advancing Self-Supervised LiDAR Pre-training](/202606/25/2606.20189v2-hilda-hierarchical-distillation-with-diffusion-for-advancing-self-supervised-lidar-pre-training)  
    标签：评分：6.0/10、query:rs-fm
-   evidence：视觉Transformer的参数高效微调方法，可应用于遥感模型
-10. [Learning Stable Canonical Worlds for Novel View Synthesis and Beyond](/202606/23/2606.23027v1-learning-stable-canonical-worlds-for-novel-view-synthesis-and-beyond)  
+   evidence：利用视觉基础模型进行LiDAR自监督预训练
+7. [Inductive Generalization for Robotic Manipulation](/202606/25/2606.20999v1-inductive-generalization-for-robotic-manipulation)  
+   标签：评分：6.0/10、query:cross-domain
+   evidence：面向机器人任务的归纳泛化方法，涉及分布外泛化评估
+8. [MixedPEFT: Combining Multiple PEFT Methods with Mixed Objectives for Unsupervised Domain Adaptation](/202606/25/2606.22272v1-mixedpeft-combining-multiple-peft-methods-with-mixed-objectives-for-unsupervised-domain-adaptation)  
+   标签：评分：6.0/10、query:cross-domain
+   evidence：结合多种参数高效微调方法和混合目标的无监督域适应
+9. [AwakeForest: An Interactive Geospatial Platform for Large-Scale Forest Imagery](/202606/25/2606.23542v1-awakeforest-an-interactive-geospatial-platform-for-large-scale-forest-imagery)  
+   标签：评分：6.0/10、query:rs-fm
+   evidence：集成预训练模型的地理空间遥感平台
+10. [ABACUS: Adapting Unified Foundation Model for Bridging Image Count Understanding and Generation](/202606/25/2606.23835v1-abacus-adapting-unified-foundation-model-for-bridging-image-count-understanding-and-generation)  
    标签：评分：6.0/10、query:world-models
-   evidence：学习稳定规范世界用于新视图合成
+   evidence：适配统一基础模型用于图像计数和生成任务
+11. [HANCLIP: A Family of Hyperbolic Angular Negation Vision Language Models](/202606/25/2606.23843v1-hanclip-a-family-of-hyperbolic-angular-negation-vision-language-models)  
+   标签：评分：6.0/10、query:world-models
+   evidence：提出处理否定的视觉语言模型家族，推动多模态基础模型发展
+12. [From Open Waters to Enclosed Cabins: ProteusVPR for Cross-Scene Visual Place Recognition in Maritime Perception and Cabin Inspection](/202606/25/2606.24234v1-from-open-waters-to-enclosed-cabins-proteusvpr-for-cross-scene-visual-place-recognition-in-maritime-perception-and-cabin-inspection)  
+   标签：评分：6.0/10、query:cross-domain
+   evidence：视觉位置识别中的跨场景域偏移
 
 
 <div class="dpr-home-promo-card">
