@@ -1,0 +1,338 @@
+Title: CoSA: Correlation-Guided Change Attention with Learnable Residual Gating for Remote Sensing Change Detection
+
+URL Source: https://arxiv.org/pdf/2606.21932v1
+
+Published Time: Tue, 23 Jun 2026 01:50:12 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# CoSA: C orrelation -G uided Change Attention with Learnable Residual 
+
+# Gating for Remote Sensing Change Detection 
+
+IEEE Access paper, Publication date June 11, 2026 
+
+Abdirashid Omar and Jonghyuk Park 
+
+Department of Data Science, Graduate School of Kookmin University Seoul 02707, Republic of Korea 
+
+# Abstract 
+
+Remote sensing change detection (CD) from bi-temporal imagery is critical for applications such as urban monitoring, disaster assessment, and environmental management, yet robust localization remains challenging under sparse changes, noisy labels, and appearance variations. In this paper, we propose Context Sampling Attention (CoSA), a lightweight decoder-side refinement module that explicitly leverages bi-temporal feature correlation as a control signal for adaptive change-aware feature enhancement. This di ff ers from conventional attention mechanisms that rely on implicit feature weighting without explicit temporal control. In the imple-mented FC-Siam setting, CoSA computes normalized same-location cross-correlation between paired decoder features, converts low correlation into a change gate, and injects the resulting gated residual at native 1 /8 and 1/16 feature scales through learnable residual scaling. This design enables e ff ective discrimination between stable and ambiguous regions without relying on computationally expensive global attention. Extensive experiments on four benchmark datasets (LEVIR-CD, S2Looking, DSIFN, and CLCD) demonstrate consistent improvements over strong baselines, achieving 1.5–2.6% gains in changed-class F1 while introducing negligible parameter overhead. Ablation studies confirm that multiscale placement and learnable residual gating are both important for peak performance. These results indicate that CoSA establishes a practical and e ff ective refinement paradigm for enhancing temporal discriminability in Siamese change detection frameworks. 
+
+Keywords change detection · remote sensing · Siamese network · decoder refinement · attention · correlation · plug-in module 
+
+# 1 Introduction 
+
+Remote sensing change detection (CD) aims to estimate a pixel-wise change mask from a co-registered bi-temporal image pair (I1, I2) acquired over the same area at two times. The task is central to urban monitoring, disaster response, land-use analysis, and environmental management [1 –6]. In practice, however, the desired semantic changes are often sparse and localized, whereas nuisance variation from illumination shifts, seasonal appearance changes, registration error, and boundary ambiguity can be large [7 –10]. A useful CD model must therefore suppress spurious temporal di ff erences while still recovering weak but genuine change regions. Recent progress has been driven by Siamese convolutional net-works, attention-enhanced decoders, and transformer-based tem-poral fusion models [11 – 14]. These architectures improve rep-resentation quality, but they also expose a practical tradeo ff .Simple Siamese di ff erencing pipelines are e ffi cient and easy to deploy, yet they can miss weak changes or overreact to nuisance variation. Stronger global-attention models improve temporal interaction, but they often do so at higher computational cost and with greater architectural disruption [7, 15 –17]. This motivates a more targeted question for this paper: can a lightweight plug-in decoder module improve temporal discriminability without re-placing the backbone or introducing a heavy global interaction block? To address this problem, we propose Context Sampling Atten-tion (CoSA), a decoder-side refinement module that converts bi-temporal feature correlation into an explicit change gate. In the controlled FC-Siam setting studied here, this refinement is implemented through pointwise same-location correlation at na-tive decoder scales rather than through a separate neighborhood-sampling operator. The backbone first produces paired encoder features and absolute di ff erence features at multiple decoder stages. CoSA then computes normalized cross-correlation be-tween the paired features, transforms low correlation into a high change-response gate, and injects the gated residual into the baseline di ff erence features through a learnable scalar. In our multiscale configuration, the same refinement is applied inde-pendently at the native 1 /8 and 1 /16 feature resolutions already produced by the backbone, so CoSA reuses existing multiresolu-tion features instead of constructing a separate image pyramid or replacing the prediction head. Figure 1 illustrates this intuition by contrasting stable high-correlation regions with ambiguous low-correlation regions that benefit from refinement. We evaluate CoSA on four benchmarks with complementary di ffi culty profiles: LEVIR-CD, S2Looking, DSIFN, and CLCD. Across this suite, CoSA improves changed-class F1 by roughly 1.5–2.6 points over the controlled baseline while preserving the plug-in design. The gains are dataset dependent: some settings benefit mainly from recall recovery, others from stronger false-positive suppression, and near-neutral behavior is possible when the backbone already performs strong temporal fusion. This pattern is important because it suggests that CoSA is a targeted refinement mechanism rather than a universal replacement for richer temporal interaction models. In summary, this paper makes four contributions. First, it for-mulates a lightweight decoder refinement strategy that uses bi-temporal correlation as an explicit control signal for change gating. Second, it instantiates this strategy as a plug-in resid-
+
+Corresponding author: jonghyuk@kookmin.ac.kr 
+
+> arXiv:2606.21932v1 [cs.CV] 20 Jun 2026
+
+Figure 1: Conceptual overview of CoSA in the introduction stage. Given bi-temporal features from T 1 and T 2, CoSA in-terprets high feature correlation as unchanged context and low correlation as potential change, then applies correlation-guided change attention for refined prediction. ual module that can be inserted into existing Siamese encoder– decoder pipelines without modifying the encoder or prediction head. Third, it demonstrates consistent controlled gains on four benchmarks together with ablations that isolate the role of multiscale placement and learnable residual scaling. Fourth, it analyzes when the module helps, when it is near-neutral, and what computational overhead it introduces in the main controlled setting. 
+
+# 2 Related Work 
+
+Remote sensing change detection has developed from classical di ff erence-image analysis toward deep neural architectures with increasingly explicit temporal interaction. This section briefly reviews that progression and positions CoSA relative to both classical and modern families. 
+
+2.1 Classical Change Detection 
+
+Before deep learning, remote sensing CD was commonly ap-proached through image di ff erencing, image ratioing, change vector analysis, principal-components-style transforms, thresh-olding, and post-classification comparison [18 – 20]. These meth-ods remain important because they define the core problem formulation: given two registered observations, derive a change-sensitive representation and then separate changed from un-changed regions. Their strengths are simplicity, interpretabil-ity, and low computational cost. Their limitations are equally well known: sensitivity to radiometric variation, dependence on threshold selection, and limited ability to model complex spatial context or semantic ambiguity [18, 19]. Modern learning-based CD systems inherit this same problem structure, but replace handcrafted representations and thresholds with trainable fea-ture extractors and discriminative decoders. 
+
+2.2 CNN-Based Change Detection 
+
+Foundational deep CD systems are largely Siamese CNN encoder–decoder models that process the two dates with shared weights and localize change through feature di ff erencing or late fusion [11, 21, 22]. This design remains attractive because it is simple, e ffi cient, and well aligned with pixel-wise CD su-pervision. Subsequent CNN variants improved decoder fusion and local representation quality through denser skip connec-tions, deeper supervision, or lightweight multi-branch refine-ment, as seen in DSIFN [23], SNUNet-CD [24], TinyCD [25], LightCDNet [26], DASNet [27], adaptive Siamese fusion [28], asymmetric semantic CD networks [29], and multitask Siamese designs [30]. These CNN-based methods establish strong practical baselines, but their temporal interaction is often dominated by fixed di ff er-encing or local convolutional fusion. As a result, false-positive suppression and weak-change recovery can remain di ffi cult when temporal nuisance variation is strong. This motivates plug-in refinements that preserve the e ffi ciency of Siamese CNNs while improving how temporal evidence is used inside the de-coder. 
+
+2.3 Attention-Based Methods 
+
+Attention modules are a common extension to Siamese CNNs be-cause they selectively reweight features that are likely to be use-ful for CD. STANet [12] introduced spatial–temporal attention for remote sensing CD, while HANet [31] and SemiSANet [32] explored hierarchical and graph-attentive variants. Other works refine di ff erence features with explicit attention branches, in-cluding AFDE-Net [33], ADDEDNet [34], and several multi-scale architectures such as three-branch attention networks [15], MDANet [16], M2F2Net [35], wavelet-based aggregation [36], and lightweight multi-spectral attention models [37]. These methods improve feature selection and often outperform plain CNN baselines, especially when cross-scale reasoning is important. Their limitation, however, is usually one of control: generic attention learns what to emphasize, but it does not neces-sarily expose an explicit temporal variable that tells the decoder where change evidence is weak or strong. CoSA is closer to a correlation-conditioned gate than to a generic attention branch, because its refinement strength is driven directly by bi-temporal feature agreement. 
+
+2.4 Transformer-Based Approaches 
+
+Transformer-based CD models push temporal interaction fur-ther by using self-attention to capture long-range dependen-cies across the bi-temporal pair. Representative examples in-clude BIT [13], ChangeFormer [14], transformer-based Siamese CD [38], STransUNet [39], multitask CNN–Transformer se-mantic CD [17], and STeInFormer [40]. More recent work has explored stronger pretraining and larger representation mod-els, including bitemporal foundation-model integration [41], foundation-model-based remote sensing CD [42], and new large-scale evaluation settings such as JL1-CD [43]. Recent reviews also show that transformer-style global fusion is now a major axis of CD research [7, 44]. The trade-o ff is practical. Global attention improves contextual modeling, but it also increases memory and computational cost as image resolution grows, and many transformer solutions re-quire backbone-level redesign rather than decoder-side insertion. Strong temporal fusion may also reduce the marginal value of later refinement, which is consistent with our near-neutral BIT result. CoSA therefore targets a di ff erent operating point: it 2 
+
+> Code and materials: https://github.com/rashiedomar/CoSA
+
+keeps the backbone intact and applies a lightweight correlation-conditioned residual gate only at selected decoder scales. 
+
+2.5 Correlation-Based and Feature Interaction Methods 
+
+A smaller but important line of work tries to move beyond plain di ff erencing by making cross-temporal interaction more explicit. Changer argues that feature interaction is central to CD and in-troduces dedicated interaction modeling [45]. Change Guiding Network injects a learned change prior to steer prediction [46], while SFSCDNet uses semantic flow to encode structured tem-poral correspondence [9]. Related formulations also widen the supervision or interaction setting, for example by reframing ob-ject change detection with single-temporal supervision [47] or by integrating richer bi-temporal features through large pre-trained models [41]. These methods are closest to CoSA in spirit because they treat temporal correspondence as something to model directly rather than as a byproduct of subtraction alone. However, they typically introduce richer interaction modules, priors, or larger fusion blocks. By contrast, CoSA uses a simpler pointwise cross-correlation signal to build a change gate that modulates existing di ff erence features, and in the multiscale variant it repeats this operation independently at two backbone resolutions. 
+
+2.6 Positioning CoSA 
+
+CoSA is positioned between heavy backbone replacement and generic add-on attention. Relative to CNN baselines [11, 22], it injects stronger temporal control without changing the en-coder or prediction head. Relative to attention-based refine-ments [12,15,31], it uses bi-temporal correlation explicitly rather than only learning implicit reweighting. Relative to transformer-style models [13, 14, 17], it avoids global all-pairs interaction and remains plug-in compatible. Relative to broader interaction-based designs [9, 45, 46], it emphasizes a lightweight formula-tion: pointwise normalized cross-correlation, multiscale decoder placement, and learnable residual scaling. That combination is the main distinction of CoSA. The module is designed for targeted decoder refinement rather than whole-sale architectural replacement, and the ablation later in the paper shows that the strongest gains require both multiscale placement and learnable residual gating. Recent hybrid systems for special-ized CD settings, such as SiamMask-ICDNet for island-building monitoring [48], further illustrate a broader trend: many gains come from scenario-specific redesign rather than from a general refinement block. CoSA instead targets the unresolved design gap of an explicitly correlation-conditioned, lightweight de-coder refinement that remains deployable across heterogeneous Siamese backbones. 
+
+# 3 Method 
+
+We present Context Sampling Attention (CoSA) as a lightweight decoder-side refinement module for Siamese change detection pipelines. The design goal is practical: improve temporal dis-criminability without replacing the encoder backbone or intro-ducing a heavy global interaction stage. In the controlled FC-Siam setting used throughout this paper, the implemented CoSA block uses pointwise same-location correlation at native decoder scales rather than an explicit neighborhood-sampling operator. It acts on baseline absolute-di ff erence features and returns refined di ff erence features that are passed to the unchanged decoder and prediction head. 
+
+3.1 Overview and Architecture 
+
+Given a bi-temporal pair ( I1, I2), a shared Siamese encoder ex-tracts paired features at multiple resolutions. At decoder scale s,let 
+
+F(s)1 , F(s)2 ∈ RCs×Hs×Ws , (1) where Hs is the feature-map height, Ws is the feature-map width, and Cs is the number of channels at scale s. The baseline FC-Siam decoder forms the absolute-di ff erence tensor 
+
+X(s) = F(s)1 − F(s)2 . (2) Equation (1) defines the paired decoder features, and Eq. (2) gives the baseline di ff erence representation that CoSA refines before downstream decoding. In the multiscale variant used in the main experiments, the refinement is applied independently at the native 1 /8 and 1 /16 resolutions produced by the backbone. 
+
+3.2 Pointwise Bi-Temporal Correlation 
+
+The implemented CoSA block uses normalized same-location cross-correlation between the paired features to quantify tem-poral agreement. For each scale s, features are ℓ2-normalized along the channel axis: ¯F(s) 
+
+> t
+
+(c, x, y) = F(s) 
+
+> t
+
+(c, x, y)
+
+qPCs 
+
+> c′=1
+
+F(s) 
+
+> t
+
+(c′, x, y)2 + ε, t ∈ { 1, 2}, (3) where ε is a small constant for numerical stability. The scalar correlation score at pixel ( x, y) is then 
+
+r(s)(x, y) =
+
+> Cs
+
+X
+
+> c=1
+
+¯F(s)1 (c, x, y) ¯ F(s)2 (c, x, y). (4) Equation (3) defines the channel-wise normalization, and Eq. (4) defines the resulting pointwise correlation score. High r(s)(x, y)indicates strong temporal agreement, while low correlation indi-cates a potentially changed or ambiguous location. This exact formulation is important for clarity. The controlled FC-Siam implementation used in this paper does not perform a separate neighborhood search or an explicit context-aggregation step inside CoSA. Correlation is computed at corresponding spatial coordinates in the paired feature maps, and refinement is driven by that pointwise temporal agreement signal. 
+
+3.3 Correlation-to-Change Gate 
+
+The scalar correlation map is converted into a learnable change gate. Let Ts = min (topk , Cs) denote the replicated gate-channel width used by the implementation. The scalar map is tiled to Ts
+
+channels and passed through a 1 × 1 convolution: ˜R(s) = Repeat r(s), Ts
+
+ , (5) 
+
+G(s) = 1 − σW(s) 
+
+> g
+
+∗ ˜R(s) , (6) 3Figure 2: Full FC-Siam-style pipeline with CoSA inserted at selected decoder stages. The figure shows the bi-temporal inputs, shared Siamese encoder, multi-scale di ff erence features, CoSA refinement applied to the 1 /8 and 1 /16 di ff erence features, progressive decoding, final change-map prediction, and the weighted BCE loss used during training. Equation (5) defines the channel-repeated correlation tensor and Eq. (6) defines the resulting change gate. Here ˜R(s) ∈ RTs×Hs×Ws ,
+
+W(s) 
+
+> g
+
+is a learned 1 × 1 convolution that maps Ts channels to one channel, ∗ denotes convolution, and σ(·) is the sigmoid function. The subtraction from 1 inverts the response so that low correlation yields a high change gate. 
+
+3.4 Residual Refinement 
+
+The change gate modulates the baseline di ff erence feature through residual scaling: ˆX(s) = X(s) + γs
+
+X(s) ⊙ G(s) , (7) Equation (7) defines the final residual refinement step, where ⊙
+
+denotes element-wise multiplication and γs is a learnable scalar residual gate for scale s. In the main configuration, γs is initial-ized to 0, so training starts from the baseline decoder behavior and gradually learns how strongly the correlation-conditioned refinement should be injected. In the fixed-gate ablation, γs is replaced by a constant scale. This design separates temporal evidence estimation from refine-ment strength. The correlation term determines where temporal disagreement is high, while the residual scalar controls how aggressively that information perturbs the baseline di ff erence feature. 
+
+3.5 Multiscale Placement and Scaling Operations 
+
+The multiscale CoSA variant used in the main experiments applies independent CoSA blocks at the 1 /8 and 1 /16 feature resolutions produced by the Siamese encoder–decoder backbone. These resolutions are the native backbone scales rather than new image pyramids constructed inside CoSA. Accordingly, the module does not introduce a separate image subsampling operator, a handcrafted neighborhood function N(x, y), or an additional aggregation operator Agg (·) in the controlled FC-Siam implementation. This distinction resolves the scaling question precisely. The only scaling operations involved are those already present in the baseline architecture: the encoder produces progressively downsampled feature maps through stride-2 stages, and the decoder upsamples them through the standard U-Net pathway. CoSA is attached to those native feature maps. Because the module does not create a new image pyramid, no additional low-pass anti-aliasing filter is applied inside CoSA itself. 
+
+3.6 Training Objective 
+
+CoSA does not introduce an auxiliary supervision branch; it is trained with the same pixel-wise changed /unchanged objective used by the underlying CD model. Let Y ∈ { 0, 1}H×W denote the ground-truth change mask and ˆP ∈ [0 , 1] H×W the predicted changed-class probability map. We optimize a weighted binary 4cross-entropy loss: 
+
+LwBCE = −
+
+X
+
+> x,y
+
+hw1Yx,y log ˆ Px,y + w0(1 − Yx,y) log(1 − ˆPx,y)i, (8) Equation (8) defines the weighted training objective, where w1
+
+and w0 balance the changed and unchanged classes, respectively. In our controlled experiments, baseline and CoSA use the same unchanged:changed weighting ratio of 1 : 3, so the reported di ff erences arise from decoder refinement rather than a modified loss function. 
+
+3.7 Workflow and Integration Scope 
+
+As illustrated in Figure 2, the implemented CoSA block per-forms four steps at each selected decoder scale: compute the baseline absolute-di ff erence feature X(s); estimate pointwise nor-malized cross-correlation from the paired features F(s)1 and F(s)2 ;convert low correlation into a change gate G(s); and inject the gated residual into X(s) through the learnable scalar γs. The encoder backbone, di ff erencing strategy, decoder topology, and prediction head remain unchanged. The practical defaults used in the main FC-Siam experiments are two scales (1 /8 and 1 /16), gate-channel width topk = 32, and near-zero residual initialization for stable warm-up. Under this formulation, the main novelty of CoSA is not a heavy-weight temporal matching module, but a lightweight correlation-conditioned residual gate that can be inserted into existing Siamese decoders with negligible parameter overhead. Fig-ure 2 emphasizes that this refinement is confined to the selected decoder stages and leaves the backbone and prediction head unchanged. 
+
+# 4 Experiments 
+
+This section defines the datasets, metrics, and evaluation proto-col used to assess CoSA under controlled and transfer settings. Table 1 summarizes the four benchmark datasets used through-out the section (scale, splits, and resolution). 
+
+4.1 Datasets and Evaluation Metrics 
+
+We evaluate on four benchmarks with complementary di ffi culty profiles: LEVIR-CD [12], S2Looking [50], DSIFN [51], and CLCD [52]. This selection intentionally spans clean urban build-ing change (LEVIR-CD), sparse o ff -nadir scenes (S2Looking), mixed urban-rural conditions (DSIFN), and noisy agricultural boundaries (CLCD), so claims are not tied to one favorable benchmark. The statistics and sources in Table 1 make clear that the four benchmarks di ff er substantially in annotation richness and scene structure. Figure 3 summarizes the training-loss trajectories for the con-trolled FC-Siam baseline and FC-Siam +CoSA runs on each of the four datasets under the shared protocol. These four datasets are su ffi cient for evaluating generality because, taken together, they cover the main axes on which remote sensing CD methods typically fail: clean versus noisy annotation, dense versus sparse change, stable versus o ff -nadir acquisition, and relatively sharp versus ambiguous boundaries. LEVIR-CD provides a relatively clean, high-quality setting with limited headroom; S2Looking stresses sparse and ambiguous changes under viewpoint varia-tion; DSIFN represents intermediate real-world complexity; and CLCD stresses robustness to noisy boundaries and label uncer-tainty. A method that improves consistently across all four is therefore less likely to be benefiting from dataset cherry-picking and more likely to be addressing a transferable refinement prob-lem. Following standard CD reporting, we use changed-class preci-sion, recall, F1, and IoU ( Prec c, Rec c, F1 c, IoU c) [7,44]. Let T P ,
+
+FP , and FN denote changed-class true positives, false positives, and false negatives, respectively. The metrics are Prec c = T P T P + FP , (9) Rec c = T P T P + FN , (10) F1 c = 2 · Prec c · Rec c
+
+Prec c + Rec c
+
+, (11) IoU c = T P T P + FP + FN . (12) Equations (9) –(12) define the changed-class precision, recall, F1, and IoU used throughout the paper. These metrics capture false-alarm suppression (precision), missed-change recovery (recall), overall discrimination (F1), and spatial overlap quality (IoU). 
+
+4.2 Experimental Settings and Protocol 
+
+To isolate architectural e ff ects, baseline and CoSA share identi-cal settings: a Siamese U-Net-style decoder [21] with a ResNet-18 backbone [53], absolute di ff erencing, weighted cross-entropy (unchanged:changed = 1:3), Adam ( β1 = 0.9, β2 = 0.999), ini-tial learning rate 10 −4, and a ReduceLROnPlateau scheduler that monitors validation F1 c and halves the learning rate when the score fails to improve for 10 epochs. Training uses batch size 8 for up to 100 epochs with early stopping (patience 15) and seed 42. We use standard augmentation (flip, rotation, and light color jitter), select checkpoints by validation F1 c, and re-port test metrics at a 0.5 sigmoid threshold. For LEVIR-CD, the split is 445 training images, 64 validation images, and 128 test images. For S2Looking, DSIFN, and CLCD, we use fixed train /validation /test splits documented in the released configs to ensure reproducibility. Standalone STANet and BIT exper-iments are run under their native /custom pipelines to evaluate plug-in compatibility under model-preferred recipes; these are reported in Subsection 4.6. The smoother optimization behavior visible in Figure 3 is consistent with the shared protocol used for these controlled comparisons. 
+
+4.3 Baseline vs CoSA 
+
+Table 2 reports controlled test-set results for the FC-Siam base-line and FC-Siam +CoSA across all four datasets. CoSA improves F1 c and IoU c on all four datasets, with F1 c
+
+gains from +1.67 to +2.59 and IoU c gains from +1.88 to +2.82. Although the numerical gains may appear modest, they are con-sistent across all datasets and achieved with negligible parameter overhead. The largest gains appear on S2Looking and CLCD, 5Table 1: Dataset statistics for the four benchmarks used in this paper. Dataset sources and access links are given in the corresponding citations: LEVIR-CD [12, 49], S2Looking [50], DSIFN [51], and CLCD [52].                          
+
+> Dataset Task Image Pairs Image Size Change Instances Change Pixels LEVIR-CD binary 637 1024 ×1024 31K 30M S2Looking binary 5,000 1024 ×1024 66K 69M DSIFN binary 394 512 ×512 ––CLCD binary 560 512 ×512 ––
+
+Figure 3: Training loss for the FC-Siam baseline and FC-Siam +CoSA across LEVIR-CD, S2Looking, DSIFN, and CLCD. where sparse changes and noisy boundaries make correlation-conditioned refinement more valuable. The gains are not uni-form: on LEVIR-CD, CoSA preserves precision and improves recall ( +3.21 points), indicating stronger missed-change recov-ery without clear false-alarm inflation; on CLCD, precision rises strongly ( +7.81) while recall decreases, indicating conservative false-positive filtering in noisy conditions; DSIFN shows a recall-oriented shift with reduced precision, while S2Looking improves both precision and recall modestly. This behavior reflects the adaptive nature of CoSA, which adjusts refinement based on dataset characteristics. The training-loss curves are consistent with this pattern: CoSA typically converges to lower loss and stabilizes earlier across the four datasets. This dataset-dependent behavior motivates the deeper error analysis in Section 5. Qualitative examples are summarized in Figure 4 for one strong-gain test sample per dataset under the same protocol. Figure 4 makes these dataset-specific correction patterns visually concrete. The visual trends align with Table 2: reduced false positives in sparse /noisy scenes and improved coverage of weak true changes in ambiguous regions. We isolate mechanism-level evidence in Subsection 4.5, test cross-backbone transferability in Subsection 4.6, and analyze FP /FN transitions with patch-level consistency in Section 5. 
+
+4.4 Reproducibility 
+
+We fix training and data-loading seeds (including seed 42 for the controlled FC-Siam runs), save the best checkpoint by vali-dation F1 c, and cache per-sample predictions used for analysis tables. Paper tables and figures are generated from those logged artifacts. Full datasets and large checkpoints are omitted from the public repository for size, but released code includes con-figuration files, split definitions, training scripts, and evaluation commands su ffi cient to reproduce the reported metrics on the same public benchmarks. Beyond the core training code, the public repository preserves the exact paper-generation path used for the controlled FC-Siam results. The released files document the train /validation /test partitions for each benchmark, the checkpoint-selection rule, the fixed 0.5 decision threshold used for changed-class reporting, and the evaluation scripts that export Prec c, Rec c, F1 c, and IoU c
+
+from saved predictions. For the analysis section, the code also caches per-image confusion counts, sample-wise F1 deltas, and overlay visualizations so that the error tables and qualitative figures are regenerated from stored artifacts rather than recon-structed manually. This is especially important because the paper mixes a shared controlled recipe for FC-Siam with model-native transfer tests for STANet and BIT; the released commands separate those pipelines explicitly and preserve which results belong to the controlled protocol versus the model-preferred protocol. 6Table 2: Performance comparison between the FC-Siam baseline and CoSA on four change detection benchmarks. 
+
+Dataset Method F1 c (%) IoU c (%) Prec c (%) Rec c (%) ∆F1 c ∆IoU c
+
+LEVIR-CD FC-Siam baseline 87.70 78.09 90.23 85.31 — —CoSA 89.45 80.91 90.39 88.52 +1.75 +2.82 DSIFN FC-Siam baseline 74.85 59.81 82.05 68.81 — —CoSA 76.52 61.98 68.61 86.50 +1.67 +2.17 CLCD FC-Siam baseline 46.94 30.67 34.16 75.04 — —CoSA 49.53 32.91 41.97 60.40 +2.59 +2.24 S2Looking FC-Siam baseline 38.00 23.46 24.93 79.82 — —CoSA 40.44 25.34 26.99 80.58 +2.44 +1.88 
+
+Figure 4: Qualitative baseline-vs-CoSA comparison across LEVIR-CD, S2Looking, DSIFN, and CLCD. Columns (left to right): T2 image, ground truth, baseline overlay (TP green, FP red), CoSA overlay (TP green, FP red), and CoSA gains (blue) with remaining FP (red). 74.5 Ablation Study 
+
+Figure 5: Qualitative ablation comparison (errors only): high-lighted regions emphasize false positives and false negatives across variants. We conduct an ablation study over multiple variants on the same FC-Siam-di ff -style backbone: baseline, attention-only, CoSA with multi-scale only, CoSA with gate only, CoSA with single-scale and fixed gate, alignment-first, and the full CoSA configuration with multi-scale refinement and learnable gating. Table 3 lists quantitative results for each variant on LEVIR-CD. Figure 5 complements Table 3 with qualitative error maps (false positives and false negatives) for the same setting. Representa-tive complexity metrics are summarized separately in Table 7. “Multi-scale” inserts CoSA at two resolutions (1 /8 and 1 /16). “Learnable gate” uses a trainable residual scale γ (Section 3) initialized near zero; fixed-scale uses a constant residual fac-tor. “Gate only” disables multi-scale placement and keeps only residual gating at the bottleneck. “Alignment-first” estimates local displacement and warps features before di ff erencing. The full CoSA configuration (multi-scale + learnable residual scale) gives the best F1 /IoU balance among tested variants. Relative to baseline, CoSA improves recall ( +3.21 points) with near-stable precision ( +0.16 points), yielding +1.75 F1 c and +2.82 IoU c.The single-scale fixed variant improves precision but reduces re-call, indicating that correlation-conditioned refinement without adaptive residual control can become overly conservative. The alignment-first variant improves over baseline but remains below full CoSA, suggesting that the implemented pointwise correla-tion gate is more e ff ective than geometric pre-alignment alone in this setup [15, 16]. Table 3 therefore provides the experimental evidence for the method-level claim: multiscale placement alone or residual gating alone is insu ffi cient for peak performance, and the strongest gain appears only when both multiscale placement and adaptive residual control are used together. Figure 5 illus-trates where partial variants fail: the full module suppresses spurious detections while recovering missing change regions more consistently than partial variants. 
+
+4.6 Standalone Hero Models 
+
+We report standalone “hero” experiments for STANet [12] and BIT [13] under their native /custom pipelines. The goal is to test transferability of CoSA when inserted into strong non-baseline backbones. Table 4 reports the changed-class results for these two backbones and shows that CoSA delivers a large gain on STANet but only a marginal change on BIT. Their representative computational profiles are summarized separately in Table 7. The two hero models exhibit clearly di ff erent responses. On STANet, CoSA provides a large gain ( F1 c: 80.71 →86.14; IoU c:67.66 →75.66) with a strong precision increase, indicating ef-fective suppression of over-detection. On BIT, the e ff ect is near-neutral ( F1 c: 91.22 →91.26), consistent with partial redundancy between explicit correlation gating and BIT’s transformer-based temporal interaction. Standalone evidence therefore matches the broader pattern in this paper: CoSA is most beneficial when it complements, rather than duplicates, the temporal interaction already encoded by the backbone [17, 38]. 
+
+# 5 Analysis 
+
+This section moves beyond aggregate scores to analyze how 
+
+CoSA changes errors, where gains occur at sample level, and 
+
+why behavior di ff ers across datasets and backbones. 
+
+5.1 Error Correction Mechanics: FP /FN Transitions 
+
+To expose correction behavior, we compare baseline and CoSA error counts on the same test split. Let FP base and FP cosa denote the changed-class false-positive pixel counts before and after inserting CoSA, and define FN base and FN cosa analogously for false negatives. We report percentage reduction as FP Red . = FP base − FP cosa 
+
+FP base 
+
+× 100 , (13) FN Red . = FN base − FN cosa 
+
+FN base 
+
+× 100 . (14) Equations (13) and (14) define the error-reduction statistics re-ported in Table 5. Positive values indicate fewer errors with CoSA; negative values indicate error increase. Table 5: Error correction mechanics for CoSA on the LEVIR-CD test set across the controlled FC-Siam model and the standalone STANet and BIT settings. Entries report per-cent reduction in changed-class FP /FN counts computed as (baseline − CoSA )/baseline × 100 on cached per-sample con-fusion counts. Positive values mean CoSA reduces that error count; negative values mean CoSA increases it.         
+
+> Model family FP reduction FN reduction CNN (FC-Siam) -30.3% +23.7%
+> Attention (STANet) +68.5% -179.8% Transformer (BIT) +13.6% -10.2%
+
+Interpretation. Table 5 shows that the correction strategy is backbone-dependent. In the controlled CNN setting (FC-Siam), CoSA is recall-oriented: FN decreases while FP rises. In 8Table 3: Ablation study on LEVIR-CD (changed class). 
+
+Variant Prec c Rec c F1 c IoU c
+
+Baseline 90.23 85.31 87.70 78.09 Attention-only 90.27 85.61 87.88 78.38 CoSA with multi-scale only 91.35 83.68 87.35 77.54 CoSA with gate only 93.33 82.67 87.68 78.06 CoSA with single-scale and fixed gate 93.88 83.22 88.23 78.94 Alignment-first 92.00 85.62 88.70 79.69 Full CoSA (multi-scale + learnable gate; ours) 90.39 88.52 89.45 80.91 
+
+Table 4: Standalone hero models under their native pipelines (changed class). 
+
+Model Variant Prec c Rec c F1 c IoU c
+
+STANet Baseline 70.31 94.71 80.71 67.66 STANet + CoSA 87.11 85.19 86.14 75.66 
+
+BIT Baseline 91.37 91.08 91.22 83.87 BIT + CoSA 92.38 90.17 91.26 83.93 
+
+Table 6: Patch-level consistency of CoSA on the LEVIR-CD test set. Each cell reports the percentage of samples in a category and the average ∆F1 c (points) within that category.                          
+
+> Category FC-Siam STANet BIT Significant gain 6.25% ,+16.97 5.42%, +19.13 2.10%, +90.50
+> Moderate gain 21.09%, +5.00 21.83% ,+5.52 1.42%, +4.58 Neutral 58.59%, +0.58 63.67%, +0.05 89.31% ,+0.04 Degradation 14.06% ,-5.78 9.08%, -22.97 7.18%, -10.87
+
+STANet, behavior flips to precision-oriented filtering: FP drops strongly while FN increases. In BIT, shifts are comparatively small, consistent with partial redundancy when temporal inter-action is already strong [13, 17, 38]. This confirms that CoSA is adaptive rather than uniformly precision- or recall-biased. 
+
+5.2 Patch-Level Consistency and Sample-Wise Distribution 
+
+For each sample i, we compute: 
+
+∆F1 (i) 
+
+> c
+
+= F1 (i) 
+
+> c,cosa
+
+− F1 (i)
+
+> c,base
+
+, (15) where F1 (i) 
+
+> c,base
+
+and F1 (i) 
+
+> c,cosa
+
+are the changed-class sample-wise F1 scores before and after inserting CoSA. Equation (15) is then used to group samples into four buckets: significant gain (∆F1 (i) 
+
+> c
+
+> 10), moderate gain (2 ≤ ∆F1 (i) 
+
+> c
+
+≤ 10), neutral ( −1 ≤
+
+∆F1 (i) 
+
+> c
+
+< 2), and degradation ( ∆F1 (i) 
+
+> c
+
+< −1). 
+
+Interpretation. Most samples are neutral across all fami-lies (especially BIT), indicating that refinement is largely non-interfering. For FC-Siam and STANet, improvement buckets (moderate + significant) exceed degradation frequency, which explains positive aggregate gains. BIT remains predominantly neutral, consistent with its near-ceiling baseline and marginal overall gain in standalone tests. 
+
+When CoSA helps. Strongest improvements are concentrated in FN-heavy and boundary-ambiguous samples, where pointwise bi-temporal correlation cues recover coherent changed regions missed by baseline predictions. 
+
+When CoSA can hurt. Degradation is concentrated in am-biguous or noisy-label regions and weak-texture areas, where correlation structure is less reliable. 
+
+5.3 Cross-Dataset Adaptive Behavior 
+
+Table 6 provides the sample-wise backdrop for the cross-dataset trends discussed next. Controlled results in Table 2 show that CoSA improves F1 c on all four datasets, but via di ff erent pre-cision /recall routes. LEVIR-CD benefits mainly from recall recovery with stable precision; S2Looking improves both preci-sion and recall; DSIFN shifts strongly toward recall; and CLCD shifts toward precision filtering under noisier boundaries. This pattern supports the method claim from Section 3: learnable residual gating enables dataset-dependent calibration rather than fixed global behavior. 
+
+5.4 Computational Cost and E ffi ciency Discussion 
+
+CoSA is implemented as a pointwise correlation-conditioned residual gate, so its cost is lighter than the neighborhood-aggregation formulation used in the previous draft. At decoder scale s, the dominant operations are channel-wise feature nor-malization and same-location cross-correlation O(HsWsCs), fol-lowed by a lightweight 1 × 1 gate over Ts = min (topk , Cs)channels and element-wise residual modulation O(HsWsTs). Be-cause the module is attached only at selected decoder scales, it leaves the baseline backbone and prediction head unchanged. A representative cross-model benchmark extends the previous single-model overhead view to include both baseline and CoSA-augmented variants where available. In the shared RTX A6000 batch-1 256 × 256 forward-pass benchmark, FC-Siam +CoSA adds only 66 trainable parameters overall and changes GFLOPs only at very fine precision, while improving changed-class F1 c
+
+by +1.75 points. STANet shows the clearest transfer gain ( F1 c
+
+80.71 →86.14) with modest extra cost, whereas BIT changes only marginally in both accuracy and resource use. These com-parisons reinforce the broader pattern from the hero-model sec-tion: CoSA is most useful when it complements weaker tem-9Table 7: Representative complexity comparison on LEVIR-CD. Parameters and GFLOPs are reported per model, while latency, FPS, and peak GPU memory are measured on an RTX A6000 under a shared paired-input forward-pass benchmark (batch size 1, 256 × 256, evaluation mode).                                          
+
+> Method Params (M) GFLOPs@256 Latency (ms) FPS Peak Mem. (MB) FC-Siam baseline 33.227841 137.5690 6.82 146.59 531.62 FC-Siam +CoSA 33.227907 137.5691 6.72 148.81 661.32 STANet baseline 16.897041 26.2054 8.50 117.58 1016.94 STANet +CoSA 17.016917 29.2512 9.23 108.33 1017.42 BIT baseline 11.943754 17.5045 15.26 65.55 519.68 BIT +CoSA 11.943787 17.5048 15.29 65.39 521.20
+
+poral interaction, and its overhead remains small relative to the aff ected backbone. Table 7 is intentionally scoped as a common hardware bench-mark rather than a unified accuracy ranking, because the com-pared backbones were trained under their preferred recipes and not all of them admit the same full-resolution evaluation path. In particular, STANet’s native pairwise attention exceeded A6000 memory at full-resolution 1024 × 1024, so the shared cross-model benchmark is reported at 256 × 256. The batch size of 1 used in Table 7 is therefore an inference-profiling choice, not the training configuration: the controlled FC-Siam accuracy experiments still use batch size 8. To complement that shared benchmark with a deployment-scale view, our controlled FC-Siam full-resolution measurement on LEVIR-CD raises latency from 299.05 to 303.26 ms per image and peak GPU memory from 3396.83 to 3531.07 MB on the same GPU (3.34 to 3.30 FPS, batch size 1, input size 1024 × 1024). Taken together, these measurements make the performance /complexity tradeo ff more concrete: CoSA introduces little architectural overhead, and its practical cost is small relative to the accuracy gain in the main controlled setting. 
+
+# 6 Conclusion 
+
+This work introduced Context Sampling Attention (CoSA), a lightweight decoder-side refinement module for remote sens-ing change detection. In the implemented formulation studied here, CoSA uses pointwise bi-temporal feature correlation as an explicit control signal, converts low correlation into a learned change gate, and injects the gated residual at selected decoder scales through learnable residual scaling. On four benchmarks (LEVIR-CD, S2Looking, DSIFN, and CLCD), CoSA improves changed-class F1 and IoU over the controlled baseline. Ablations indicate that multiscale place-ment and adaptive residual gating are both important for peak performance. Cross-backbone tests further show that the mod-ule is most helpful when temporal fusion is limited and can be near-neutral when fusion is already strong. Despite these gains, limitations remain. CoSA is not uniformly beneficial across architectures, and some samples still degrade in ambiguous or noisy-boundary regions where correlation is less reliable. Moreover, although the controlled FC-Siam benchmark in this paper now includes measured latency and GPU-memory overhead, broader cross-hardware deployment profiling remains limited. Table 7 makes clear that the current deployment evi-dence is still tied to a shared single-hardware benchmark rather than a broader hardware sweep. These limitations suggest several practical directions for future work. Confidence-aware gating could reduce unnecessary refine-ment on di ffi cult samples, broader transfer studies could clarify more precisely where CoSA is complementary versus redun-dant, and larger standardized e ffi ciency benchmarks could fur-ther strengthen the deployment case for lightweight correlation-conditioned refinement. 
+
+# References 
+
+[1] A. Javed, T. Kim, C. woo Lee, J. Oh, and Y. Han, “Deep learning-based detection of urban forest cover change along with overall urban changes using very-high-resolution satellite images,” Remote Sensing , 2023. [2] J. Cha, S. Lee, and H. Kim, “Deep learning-based detection and assessment of road damage caused by disaster with satellite imagery,” Applied Sciences , 2025. [3] S. Camalan, K. Cui, V. P. Pauca, S. M. Alqahtani, M. Sil-man, R. Chan, R. Plemmons, E. N. Dethier, L. E. Fernan-dez, and D. Lutz, “Change detection of amazonian alluvial gold mining using deep learning and sentinel-2 imagery,” 
+
+Remote Sensing , 2022. [4] K. Win and J. Sasaki, “The change detection of mangrove forests using deep learning with medium-resolution satel-lite imagery: A case study of wunbaik mangrove forest in myanmar,” Remote Sensing , 2024. [5] R. S. Priya and K. Vani, “Vegetation change detection and recovery assessment based on post-fire satellite imagery using deep learning,” Scientific Reports , 2024. [6] J. Gonzlez-Vlez, M. C. Torres-Madronero, J. D. Martnez-Vargas, P. Rodriguez-Marin, J. Perez-Guerra, and V. Herrera-Ruiz, “Tropical dry forest land use /land cover change detection using semi-supervised deep learning al-gorithms and remote sensing,” Environmental Monitoring 
+
+& Assessment , 2026. [7] D. Patel, R. Bhattad, and V. Patel, “Siamese networks for change detection in remote sensing: A comprehen-sive review,” 2025 International Conference on Artificial Intelligence and Machine Vision (AIMV) , 2025. [8] Z. Karim and T. L. van Zyl, “Deep learning and transfer learning applied to sentinel-1 dinsar and sentinel-2 optical satellite imagery for change detection,” 2020 International SAUPEC /RobMech /PRASA Conference , 2020. [9] K. S. Basavaraju, N. Sravya, V. D. Kevala, S. Suresh, and S. Lal, “Sfscdnet: A deep learning model with spatial flow-10 based semantic change detection from bi-temporal satellite images,” IEEE Access , 2024. [10] S. B. Kasetty and K. Rajakumar, “Metamorphnet: Deep shearlet and flux-based fusion for change detection in multi-source satellite imagery,” IEEE Access , 2026. [11] R. C. Daudt, B. Le Saux, and A. Boulch, “Fully convo-lutional siamese networks for change detection,” in 2018 25th IEEE International Conference on Image Processing (ICIP) , 2018, pp. 4063–4067. [12] H. Chen and Z. Shi, “A spatial-temporal attention method and dataset for remote sensing change detection,” Remote Sensing , vol. 12, no. 10, p. 1662, 2020. [13] H. Chen, Z. Qi, and Z. Shi, “Remote sensing image change detection with transformers,” IEEE Trans. Geosci. Remote Sens. , vol. 60, pp. 1–14, 2022. [14] W. G. C. Bandara and V. M. Patel, “A transformer-based siamese network for change detection,” in 2022 IEEE In-ternational Geoscience and Remote Sensing Symposium (IGARSS) , 2022. [15] Y. Li, L. Weng, M. Xia, K. Hu, and H. Lin, “Multi-scale fusion siamese network based on three-branch atten-tion mechanism for high-resolution remote sensing image change detection,” Remote Sensing , 2024. [16] S. Jiang, H. Lin, H. Ren, Z. Hu, L. Weng, and M. Xia, “Mdanet: A high-resolution city change detection network based on di ff erence and attention mechanisms under multi-scale feature fusion,” Remote Sensing , 2024. [17] W. Liu, Z. Kang, J. Liu, Y. Lin, Y. Yu, and J. Li, “A multitask cnn-transformer network for semantic change detection from bitemporal remote sensing images,” IEEE Transactions on Geoscience and Remote Sensing , 2024. [18] A. Singh, “Digital change detection techniques using remotely-sensed data,” International Journal of Remote Sensing , vol. 10, no. 6, pp. 989–1003, 1989. [19] D. Lu, P. Mausel, E. Brondízio, and E. Moran, “Change detection techniques,” International Journal of Remote Sensing , vol. 25, no. 12, pp. 2365–2407, 2004. [20] L. Bruzzone and D. Fernández Prieto, “Automatic analysis of the di ff erence image for unsupervised change detection,” 
+
+IEEE Transactions on Geoscience and Remote Sensing ,vol. 38, no. 3, pp. 1171–1182, 2000. [21] O. Ronneberger, P. Fischer, and T. Brox, “U-Net: Convo-lutional networks for biomedical image segmentation,” in 
+
+Medical Image Computing and Computer-Assisted Inter-vention (MICCAI) , 2015, pp. 234–241. [22] H. Chen, C. Wu, B. Du, and L. Zhang, “Deep siamese multi-scale convolutional network for change detection in multi-temporal vhr images,” International Workshop on the Analysis of Multitemporal Remote Sensing Images ,2019. [23] C. Zhang, P. Yue, D. Tapete, L. Jiang, B. Shangguan, L. Huang, and G. Liu, “A deeply supervised image fu-sion network for change detection in high resolution bi-temporal remote sensing images,” ISPRS Journal of Pho-togrammetry and Remote Sensing , vol. 166, pp. 183–200, 2020. [24] S. Fang, K. Li, J. Shao, and Z. Li, “Snunet-cd: A densely connected siamese network for change detection of VHR images,” IEEE Geoscience and Remote Sensing Letters ,pp. 1–5, 2021. [25] A. Codegoni, G. Lombardi, and A. Ferrari, “TINYCD: A (not so) deep learning model for change detection,” arXiv preprint arXiv:2207.13159 , 2022. [26] Y. Xing, J. Jiang, J. Xiang, E. Yan, Y. Song, and D. Mo, “Lightcdnet: Lightweight change detection network based on vhr images,” IEEE Geoscience and Remote Sensing Letters , vol. 20, pp. 1–5, 2023. [27] J. Chen, Z. Yuan, J. Peng, L. Chen, H. Huang, J. Zhu, Y. Liu, and H. Li, “Dasnet: Dual attentive fully convo-lutional siamese networks for change detection in high-resolution satellite images,” IEEE Journal of Selected Top-ics in Applied Earth Observations and Remote Sensing ,2020. [28] Y. Zhang, J. Zhen, T. Liu, Y. Yang, and Y. Cheng, “Adap-tive di ff erentiation siamese fusion network for remote sens-ing change detection,” IEEE Geoscience and Remote Sens-ing Letters , 2025. [29] K. Yang, G.-S. Xia, Z. Liu, B. Du, W. Yang, M. Pelillo, and L. Zhang, “Asymmetric siamese networks for semantic change detection in aerial images,” IEEE Transactions on Geoscience and Remote Sensing , 2022. [30] X. Zuo, F. Jin, L. Ding, S. Wang, Y. Lin, B. Liu, and Y. Ding, “Multitask siamese network guided by enhanced change information for semantic change detection in bitem-poral remote sensing images,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing ,2025. [31] C. Han, C. Wu, H. Guo, M. Hu, and H. Chen, “Hanet: A hierarchical attention network for change detection with bitemporal very-high-resolution remote sensing images,” 
+
+IEEE Journal of Selected Topics in Applied Earth Observa-tions and Remote Sensing , vol. 16, pp. 3867–3878, 2023. [32] C. Sun, J. Wu, H. Chen, and C. Du, “Semisanet: A semi-supervised high-resolution remote sensing image change detection model using siamese networks with graph atten-tion,” Remote Sensing , 2022. [33] S. Holail, T. Saleh, X. Xiao, and D. Li, “Afde-net: Building change detection using attention-based feature di ff erential enhancement for satellite imagery,” IEEE Geoscience and Remote Sensing Letters , 2023. [34] J. Wei and Y. Dang, “Addednet: Remote sensing image change detection algorithm based on multiple attention mechanisms,” International Conference Civil Engineering and Architecture , 2025. [35] B. Gu, L. Song, Y. Kong, and B. Gu, “M2f2net: Multi-stage mixed feature fusion network for remote sensing change detection,” Proc. IEEE ICASSP , 2025. [36] J. Xie, F. Gao, X. Zhou, and J. Dong, “Wavelet-based bi-dimensional aggregation network for sar image change detection,” IEEE Geoscience and Remote Sensing Letters ,2024. [37] L. H. Jasim, P. Girish, H. Deepanjali, S. D. V, and S. M. P, “Ddmsa-u-net: A lightweight deep learning framework for 11 multi-spectral change detection for agricultural land use monitoring,” ITM Web Conf. , 2025. [38] W. G. C. Bandara and V. M. Patel, “A transformer-based siamese network for change detection,” IEEE International Geoscience and Remote Sensing Symposium , 2022. [39] J. Yuan, L. Wang, and S. Cheng, “Stransunet: A siamese transunet-based remote sensing image change detection network,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , 2022. [40] X. Ma, Z. Wu, M.-Y. Ma, M. Zhao, F. Yang, Z. Du, and W. Zhang, “Steinformer: Spatial-temporal interac-tion transformer architecture for remote sensing change detection,” arXiv.org , 2024. [41] K. Chen, C. Liu, W. Li, Z. Liu, H. Chen, H. Zhang, Z. Zou, and Z. Shi, “Time travelling pixels: Bitemporal features integration with foundation model for remote sensing im-age change detection,” arXiv preprint arXiv:2312.16202 ,2023. [42] K. Li, X. Cao, and D. Meng, “A new learning paradigm for foundation model-based remote sensing change detection,” 
+
+IEEE Transactions on Geoscience and Remote Sensing , pp. 1–1, 2024. [43] Z. Liu, R. Zhu, L. Gao, Y. Zhou, J. Ma, and Y. Gu, “Jl1-cd: A new benchmark for remote sensing change detection and a robust multi-teacher knowledge distillation framework,” 
+
+arXiv preprint arXiv:2502.13407 , 2025. [44] K. Ramineni, B. S. Rao, G. S. Chauhan, S. Mohmmad, U. Sadhana, and K. Sridhar, “Satellite-based infrastructure change detection using deep learning,” Proc. 5th Int. Conf. Soft Comput. Security Appl. (ICSCSA) , 2025. [45] S. Fang, K. Li, and Z. Li, “Changer: Feature interaction is what you need for change detection,” arXiv preprint arXiv:2209.08290 , 2022. [46] C. Han, C. Wu, H. Guo, M. Hu, J. Li, and H. Chen, “Change guiding network: Incorporating change prior to guide change detection in remote sensing imagery,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing , vol. 16, pp. 8395–8407, 2023. [47] Z. Zheng, A. Ma, L. Zhang, and Y. Zhong, “Change is everywhere: Single-temporal supervised object change detection in remote sensing imagery,” in Proceedings of the IEEE /CVF International Conference on Computer Vision (ICCV) , 2021, pp. 15 193–15 202. [48] L. Yang, Y. Zhao, Y. Chen, W. Ma, Y. Ye, X. Ji, and Y. Chen, “Siammask-icdnet: A hybrid algorithm of siamese neural network and mask r-cnn for island building change detection,” 2025 6th International Conference on Geology, Mapping and Remote Sensing (ICGMRS) , 2025. [49] “Levir-cd dataset project page,” [Online]. URL, accessed: 2026-05-05. [50] “S2looking dataset repository,” [Online]. URL, accessed: 2026-03-05. [51] “Dsifn dataset project page,” [Online]. URL, accessed: 2026-03-05. [52] “Cropland-cd dataset repository,” [Online]. URL, accessed: 2026-03-05. [53] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learn-ing for image recognition,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) , 2016, pp. 770–778. 12
