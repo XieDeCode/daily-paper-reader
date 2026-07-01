@@ -6,55 +6,46 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-06-30
-- 运行时间：2026-06-30 22:21:55 UTC
+- 最新运行日期：2026-07-01
+- 运行时间：2026-07-01 22:14:36 UTC
 - 运行状态：成功
-- 本次总论文数：11
-- 精读区：7
-- 速读区：4
+- 本次总论文数：8
+- 精读区：5
+- 速读区：3
 
 ### 今日简报（AI）
-今日共阅读11篇论文，精读7篇、速读4篇。  
-最值得关注的是满分论文《Benchmarking Geospatial Foundation Models for Agriculture》和9分论文《Bayesian-Optimized Multi-Source Domain Adaptation for Post-Earthquake Damage Assessment》，分别聚焦农业遥感基础模型评估与震后灾损评估的域适应优化。  
-建议优先精读这两篇高分论文，重点关注其方法设计与实验设置，可迁移至相关领域的模型选择或迁移学习任务。
-- 详情：[/202606/30/README](/202606/30/README)
+今日精读2篇高分论文、速读3篇，聚焦域自适应检测与遥感语义分割。  
+强烈推荐双流双层循环优化的域自适应检测（9.0分）和RSGPNet几何提示遥感分割（8.0分）。  
+建议重点阅读前两篇精读论文，掌握域迁移与开放词汇分割的最新思路。
+- 详情：[/202607/01/README](/202607/01/README)
 
 ### 精读区论文标签
-1. [Benchmarking Geospatial Foundation Models for Agriculture Applications](/202606/30/2606.29664v1-benchmarking-geospatial-foundation-models-for-agriculture-applications)  
-   标签：评分：10.0/10、query:rs-fm
-   evidence：农业地理空间基础模型基准测试
-2. [Bayesian-Optimized Multi-Source Domain Adaptation for Post-Earthquake Damage Assessment](/202606/30/2606.28602v1-bayesian-optimized-multi-source-domain-adaptation-for-post-earthquake-damage-assessment)  
+1. [Domain Adaptive Object Detection via Dual-Stream Bilevel-Cycle Optimization](/202607/01/2606.31373v1-domain-adaptive-object-detection-via-dual-stream-bilevel-cycle-optimization)  
    标签：评分：9.0/10、query:cross-domain
-   evidence：多源域适应用于地震损伤评估
-3. [ExACT: Exemplar-Driven Calibrated Refinement for Training-Free Visual Grounding in Remote Sensing Images](/202606/30/2606.28920v1-exact-exemplar-driven-calibrated-refinement-for-training-free-visual-grounding-in-remote-sensing-images)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：基于基础模型的遥感视觉定位
-4. [TextDS: Parameter-Efficient Representation Alignment for Scene Text Detection under Distribution Shifts](/202606/30/2606.28077v1-textds-parameter-efficient-representation-alignment-for-scene-text-detection-under-distribution-shifts)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：处理场景文本检测中的分布偏移
-5. [TextDS: Parameter-Efficient Representation Alignment for Scene Text Detection under Distribution Shifts](/202606/30/2606.28077v2-textds-parameter-efficient-representation-alignment-for-scene-text-detection-under-distribution-shifts)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：处理场景文本检测中的分布偏移
-6. [RSGPNet: Geometric Prompting for Remote Sensing Open-Vocabulary Semantic Segmentation](/202606/30/2606.28410v1-rsgpnet-geometric-prompting-for-remote-sensing-open-vocabulary-semantic-segmentation)  
+   evidence：目标检测的域自适应方法
+2. [RSGPNet: Geometric Prompting for Remote Sensing Open-Vocabulary Semantic Segmentation](/202607/01/2606.28410v1-rsgpnet-geometric-prompting-for-remote-sensing-open-vocabulary-semantic-segmentation)  
    标签：评分：8.0/10、query:rs-fm
-   evidence：利用CLIP的免训练几何提示用于遥感开放词汇分割
-7. [Semantic-Driven Scale and Spatial Selection for Efficient Cross-Modal Alignment in Referring Remote Sensing Image Segmentation](/202606/30/2606.30244v1-semantic-driven-scale-and-spatial-selection-for-efficient-cross-modal-alignment-in-referring-remote-sensing-image-segmentation)  
+   evidence：利用基础模型CLIP进行遥感开放词汇分割
+3. [Beyond 2D Matching: A Unified Single-Stage Framework for Geometry-Aware Cross-View Object Geo-Localization](/202607/01/2606.30576v1-beyond-2d-matching-a-unified-single-stage-framework-for-geometry-aware-cross-view-object-geo-localization)  
    标签：评分：8.0/10、query:rs-fm
-   evidence：面向遥感图像指代分割的基础模型参数高效微调
+   evidence：用于跨视角地理定位的地理空间基础模型
+4. [No Adaptation Without Observation: Observability-Constrained Test-Time Prompt Tuning for LiDAR Semantic Segmentation](/202607/01/2606.30937v1-no-adaptation-without-observation-observability-constrained-test-time-prompt-tuning-for-lidar-semantic-segmentation)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：测试时适应用于LiDAR语义分割，直接应对分布偏移，属于域适应方法
+5. [FROST: Training-Free Few-Shot Segmentation with Frozen Features and Nonparametric Statistics](/202607/01/2606.31136v1-frost-training-free-few-shot-segmentation-with-frozen-features-and-nonparametric-statistics)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：使用冻结自监督特征进行遥感小样本分割
 
 ### 速读区论文标签
-1. [SciFlow: Semantic Cross Interference for Self-Supervised Optical Flow Domain Generalization](/202606/30/2606.29004v1-sciflow-semantic-cross-interference-for-self-supervised-optical-flow-domain-generalization)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：自监督域泛化用于合成到真实光流估计
-2. [Learning Stable Canonical Worlds for Novel View Synthesis and Beyond](/202606/30/2606.23027v2-learning-stable-canonical-worlds-for-novel-view-synthesis-and-beyond)  
+1. [DFM: Difference Feature Modeling with Text-Guided Gated Contrastive Loss for Remote Sensing Image Change Captioning](/202607/01/2606.27410v1-dfm-difference-feature-modeling-with-text-guided-gated-contrastive-loss-for-remote-sensing-image-change-captioning)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：利用预训练变化检测模型进行遥感图像描述
+2. [A Unified Framework for Vision Transformers Equivariant to Discrete Subgroups of $\mathrm{O}(2)$](/202607/01/2606.27864v2-a-unified-framework-for-vision-transformers-equivariant-to-discrete-subgroups-of-mathrmo2)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：视觉Transformer的O(2)子群等变性
+3. [MIRROR: Aligning Semantic Relations from Language to Image via Gromov--Wasserstein](/202607/01/2606.29462v1-mirror-aligning-semantic-relations-from-language-to-image-via-gromov--wasserstein)  
    标签：评分：7.0/10、query:world-models
-   evidence：学习稳定规范世界用于新视角合成
-3. [Learning Stable Canonical Worlds for Novel View Synthesis and Beyond](/202606/30/2606.23027v1-learning-stable-canonical-worlds-for-novel-view-synthesis-and-beyond)  
-   标签：评分：6.0/10、query:world-models
-   evidence：基于前馈高斯泼溅的稳定场景表示新视角合成
-4. [MIRROR: Aligning Semantic Relations from Language to Image via Gromov--Wasserstein](/202606/30/2606.29462v1-mirror-aligning-semantic-relations-from-language-to-image-via-gromov--wasserstein)  
-   标签：评分：6.0/10、query:world-models
-   evidence：从语言到图像的语义关系对齐
+   evidence：对齐语言到图像的语义关系，用于多模态基础模型学习
 
 
 <div class="dpr-home-promo-card">
