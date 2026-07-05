@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-07-05 <!--dpr-date:20260705-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/05/2607.00666v1-domain-arithmetic-one-shot-vla-adaptation-under-environmental-shifts" data-sidebar-item="{&quot;title&quot;: &quot;Domain Arithmetic: One-Shot VLA Adaptation under Environmental Shifts&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.00666v1-domain-arithmetic-one-shot-vla-adaptation-under-environmental-shifts&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;cross-domain&quot;}], &quot;evidence&quot;: &quot;提出面向视觉-语言-动作模型的单次域适应方法&quot;}">Domain Arithmetic: One-Shot VLA Adaptation under Environmental Shifts</a>
   * 2026-07-04 <!--dpr-date:20260704-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/04/2606.30795v1-simple-supervision-is-hard-to-beat-a-bitter-lesson-from-sparse-target-labels-in-domain-adaptive-object-detection" data-sidebar-item="{&quot;title&quot;: &quot;Simple Supervision Is Hard to Beat: A Bitter Lesson from Sparse Target Labels in Domain-Adaptive Object Detection&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2606.30795v1-simple-supervision-is-hard-to-beat-a-bitter-lesson-from-sparse-target-labels-in-domain-adaptive-object-detection&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;cross-domain&quot;}], &quot;evidence&quot;: &quot;基于稀疏标签的源自由域自适应目标检测&quot;}">Simple Supervision Is Hard to Beat: A Bitter Lesson from Sparse Target Labels in Domain-Adaptive Object Detection</a>

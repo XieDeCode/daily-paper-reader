@@ -6,47 +6,28 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-04
-- 运行时间：2026-07-04 21:31:55 UTC
+- 最新运行日期：2026-07-05
+- 运行时间：2026-07-05 20:52:45 UTC
 - 运行状态：成功
-- 本次总论文数：9
-- 精读区：6
-- 速读区：3
+- 本次总论文数：1
+- 精读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日精读6篇、速读3篇，聚焦域自适应目标检测与遥感树高变化回归两大方向。最值得看《Simple Supervision Is Hard to Beat》揭示稀疏标签在域自适应检测中的优势，以及《Uncertainty-aware tree height change regression》对树高变化的精准不确定性建模。普通读者可优先精读这两篇，学习简单监督和不确定性方法在实际场景中的落地经验。
-- 详情：[/202607/04/README](/202607/04/README)
+今日精读一篇高分论文，聚焦机器人在环境变化下的高效适应问题。
+
+该工作提出“域算术”方法，通过一次操作即可让VLA模型适应新环境，无需重新微调。
+
+可关注此方向在机器人部署中的潜力，但注意其适用场景可能受限于域差异大小。
+- 详情：[/202607/05/README](/202607/05/README)
 
 ### 精读区论文标签
-1. [Simple Supervision Is Hard to Beat: A Bitter Lesson from Sparse Target Labels in Domain-Adaptive Object Detection](/202607/04/2606.30795v1-simple-supervision-is-hard-to-beat-a-bitter-lesson-from-sparse-target-labels-in-domain-adaptive-object-detection)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：基于稀疏标签的源自由域自适应目标检测
-2. [Uncertainty-aware tree height change regression](/202607/04/2607.00638v1-uncertainty-aware-tree-height-change-regression)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：利用地理空间基础模型进行遥感树高回归
-3. [Domain Generalization via Text-Anchored Information Bottleneck](/202607/04/2607.01657v1-domain-generalization-via-text-anchored-information-bottleneck)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：提出使用文本锚定信息瓶颈的域泛化方法
-4. [Mind the Gap: Quantifying the Domain Gap in Cross-Sensor Diffusion Super-Resolution](/202607/04/2606.28039v1-mind-the-gap-quantifying-the-domain-gap-in-cross-sensor-diffusion-super-resolution)  
+1. [Domain Arithmetic: One-Shot VLA Adaptation under Environmental Shifts](/202607/05/2607.00666v1-domain-arithmetic-one-shot-vla-adaptation-under-environmental-shifts)  
    标签：评分：8.0/10、query:cross-domain
-   evidence：量化跨传感器扩散超分辨中的域差距
-5. [Domain Arithmetic: One-Shot VLA Adaptation under Environmental Shifts](/202607/04/2607.00666v1-domain-arithmetic-one-shot-vla-adaptation-under-environmental-shifts)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：通过权重算术适应环境变化下的VLA模型领域
-6. [Dual-Selective Network for Domain-Incremental Change Detection](/202607/04/2607.02299v1-dual-selective-network-for-domain-incremental-change-detection)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：面向域增量变化检测的域适应方法
+   evidence：提出面向视觉-语言-动作模型的单次域适应方法
 
 ### 速读区论文标签
-1. [MIRROR: Aligning Semantic Relations from Language to Image via Gromov--Wasserstein](/202607/04/2606.29462v1-mirror-aligning-semantic-relations-from-language-to-image-via-gromov--wasserstein)  
-   标签：评分：7.0/10、query:world-models
-   evidence：对齐语言到视觉的语义关系以提升多模态基础模型鲁棒性
-2. [FLORA: A deep learning approach to predict forest attributes from heterogeneous LiDAR data](/202607/04/2606.32023v1-flora-a-deep-learning-approach-to-predict-forest-attributes-from-heterogeneous-lidar-data)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：基于异构LiDAR数据的森林属性深度学习预测，处理域差异
-3. [Interpretation-Oriented Cloud Removal via Observation-Anchored Residual Flow with Geo-Contextual Alignment](/202607/04/2607.02471v1-interpretation-oriented-cloud-removal-via-observation-anchored-residual-flow-with-geo-contextual-alignment)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：遥感云去除与地理上下文对齐
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
