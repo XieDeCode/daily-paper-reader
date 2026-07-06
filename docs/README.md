@@ -6,28 +6,33 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-05
-- 运行时间：2026-07-05 20:52:45 UTC
+- 最新运行日期：2026-07-06
+- 运行时间：2026-07-06 21:32:53 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：1
-- 速读区：0
+- 本次总论文数：4
+- 精读区：0
+- 速读区：4
 
 ### 今日简报（AI）
-今日精读一篇高分论文，聚焦机器人在环境变化下的高效适应问题。
-
-该工作提出“域算术”方法，通过一次操作即可让VLA模型适应新环境，无需重新微调。
-
-可关注此方向在机器人部署中的潜力，但注意其适用场景可能受限于域差异大小。
-- 详情：[/202607/05/README](/202607/05/README)
+今日收录4篇论文，聚焦视觉-语言对齐、遥感变化描述与无负样本预训练。最值得关注的是《MIRROR》提出用格罗莫夫-瓦瑟斯坦距离对齐语义关系，以及《JL1-CC&QA》将遥感变化检测拓展到描述与问答任务。建议优先阅读这两篇高分论文，它们分别适用于多模态语义理解优化和遥感数据智能分析场景。
+- 详情：[/202607/06/README](/202607/06/README)
 
 ### 精读区论文标签
-1. [Domain Arithmetic: One-Shot VLA Adaptation under Environmental Shifts](/202607/05/2607.00666v1-domain-arithmetic-one-shot-vla-adaptation-under-environmental-shifts)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：提出面向视觉-语言-动作模型的单次域适应方法
+- 本次无精读推荐。
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [MIRROR: Aligning Semantic Relations from Language to Image via Gromov--Wasserstein](/202607/06/2606.29462v1-mirror-aligning-semantic-relations-from-language-to-image-via-gromov--wasserstein)  
+   标签：评分：7.0/10、query:world-models
+   evidence：通过关系对齐的多模态基础模型学习
+2. [JL1-CC&QA: Extending the JL1-CD Benchmark with Change Captioning and Question Answering](/202607/06/2606.31745v1-jl1-ccqa-extending-the-jl1-cd-benchmark-with-change-captioning-and-question-answering)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：遥感变化描述与问答基准
+3. [LeVLJEPA: End-to-End Vision-Language Pretraining Without Negatives](/202607/06/2607.00784v1-levljepa-end-to-end-vision-language-pretraining-without-negatives)  
+   标签：评分：6.0/10、query:world-models
+   evidence：多模态基础模型学习（视觉-语言预训练）
+4. [Towards High-Resolution Visual Perception via Hierarchical Entity Exploration](/202607/06/2607.00816v1-towards-high-resolution-visual-perception-via-hierarchical-entity-exploration)  
+   标签：评分：6.0/10、query:world-models
+   evidence：多模态大语言模型中高分辨率视觉感知的分层实体探索
 
 
 <div class="dpr-home-promo-card">
