@@ -6,54 +6,40 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-08
-- 运行时间：2026-07-08 21:57:57 UTC
+- 最新运行日期：2026-07-09
+- 运行时间：2026-07-09 20:43:41 UTC
 - 运行状态：成功
-- 本次总论文数：10
-- 精读区：4
-- 速读区：6
+- 本次总论文数：6
+- 精读区：2
+- 速读区：4
 
 ### 今日简报（AI）
-今日精选10篇遥感与视觉论文，精读聚焦像素级基础模型与红外遥感视觉语言学习两大方向。
-
-最值得关注TESSERA v2像素级地球基础模型和MonoIR-RS红外遥感CLIP与VLM适配，均获9.0高分。
-
-普通读者可先预览扩散模型诊断目标检测及MambaVision区域边界时间精化等高效方法，再深入精读篇目。
-- 详情：[/202607/08/README](/202607/08/README)
+1) 今日共推荐6篇论文，精读2篇、速读4篇，覆盖森林碳汇与遥感目标检测两大前沿方向。  
+2) 最值得关注《Phase-Preserving Trimodal Transformer》融合光学与PolInSAR数据提升热带森林生物量估计精度，以及《Prototype-Anchored Generalized Manifold Regression》解决未知域目标检测的泛化难题。  
+3) 建议优先精读这两篇高分论文，掌握其多模态保相与原型锚定流形的设计思路，可为同领域研究提供直接参考。
+- 详情：[/202607/09/README](/202607/09/README)
 
 ### 精读区论文标签
-1. [TESSERA v2: Scaling Pixel-wise Earth Foundation Models](/202607/08/2607.03949v1-tessera-v2-scaling-pixel-wise-earth-foundation-models)  
+1. [Phase-Preserving Trimodal Transformer for Tropical Forest Biomass Estimation Using Optical and PolInSAR Data](/202607/09/2607.03663v2-phase-preserving-trimodal-transformer-for-tropical-forest-biomass-estimation-using-optical-and-polinsar-data)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：像素级地球观测基础模型的最大规模缩放研究
-2. [MonoIR-RS: Infrared Remote Sensing Vision-Language Learning with CLIP and VLM Adaptation](/202607/08/2607.06552v1-monoir-rs-infrared-remote-sensing-vision-language-learning-with-clip-and-vlm-adaptation)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：将CLIP和VLM适配到红外遥感视觉语言任务
-3. [GeoXplain: On-the-Fly Visual Explanations for Weather Foundation Models](/202607/08/2607.05655v1-geoxplain-on-the-fly-visual-explanations-for-weather-foundation-models)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：天气基础模型可视化工具
-4. [Mitigating Domain Shift in Conditioned Floor Plan Generation: Synthetic Pre-training for Data-Efficient Adaptation](/202607/08/2607.06483v1-mitigating-domain-shift-in-conditioned-floor-plan-generation-synthetic-pre-training-for-data-efficient-adaptation)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：缓解条件楼层平面生成中的域偏移
+   evidence：用于遥感生物量估计的视觉Transformer
+2. [Prototype-Anchored Generalized Manifold Regression for Unknown-Domain Object Detection](/202607/09/2607.07192v1-prototype-anchored-generalized-manifold-regression-for-unknown-domain-object-detection)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：单源域泛化目标检测方法，针对未见过域
 
 ### 速读区论文标签
-1. [Diagnosing Aerial-View Object Detectors with Foundational Image Generative Models](/202607/08/2607.02718v1-diagnosing-aerial-view-object-detectors-with-foundational-image-generative-models)  
+1. [SLAM: Structured and Localized Analytic Manifold Adaptation for Lifelong VPR](/202607/09/2607.04764v1-slam-structured-and-localized-analytic-manifold-adaptation-for-lifelong-vpr)  
+   标签：评分：7.0/10、query:cross-domain
+   evidence：结构化局部解析流形适应用于终身视觉位置识别
+2. [ASFR-Net: Adversarial Alignment and Spatio-Frequency Refinement Network for Heterogeneous Remote Sensing Image Change Detection](/202607/09/2607.07161v1-asfr-net-adversarial-alignment-and-spatio-frequency-refinement-network-for-heterogeneous-remote-sensing-image-change-detection)  
+   标签：评分：7.0/10、query:cross-domain
+   evidence：遥感变化检测中的域适应方法
+3. [CarbonCLIP: Enhance Carbon Prediction from Satellite Imagery via Integrated Street-View Semantics and Temporal Context Training](/202607/09/2607.07292v1-carbonclip-enhance-carbon-prediction-from-satellite-imagery-via-integrated-street-view-semantics-and-temporal-context-training)  
    标签：评分：7.0/10、query:rs-fm
-   evidence：利用基础生成模型诊断航空目标检测器
-2. [MambaRefine-CD: MambaVision with Region-Boundary Temporal Refinement](/202607/08/2607.04403v1-mambarefine-cd-mambavision-with-region-boundary-temporal-refinement)  
-   标签：评分：7.0/10、query:rs-fm
-   evidence：MambaVision编码器用于遥感变化检测
-3. [Soft Mixture-of-Recursions: Going Deeper with Recursive Vision Transformers](/202607/08/2607.00774v1-soft-mixture-of-recursions-going-deeper-with-recursive-vision-transformers)  
+   evidence：基于卫星的碳排放预测，采用类似基础模型预训练的多模态对比学习
+4. [LoCA: Spatially-Aware Low-Rank Convolutional Adaptation of Vision Foundation Models](/202607/09/2607.06918v1-loca-spatially-aware-low-rank-convolutional-adaptation-of-vision-foundation-models)  
    标签：评分：6.0/10、query:rs-fm
-   evidence：基于软递归混合的递归视觉Transformer
-4. [GeoSelect: Spatial-Program Execution for Training-Free Referring Remote Sensing Image Segmentation](/202607/08/2607.03869v1-geoselect-spatial-program-execution-for-training-free-referring-remote-sensing-image-segmentation)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：训练免费的遥感图像指代分割方法
-5. [SLAM: Structured and Localized Analytic Manifold Adaptation for Lifelong VPR](/202607/08/2607.04764v1-slam-structured-and-localized-analytic-manifold-adaptation-for-lifelong-vpr)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：面向终身视觉地点识别的领域自适应方法
-6. [From RGB Generation to Dense Field Readout: Pixel-Space Dense Prediction with Text-to-Image Models](/202607/08/2607.06553v1-from-rgb-generation-to-dense-field-readout-pixel-space-dense-prediction-with-text-to-image-models)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：预训练DiT用于密集预测
+   evidence：提出空间感知的低秩卷积适应方法用于视觉基础模型
 
 
 <div class="dpr-home-promo-card">
