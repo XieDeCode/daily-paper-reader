@@ -1,0 +1,568 @@
+Title: STRATOS: Bridging the Symbolic-to-Numeric Gap in Spatio-Temporal Text-to-SQL for Meteorological Data
+
+URL Source: https://arxiv.org/pdf/2607.03501v1
+
+Published Time: Tue, 07 Jul 2026 01:12:40 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# STRATOS: Bridging the Symbolic-to-Numeric Gap in Spatio-Temporal Text-to-SQL for Meteorological Data 
+
+## Yi Zhang 
+
+Zurich University of Applied Sciences yi.zhang@zhaw.ch 
+
+## Farhad Nooralahzadeh 
+
+Zurich University of Applied Sciences farhad.noorlahzadeh@zhaw.ch 
+
+## Jonathan Fürst 
+
+Zurich University of Applied Sciences jonathan.fuerst@zhaw.ch 
+
+## Fabio Scherrer 
+
+Zurich University of Applied Sciences fabio.scherrer@zhaw.ch 
+
+## Antonis Bezes 
+
+National Oberservatory of Athens antbezes@noa.gr 
+
+## Vassiliki Kotroni 
+
+National Oberservatory of Athens kotroni@noa.gr 
+
+## Kurt Stockinger 
+
+Zurich University of Applied Sciences kurt.stockinger@zhaw.ch 
+
+ABSTRACT 
+
+Copernicus, the European Union’s Earth observation program, pro-duces petabytes of Earth observation and climate data, offering immense potential for research, policy, and applications. However, access to these datasets requires advanced programming skills and familiarity with domain-specific formats such as NetCDF or GRIB. Moreover, general-purpose Text-to-SQL systems fail when applied naively to the meteorological domain due to a profound “Symbolic-to-Numeric” gap. To overcome these limitations, we present an end-to-end Text-to-SQL framework specifically engineered for real-world, scalable meteorological data exploration. Our system inter-cepts natural language to resolve spatial and semantic ambiguities 
+
+before SQL generation. We design STRATOS, a Spatio-Temporal Res-olution Agent for Text-to-SQL to dynamically bridge the symbolic-to-numeric gap by mapping fuzzy concepts to a localized ontology and resolving spatial entities via external knowledge bases. Further, our complexity-aware query rewriter rewrites expensive spatial predicates, reducing execution times from hours to seconds. Last, we introduce the STRATOS Evaluation Workload, comprising 7,520 complex query pairs explicitly designed by domain experts to test scalability and symbolic-to-numeric translation across challenging spatio-temporal dimensions previously unexplored by Text-to-SQL systems. 
+
+1 INTRODUCTION 
+
+Copernicus, the European Union’s Earth observation program, produces petabytes of Earth observation and climate data, with immense potential for research, policy, and applications. How-ever, there is a major obstacle: access to these datasets requires advanced programming skills and familiarity with fragmented, domain-specific formats such as NetCDF [ 20 ] or GRIB [ 27 ]. Even for domain experts, the “time-to-insight” is throttled by the need to manually align disparate sources, such as the ERA5-Land [ 15 ]atmospheric reanalysis ( 0.1◦ × 0.1◦ resolution) and CORINE Land Cover [6] maps (100 m resolution). While migrating this multidimensional scientific data into a uni-fied relational database architecture is a foundational prerequisite for declarative querying, it is not a complete solution. General-purpose Large Language Models (LLMs) and Text-to-SQL systems WITH filtered AS (                                                       
+
+> SELECT
+> time ,
+> tmax,
+> DATE (time )AS date_only
+> FROM meteo_tmax
+> WHERE
+> EXTRACT (YEAR FROM time )between 2001 and 2020
+> AND round (latitude:: numeric ,1) = 38
+> AND round (longitude:: numeric ,1) = 23.7
+> AND tmax IS NOT NULL
+> ),
+> heatwave_days AS (
+> SELECT
+> date_only ,
+> tmax,
+> CASE WHEN tmax -273.15 >= 35.0 THEN 1ELSE 0END AS is_heatwave_day
+> FROM filtered
+> ),
+> streaks AS (
+> SELECT
+> date_only ,
+> is_heatwave_day ,
+> date_only -(ROW_NUMBER () OVER (ORDER BY date_only ) * INTERVAL '1 day' )AS
+> group_id
+> FROM heatwave_days
+> WHERE is_heatwave_day =1
+> ),
+> streak_lengths AS (
+> SELECT
+> group_id ,
+> COUNT (*)AS streak_length
+> FROM streaks
+> GROUP BY group_id
+> HAVING COUNT (*) >= 3
+> )
+> SELECT COUNT (*)AS heat_wave_count
+> FROM streak_lengths ;
+> Coordinates of
+> Athens, Greece
+> Definition of
+> Heat Day
+> Definition of
+> Heat Wave
+> Kelvin to Celsius conversion
+
+Figure 1: How many heat waves did Athens experience in the first two decades of the 21st century? Answering this question requires spatial decoding (coordinates of Athens, Greece) and semantic translation (a definition of a heat day and heat wave with unit conversion from Kelvin to Celsius) .
+
+appear perfectly suited to bridge the remaining usability gap, yet they fail when applied naively to the meteorological domain. This failure is rooted in a profound semantic and structural disconnect. Consider the seemingly simple query: “How many heat waves did Athens experience in the first two decades of the 21st century?” 
+
+Answering this question is challenging because the definition of a heat wave varies by local climatology, available variables, and persistence criteria [ 7]. Considering a working definition of a daily maximum temperature ( 𝑇 𝑚𝑎𝑥 ) ≥ 35 ◦C for at least three consecu-tive days, generating a correct SQL query (Figure 1) exposes three distinct failure points for standard Text-to-SQL systems: 
+
+• Location Resolution (The “Where”): “City of Athens” is a sym-bolic toponym. Because the database stores values against specific latitude/longitude grids, the query requires precise mathematical geometries (e.g., a spatial bounding box or multipolygon). Relying on an LLM to guess coordinate boundaries yields hallucinations or omits the spatial filter entirely. 
+
+> arXiv:2607.03501v1 [cs.DB] 3 Jul 2026
+
+• The Symbolic-to-Numeric Gap (The “What”): “Heat waves” is a derived meteorological index, not a database column. The system must map natural language concepts to formal threshold-duration definitions, applying the correct meteorological variables and im-plicit unit conversions (e.g., Kelvin to Celsius), which are invisible to a Text-to-SQL system. 
+
+• Computational Complexity (The “How”): Even if a Text-to-SQL system generates a semantically correct SQL query, executing naive spatial predicates (e.g., massive WHERE ... IN coordinate lists or complex vector-to-raster joins) over multi-terabyte arrays can take hours, making interactive data exploration impossible. To overcome these limitations, we present STRATOS, a Spatio-Temporal Resolution Agent for Text-to-SQL, specifically engineered for scalable, meteorological data science. Our system intercepts nat-ural language to resolve spatial and semantic ambiguities before SQL generation and employs deterministic query rewriting to optimize execution. Our core contributions are threefold: 
+
+1. Spatio-Temporal Intent Resolution: Unlike standard Text-to-SQL systems that rely on purely schema-bound semantic match-ing, we propose an externally-augmented pipeline to dynamically bridge the symbolic-to-numeric gap. We extract and resolve loca-tion entities against external knowledge bases (Wikidata/Open-StreetMap) to inject precise spatial bounds. Concurrently, a Do-main Logic Injector maps fuzzy meteorological concepts to a localized ontology, ensuring scientific reproducibility and pre-venting LLM hallucination. 
+
+2. Complexity-Aware Spatial Run-time Rewriting: While gen-erating a structurally correct SQL query is becoming increasingly easy for modern Text-to-SQL systems [ 13 , 31 ], generating an ef-ficient query for multi-terabyte data remains a challenge. We bypass the slow execution of naive Text-to-SQL outputs by dy-namically synthesizing high-performance spatial SQL. By rewrit-ing expensive IN -list clauses into VALUES -based subqueries and leveraging spatial expression indices, we reduce query execution times from hours to seconds. 
+
+3. A Scalable Evaluation Workload: We introduce the STRATOS Evaluation Workload, explicitly designed to test scalability and symbolic-to-numeric translation. Based on 161 manually curated, domain-expert-verified seed queries spanning 6 distinct analyt-ical categories (e.g., extrema, threshold events, temporal sum-maries), we synthesize a large-scale evaluation dataset of 7,520 natural language/SQL-pairs. This workload systematically scales along temporal dimensions, spatial granularities, and diverse meteorological variables. For DAIL-SQL [ 8 ] and OpenSearch-SQL [ 28 ], two open-source, state-of-the-art Text-to-SQL systems, our framework achieves an improvement in execution accuracy of up to a factor of 5, and a speedup in query execution time of up to a factor of 50. 
+
+2 METEOROLOGICAL DATA SCIENCE 
+
+Meteorological data science relies heavily on large-scale, multidi-mensional datasets to understand climate patterns, assess environ-mental impacts, and inform policy. Typical users range from climate scientists and environmental researchers to urban planners and policymakers. Their analytical needs frequently involve complex spatio-temporal queries, such as tracking long-term temperature anomalies across specific administrative regions, correlating local-ized weather phenomena with land-cover types, or aggregating decadal extreme event frequencies. Enabling declarative, natural language access to this data significantly accelerates the time-to-insight for domain experts and data scientists [3]. 
+
+2.1 Meteorological Datasets and Formats 
+
+Earth observation data is natively distributed in specialized sci-entific formats such as NetCDF-4 (built on HDF5) or GRIB. For example, the ERA5-Land atmospheric reanalysis provides high-resolution, multi-decadal meteorological variables as continuous multi-dimensional arrays. Similarly, the CORINE Land Cover (CLC) inventory maps ecological zones using hierarchical codes and up-scaled raster grids. Integrating these inherently array-based and geographically bound formats into a relational PostgreSQL database is a foundational prerequisite for standard SQL querying. 
+
+2.2 Challenges for Natural Language Interfaces 
+
+We identify the following challenges regarding natural language interfaces for meteorological data: [C1] Location Resolution . When querying meteorological datasets, users naturally frame spatial constraints using symbolic to-ponyms (e.g., “in Thessaly” or “across the Canton of Bern”) rather than explicit coordinate geometries. Because the under-lying relational database relies on precise mathematical geome-tries or latitude/longitude coordinates, a standard LLM-based Text-to-SQL system must either hallucinate approximate coor-dinate bounds or omit the spatial filter entirely. Successfully resolving these logical toponyms requires external grounding against geographic knowledge bases. [C2] The Symbolic-to-Numeric Gap . LLMs lack the domain-specific meteorological knowledge required to map natural language concepts to encoded database schema elements. Generating correct SQL requires bridging several semantic disconnects: 
+
+• Implicit Units: Meteorological variables from ERA5-Land are stored as floating-point scalars in physical units, such as temperatures in Kelvin, daily precipitation in meters, or solar radiation in J ·m−2. Computing a monthly average tem-perature in Celsius demands explicit unit conversion (e.g., 
+
+SELECT AVG(tmean) - 273.15 ), a convention not derivable from schema metadata alone. 
+
+• Array Semantics: Land-cover classifications follow the CORINE scheme [ 6], mapping hierarchical integer codes to natural lan-guage labels. Resolving an entity like forest requires struc-turally valid array subscript predicates to decode the grid-cell pixel counts stored in the database. 
+
+• (Composite) Meteorological Concepts: A query such as 
+
+How many heat waves occurred in Athens in 2020 presupposes a formal event definition absent from the schema. Because def-initions vary based on local climatology and intensity thresh-olds [ 7 ], the system must programmatically map abstract con-cepts to explicit, threshold-duration filtering logic (e.g., 𝑇 𝑚𝑎𝑥 ≥
+
+35 ◦C for ≥ 3 consecutive days). [C3] Computational Complexity of Spatial Queries . Even when an LLM synthesizes a semantically and structurally correct SQL query, naive execution over multi-terabyte meteorological 
+
+> 2
+
+datasets is prohibitively expensive. Translating broad admin-istrative regions into extensive sets of coordinate pairs often yields massively inflated IN -list predicates. Without query-rewriting strategies—such as dynamically transforming these 
+
+IN -lists into VALUES -based subqueries or leveraging spatial expression indices—database planning and execution times de-grade from seconds to hours, rendering interactive exploration infeasible. 
+
+3 STRATOS: SPATIO-TEMPORAL RESOLUTION AGENT FOR TEXT-TO-SQL 
+
+Figure 2 illustrates the STRATOS architecture, designed to address the specific data science challenges outlined in Section 2.2. A user’s natural language question is first processed and analyzed by the 
+
+Text-to-SQL component that in turn interacts with the Geo Decoding 
+
+component and the Domain Knowledge component. The Geo Decod-ing component resolves symbolic toponyms to spatial coordinates using Wikidata and OpenStreetMap [ C1 ], while a Domain Knowl-edge component retrieves relevant meteorological definitions from an ontology. Using this enriched context, the generative Text-to-SQL 
+
+component synthesizes an initial candidate query [ C2 ]. Finally, a 
+
+Query Rewriter leverages tool-calling and a query cache to refine the candidate query for efficient database execution [ C3 ]. 
+
+3.1 Geo-Spatial Context Resolution 
+
+To address spatial ambiguity [ C1 ], we implemented a geospatial retriever that extracts location entities from natural language ques-tions and resolves them into precise geographic geometries using external knowledge bases. Specifically, the retriever first queries the Wikidata [ 24 ] knowledge base using the extracted place name. To resolve potential geographical ambiguities, an LLM evaluates the top-𝑘 candidate entities returned by Wikidata and selects the most contextually appropriate match. The selected Wikidata Entity Identifier (QID, e.g., Q72 for the City of Zurich) is subsequently used to query the OpenStreetMap (OSM) API. This allows the system to retrieve the corresponding GeoJSON data, capturing both the spatial bounding box (minimum and maximum latitude and longi-tude) and the precise multi-polygon boundary of the target entity. This geometry is then injected into the SQL generation prompt, ensuring accurate spatial filtering downstream. 
+
+3.2 Semantic Translation and Bridging the Symbolic-Numeric Gap 
+
+To bridge the symbolic-to-numeric gap [ C2 ], the Domain Knowl-edge component employs two complementary mechanisms: on-tology grounding for meteorological concepts and array-semantic hints for complex land-cover schemas. 
+
+3.2.1 Ontology Grounding. We encode formal meteorological logic in an OWL/RDF ontology ( .ttl ), ensuring definitions remain cus-tomizable and distinct from pipeline code (see schematic represen-tation in Figure 2). During execution, an agent performs a semantic root search : it matches the user’s question to a top-ranked ontology anchor via embedding similarity, then expands the graph along a controlled predicate list (e.g., exceedsThreshold , hasConversionRule )to reconstruct the full definition [ 2, 21 ]. Starting from an anchor node like HeatWave , the system traverses the knowledge graph to extract formal constraints. The extracted HeatWave subgraph is serialized into an Ontology Grounding Function and appended to the LLM prompt. This mechanism seamlessly handles composite cli-mate indices (e.g., FrostDay , TropicalNight ) without additional prompt engineering. 
+
+3.2.2 Array-Semantic Hint. The CORINE land-cover schema intro-duces a unique structural hurdle: regional classifications are stored as 2D integer arrays ( integer[][] ). Translating natural language against this schema requires overcoming two sub-challenges: 
+
+Entity Matching: Natural language terms such as "city" or "lake" must map exactly to the corresponding CORINE labels, namely "ur-ban fabric" or "inland waters", respectively. The agent first applies substring validations ( ILIKE ) against CORINE labels. For terms lacking exact matches, an embedding-based fallback resolves the discrepancy (e.g., mapping “lake” to the broader category “Inland waters” ). 
+
+Semantic Query Structuring: LLMs struggle to spontaneously generate syntax for multidimensional array parsing. To guide it, a semantic hint module classifies the user’s question into one of six pre-defined access paradigms (e.g., membership filter , aggregate distribution ). E.g., querying “urban-dominated areas” triggers the 
+
+membership filter paradigm. 
+
+3.3 Query Rewriting 
+
+The temporal and spatial complexity of meteorological data in-troduces severe query performance bottlenecks [ C3 ], which we illustrate using the query “What is the average temperature in Cel-sius in the Canton of Bern in 2016?” Geo-spatial resolution maps the Canton of Bern boundary to 65 grid-point pairs. A standard LLM typically generates the following predicate structure:      
+
+> SELECT AVG (tmean) - 273.15
+> FROM meteo_tmean
+> WHERE EXTRACT (YEAR FROM time ) = 2016
+> AND (ROUND (CAST (latitude AS DECIMAL ), 1),
+> ROUND (CAST (longitude AS DECIMAL ), 1))
+> IN ((47.1, 6.9), (47.0, 7.1), ...) -- 65 pairs
+
+Temporal Bottleneck. The EXTRACT predicate on a raw times-tamp column is opaque to a standard B-tree index, forcing a full sequential scan (with an estimated cost of ≈ 4,000 ,000 according to the PostgreSQL query planner). This is resolved by creating a multi-column expression index over the rounded coordinates alongside the extracted year and month:    
+
+> CREATE INDEX ON meteo_tmean (
+> ROUND (latitude:: numeric , 1), ROUND (longitude:: numeric , 1),
+> EXTRACT (YEAR FROM time ), EXTRACT (MONTH FROM time ));
+
+This index allows the planner to satisfy the EXTRACT condition directly as an index predicate, reducing the cost by a factor of 100. This expression index is proactively applied to all meteorological fact tables in our database. 
+
+Spatial Bottleneck. Even with the expression index, the 65-pair IN -list prevents a single index lookup. The query planner decomposes it into 65 independent Bitmap Index Scan nodes merged via 
+
+BitmapOr , paired with a Recheck condition growing linearly with the number of coordinate pairs. To resolve this, the Query Rewriter rewrites the IN -list into a VALUES -based subquery: 
+
+> 3Domain -specific
+> Knowledge
+
+Geospatial 
+
+Decoding 
+
+Domain 
+
+Knowledge 
+
+Text -to -SQL 
+
+> OpenSearch -SQL
+> DAIL -SQL
+
+Query 
+
+Rewriting 
+
+> Tool Calling
+> ((47.4, 8.4), (47.5, 8.4),
+> (47.3, 8.5 …, (47.5, 8.8))
+> Coordinates/
+> Bounding Box
+
+How many heat waves 
+
+did Athens experience in 
+
+the first two decades of 
+
+the 21st century? 
+
+> Meteo
+> DB
+> ERA5Land & CORINE
+> (PostgreSQL)
+
+User Question 
+
+& DB Schema             
+
+> Class: HeatWave
+> Subclass Of: ExtremeWeatherEvent
+> Duration: >= 3 days
+> Temperature : >= 35 °C
+> Retrieving Meteorological
+> Ontology
+> SELECT EXTRACT(MONTH
+> FROM mtp.time )
+> FROM meteo_tmean
+> WHERE… (latitude, longitude)
+> IN (( 47.4, 8.4),(47.5, 8.4) ...)
+> Optimization
+> Patterns Cache
+> Tool Calling & Retrieval
+> SELECT EXTRACT(MONTH
+> FROM mtp.time )
+> FROM meteo_tmean
+> WHERE… (latitude, longitude) IN (
+> SELECT rlat, rlon
+> FROM (VALUES (47.4::numeric,
+> 8.4::numeric), ...)
+> AS _geo_pts(rlat, rlon))
+
+Rewritten Query Figure 2: Overview of the STRATOS multi-agent architecture. External APIs and domain ontologies augment the generative Text-to-SQL pipeline, followed by automated query rewriting. 
+
+AND (ROUND (CAST (latitude AS DECIMAL ), 1), 
+
+ROUND (CAST (longitude AS DECIMAL ), 1)) IN (
+
+SELECT rlat, rlon 
+
+FROM (VALUES (47.1:: numeric , 6.9:: numeric ), ...) 
+
+AS _geo_pts(rlat, rlon)) 
+
+Despite a relatively modest difference in estimated query cost (7,632 vs. 6,569 ), the actual execution times on a cold buffer cache reveal a substantial performance gap: 2,287 ms for the BitmapOr 
+
+plan compared to just 32 ms for the rewritten query— yielding an end-to-end speedup of 68 × (Table 1). The divergence is explained by the structural difference in the two query execution plans: 
+
+Before rewrite — BitmapOr within Bitmap Heap Scan :
+
+Aggregate (cost=7632) (actual time=2284 ms) -> Bitmap Heap Scan on meteo_tmean Recheck Cond: (... 65-clause OR condition ...) Heap Blocks: exact=2249 -> BitmapOr -> Bitmap Index Scan x65 on idx_tmean_round_latlon_ym (cost=4.86 each) (actual time=~0.1 ms each) ... Planning Time: 19.816 ms Execution Time: 2287.316 ms 
+
+After rewrite — Nested Loop over Values Scan :
+
+Aggregate (cost=6569) (actual time=23 ms) -> Nested Loop -> HashAggregate on Values Scan (65 rows, 24 kB memory) -> Index Scan x65 on idx_tmean_round_latlon_ym (cost=97 each) (actual time=0.26 ms each) ... Planning Time: 1.908 ms Execution Time: 31.867 ms 
+
+To automate such performance gains, the Query Rewriter detects large coordinate IN -list predicates via regular expression matching and refactors them into VALUES -subqueries. Each rewritten query is then verified for correctness by executing an EXPLAIN statement against the target database. Together, the temporal expression indexing and spatial query rewriting reduce execution time by up to two orders of magnitude on region-scale queries . For instance, the original unindexed LLM query times out after 2 hours, 
+
+Table 1: Query execution times for the Canton of Bern tem-perature query before and after query rewriting. 
+
+Planning Execution Total 
+
+IN -list ( BitmapOr ) 19.8 ms 2,287 ms 2,307 ms 
+
+VALUES subquery 1.9 ms 32 ms 34 ms Speedup 10 × 71 × 68 ×
+
+whereas the rewritten query executes in 2.3 seconds—representing a speed-up of ≈3,200 ×.
+
+4 THE STRATOS EVALUATION WORKLOAD 
+
+To evaluate our spatio-temporal framework, we created a spe-cialized Text-to-SQL workload designed to stress-test both the symbolic-to-numeric reasoning of LLMs and the execution scalabil-ity of the underlying database. 
+
+4.1 Workload Generation and Scaling 
+
+The evaluation workload is built upon a foundation of 161 manually curated, domain-expert-verified natural language questions span-ning six distinct analytical categories (e.g., temporal summaries, ex-trema, anomalies). To rigorously evaluate system scalability across varied computational regimes, we abstracted these seeds into 376 parameterized templates. We systematically sampled parameters from predefined pools—including 7 climate variables, multiple tem-poral scales (from daily to decadal), and 20 geographically diverse locations across Switzerland and Greece. A critical feature of this workload is its dual-spatial instantiation .For every natural language query, we generate two gold-standard SQL variants to test different database execution profiles: 
+
+• Point-wise Queries (Exact): These enforce precise multi-polygon boundaries by checking intersections against hundreds of explicit coordinate pairs. While highly accurate, they are computation-ally intensive and frequently trigger out-of-memory exceptions or hours-long execution times in unoptimized systems. 
+
+> 4
+
+• Bounding-Box Queries (Approximate): These simplify the spatial constraint into an encompassing rectangle. They are typi-cally faster for a database to execute, since approximate queries need to evaluate a smaller number of points rather than exact queries, but trade off geographical precision. By including both variants, the benchmark yields a total of 7,520 query pairs (summarized in Table 2), enabling a controlled compar-ison of query rewriting effectiveness across exact and approximate spatial filtering. 
+
+Table 2: STRATOS Benchmark Queries.                
+
+> Cat. Description NL/SQL-Pairs
+> AGG Aggregates & Temporal Summaries 1,580 CHG Change, Trend & Comparison 840 EVT Events, Thresholds & Persistence 1,200 EXT Extrema & Conditional Extrema 2,440 ORD Ranking & Distribution 580 SPC Spatial & Elevation Constraints 880
+> Total 7,520
+
+4.2 Decoupled Workload Hardness 
+
+Standard Text-to-SQL benchmarks such as Spider [ 29 ] typically approximate query difficulty by counting the number of constraints (e.g., WHERE clauses). In scalable data science, this heuristic fails. A meteorological query spanning ten years across an entire coun-try may require massive database processing power but possess a relatively simple SQL structure. Conversely, extracting a complex array-based land-cover metric for a single grid cell is semantically difficult for an LLM but executes in fractions of a second. To resolve this contradiction, we annotate every query in the workload with 
+
+two decoupled hardness scores (see Table 3): (1) Semantic Hardness ( easy , medium , hard ): Measures the struc-tural complexity of the SQL schema linking. It scales upward based on the presence of explicit joins, CTE subqueries, and non-standard array unnesting operations, deliberately ignoring spatial or temporal span. (2) Execution Hardness ( small , medium , large , xlarge ): Mea-sures the estimated data-volume complexity. It scales logarithmi-cally based on the effective temporal grain (e.g., days vs. decades) multiplied by the number of queried spatial units (distinct coor-dinate points or bounding-box grid cells). This decoupled annotation allows us to independently evalu-ate a system’s ability to navigate complex schemas ( →Semantic Hardness) versus its ability to rewrite and optimize large-scale aggregations ( →Execution Hardness). 
+
+4.3 Template-based Data Splitting 
+
+The test set ( 1,504 queries) is heavily isolated (see Table 3): it com-prises entirely held-out examples evaluated against four strictly un-seen geographic regions (Zurich, Athens, Canton of Bern, and Thes-saly Region). The training set ( 6,016 queries) utilizes the remaining 
+
+Table 3: Data split: Distribution across Semantic and Execu-tion Hardness levels, #Places and NL/SQL-pair counts.                                                   
+
+> Train Test Total
+> Semantic Easy 3,744 (62.2%) 1,016 (67.6%) 4,760 (63.3%)
+> Medium 928 (15.4%) 224 (14.9%) 1,152 (15.3%)
+> Hard 1,344 (22.3%) 264 (17.6%) 1,608 (21.4%)
+> Execution Small 1,210 (20.1%) 70 (4.7%) 1,280 (17.0%)
+> Medium 1,978 (32.9%) 434 (28.9%) 2,412 (32.1%)
+> Large 2,230 (37.1%) 856 (56.9%) 3,086 (41.0%)
+> XLarge 598 (9.9%) 144 (9.6%) 742 (9.9%)
+> #Places 16 420
+> Total Pairs 6,016 1,504 7,520
+
+templates and regions. We carefully balance the sampling distri-bution to ensure that the ratio of Semantic Hardness (easy/medi-um/hard) remains consistent across both the training and testing sets, ensuring a fair evaluation baseline. 
+
+5 EXPERIMENTAL EVALUATION 
+
+Our experimental evaluation is designed to answer three core re-search questions (RQs) that assess both the natural language com-prehension and the database scalability of our framework: 
+
+• RQ1 (Semantic Translation): How effectively does STRATOS bridge the symbolic-to-numeric gap compared to state-of-the-art prompt-based and agentic Text-to-SQL baselines? 
+
+• RQ2 (Execution Scalability): How does the query rewriting impact execution latency, and how do exact (point-wise) queries compare against approximate (bounding box) queries at scale? 
+
+• RQ3 (Ablation): What is the individual contribution of the geospatial, ontological, and array-semantic agents to the overall system accuracy and scalability? 
+
+5.1 Experimental Setup 
+
+Data & Infrastructure. The meteorological datasets (ERA5-Land and CORINE Land Cover) are hosted on a PostgreSQL v17.7 data-base enhanced with the PostGIS v3.6.1 extension for spatial op-erations. All query execution experiments were conducted on a dedicated server equipped with 16 CPU cores, 32 GB of RAM, and 2000 GB of NVMe storage to ensure consistent buffer cache profiling and execution latency measurements. 
+
+Baselines & Integration Frameworks. To demonstrate the gen-eralizability and impact of our architecture, we evaluate STRATOS as a capability augmentation over two representative, state-of-the-art, open-source Text-to-SQL systems, each integrated across two distinct, open-source Large Language Model (LLM) backbones— namely, the Llama-3.3-70B and Qwen3-Coder-Next-80B models: (1) 
+
+DAIL-SQL [ 8]: A leading prompt-based Text-to-SQL framework that utilizes advanced few-shot in-context learning and schema-linking heuristics. (2) OpenSearch-SQL [ 28 ]: A recent, highly-capable agen-tic Text-to-SQL system designed for complex reasoning, tool-calling, and iterative query generation. For each framework and backbone LLM combination, we es-tablish a “Vanilla” baseline (the system operating purely on the database DDL and standard schema information) and compare it 
+
+> 5
+
+against STRATOS. This paired evaluation strictly isolates the perfor-mance gains directly attributable to our Spatial Resolution, Domain Knowledge Injection, and Query Rewriter under different model capacities and architectures. 
+
+Metrics. We evaluate over the STRATOS Evaluation Workload (Section 4) using the following primary metrics: 
+
+• Execution Accuracy (EX): The percentage of generated queries whose execution result set exactly matches the gold-standard. 
+
+• Valid Execution Score (VES): A BIRD benchmark metric [ 13 ] com-bining execution accuracy and relative query efficiency, penaliz-ing correct but computationally inefficient queries. 
+
+• Inference Time: Time required to process the NL question and generate the final SQL query (in seconds). 
+
+• Successful DB Runtime: The database execution time of the gen-erated SQL queries that successfully completed (in seconds). 
+
+• Timeout/OOM Rate: The percentage of structurally correct queries that failed to execute due to Out-Of-Memory (OOM) exceptions or exceeded a hard timeout limit of 6 hours. 
+
+5.2 RQ1: End-to-End Accuracy and Efficiency 
+
+To evaluate how effectively our system bridges the symbolic-to-numeric gap, we analyze both Execution Accuracy (EX) and Valid Execution Score (VES) across the three semantic hardness levels. As shown in Table 4, vanilla LLM baselines struggle severely, achieving near-zero accuracy on medium and hard queries. This failure stems directly from their inability to spontaneously syn-thesize meteorological unit conversions (e.g., Kelvin to Celsius), decipher derived ontology concepts (e.g., “heat waves”), or generate valid multidimensional array unnesting logic for land-cover data. Conversely, integrating STRATOS maintains a high execution accuracy across all semantic complexities for both DAIL-SQL and OpenSearch-SQL, across both the Llama and Qwen backbone mod-els. We can observe the highest overall EX improvement of STRATOS from 10.44% to 49.60% for OpenSearch-SQL using Qwen3-Coder. 
+
+This corresponds to an EX improvement of almost a factor of 5 over the Vanilla implementation .Furthermore, the high Valid Execution Scores (VES) indicate that STRATOS does not just generate correct queries, but it generates 
+
+efficient queries that align well with gold-standard performance. For instance, the highest overall VES improvement from 0.086 to 0.487 is again achieved with OpenSearch-SQL using Qwen3-Coder. By dynamically injecting Ontology Grounding Functions (OGF) and array-semantic hints into the prompt context, the system success-fully shields the generative model from the underlying schema’s structural idiosyncrasies. 
+
+Table 4: Execution Accuracy (EX) and Valid Execution Score (VES) across semantic hardness levels evaluated under an embedding-similarity-based 3-shot setting. LLM-Backbone System Config. Easy Medium Hard Overall                                                                        
+
+> EX VES EX VES EX VES EX VES
+> Llama-3.3-70B
+> DAIL-SQL (Vanilla) 17.03% 0.123 13.39% 0.099 7.58% 0.070 14.83% 0.111
+> STRATOS 𝐷𝐴𝐼 𝐿 −𝑆𝑄𝐿 25.20% 0.221 25.00% 0.245 9.47% 0.077 22.41% 0.199
+> OpenSearch-SQL (Vanilla) 9.65% 0.082 9.38% 0.085 0.00% 0.000 7.91% 0.068
+> STRATOS 𝑂𝑝𝑒𝑛𝑆𝑒𝑎𝑟𝑐ℎ −𝑆𝑄𝐿 18.80% 0.174 12.95% 0.126 0.76% 0.008 14.76% 0.138 Qwen3-Coder-Next-80B
+> DAIL-SQL (Vanilla) 17.42% 0.131 15.62% 0.115 11.36% 0.097 16.09% 0.123
+> STRATOS 𝐷𝐴𝐼 𝐿 −𝑆𝑄𝐿 53.94% 0.480 50.00% 0.477 22.73% 0.180 47.87% 0.427
+> OpenSearch-SQL (Vanilla) 11.61% 0.092 12.95% 0.116 3.79% 0.038 10.44% 0.086
+> STRATOS 𝑂𝑝𝑒𝑛𝑆𝑒𝑎𝑟𝑐ℎ −𝑆𝑄𝐿 61.42% 0.602 35.27% 0.349 16.29% 0.163 49.60% 0.487
+
+5.3 RQ2: Execution Scalability and Rewriter Impact 
+
+Generating a semantically correct SQL query is only half the chal-lenge in meteorological data science. While the inference time (the LLM generation phase) remains relatively constant regardless of query scale, executing the generated spatial queries against large raster arrays dictates the true DB runtime bottleneck. 
+
+Query Rewriting Impact. The STRATOS Query Rewriter bridges this DB runtime performance gap. As detailed in Section 3, unopti-mized point-wise queries rely on massive coordinate IN -lists that force the query planner to generate highly inefficient BitmapOr 
+
+scans. By automatically rewriting these spatial filters into VALUES -based subqueries and leveraging multi-column expression indices, STRATOS achieves dramatic speedups. For selected queries with one-shot, the rewriter reduces the DB runtime from 9.793 seconds to 0.199 seconds - an improvement of 49 .2×. Furthermore, the rewriter reduces the system’s overall timeout rate from 5.6% to 4.4%, demonstrating that STRATOS is highly viable for interactive data exploration. 
+
+Exact vs. Approximate Queries on Gold SQL. To evaluate the impact of the query rewriter independently from the LLM inference quality, we directly analyze the gold SQL queries. Figure 3 illustrates the average DB runtime latency across the four execution hardness levels small, medium, large and xlarge. We use a 6-hour timeout to isolate and measure the before/after-query-rewriting effect on all exact queries. While exact point-wise queries provide precise multi-polygon boundary filtering, their execution times scale exponentially from 0.4 seconds for small queries to 279.66 seconds for xlarge queries, frequently resulting in timeouts for large and xlarge queries in unoptimized systems. Bounding-box (approximate) queries execute significantly faster peaking at 159.33 seconds for large queries and then dropping to 21.87 seconds for xlarge queries. small medium large xlarge     
+
+> 0
+> 50
+> 100
+> 150
+> 200
+> 250
+> 300
+> Mean DB runtime (s)
+> 0.40
+> 24.21
+> 173.81
+> 279.66
+> 0.40 1.71
+> 83.94
+> 119.14
+> 0.71 9.37
+> 159.33
+> 21.87
+> Optimizer impact on DB runtime vs. execution hardness level
+> (GOLD SQL; Original Exact vs. Optimized Exact vs. Approximate)
+> Origin. Exact Opt. Exact Approximate
+
+Figure 3: Query rewriter impact on DB runtime across execu-tion hardness levels for exact queries compared to approxi-mate queries. Opt. Exact = rewritten queries. 
+
+The drop in runtime for xlarge approximate queries can be ex-plained by an artifact of one query template that retrieves rows by elevation and takes the top one ( ORDER BY elevation DESC LIMIT 1 ) instead of pre-filtering by location first. PostgreSQL then scans the elevation index from the global maximum downward, testing the filter condition row by row. Consequently, the runtime mainly depends on how far down the global elevation ranking the target region is positioned, rather than on the size of the area. 
+
+> 6
+
+Query Rewriting on Gold SQL. Let us now analyze the impact of rewriting exact queries. In Figure 3 we can observe that the average DB runtime for rewritten exact queries ranges from 0.4 seconds to 119.14, which corresponds to improvement over the original exact queries of more than a factor of 2 for xlarge queries .Table 5 shows the mean and max DB run times for exact and ap-proximate queries across four hardness levels. For medium queries we can observe a speedup due to query rewriting of a factor of 14.18 and 8.93 for mean and max runtime times, respectively. We also see that 27 of the original exact queries time out (Orig.), while none of the rewritten queries time out (Opt.). We also notice that 11 of the approximate queries time out. In summary, rewriting approximate queries not only improves the run time of queries significantly but also avoids time outs (queries that run longer than 6 hours). Moreover, approximate queries show a similar run time behavior than exact queries with a clear improvement of xlarge queries. This suggests that STRATOS should choose query rewriting for small and large queries, while for xlarge queries it should switch to approximate query processing. 
+
+Table 5: DB run time comparison on GOLD SQL by execution hardness level. Mean/Max are aggregated over non-timeout queries (finished within 6h). Opt. = rewritten queries.                                            
+
+> Mode Lv. Mean (s) Max (s) Timeout (n) Orig. Opt. Spd-up Orig. Opt. Spd-up Orig. Opt.
+> Exact S0.398 0.398 1.00 ×10.987 10.987 1.00 ×00M24.214 1.708 14.18 ×2964.138 332.069 8.93 ×30L173.814 83.935 2.07 ×4,453.092 2,280.674 1.95 ×20 0XL 279.660 119.144 2.35 ×2,430.949 2,306.794 1.05 ×40
+
+Table 6: Gold SQL answer agreement between exact and approximate geo context. Two results are considered Ap-prox. Identical if every numeric value agrees within 𝜖 where 
+
+𝜖 = max (1% × | 𝑒𝑟𝑟𝑜𝑟 |, 0.01 ); Precision Loss = 1− Approx. Identi-cal.                                              
+
+> Level / ID NApprox. Identical Precision Loss
+> Semantic Hardness Easy 508 246 (48.4%) 262 (51.6%)
+> Medium 112 36 (32.1%) 76 (67.9%) Hard 132 25 (18.9%) 107 (81.1%) Execution Hardness Small 35 19 (54.3%) 16 (45.7%)
+> Medium 217 100 (46.1%) 117 (53.9%) Large 428 169 (39.5%) 259 (60.5%) XLarge 72 19 (26.4%) 53 (73.6%) Category AGG 204 126 (61.8%) 78 (38.2%)
+> CHG 76 11 (14.5%) 65 (85.5%) EVT 120 44 (36.7%) 76 (63.3%) EXT 236 92 (39.0%) 144 (61.0%) ORD 56 16 (28.6%) 40 (71.4%) SPC 60 18 (30.0%) 42 (70.0%)
+> Total 752 307 (40.8%) 445 (59.2%)
+
+Quantify the Precision Loss of Approximate Queries. Table 6 quantifies the precision loss of exact vs. approximate queries across 752 test GOLD SQL queries. Overall 59 .2% of query answers change with the approximation threshold 𝜖 tolerating 1% error. We ob-serve that precision loss scales monotonically across both semantic hardness (easy 51 .6% → hard 81 .1% ) and execution hardness level (small 45 .7% → xlarge 73 .6% ), indicating that structurally complex queries are more sensitive to the geo-context approximation. At the category level, AGG ( 38 .2% ) and CHG ( 85 .5% ) mark the upper and lower boundaries. This divergence motivates a closer look at why the same spatial expansion affects query types so differently. For instance, the aggregation question What was the average maximum wind speed in Canton of Bern during January 2005? returns 2.114 m/s as the exact result and 2.107 m/s as an approximation (error=0.35%). However, the picture changes notably in CHG: What was the precipitation anomaly in City of Zurich during 2010 compared to the 1981–2010 baseline? , which yields +0.092 mm/day as the exact result but +0.541mm/day as an approximation – a six-fold difference that shifts the interpretation from near-normal to clearly above-average. These two examples demonstrate that in some cases approximate results are sufficient while in other cases they might lead to non-sufficiently precise results. Note that data scientists working with STRATOS have now the option to chose between exact but slower queries or approximate but faster queries. 
+
+5.4 RQ3: Ablation Study 
+
+To justify the multi-agent architecture, we conducted an ablation study isolating the impact of key components within the STRATOS pipeline. This ablation is evaluated specifically on the agentic Open-Search-SQL framework backed by the Qwen backbone model, as this setting showed the best results in our previous experiments. The results for exact queries are summarized across both zero-shot and few-shot (FS) settings in Table 7. 
+
+Table 7: Ablation study for exact queries on Qwen3 (OpenSearch-SQL) across zero-shot and few-shot (FS) settings. ST = Semantic Translation , SN = Symbolic-Numeric. Ablation Fewshot EX Acc VES Mean Inf. Time (s) 
+
+Full zero 35.24% 0.345 74.4 (± 53.8) 
+
+FS@1 43.09% 0.421 71.6 (± 51.6) 
+
+FS@3 51.86% 0.505 70.8 (± 52.9) 
+
+− Query Rewriter zero 34.18% 0.339 74.5 (± 54.0) 
+
+FS@1 42.95% 0.423 72.9 (± 54.0) 
+
+FS@3 48.94% 0.482 71.8 (± 52.9) 
+
+− ST & SN Bridging zero 25.66% 0.253 80.7 (± 62.6) 
+
+FS@1 33.51% 0.330 70.9 (± 51.3) 
+
+FS@3 36.97% 0.362 71.0 (± 53.4) 
+
+− Geo Context zero 6.78% 0.062 64.9 (± 37.2) 
+
+FS@1 9.31% 0.072 51.4 (± 34.7) 
+
+FS@3 9.44% 0.063 45.2 (± 30.4) 
+
+As observed in Table 7, each module plays a distinct role in ensuring scalability and correctness. Removing the spatial query rewriter ( − Query Rewriter) reduces EX from 51.86% to 48.94% for 3-shot queries (FS@3) and VES drops from 0.505 to 0.482. While inference time and baseline accuracy remain relatively stable, the database struggles with unoptimized queries, as evidenced by the total DB Runtime increasing from 581.8s to 786.9s for 1-shot queries (FS@1). Omitting the semantic translations ( − ST & SN Bridging) 
+
+leads to measurable drops in both EX and VES dropping from 48.94% to 36.97% and from 0.482 to 0.362, respectively at FS@3 -reaffirming the necessity of the ontology mapping for accurately 
+
+> 7
+
+parsing complex meteorological concepts. Finally, removing the 
+
+geospatial decoding component ( − Geo Context) has the highest impact, forcing the LLM to hallucinate spatial coordinates. This causes EX to plummet dramatically from 36.97% to 9.44% at FS@3. 
+
+5.5 Error Analysis Optimized Exact Optimized Exact Optimized Exact Optimized Exact Optimized Exact    
+
+> 362/752 (48%) 362/752 (48%) 362/752 (48%) 362/752 (48%) 362/752 (48%)
+> Approximate Approximate Approximate Approximate Approximate
+> 396/752 (53%) 396/752 (53%) 396/752 (53%) 396/752 (53%) 396/752 (53%)
+> No joins No joins No joins No joins No joins
+> 458/1144 (40%) 458/1144 (40%) 458/1144 (40%) 458/1144 (40%) 458/1144 (40%)
+> #joins ≥ 1 #joins ≥ 1 #joins ≥ 1 #joins ≥ 1 #joins ≥ 1
+> 300/360 (83%) 300/360 (83%) 300/360 (83%) 300/360 (83%) 300/360 (83%)
+> No nesting No nesting No nesting No nesting No nesting
+> 392/992 (40%) 392/992 (40%) 392/992 (40%) 392/992 (40%) 392/992 (40%)
+> #nesting ≥ 1 #nesting ≥ 1 #nesting ≥ 1 #nesting ≥ 1 #nesting ≥ 1
+> 366/512 (71%) 366/512 (71%) 366/512 (71%) 366/512 (71%) 366/512 (71%)
+> w/o Array ops w/o Array ops w/o Array ops w/o Array ops w/o Array ops
+> 715/1448 (49%) 715/1448 (49%) 715/1448 (49%) 715/1448 (49%) 715/1448 (49%)
+> with Array ops with Array ops with Array ops with Array ops with Array ops
+> 43/56 (77%) 43/56 (77%) 43/56 (77%) 43/56 (77%) 43/56 (77%)
+> easy easy easy easy easy
+> 392/1016 (39%) 392/1016 (39%) 392/1016 (39%) 392/1016 (39%) 392/1016 (39%)
+> medium medium medium medium medium
+> 145/224 (65%) 145/224 (65%) 145/224 (65%) 145/224 (65%) 145/224 (65%)
+> hard hard hard hard hard
+> 221/264 (84%) 221/264 (84%) 221/264 (84%) 221/264 (84%) 221/264 (84%)
+> AGG AGG AGG AGG AGG
+> 185/408 (45%) 185/408 (45%) 185/408 (45%) 185/408 (45%) 185/408 (45%)
+> CHG CHG CHG CHG CHG
+> 132/152 (87%) 132/152 (87%) 132/152 (87%) 132/152 (87%) 132/152 (87%)
+> EVT EVT EVT EVT EVT
+> 98/240 (41%) 98/240 (41%) 98/240 (41%) 98/240 (41%) 98/240 (41%)
+> EXT EXT EXT EXT EXT
+> 234/472 (50%) 234/472 (50%) 234/472 (50%) 234/472 (50%) 234/472 (50%)
+> ORD ORD ORD ORD ORD
+> 34/112 (30%) 34/112 (30%) 34/112 (30%) 34/112 (30%) 34/112 (30%)
+> SPC SPC SPC SPC SPC
+> 75/120 (62%) 75/120 (62%) 75/120 (62%) 75/120 (62%) 75/120 (62%)
+> Error distribution across 6 dimensions (n=758 incorrect queries, OpenSearch-SQL/Qwen, full+fewshot k=3, Optimized Exact + Approximate)
+> Geo-context mode
+> #Joins #Nesting Array ops Semantic Hardness Level
+> Category
+
+Figure 4: Error distribution across 6 dimensions with 929/1504 incorrect queries on OpenSearch-SQL/ Qwen3-Coder-Next (fewshot k=3, Optimized Exact + Approximate). 
+
+We perform error analysis on the best-performing configuration, 
+
+OpenSearch-SQL + STRATOS with Qwen3-Coder-Next-80B (few-shot 𝑘 =3), across the 1,504 test instances spanning both geo-context modes (see Table 4). The model fails on 50.4% of queries overall (758/1,504), with a higher error rate under Approximate geo-context (53%, 396/752) than under Optimized Exact (48%, 362/752); this gap is consistent with the underlying predicate shift, since Optimized Exact resolves a place to a set of points following an IN operator, while Approximate needs to expand the same place into a bounding box requiring a four-sided range predicate (two BETWEEN oper-ators on both ordered latitudes and longitudes). The latter raises the possibility that a syntactically plausible but boundary-incorrect SQL still passes generation, yet returns a mismatched result set. Structural complexity is the strongest driver of failure: queries re-quiring at least one join fail 83% of the time versus 40% for join-free queries. Queries with non-trivial nesting (CTEs/subqueries) fail 71% versus 40% without; queries using array operations fail at 77%. Error rate also rises monotonically with our semantic-hardness tiers, from 39% (easy) to 65% (medium) to 84% (hard), confirming the tiers track real difficulty. Breaking down by query category, Change/Compari-son (CHG, 87%) and Spatial Coverage (SPC, 62%) queries are hardest, while Ranking/Distribution (ORD, 30%) queries are comparatively easy, indicating that the model’s weaknesses are concentrated in comparative reasoning and elevation/coverage-style spatial filters rather than simple aggregation or extrema lookups. 
+
+6 RELATED WORK 
+
+Text-to-SQL has been a long-standing research topic in the data-base community [ 1]. Common techniques are relationship-aware attention for schema linking in RATSQL [ 26 ], schema pruning in REDSQL [ 10 ] or graph-based schema question modeling in RASAT [ 19 ], and LGESQL [ 4]. Recent advances are largely driven by large language models (LLMs), with research focusing on improving query generation through prompt optimization [ 8, 18 ], multi-agent decompositions [ 16 , 17 , 25 , 28 ], and multi-candidate generation with selection [ 14 ] or voting mechanisms [ 22 ]. Additional gains come from supervised fine-tuning on domain-specific datasets [ 11 ]and reinforcement learning with verifiable rewards [ 23 ]. Recent work incorporates planning, candidate selection, execution feed-back, and agent-based reasoning [5]. These approaches have been evaluated on several benchmarks such as BIRD [ 12 ], ScienceBenchmark [ 30 ] and Spider 2.0 [ 9 ]. How-ever, none of these benchmarks addresses the ambiguity and scala-bility issues of spatio-temporal queries that are inherent in meteo-rological queries that cover data over time-span of 30+ years with spatial extensions of cities, regions, countries or even contents. 
+
+7 DISCUSSION AND CONCLUSION 
+
+In this paper, we presented STRATOS, an end-to-end Text-to-SQL framework designed specifically to tackle the scalability and se-mantic challenges of meteorological data science. By combining a multi-agent architecture for resolving symbolic-to-numeric gaps with a deterministic query rewriter for spatial arrays, our system drastically reduces both execution latency and the occurrence of database timeouts. STRATOS is not merely a theoretical framework evaluated in a sandbox; it has been actively developed and refined over the past 1.5 years as a core technological infrastructure within a large-scale European Union project involving over 13 consortium partners. The architecture presented in this work is continuously evolving, driven by real-world data management challenges and direct feedback from meteorologists and data scientists using the system daily. Future work will focus on extending our Domain Logic Injec-tor to accommodate real-time streaming sensor data and optimiz-ing spatial indexing strategies for distributed, cloud-native deploy-ments. 
+
+ACKNOWLEDGMENTS 
+
+This work was supported by DataGEMS, funded by the European Union’s Horizon Europe Research and Innovation Programme, un-der grant agreement number 101188416. 
+
+REFERENCES 
+
+[1] Katrin Affolter, Kurt Stockinger, and Abraham Bernstein. 2019. A comparative survey of recent natural language interfaces for databases. The VLDB Journal 28, 5 (2019), 793–819. [2] G. Bhalotia, A. Hulgeri, C. Nakhe, S. Chakrabarti, and S. Sudarshan. 2002. Key-word searching and browsing in databases using BANKS. In Proceedings 18th International Conference on Data Engineering . 431–440. https://doi.org/10.1109/ ICDE.2002.994756 [3] Martin Braschler, Thilo Stadelmann, and Kurt Stockinger. 2019. Applied Data Science: Lessons Learned for the Data-Driven Business. [4] Ruisheng Cao, Lu Chen, Zhi Chen, Yanbin Zhao, Su Zhu, and Kai Yu. 2021. LGESQL: Line graph enhanced text-to-SQL model with mixed local and non-local relations. In Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers) . 2541–2555. [5] Yeounoh Chung, Gaurav T Kakkar, Yu Gan, Brenton Milne, and Fatma Özcan. 2025. Is Long Context All You Need? Leveraging LLM’s Extended Context for NL2SQL. Proceedings of the VLDB Endowment 18, 8 (2025), 2735–2747. [6] Copernicus Land Monitoring Service. 2018. CORINE Land Cover 2018 (raster 100 m), Europe, 6-yearly . https://doi.org/10.2909/960998c1-1870-4e82-8051-6485205ebbac 
+
+8[7] Elissavet Galanaki, Chris Giannaros, Vassiliki Kotroni, Kostas Lagouvardos, and Georgios Papavasileiou. 2022. Spatio-temporal analysis of heatwaves character-istics in Greece from 1950 to 2020. Climate 11, 1 (2022), 5. [8] Dawei Gao, Haibin Wang, Yaliang Li, Xiuyu Sun, Yichen Qian, Bolin Ding, and Jingren Zhou. 2024. Text-to-SQL Empowered by Large Language Models: A Benchmark Evaluation. Proceedings of the VLDB Endowment 17, 5 (2024), 1132– 1145. [9] Fangyu Lei, Jixuan Chen, Yuxiao Ye, Ruisheng Cao, Dongchan Shin, Hongjin Su, Zhaoqing Suo, Hongcheng Gao, Wenjing Hu, Pengcheng Yin, et al . 2025. Spider 2.0: Evaluating language models on real-world enterprise text-to-sql workflows. In International Conference on Learning Representations , Vol. 2025. 28691–28735. [10] Haoyang Li, Jing Zhang, Cuiping Li, and Hong Chen. 2023. Resdsql: Decoupling schema linking and skeleton parsing for text-to-sql. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 37. 13067–13075. [11] Haoyang Li, Jing Zhang, Hanbing Liu, Ju Fan, Xiaokang Zhang, Jun Zhu, Renjie Wei, Hongyan Pan, Cuiping Li, and Hong Chen. 2024. Codes: Towards build-ing open-source language models for text-to-sql. Proceedings of the ACM on Management of Data 2, 3 (2024), 1–28. [12] Jinyang Li, Binyuan Hui, Ge Qu, Jiaxi Yang, Binhua Li, Bowen Li, Bailin Wang, Bowen Qin, Ruiying Geng, Nan Huo, et al . 2023. Can llm already serve as a database interface? a big bench for large-scale database grounded text-to-sqls. 
+
+Advances in Neural Information Processing Systems 36 (2023), 42330–42357. [13] Jinyang Li, Binyuan Hui, Ge Qu, Jiaxi Yang, Binhua Li, Bowen Li, Bailin Wang, Bowen Qin, Ruiying Geng, Nan Huo, et al . 2024. Can llm already serve as a database interface? a big bench for large-scale database grounded text-to-sqls. 
+
+Advances in Neural Information Processing Systems 36 (2024). [14] Yifu Liu, Yin Zhu, Yingqi Gao, Zhiling Luo, Xiaoxia Li, Xiaorong Shi, Yuntao Hong, Jinyang Gao, Yu Li, Bolin Ding, et al . 2026. Xiyan-sql: A novel multi-generator framework for text-to-sql. IEEE Transactions on Knowledge and Data Engineering (2026). [15] Joaquín Muñoz-Sabater, Emanuel Dutra, Anna Agustí-Panareda, Clément Al-bergel, Gabriele Arduini, Gianpaolo Balsamo, Souhail Boussetta, Margarita Choulga, Shaun Harrigan, Hans Hersbach, et al . 2021. ERA5-Land: A state-of-the-art global reanalysis dataset for land applications. Earth system science data 13, 9 (2021), 4349–4383. [16] Farhad Nooralahzadeh, Yi Zhang, Jonathan Fürst, and Kurt Stockinger. 2025. Multi-Modal Data Exploration via Language Agents. In Proceedings of the 14th International Joint Conference on Natural Language Processing and the 4th Confer-ence of the Asia-Pacific Chapter of the Association for Computational Linguistics .795–813. [17] Mohammadreza Pourreza, Hailong Li, Ruoxi Sun, Yeounoh Chung, Shayan Talaei, Gaurav Tarlok Kakkar, Yu Gan, Amin Saberi, Fatma Ozcan, and Sercan Arik. 2025. Chase-sql: Multi-path reasoning and preference optimized candidate selection in text-to-sql. In International Conference on Learning Representations , Vol. 2025. 60385–60415. [18] Mohammadreza Pourreza and Davood Rafiei. 2023. Din-sql: Decomposed in-context learning of text-to-sql with self-correction. Advances in neural informa-tion processing systems 36 (2023), 36339–36348. [19] Jiexing Qi, Jingyao Tang, Ziwei He, Xiangpeng Wan, Yu Cheng, Chenghu Zhou, Xinbing Wang, Quanshi Zhang, and Zhouhan Lin. 2022. Rasat: Integrating relational structures into pretrained seq2seq model for text-to-sql. In Proceedings of the 2022 conference on empirical methods in natural language processing . 3215– 3229. [20] Russ Rew and Glenn Davis. 1990. NetCDF: an interface for scientific data access. 
+
+IEEE computer graphics and applications 10, 4 (1990), 76–82. [21] Md Rashad Al Hasan Rony, Debanjan Chaudhuri, Ricardo Usbeck, and Jens Lehmann. 2022. Tree-KGQA: An Unsupervised Approach for Question An-swering Over Knowledge Graphs. IEEE Access 10 (2022), 50467–50478. https: //doi.org/10.1109/ACCESS.2022.3173355 [22] Lei Sheng and Xu Shuai Shuai. 2025. Csc-sql: Corrective self-consistency in text-to-sql via reinforcement learning. In Proceedings of the 14th International Joint Conference on Natural Language Processing and the 4th Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics . 1473–1496. [23] Rishit Toteja, Arindam Sarkar, and Prakash Mandayam Comar. 2025. In-context reinforcement learning with retrieval-augmented generation for Text-to-SQL. In Proceedings of the 31st International Conference on Computational Linguistics .10390–10397. [24] Denny Vrandečić and Markus Krötzsch. 2014. Wikidata: a free collaborative knowledgebase. Commun. ACM 57, 10 (Sept. 2014), 78–85. https://doi.org/10. 1145/2629489 [25] Bing Wang, Changyu Ren, Jian Yang, Xinnian Liang, Jiaqi Bai, Linzheng Chai, Zhao Yan, Qian-Wen Zhang, Di Yin, Xing Sun, et al . 2025. Mac-sql: A multi-agent collaborative framework for text-to-sql. In Proceedings of the 31st International Conference on Computational Linguistics . 540–557. [26] Bailin Wang, Richard Shin, Xiaodong Liu, Oleksandr Polozov, and Matthew Richardson. 2020. Rat-sql: Relation-aware schema encoding and linking for text-to-sql parsers. In Proceedings of the 58th annual meeting of the association for computational linguistics . 7567–7578. [27] World Meteorological Organization. 2010. GRIB Edition 2 . https://codes.ecmwf. int/grib/format/grib2/overview/ FM 92-XIII Ext., Manual on Codes (WMO-No. 306), Vol. I.2, Version 6. [28] Xiangjin Xie, Guangwei Xu, Lingyan Zhao, and Ruijie Guo. 2025. Opensearch-sql: Enhancing text-to-sql with dynamic few-shot and consistency alignment. 
+
+Proceedings of the ACM on Management of Data 3, 3 (2025), 1–24. [29] Tao Yu, Rui Zhang, Kai Yang, Michihiro Yasunaga, Dongxu Wang, Zifan Li, James Ma, Irene Li, Qingning Yao, Shanelle Roman, Zilin Zhang, and Dragomir Radev. 2018. Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task. In Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing , Ellen Riloff, David Chiang, Julia Hockenmaier, and Jun’ichi Tsujii (Eds.). Association for Computational Linguistics, Brussels, Belgium, 3911–3921. https://doi.org/10. 18653/v1/D18-1425 [30] Yi Zhang, Jan Deriu, George Katsogiannis-Meimarakis, Catherine Kosten, Geor-gia Koutrika, and Kurt Stockinger. 2023. ScienceBenchmark: A Complex Real-World Benchmark for Evaluating Natural Language to SQL Systems. Proceedings of the VLDB Endowment 17, 4 (2023), 685–698. [31] Yuxuan Zhu, Tengjun Jin, Yoojin Choi, and Daniel Kang. 2026. ReViSQL: Achiev-ing Human-Level Text-to-SQL. arXiv preprint arXiv:2603.20004 (2026).
