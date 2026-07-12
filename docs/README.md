@@ -6,34 +6,39 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-11
-- 运行时间：2026-07-11 20:04:38 UTC
+- 最新运行日期：2026-07-12
+- 运行时间：2026-07-12 20:51:12 UTC
 - 运行状态：成功
-- 本次总论文数：4
+- 本次总论文数：5
 - 精读区：3
-- 速读区：1
+- 速读区：2
 
 ### 今日简报（AI）
-今日聚焦地球观测基础模型的可扩展性与可信度，并深入视频异常预测的语义流形桥接。  
-最值得看《Scalable and Trustworthy Earth Observation Foundation Models》（9.0）与《Latent Clarity》（8.0），前者为遥感大模型提供可信框架，后者开创视频异常预测新范式。  
-建议优先精读9分的地球观测论文，掌握其可扩展性与可信度设计思路。
-- 详情：[/202607/11/README](/202607/11/README)
+今日精读两篇高分论文，分别聚焦地球观测基础模型的可信性与计算机视觉的持续测试时自适应。
+
+《Scalable and Trustworthy Earth Observation Foundation Models》与《Continual Test-Time Adaptation》方向值得重点关注，评分均为9.0。
+
+建议读者优先阅读这两篇高分论文，深入了解最新方法框架与基准。
+- 详情：[/202607/12/README](/202607/12/README)
 
 ### 精读区论文标签
-1. [Scalable and Trustworthy Earth Observation Foundation Models](/202607/11/2607.07758v1-scalable-and-trustworthy-earth-observation-foundation-models)  
+1. [Scalable and Trustworthy Earth Observation Foundation Models](/202607/12/2607.07758v1-scalable-and-trustworthy-earth-observation-foundation-models)  
    标签：评分：9.0/10、query:rs-fm
    evidence：地球观测基础模型综述
-2. [Latent Clarity: Bridging World-Model Kinematics to Semantic Manifolds for Video Anomaly Anticipation](/202607/11/2607.03558v1-latent-clarity-bridging-world-model-kinematics-to-semantic-manifolds-for-video-anomaly-anticipation)  
-   标签：评分：8.0/10、query:world-models
-   evidence：使用V-JEPA和Qwen3-VL的世界模型流程用于视频异常预测
-3. [ZipDepth: Bringing Lightweight Zero-Shot Monocular Depth Anywhere, on Any Device](/202607/11/2607.08771v1-zipdepth-bringing-lightweight-zero-shot-monocular-depth-anywhere-on-any-device)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：通过基础模型蒸馏解决零样本深度估计中的域偏移问题
+2. [Continual Test-Time Adaptation in Computer Vision: Methods, Benchmarks, and Future Directions](/202607/12/2607.08164v1-continual-test-time-adaptation-in-computer-vision-methods-benchmarks-and-future-directions)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：计算机视觉中持续测试时间适应的综述
+3. [LoCA: Spatially-Aware Low-Rank Convolutional Adaptation of Vision Foundation Models](/202607/12/2607.06918v1-loca-spatially-aware-low-rank-convolutional-adaptation-of-vision-foundation-models)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：视觉基础模型的高效适应
 
 ### 速读区论文标签
-1. [STRATOS: Bridging the Symbolic-to-Numeric Gap in Spatio-Temporal Text-to-SQL for Meteorological Data](/202607/11/2607.03501v1-stratos-bridging-the-symbolic-to-numeric-gap-in-spatio-temporal-text-to-sql-for-meteorological-data)  
-   标签：评分：7.0/10、query:stm
-   evidence：气象数据的时空文本到SQL
+1. [Exploring Convolutional Neural Processes for Weather Downscaling](/202607/12/2607.04190v1-exploring-convolutional-neural-processes-for-weather-downscaling)  
+   标签：评分：6.0/10、query:stm
+   evidence：探索卷积神经过程用于时空天气降尺度
+2. [FEATMAP: Targeted Correction of Acquisition Signatures Harmonizes Medical Foundation Model Embeddings and Enables Robust Task Generalization](/202607/12/biorxiv-10-64898-2026-07-02-736184-v1-featmap-targeted-correction-of-acquisition-signatures-harmonizes-medical-foundation-model-embeddings-and-enables-robust-task-generalization)  
+   标签：评分：6.0/10、query:cross-domain
+   evidence：靶向校正采集特征以实现医学基础模型域适应
 
 
 <div class="dpr-home-promo-card">
