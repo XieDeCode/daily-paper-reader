@@ -1,0 +1,294 @@
+Title: PhenoEmbed: Self-Supervised Multispectral UAV Time-Series Embeddings for Individual Tree Crown Phenology
+
+URL Source: https://arxiv.org/pdf/2607.10231v1
+
+Published Time: Tue, 14 Jul 2026 00:57:47 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# PhenoEmbed: Self-Supervised Multispectral UAV Time-Series Embeddings for Individual Tree Crown Phenology 
+
+Taimur Khan 1
+
+Abstract: Tree crowns are a challenging target for resilient AI because they are not static objects: their spectral response, internal texture, translucency, and apparent boundaries change substantially across the growing season. We develop PhenoEmbed, a self-supervised crown-centric temporal embedding model trained with contrastive and masked reconstruction objectives on HeideBench, an 18-date UAV multispectral time-series benchmark for forest crown phenology in Dölauer Heide. The model treats seasonal crown dynamics as phenological appearance change driven by leaf emergence, canopy closure, senescence, and leaf-off conditions. Segmented tree crown polygons are retained as object anchors to extract aligned crown-centered crops through time, allowing one 256-dimensional vector summarizing seasonal crown appearance to be learned per tree. On 5,885 crop-safe crowns, the exported embeddings show structured low-dimensional organization, with the first two principal components explaining 25.1% of variance and nearest-neighbor retrieval producing a median top-1 cosine similarity of 0.946. Compared with handcrafted temporal features and a learned mean-pooling baseline, PhenoEmbed yields substantially more compact nearest-neighbor structure, while ablations show that the contrastive loss, masked reconstruction loss, and explicit seasonal time features each affect the structure of the learned embedding space. These results support PhenoEmbed as a reusable forest crown representation learner and moti-vate future downstream tests of whether such features improve tree-level models under seasonal change. 
+
+Code: https://github.com/Helmholtz-UFZ/PhenoEmbed 
+
+Model: https://doi.org/10.57967/hf/9558 
+
+Data: https://doi.pangaea.de/10.1594/PANGAEA.993969 
+
+Keywords: tree phenology, UAV remote sensing, multispectral, individual tree crowns, self-supervised learning 
+
+# 1 Introduction 
+
+Tree monitoring models often assume that the object of interest has a reasonably stable visual signature. Individual tree crowns violate that assumption. Across a single growing season, the same crown can move from leaf emergence to canopy closure, from peak vigor to discoloration and senescence, and finally toward partially leaf-off conditions (Fig. 1). Those transitions alter not only reflectance but also translucency, within-crown texture, shadowing, branch visibility, and even the apparent extent of the crown in an orthomosaic. In practice, this means that a crown segmentation or crown analysis model trained on one part of the year can become brittle when applied to another.  
+
+> 1
+
+Helmholtz Centre for Environmental Research - UFZ, Community Ecology, Theodor-Lieser-Str. 4, 06120 Halle, Germany, taimur.khan@ufz.de, https://orcid.org/0000-0001-7833-5474 arXiv:2607.10231v1 [cs.CV] 11 Jul 2026 2025-03-06 2025-05-12 2025-08-12 2025-11-05 Fig. 1: Example crown-centered crop rendered at four points in the 2025 UAV time series. The same crown anchor is shown in early spring, green-up, late summer, and late autumn using synthetic RGB from the canonical 𝑅 , 𝐺 , and 𝑅𝐸 bands. The panel illustrates why crowns are treated as temporally dynamic objects rather than static image patches. 
+
+That brittleness is a concrete resilient AI problem in Earth observation. Season-varying remote sensing is well known to confound change analysis, because genuine structural change is entangled with phenology-induced spectral variation [Ko20]. At the same time, recent individual-tree studies show that UAV imagery is rich enough to resolve phenology at the crown scale [Ka26; Kl24; KVK23; Pa19]. Embeddings are a way to compress large amounts of information into a smaller set of features that represent meaningful semantics. Therefore, the opportunity is clear: instead of treating seasonal change as nuisance variability to be suppressed, one can learn a tree representation (i.e. embeddings) that explicitly models seasonal dynamics and then reuse that representation as a prior for downstream tree-level tasks. For UAV-based forest monitoring, such representations may reduce the need for season-specific downstream models when future imagery comes from the same or similar forest environments, although transfer across sites, sensors, and years remains to be tested. This paper presents PhenoEmbed , a first step toward changing the usual crown-segmentation setup. The current paradigm is largely tree annotations + aerial or UAV rasters = seg-mentations , supported by modern crown delineation systems [Zh23]. This works when the target imagery resembles the imagery used for annotation and training, but it becomes fragile when the model is applied to rasters from a different phenological state. We instead aim for tree annotations + aerial or UAV rasters + phenological embeddings = more resilient segmentations . PhenoEmbed learns one temporal descriptor per crown from a multi-date multispectral sequence, using the same broad representation-learning logic behind contrastive and masked modeling methods [Ch20; Co22; FMG23; He22; Sh24; Wa25]. Downstream models can later use not only current image appearance but also a compact representation of how that tree changes through the season. This paper evaluates only the representation-learning part of this pipeline. The project is framed as a reusable feature-learning system rather than a closed downstream benchmark. The implementation covers the full path from geospatial auditing and crop extraction to training, embedding export, and intrinsic representation analysis. This paper therefore has two goals: 1. to define the PhenoEmbed problem setting and the implemented method precisely, and 2. to report intrinsic evidence that the pipeline learns useful seasonal structure, while making clear which downstream evaluations remain future work. 
+
+# 2 Related Work 
+
+2.1 Individual tree crowns and UAV phenology 
+
+Individual tree crown analysis from airborne and UAV data has advanced rapidly, with deep learning methods, reusable software, and open datasets now supporting crown delineation in high-resolution optical imagery [DFK24; FMN22; KAG25; Ve24; We20]. PhenoEmbed builds on this ecosystem by treating segmented crowns as object anchors rather than only as segmentation targets. The representation unit is therefore a segmented tree crown, not a random image tile crop. UAV phenology studies show that repeated high-resolution acquisitions can recover individual-tree seasonal signals across species, forest types, and sensors [Bo26; Ka26; Kl24; KVK23; Pa19]. These results motivate the central assumption of PhenoEmbed: individual crowns carry temporal signatures that can be learned as representations, not only summarized by handcrafted vegetation indices. 
+
+2.2 Temporal representation learning in remote sensing 
+
+Self-supervised learning has become central to remote sensing representation learning, particularly when labeled data are limited. Masked autoencoding and contrastive learning are relevant because they naturally match multispectral and multitemporal data [Ch20; He22]. Recent remote sensing models extend these ideas with temporal, spectral, multimodal, and feature-reconstruction targets [Co22; FMG23; Sh24; Wa25]. Temporal sequence models and geospatial foundation models further show the value of reusable representations, while also exposing the difficulty of transferring encoders across sensors, bands, scales, and tasks [CS23; HLW25; Oq23; Xi24]. PhenoEmbed sits in a narrower regime: object-centric UAV multispectral sequences for forest crowns. It inherits lessons from foundation-model adaptation, but uses a smaller architecture suited to the available data and downstream goals. 3 Data and Geospatial Preprocessing 
+
+3.1 Study data 
+
+The experiments use HeideBench, a multispectral UAV time-series benchmark for forest crown phenology collected over a forest patch in Dölauer Heide, Halle (Saale), Germany [Kh26]. The site contains pine-dominated stands affected by dieback as well as near-natural mixed deciduous forest with oaks, birches, and beeches, making it a useful setting for observing seasonal canopy development under contrasting forest structures. The valid imaging footprint covers approximately 321,215 m 2 (32.1 ha), is bounded by 11.902653– 11.911325 ◦E and 51.499959–51.508576 ◦N, and is stored in ETRS89 / UTM zone 32N (EPSG:25832). This valid-footprint polygon is used as the trusted spatial boundary for retaining crowns and materializing crops. HeideBench provides 18 georeferenced multispectral GeoTIFF orthomosaics acquired between 6 March 2025 and 5 November 2025, spanning a 244-day seasonal period from early spring to late autumn [Kh26]. The median revisit interval is 14 days, with intervals ranging from 4 to 27 days, and the average ground sampling distance is 5.53 cm per pixel. Data were collected with a DJI Mavic 3M Enterprise UAV equipped with multispectral cameras measuring green (560 nm), red (650 nm), red-edge (730 nm), and near-infrared (860 nm) reflectance, using RTK positioning for centimeter-level geolocation. In the GeoTIFFs, the source band order is G, R, RE, NIR, Alpha ; PhenoEmbed remaps this metadata-aware source order to the canonical modeling order R, G, RE, NIR .Tree crowns are represented as 5,885 crop-safe segmented polygons included with Hei-deBench and extracted with the DeepTrees library [KAG25; Kh26]. These polygons were originally derived from RGBI aerial Digital Orthophotos (DOP) at 20 cm resolution [lv], merged from three overlapping DOP sources, and filtered against the valid-imaging boundary so that retained crowns lie fully within the trusted area of all 18 orthomosaics. The preprocessing pipeline first performs a geospatial audit of the rasters and crowns. It then generates a temporal manifest that links each crown to each acquisition date together with crop geometry, date index, day-of-year, seasonal time, band mapping, and alpha-band metadata. We define a crop-safe crown as a crown whose full 16 m crown-centered square crop fits inside every one of the 18 rasters. Only crop-safe crowns are used for training. Fixed-size crops are then materialized from the manifest. Each crop corresponds to a 16 m square around the crown center, resampled to 288 × 288 pixels and saved as an .npz file containing the canonical four-band image and, optionally, the alpha mask. This representation keeps the crown polygon as the alignment anchor while producing a model-friendly tensor format. The resulting dataset contains 5,885 crowns, 18 dates, and 105,930 crop instances in total. 3.2 Normalization and handcrafted temporal baselines 
+
+The model-facing dataloader normalizes crops by dividing scaled reflectance values by 10,000, clipping to a stable reflectance range, and then applying dataset-level mean and standard deviation normalization. These statistics are computed over the full crop corpus with alpha masking enabled. In parallel, the preprocessing stack computes polygon-pooled per-date summaries and common vegetation indices: Normalized Difference Vegetation Index (NDVI), Normalized Difference Red Edge (NDRE), and Green Normalized Difference Vegetation Index (GNDVI). These handcrafted trajectories serve two roles: they provide a biologically interpretable baseline, and they demonstrate the presence of seasonal signal independently of the learned embedding. Tab. 1 summarizes the resulting PhenoEmbed crop-safe dataset and training corpus.               
+
+> Property Value Orthomosaics 18 UAV multispectral dates Date range 2025-03-06 to 2025-11-05 Canonical bands R, G, RE, NIR Source band order G, R, RE, NIR, Alpha Crop-safe crowns 5,885 Temporal crop instances 105,930 Crop extent 16 m square per crown Crop tensor size 288 ×288 ×4
+> Train/validation split 5,297 / 588 crowns Tab. 1: PhenoEmbed dataset and training corpus.
+
+# 4 PhenoEmbed Method 
+
+4.1 Problem formulation 
+
+Let crown 𝑖 have a temporally ordered sequence of multispectral crops 
+
+𝑋 𝑖 = {𝑥 𝑖, 1, . . . , 𝑥 𝑖,𝑇 }, 𝑥 𝑖,𝑡 ∈ R4×𝐻 ×𝑊 ,
+
+where channels are in canonical order (𝑅, 𝐺, 𝑅𝐸, 𝑁 𝐼 𝑅 ) and 𝑇 = 18 for this dataset. Each date also has a normalized seasonal coordinate 𝜏 𝑡 ∈ [ 0, 1] derived from day-of-year. Specifically, 𝜏 𝑡 = (𝑑 𝑡 − 𝑑 min )/( 𝑑 max − 𝑑 min ), where 𝑑 𝑡 is the acquisition date and 𝑑 min 
+
+and 𝑑 max are the first and last acquisition dates in the sequence. The goal is to learn an embedding function 
+
+𝑓 (𝑋 𝑖 ) = 𝑒 𝑖 ∈ R256 ,
+
+where 𝑖 indexes a crown, 𝑡 indexes an acquisition date, and 𝑥 𝑖,𝑡 is the four-band crop for crown 𝑖 at date 𝑡 . The output 𝑒 𝑖 is one vector summarizing seasonal crown appearance for downstream models. The full PhenoEmbed architecture is summarized in Fig. 2. The model consists of three main components: (1) a crown-centric time-series extraction pipeline that produces aligned multispectral crops for each crown across all dates; (2) a spatial encoder with a multispectral adapter, followed by seasonal time encoding and temporal aggregation via a Transformer; and (3) self-supervised objectives that combine temporal contrastive learning with masked reconstruction of per-date spectral summaries. We next describe each component in more detail.  
+
+> Fig. 2: Overview of the PhenoEmbed architecture. (1) Crown-centric time-series extraction: segmented tree crown polygons are used as object anchors to extract aligned multispectral UAV crops of the same crown across T acquisition dates, using the canonical R, G, RE, and NIR bands. (2) Encoder and temporal aggregation: each date-specific crop is passed through a shared image encoder to obtain per-date features, which are combined with seasonal time encodings and aggregated into one 𝐿 2-normalized 256-dimensional crown embedding. (3) Self-supervised objectives: the embedding model is trained using a contrastive loss that pulls masked views of the same crown together while separating different crowns, and a masked reconstruction loss that encourages the temporal representation to retain seasonal spectral information.
+
+4.2 Spatial encoder with multispectral spectral adapter 
+
+The model uses SegFormer MiT-B2 as a shared per-date spatial encoder [Xi21]. Because the pretrained backbone expects three-channel ImageNet-like input, we prepend a trainable 
+
+1 × 1 spectral adapter 
+
+𝐴 : R4×𝐻 ×𝑊 → R3×𝐻 ×𝑊 .
+
+The adapter is initialized with a physically motivated mapping: the red output channel is initialized from 𝑅 , the green output from 𝐺 , and the third pseudo-blue channel is initialized as the average of the 𝑅𝐸 and 𝑁 𝐼 𝑅 bands. This initialization only defines the starting point; the 1 × 1 adapter is trainable, so all three pseudo-RGB channels can learn weighted mixtures of the four multispectral input bands during model fitting. This gives the pretrained backbone a reasonable starting point while allowing the mapping to adapt during training. In the selected model, the SegFormer backbone is frozen and only the adapter and temporal head are trained. This conservative choice reduces optimization instability and respects the modest size of the crown dataset. For each date, the spatial encoder yields a pooled feature vector 
+
+𝑠 𝑖,𝑡 = 𝐸 ( 𝐴 (𝑥 𝑖,𝑡 )) ∈ R256 .
+
+Here, 𝐴 denotes the trainable multispectral adapter, 𝐸 denotes the shared SegFormer spatial encoder, and 𝑠 𝑖,𝑡 is the 256-dimensional feature vector for crown 𝑖 at date 𝑡 .
+
+4.3 Seasonal time encoding and temporal Transformer 
+
+For each date, the spatial encoder produces one feature vector describing the crown crop at that date. These vectors are projected into a shared feature space for the date sequence and augmented with explicit seasonal descriptors. For a normalized seasonal coordinate 𝜏 𝑡 , the implemented time feature map is 
+
+𝜙 (𝜏 𝑡 ) = 𝜏 𝑡 , 𝜏 2 
+
+> 𝑡
+
+, sin (2𝜋𝜏 𝑡 ), cos (2𝜋𝜏 𝑡 ) . (1) Here, 𝜙 (𝜏 𝑡 ) is the four-dimensional time feature vector for date 𝑡 . These features encode both monotonic seasonal progression and cyclic annual structure. A learned linear projection maps 𝜙 (𝜏 𝑡 ) into the temporal token dimension and adds it to the projected spatial feature. A learned class token, used as a sequence summary, is prepended, and the resulting token sequence is processed by a 2-layer Transformer encoder with 4 attention heads and temporal dimension 256. The output class token is finally projected and 𝐿 2-normalized: 
+
+𝑒 𝑖 = 𝑊 ℎ cls 
+
+> 𝑖
+
+∥𝑊 ℎ cls  
+
+> 𝑖
+
+∥2
+
+, (2) Here, ℎcls  
+
+> 𝑖
+
+is the Transformer output for the class token of crown 𝑖 , 𝑊 is the learned linear projection to the embedding dimension, and 𝑒 𝑖 is the normalized crown embedding. 
+
+4.4 Self-supervised objective 
+
+Training does not require species labels or phenology labels. Instead, it uses two masked views of the same crown sequence. For each mini-batch, two independent temporal masks are sampled, and masked dates are zeroed before being passed through the encoder. This produces two embeddings 𝑒 (𝑎 ) 
+
+> 𝑖
+
+and 𝑒 (𝑏 ) 
+
+> 𝑖
+
+per crown. Temporal contrastive loss. The first objective is an InfoNCE-style contrastive loss over the batch [OLV18]: 
+
+Lctr = − 1
+
+𝐵 
+
+> 𝐵
+
+∑︁ 
+
+> 𝑖 =1
+
+log exp (⟨ 𝑒 (𝑎 ) 
+
+> 𝑖
+
+, 𝑒 (𝑏 ) 
+
+> 𝑖
+
+⟩/ 𝛾 )
+
+Í𝐵 𝑗 =1 exp (⟨ 𝑒 (𝑎 ) 
+
+> 𝑖
+
+, 𝑒 (𝑏 ) 
+
+> 𝑗
+
+⟩/ 𝛾 ) , (3) Here, 𝐵 is the batch size, 𝑗 indexes candidate crowns in the batch, ⟨· , ·⟩ is cosine similarity because embeddings are normalized, and 𝛾 is the temperature parameter. The loss is lower when two masked views of the same crown are close in embedding space and different crowns are farther apart. The selected run uses a batch size of 2 and additionally evaluate a batch-size-16 training run to examine whether a larger negative pool changes the resulting embedding structure. 
+
+Masked temporal reconstruction loss. The second objective reconstructs a compact per-date spectral target rather than raw pixels. Specifically, the target at date 𝑡 is the four-dimensional vector of per-band crop means: 
+
+𝑚 𝑖,𝑡 = mean 𝑢,𝑣 𝑥 𝑖,𝑡 (:, 𝑢, 𝑣 ).
+
+Here, 𝑢 and 𝑣 index crop pixels, and 𝑚 𝑖,𝑡 contains the mean 𝑅 , 𝐺 , 𝑅𝐸 , and 𝑁 𝐼 𝑅 values for crown 𝑖 at date 𝑡 . A linear head predicts masked-date summaries from temporal tokens, and the loss is mean squared error restricted to masked dates: 
+
+Lrec = 1
+
+|M| ∑︁ (𝑖,𝑡 ) ∈ M 
+
+ˆ𝑚 𝑖,𝑡 − 𝑚 𝑖,𝑡 22 . (4) Here, M is the set of masked crown-date pairs and ˆ𝑚 𝑖,𝑡 is the predicted band-mean vector. This loss is lower when predicted masked-date band means match the true band means. Crown phenology is largely about how spectral state evolves through time; reconstructing band means provides a stable proxy for that temporal continuity without forcing the model to solve pixel-level synthesis. 
+
+Total loss. The total training loss is 
+
+L = 𝜆 ctr Lctr + 𝜆 rec Lrec , (5) where 𝜆 ctr and 𝜆 rec control the contrastive and reconstruction terms, with both weights set to 1.0 in the selected model. The design is closest in spirit to remote sensing methods that combine contrastive and reconstruction targets [FMG23; Sh24], but it is adapted to crown-level object sequences rather than satellite tiles. 5 Experimental Setup 
+
+5.1 Training configuration 
+
+Training is implemented in PyTorch Lightning to make checkpointing, deterministic data splitting, early stopping, CSV logging, and resume behavior explicit and reproducible. Learned models are selected by minimum validation objective, and all reported embedding analyses use the selected checkpoints. The training configuration is outlined in Tab. 2.                           
+
+> Component Setting Spatial backbone SegFormer MiT-B2 Backbone initialization ImageNet pretrained Backbone status Frozen Input bands R, G, RE, NIR Spectral adapter Trainable 1×1conv, 4 →3Temporal encoder 2-layer Transformer, 4 heads Embedding size 256 Batch size 2Optimizer AdamW Learning rate 5×10 −5
+> Weight decay 10 −4
+> Mask probability 0.3 Contrastive temperature 0.2 Validation split 10% of crowns Checkpoint monitor Validation objective Maximum training steps 50,000 Early stopping patience 20 validation checks Tab. 2: Training configuration for the selected PhenoEmbed model.
+
+5.2 Evaluation protocol 
+
+The evaluation focuses on crown-level representation quality. Learned models are selected by the best validation objective within each run, and embedding-space analyses use the selected checkpoints. The evaluation uses four complementary views: 1. handcrafted seasonal trajectories from polygon-pooled spectral summaries; 2. baseline and ablation comparisons against simpler representation families; 3. embedding export and analysis utilities, including PCA, nearest-neighbor retrieval, and spatial inspection; 4. a biological linear-probe analysis in which ridge regression predicts each crown’s seasonal NDVI and NDRE amplitude from its full 256-dimensional embedding, evaluated using five-fold cross-validation and 𝑅 2.5.3 Baseline and ablation protocol 
+
+The intrinsic comparison is organized around three representation families. The first is a handcrafted temporal-feature baseline built from polygon-pooled seasonal summaries of base bands and vegetation indices. These features are standardized and evaluated with the same PCA and nearest-neighbor analysis used for learned embeddings. The second is a learned mean-pooling baseline that keeps the same SegFormer MiT-B2 spatial encoder and spectral adapter as PhenoEmbed, but replaces the temporal Transformer with simple average pooling over per-date features. The third is the full PhenoEmbed model with seasonal time encoding, temporal Transformer fusion, and the combined contrastive plus masked reconstruction objective. The ablation plan isolates the main design choices of the temporal objective and seasonal encoding. Specifically, we evaluate variants without the contrastive loss, without the reconstruction loss, and without the explicit seasonal time features. All learned baselines and ablations use the same crop-safe crown set, train/validation split, spatial backbone, optimizer family, and checkpoint selection rule as the full model. Each completed run is exported to one embedding vector per crown and analyzed with the same PCA and cosine nearest-neighbor protocol. Validation objectives are used for checkpoint selection within runs, but not as cross-run performance metrics because the optimized objective changes across loss ablations. We also report a batch-size-16 training-sensitivity experiment. Because this run used a different learning rate and stopping schedule, it is not treated as a controlled ablation of batch size. 
+
+# 6 Results 
+
+6.1 Seasonal signal at crown level 
+
+Fig. 3 summarizes the handcrafted temporal trajectories extracted from polygon-pooled crown summaries. Two observations are important. First, individual crowns exhibit structured, smooth changes across the season in both base bands and vegetation indices. Second, different crowns show different amplitudes and timing, especially in NDVI-like trajectories. This is exactly the regime in which a temporal crown embedding is meaningful: the model should not only recognize a crown from one date to another, but should encode how strongly and when that crown changes. 
+
+6.2 Selected model 
+
+The selected full PhenoEmbed model is the checkpoint with the lowest validation objective under the configuration in Tab. 2. The contrastive term evaluates whether masked temporal 0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Reflectance
+
+A. Representative Crown Base-Band Trajectory    
+
+> RGRE NIR
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+> Index value
+
+B. Representative Crown Vegetation-Index Trajectory   
+
+> NDVI NDRE GNDVI
+
+Mar 01 May 01 Jul 01 Sep 01 Nov 01 
+
+Acquisition date 
+
+0.5 
+
+0.6 
+
+0.7 
+
+0.8 
+
+0.9 
+
+> NDVI
+
+C. NDVI Trajectory Diversity Across Selected Crowns 
+
+> crown_002219
+> crown_002396
+> crown_002481
+> crown_002492
+> crown_002802
+> crown_002939
+
+Fig. 3: Seasonal crown trajectories from polygon-pooled handcrafted features. The top panel shows base-band reflectance over time for a representative crown. The middle panel shows vegetation-index trajectories for the same crown. The bottom panel shows NDVI trajectories for six selected crowns with full temporal coverage. views of the same crown remain close in embedding space, while the reconstruction term evaluates whether temporal tokens retain enough seasonal information to predict masked per-date spectral summaries. The exported checkpoint is summarized in Tab. 3.        
+
+> Metric Value Selection rule Minimum validation objective Exported crowns 5,885 Embedding dimension 256 PC1+PC2 variance explained 25.1% First 8 PCs variance explained 71.8% Median top-1 retrieval cosine similarity 0.946 Tab. 3: Selected model and embedding-space summary statistics.
+
+6.3 Baselines and ablations 
+
+Tab. 4 compares the selected model with handcrafted temporal features, a learned mean-pooling temporal baseline, three ablations of the PhenoEmbed design, and a batch-size sensitivity run. The handcrafted baseline uses standardized polygon-pooled spectral and vegetation-index summaries, while the learned variants use the same crop-safe crown set and 256-dimensional embedding export pipeline as the full model. The comparison supports three observations. First, compared with the two simpler baselines, the full temporal Transformer produces more compact nearest-neighbor structure: median top-1 cosine similarity increases from 0.855 for handcrafted temporal features and 0.847 for mean pooling to 0.946 for full PhenoEmbed. Second, removing either contrastive learning or masked reconstruction still yields compact embedding neighborhoods, with median top-1 similarities of 0.948 and 0.968. This is consistent with the contrastive branch acting mainly as a view-consistency signal in the selected batch-size-2 run. These values should not be read as a downstream ranking by themselves; they show that each individual objective can organize the embedding space, but compact retrieval neighborhoods do not prove that the representation preserves the most useful biological variation. Third, removing seasonal time encoding still retains meaningful retrieval structure but produces a shorter run and distinct PCA concentration, suggesting that explicit seasonal position affects temporal calibration. Increasing the batch size from 2 to 16 did not improve the intrinsic embedding diagnostics under the tested training schedule: median top-1 similarity decreased from 0.946 to 0.867. Because the larger-batch run also used a different learning rate and stopping schedule, this result shows that more in-batch negatives were not sufficient to improve the representation. We therefore interpret nearest-neighbor similarity as a diagnostic of local embedding compactness, not as an objective criterion for selecting the biologically best representation. Model Type Steps PC1+PC2 Top-1 sim. Handcrafted temporal features baseline – 37.1% 0.855 Mean-pooling temporal encoder baseline 50,000 17.0% 0.847 Full PhenoEmbed baseline 50,000 25.1% 0.946 PhenoEmbed, batch 16 sensitivity 11,952 13.1% 0.867 No contrastive loss ablation 50,000 35.3% 0.948 No reconstruction loss ablation 50,000 30.5% 0.968 No seasonal time encoding ablation 17,894 37.6% 0.929 Tab. 4: Baseline, ablation, and training-sensitivity results on the crop-safe crown set. PC1+PC2 reports the percentage of embedding variance explained by the first two principal components. Top-1 sim. is reported as an intrinsic compactness diagnostic, not as a downstream performance score. Validation objectives are used only for checkpoint selection within each learned run. 
+
+6.4 Embedding-space structure 
+
+The selected checkpoint is exported to one normalized 256-dimensional vector per crown. Fig. 4 shows the resulting crown embedding space projected with PCA and colored by each crown’s seasonal NDVI amplitude, defined as the maximum minus minimum polygon-pooled mean NDVI across the 18 dates. The first two components explain 25.1% of the embedding variance, and the first eight components explain 71.8%. This indicates that the model has not produced an unstructured cloud of arbitrary features. Crowns with larger seasonal NDVI amplitude tend to occupy different regions of the PCA projection than more stable crowns, suggesting that the learned embedding captures part of the seasonal vegetation signal while also retaining information beyond this single index. This comparison provides a biological sanity check: the embedding space is partly aligned with independently computed seasonal vegetation dynamics, but this does not replace downstream validation. As a second check, we tested whether the full 256-dimensional embeddings retain vegetation-index amplitude information beyond the first two PCA axes. A five-fold cross-validated ridge model predicted crown-level seasonal amplitude with 𝑅 2 = 0.525 for NDVI range and 𝑅 2 = 0.414 for NDRE range. This indicates that PhenoEmbed encodes biologically meaningful seasonal variation, while still leaving the downstream segmentation benefit to be tested directly. 
+
+6.5 Nearest-neighbor retrieval 
+
+Nearest-neighbor retrieval provides an additional intrinsic diagnostic of the embedding geometry. The selected model produces a median top-1 cosine similarity of 0.946, and the median cosine similarity across the top-10 retrieved neighbors is 0.902. This is not a downstream accuracy metric, but it shows that the learned representation supports crown-level search and inspection. Fig. 4: Selected-model PCA projection colored by seasonal NDVI amplitude, defined as the maximum minus minimum polygon-pooled mean NDVI across the 18 dates. The color overlay links learned embedding axes to independently computed vegetation-index dynamics. Fig. 5 shows the same retrieval idea spatially for one representative query crown. The map is inspired by recent embedding-field views of Earth observation, where learned geospatial vectors are used as compact, queryable representations for mapping tasks [Br25]. In contrast to global satellite embedding fields, PhenoEmbed attaches one temporal vector to each annotated UAV crown object. 
+
+# 7 Discussion 
+
+7.1 Why object-centric temporal embeddings are a good fit 
+
+PhenoEmbed makes a strong design choice: the unit of representation is an annotated crown, not an arbitrary tile crop. This ensures the model targets trees as the primary unit of analysis. In many forestry workflows, crown annotations are already available or can be generated by a separate delineation model. Once those object anchors exist, it is much more useful to compute one robust feature vector per tree than to estimate dense motion inside a crown whose appearance is seasonally transformed. The embedding can then be attached to the crown as a persistent tree descriptor. This perspective also aligns with the downstream goal. The project is not trying to forecast phenology for its own sake, nor to replace explicit segmentation models. It aims to produce a phenology-informed feature extractor that can later complement single-date models. A downstream model can then combine current-date appearance with a representation shaped by seasonal history. 
+
+7.2 Limitations 
+
+Several limitations remain. The selected model freezes the SegFormer backbone and uses a trainable four-to-three-channel adapter to reuse RGB pretraining, which is practical but compresses the multispectral signal before the backbone. The reconstruction target is also simple, using per-date band means rather than vegetation indices or spatially detailed crown structure. The selected model uses only a few in-batch negatives. A batch-size-16 sensitivity run did not improve the intrinsic diagnostics, but differences in learning rate and stopping schedule prevent a controlled attribution to batch size; a matched training comparison or queued-negative design remains future work. Most importantly, the evaluation is intrinsic: PCA, retrieval, and ablations show that the embedding space is structured, but they do not yet prove improved downstream crown segmentation under seasonal shift. Finally, the dataset is site-specific and forest-specific, so the present claim is not that PhenoEmbed is a universal geospatial foundation model, but that temporal crown embeddings are a promising route for reducing seasonal brittleness when repeated UAV multispectral coverage is available. Fig. 5: Spatial embedding retrieval map for a representative query crown. The background is the 30 June 2025 UAV orthomosaic rendered as synthetic RGB from the canonical 𝑅 , 𝐺 , and 𝑅𝐸 bands. The orthomosaic footprint is spatially transformed for display so that the raster fills the plotting box; the north arrow therefore follows the transformed map geometry rather than appearing vertical. Crown polygons are colored by cosine similarity between their PhenoEmbed vector and the highlighted query crown. The map provides a spatial inspection view of the learned embedding neighborhood. 7.3 Next steps 
+
+The implementation suggests a clear roadmap: 1. compare the selected frozen-backbone model with a fine-tuned spatial encoder; 2. add vegetation-index auxiliary reconstruction as an ablation; 3. test whether a single-date downstream model benefits from appending PhenoEmbed features to each crown annotation; 4. use downstream transfer, rather than intrinsic retrieval alone, to choose between the full objective and the single-loss ablations. 
+
+# 8 Conclusion 
+
+PhenoEmbed learns crown-level representations from multispectral UAV time series by using individual tree polygons as temporal anchors and training with self-supervised contrastive and masked reconstruction objectives. The results show that seasonal crown appearance contains strong structure: the learned embeddings organize crown trajectories more effectively than handcrafted spectral features and temporal mean pooling, while ablations indicate that both temporal modeling and objective design shape the representation. This supports the use of PhenoEmbed as a phenology-aware feature extractor for tree-level EO. The next step is to evaluate whether these embeddings improve downstream crown segmentation and tree analysis when training and deployment imagery come from different phenological stages. 
+
+LLM use declaration. OpenAI LLM assistance was used only to identify mistakes, check wording consistency, and make text-editing suggestions; all scientific content, experiments, interpretation, and final decisions remain the author’s responsibility. 
+
+# References       
+
+> [Bo26] Botticelli, D. et al.: Tree-LiMS: a Dataset of Multi-Temporal UAV LiDAR and Multispec-tral Data at Single-Tree Level in European Beech (Fagus sylvatica L.) Forests of the Alpe di Catenaia, Italy. Annals of Forest Science 83, p. 11, 2026. [Br25] Brown, C. F. et al.: AlphaEarth Foundations: An Embedding Field Model for Accurate and Efficient Global Mapping from Sparse Label Data, 2025, arXiv: 2507.22291 [cs.CV] .[Ch20] Chen, T. et al.: A Simple Framework for Contrastive Learning of Visual Representations. In: Proceedings of the 37th International Conference on Machine Learning. Vol. 119. Proceedings of Machine Learning Research, PMLR, pp. 1597–1607, 2020. [Co22] Cong, Y. et al.: SatMAE: Pre-Training Transformers for Temporal and Multi-Spectral Satellite Imagery, 2022, arXiv: 2207.08051 [cs.CV] .
+
+[CS23] Cheng, K.; Scott, G. J.: Deep Seasonal Network for Remote Sensing Imagery Classification of Multi-Temporal Sentinel-2 Data. Remote Sensing 15 (19), p. 4705, 2023. [DFK24] Dubrovin, I.; Fortin, C.; Kedrov, A.: An Open Dataset for Individual Tree Detection in UAV LiDAR Point Clouds and RGB Orthophotos in Dense Mixed Forests. Scientific Reports 14, p. 21938, 2024. [FMG23] Fuller, A.; Millard, K.; Green, J. R.: CROMA: Remote Sensing Representations with Contrastive Radar-Optical Masked Autoencoders, 2023, arXiv: 2311.00566 [cs.CV] .[FMN22] Freudenberg, M.; Magdon, P.; Nölke, N.: Individual Tree Crown Delineation in High-Resolution Remote Sensing Images Based on U-Net. Neural Computing and Applications 34, pp. 22197–22207, 2022. [He22] He, K. et al.: Masked Autoencoders Are Scalable Vision Learners. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR). Pp. 16000–16009, 2022. [HLW25] Hsu, C. - Y.; Li, W.; Wang, S.: Geospatial Foundation Models for Image Analysis: Evaluating and Enhancing NASA-IBM Prithvi’s Domain Adaptability. International Journal of Geographical Information Science 39 (9), pp. 2096–2125, 2025. [Ka26] Kankong, P. et al.: Monitoring Autumn Leaf Phenology at the Individual Tree Scale Using PlanetScope Satellite Imagery and Ground-Based Observations. Discover Ecology 2, p. 1, 2026. [KAG25] Khan, T.; Arnold, C.; Grover, H.: DeepTrees: Tree Crown Segmentation and Analysis in Remote Sensing Imagery with PyTorch. Journal of Open Source Software 10 (114), p. 8056, 2025. [Kh26] Khan, T.: HeideBench: A Multispectral UAV Time-Series Benchmark for Forest Crown Phenology in Dölauer Heide, PANGAEA, 2026, https : / / doi . pangaea . de / 10 . 1594 / PANGAEA.993969. [Kl24] Kloos, S. et al.: The Linkage Between Functional Traits and Drone-Derived Phenology of 74 Northern Hemisphere Tree Species. Science of the Total Environment 952, p. 175753, 2024. [Ko20] Kou, R. et al.: Progressive Domain Adaptation for Change Detection Using Season-Varying Remote Sensing Images. Remote Sensing 12 (22), p. 3815, 2020. [KVK23] Kleinsmann, J.; Verbesselt, J.; Kooistra, L.: Monitoring Individual Tree Phenology in a Multi-Species Forest Using High Resolution UAV Images. Remote Sensing 15 (14), p. 3599, 2023. [lv] lvermgeo: Digitale Orthophotos - Geodatenportal Sachsen-Anhalt — lvermgeo.sachsen-anhalt.de, https://www.lvermgeo.sachsen-anhalt.de/de/gdp-digitale-orthophotos.html, [Accessed 24-04-2026]. [OLV18] van den Oord, A.; Li, Y.; Vinyals, O.: Representation Learning with Contrastive Predictive Coding. arXiv preprint arXiv:1807.03748, 2018. [Oq23] Oquab, M. et al.: DINOv2: Learning Robust Visual Features Without Supervision, 2023, arXiv: 2304.07193 [cs.CV] .[Pa19] Park, J. Y. et al.: Quantifying Leaf Phenology of Individual Trees and Species in a Tropical Forest Using Unmanned Aerial Vehicle (UAV) Images. Remote Sensing 11 (13), p. 1534, 2019. [Sh24] Shenoy, J. et al.: Self-Supervised Learning Across the Spectrum. Remote Sensing 16 (18), p. 3470, 2024. [Ve24] Veitch-Michaelis, J. et al.: OAM-TCD: A globally diverse dataset of high-resolution tree cover maps, 2024, arXiv: 2407.11743 [cs.CV] , https://arxiv.org/abs/2407.11743. [Wa25] Wang, Y. et al.: Feature Guided Masked Autoencoder for Self-Supervised Learning in Remote Sensing. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing 18, pp. 321–336, 2025. [We20] Weinstein, B. G. et al.: DeepForest: A Python package for RGB deep learning tree crown delineation. Methods in Ecology and Evolution 11 (12), pp. 1743–1751, 2020. [Xi21] Xie, E. et al.: SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers, 2021, arXiv: 2105.15203 [cs.CV] .[Xi24] Xiao, A. et al.: Foundation Models for Remote Sensing and Earth Observation: A Survey, 2024, arXiv: 2410.16602 [cs.CV] .[Zh23] Zhao, H. et al.: A Systematic Review of Individual Tree Crown Detection and Delineation with Convolutional Neural Networks (CNN). Current Forestry Reports 9 (3), pp. 149–170, 2023, http://dx.doi.org/10.1007/s40725-023-00184-3.

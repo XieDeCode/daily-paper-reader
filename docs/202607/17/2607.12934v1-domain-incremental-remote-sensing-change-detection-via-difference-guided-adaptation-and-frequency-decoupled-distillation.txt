@@ -1,0 +1,949 @@
+Title: Domain-Incremental Remote Sensing Change Detection via Difference-Guided Adaptation and Frequency-Decoupled Distillation
+
+URL Source: https://arxiv.org/pdf/2607.12934v1
+
+Published Time: Wed, 15 Jul 2026 12:02:56 GMT
+
+Number of Pages: 33
+
+Markdown Content:
+# Domain-Incremental Remote Sensing Change Detection via Difference-Guided Adaptation and Frequency-Decoupled Distillation 
+
+Daifeng Peng ∗, Yaning Li, Haiyan Guan 
+
+> School of Remote Sensing and Geomatics Engineering, Nanjing University of Information Science and Technology, Nanjing 210044, China
+
+Abstract 
+
+Remote sensing change detection (RSCD) models are prone to catastrophic forgetting when incrementally adapted to new domains. Existing domain-incremental learning (DIL) methods mainly preserve image-level representations but often overlook bitemporal discrep-ancy cues, which are critical for robust change detection under domain shifts. To address this limitation, we propose DG-FDD, a domain-incremental change detection framework that integrates Difference-Guided Adaptation and Frequency-Decoupled Distillation. Specifically, the Difference-Guided Dynamic Adapter (DGDA) models bitemporal feature discrepancies to promote change-aware feature adaptation and reduce domain-specific interference. Mean-while, the Frequency-Decoupled Knowledge Distillation strategy with Cross-domain Synthesis (FDKD-CS) separates structural information from domain style in the frequency domain, enabling stable knowledge transfer without historical data. Extensive experiments on three public high-resolution RSCD datasets under two- and three-domain incremental protocols demonstrate that DG-FDD effectively mitigates catastrophic forgetting. Compared with in-dependently trained single-task models, DG-FDD records mean relative changes in F1 and IoU of only −0.23% and −0.45% , respectively, across six two-domain sequences, and −0.69% 
+
+and −1.31% , respectively, across the three evaluated three-domain sequences. These results indicate a favorable stability–plasticity balance between historical knowledge retention and new-domain adaptation in continual cross-domain change detection. Code will be available at 
+
+https://github.com/pandaielise/DG-FDD .
+
+Keywords: 
+
+Remote sensing change detection; Domain incremental learning; Catastrophic forgetting; Bitemporal discrepancy modeling; Frequency-domain distillation; Knowledge distillation 
+
+1. Introduction 
+
+Remote sensing change detection (RSCD) aims to identify dynamic surface changes by analyzing multi-temporal images acquired over the same geographical area and has become a fundamental technique in applications such as urbanization monitoring (Daudt et al., 2018),   
+
+> ∗Corresponding author at: School of Remote Sensing and Geomatics Engineering, Nanjing University of Information Science and Technology, Nanjing 210044, China.
+> Email address: daifeng@nuist.edu.cn (D. Peng) arXiv:2607.12934v1 [cs.CV] 14 Jul 2026
+
+land-use analysis (Das and Angadi, 2022), disaster assessment (Khan et al., 2023), and en-vironmental monitoring (Ma et al., 2024). In recent years, deep learning-based approaches, including Convolutional Neural Networks (CNNs) (Li et al., 2022), Transformers (Zhang et al., 2024), and Mamba architectures (Chen et al., 2024), have substantially advanced CD perfor-mance. Benefiting from their powerful nonlinear modeling capability and hierarchical feature representation learning ability, these methods have substantially improved both the accuracy and automation of CD systems (Cheng et al., 2024). However, most CD models assume that training and test data are independently and identically distributed, which rarely holds in real-world remote sensing applications. Variations in sensor configurations, imaging condi-tions, and seasonal characteristics often introduce substantial domain shifts across datasets, thereby limiting the generalization ability of CD models in practical cross-domain scenarios. Directly fine-tuning a model on newly acquired data typically drives its parameters to-ward the optimum of the new task, which can substantially degrade its ability to recognize change patterns from previously learned scenes. This phenomenon is commonly known as catastrophic forgetting (Kirkpatrick et al., 2017). Although retraining with all historical data can mitigate this issue, it is often impractical in large-scale scenarios due to storage, com-putational, and privacy constraints. Therefore, balancing new-domain adaptation with prior-knowledge preservation under limited access to historical data remains a key challenge for the continual deployment of CD models (Sha et al., 2026). To address catastrophic forgetting, several mainstream incremental learning paradigms have been developed, including replay-based methods (Lee et al., 2025), regularization-based methods (Douillard et al., 2021), and parameter-isolation methods (Rui et al., 2023; Shao et al., 2025). These methods balance his-torical knowledge preservation and new-task adaptation through experience replay, knowledge regularization, or task-specific parameter decoupling, and have shown promising performance in general visual recognition tasks. Recent advances in large-scale pretrained models have fur-ther promoted parameter-efficient continual learning through feature disentanglement, feature synthesis (Weng et al., 2026), and visual prompt learning (Li et al., 2026a), providing new opportunities to address the stability-plasticity dilemma under limited data availability. However, directly applying these conventional approaches to domain-incremental change detection (DICD) remains highly challenging. Unlike conventional incremental learning, DICD maintains a fixed label space while facing continuously evolving feature distributions caused by cross-domain variations in remote sensing imaging conditions. This setting gives rise to a central challenge for high-resolution RSCD under continual deployment: preserving previously learned change-structure knowledge with limited access to historical data while adapting to new-domain imaging characteristics induced by geographic, seasonal, and sensor variations. The mismatch between stable semantic supervision and drifting feature distributions can in-duce gradient conflicts during optimization, resulting in knowledge confusion and severe for-getting. MDINet (Weng et al., 2024), a representative DICD method, partially mitigates catastrophic forgetting through domain-specific residual adapters and hierarchical knowledge distillation. Nevertheless, existing DICD methods for high-resolution remote sensing imagery still have two key limitations. First, most parameter-efficient fine-tuning modules are inherited from single-temporal vision tasks and process bitemporal images through separate branches, as shown in Fig. 1(a). This weakens their ability to exploit temporal comparison cues and may cause overfitting to domain-specific image styles rather than robust cross-domain change semantics. Second, existing distillation and feature alignment strategies generally assume consistent teacher–student feature distributions. In cross-domain remote sensing scenarios, 2Fig. 1. Limitations of existing domain-incremental change detection methods in cross-domain scenarios. 
+
+however, substantial source–target distribution shifts are common, as illustrated in Fig. 1(b). These shifts can lead to biased teacher responses and semantic inconsistency during direct feature alignment, thereby degrading knowledge transfer in continual cross-domain learning. To address these challenges, this paper proposes a DICD framework for remote sensing im-agery that integrates a Difference-Guided Dynamic Adapter (DGDA) and frequency-domain distillation. Unlike existing methods that independently optimize temporal features or directly distill teacher representations, the proposed framework jointly exploits bitemporal discrepancy cues in the spatial domain and structural knowledge in the frequency domain. Specifically, DGDA incorporates bitemporal feature discrepancies into parameter adaptation, enabling change-relevant semantics to guide feature recalibration and suppress domain-specific ap-pearance interference. To improve cross-domain knowledge transfer, we further develop a Frequency-Decoupled Knowledge Distillation with Cross-Domain Feature Synthesis (FDKD-CS) strategy, which enforces phase-spectrum consistency and introduces cross-domain synthe-sized features during distillation. This design preserves structural knowledge while reducing the adverse effects of domain discrepancy on teacher supervision, thereby achieving a favorable balance between plasticity and stability without relying on historical data replay. The main 3contributions of this paper are summarized as follows. 
+
+• We propose DG-FDD, a DICD framework that jointly integrates difference-guided adap-tation and frequency-decoupled knowledge distillation to mitigate catastrophic forgetting under continuous domain shifts. 
+
+• We design a Difference-Guided Dynamic Adapter (DGDA) that exploits bitemporal fea-ture discrepancies to guide dynamic parameter adaptation, thereby enhancing change-relevant semantics while suppressing domain-specific appearance interference.We in-troduce FDKD-CS, a frequency-decoupled distillation strategy that combines phase-spectrum consistency with amplitude-guided cross-domain feature synthesis to reduce teacher student distribution mismatch during continual adaptation. 
+
+• Extensive experiments are conducted on three public high-resolution RSCD datasets under two-task and three-task domain-incremental protocols, demonstrating that DG-FDD achieves a favorable balance between stability and plasticity in continual cross-domain change detection. 
+
+2. Related Work 
+
+2.1. Deep learning-based change detection 
+
+Deep learning has become the dominant paradigm in RSCD due to its strong capabil-ity for hierarchical feature learning and nonlinear semantic modeling. Unlike conventional methods that rely on handcrafted features or shallow change representations (Bandara and Patel, 2025), end-to-end deep models learn change-discriminative representations directly from bitemporal images, thereby improving the extraction of complex change patterns (Peng et al., 2025). Existing RSCD networks have evolved from CNN-based Siamese and encoder-decoder architectures to attention-enhanced models (Lei et al., 2023; Zheng et al., 2025), Transformer-based models (Bandara and Patel, 2022; Zhang et al., 2022), CNN-Transformer hybrids (Wang et al., 2025; Yang et al., 2025), and recent Mamba-based architectures (Paranjape et al., 2025; Zhang et al., 2025a). These developments have substantially improved spatial representation, long-range dependency modeling, and computational efficiency. Nevertheless, most existing methods are developed under the assumption of static data distributions. When deployed in open and continuously evolving environments, they remain vulnerable to domain shifts, which can cause severe performance degradation and even catastrophic forgetting. 
+
+2.2. Incremental learning 
+
+Incremental learning (IL) aims to learn new tasks sequentially while retaining previously ac-quired knowledge. Its central challenge is to balance stability and plasticity. Existing IL meth-ods are commonly grouped into replay-based, regularization-based, and parameter-isolation approaches, with recent work increasingly moving toward hybrid frameworks. Replay-based methods mitigate catastrophic forgetting by rehearsing a small set of historical samples dur-ing new-task learning, thereby approximating joint training (Wang et al., 2024).To reduce memory costs, recent studies have replaced raw samples with feature representations (Iscen et al., 2020; Xuan et al., 2025), semantic queries (Zhu et al., 2024), or more effective sample selection strategies (Lee et al., 2025; Ceccon et al., 2024). However, their reliance on stored historical data limits the applicability in memory-constrained or privacy-sensitive scenarios. 4Regularization-based methods avoid data storage by constraining parameter updates or out-put responses to preserve prior knowledge (Kirkpatrick et al., 2017; Li and Hoiem, 2018). Although memory-efficient, they often struggle to maintain an effective stability-plasticity trade-off under distribution shifts. Parameter-isolation methods instead allocate task-specific parameters or lightweight adaptation modules to reduce interference between old and new knowledge (Mallya and Lazebnik, 2018). With the rise of pretrained models, parameter-efficient fine-tuning (PEFT) has become increasingly popular in continual learning (Xu et al., 2026). By freezing the backbone and introducing lightweight adapters, PEFT enables efficient adaptation with limited parameter overhead (Shao et al., 2025; Luo et al., 2026). Recent IL studies have further developed hybrid frameworks that combine experience replay, knowledge distillation, parameter-efficient fine-tuning, and domain adaptation to improve robustness un-der distribution shifts (Wang et al., 2024; Zhao et al., 2024; Zhou et al., 2025). In RSCD, IL is further extended to domain-incremental change detection (DICD), where models must continually adapt to new imaging domains caused by sensor, seasonal, and ge-ographic variations. Unlike conventional IL, DICD must preserve historical knowledge while handling continuously drifting feature distributions across domains.. Existing representative methods mainly combine parameter-efficient adaptation with knowledge preservation strate-gies to alleviate knowledge confusion during continual adaptation (Weng et al., 2024). Nev-ertheless, these methods largely inherit general IL paradigms and insufficiently exploit the unique characteristics of RSCD, particularly bi-temporal discrepancy modeling and robust knowledge transfer under domain shifts. 
+
+2.3. Bi-temporal difference modeling 
+
+CD differs from general remote sensing classification and segmentation because it focuses on identifying semantic changes between two temporally separated observations. Existing CD networks commonly model bitemporal relationships through Siamese feature extraction, fea-ture differencing, temporal attention, and multi-scale fusion (Hou et al., 2025; Peng et al., 2019). Recent studies have further improved difference modeling by introducing feature dif-ference maps (Chen et al., 2025), cross-domain feature aggregation strategies (Zhan et al., 2025), hybrid CNN-Transformer representations (Li et al., 2026b), and semantic interaction mechanisms (Hu et al., 2026), leading to better discrimination of changed regions and stronger suppression of background interference. However, these methods are mainly developed for one-stage offline training with static data distributions. In DICD, bitemporal features encode not only change semantics but also domain-specific appearance variations caused by sensor, sea-sonal, and geographic differences. Existing parameter-efficient adaptation methods often treat the two temporal branches independently, leaving bitemporal discrepancies underexploited as guidance for feature adaptation. As a result, domain-specific styles may become entangled with change semantics during continual adaptation, weakening the robustness of cross-domain change representation. Therefore, how to exploit bitemporal discrepancies while disentangling domain-specific styles from change semantics remains a critical yet underexplored challenge in DICD. 
+
+2.4. Knowledge distillation 
+
+Knowledge distillation (KD) is widely used in continual learning to preserve historical knowledge without accessing previous training data. Conventional KD methods mitigate 5catastrophic forgetting by encouraging the student model to mimic the teacher’s output re-sponses (Garg et al., 2021; Li and Hoiem, 2018). Recent studies have further extended dis-tillation from prediction logits to intermediate feature representations to retain high-level semantics and fine-grained spatial structures. Typical strategies include multi-level feature alignmen (Huang et al., 2024; Rui et al., 2023; Weng et al., 2024) and local structural distil-lation (Douillard et al., 2021), which have shown effectiveness in dense prediction tasks such as semantic segmentation and object detection. However, most KD methods assume that the teacher can provide reliable supervision for current-domain inputs. This assumption becomes problematic in DICD, where sensor, seasonal, and geographic variations can cause substantial distribution shifts and biased responses from the frozen teacher. In such cases, directly enforc-ing feature consistency may introduce semantic mismatch and degrade knowledge transfer, especially for structurally complex change patterns. These limitations motivate distillation strategies that account for teacher reliability under domain shifts. 
+
+3. Methodology 
+
+3.1. Problem formulation 3.1.1. Remote sensing change detection 
+
+Given a pair of strictly registered bitemporal remote sensing images X = {Xt1 , X t2 }, where 
+
+Xt1 , X t2 ∈ RH×W ×C denote remote sensing images acquired at times t1 and t2, respectively. H,
+
+W , and C denote the spatial size and spectral channel number. The goal of RSCD is to learn a parameterized model Φ to predict the corresponding binary change map ˆY ∈ { 0, 1}H×W .The value 1 denotes changed regions and 0 denotes unchanged regions. A CD network Φ generally consists of a feature extraction encoder Fθenc and a change decoding module Gθdec . For the input bitemporal images, the encoder first maps them into a deep feature space and extracts high-level semantic features F t1 = Fθenc (Xt1 ) and F t2 =
+
+Fθenc (Xt2 ), where F ∈ RH′×W ′×D. The Gθdec then extracts temporal difference relationships between these two feature groups and restores the spatial resolution, finally outputting a change probability map P ∈ RH×W ×2:
+
+P = σ  Gθdec (F t1 , F t2 ) (1) where σ(·) denotes the Softmax activation function, P (h,w ) 
+
+> c
+
+∈ [0 , 1] denotes the confidence probability predicted by the network that spatial position (h, w ) belongs to class c ∈ { 0, 1}.In conventional static scenarios, the model is optimized end-to-end by minimizing the standard pixel-level Cross-Entropy Loss (CE): 
+
+LCE = − 1
+
+H × W
+
+> H
+
+X
+
+> h=1
+> W
+
+X
+
+> w=1 1
+
+X
+
+> c=0
+
+I  y(h,w ) = c log  P (h,w )
+
+> c
+
+ (2) where I(·) denotes the indicator function, which equals 1 when the condition is satisfied and 0 otherwise. Although this objective effectively learns bitemporal change features, it relies on the as-sumption of independently and identically distributed training and test data. Under open and dynamic deployment, the mismatch between a fixed label space and drifting feature distribu-tions can undermine static optimization, resulting in knowledge confusion and catastrophic forgetting. 63.1.2. Domain Incremental Change Detection 
+
+Due to variations in sensor configurations, geographical regions, seasonal conditions, and imaging environments, remote sensing data acquired at different stages often exhibit substan-tial distribution shifts. To characterize this dynamic learning process, DICD is formulated as a multi-stage sequential learning task. Specifically, the model is assumed to experience 
+
+T incremental stages sequentially, denoted as t ∈ { 1, 2, . . . , T }. At the t-th stage, only the current-domain dataset is accessible: 
+
+Dt = {(Xt,i , Y t,i )}Nt 
+
+> i=1
+
+(3) where Nt denotes the number of samples in the current stage, and Xt,i and Yt,i represent the bi-temporal image pair and corresponding binary change label, respectively. Unlike conventional static learning, DICD involves substantial shifts in the marginal dis-tribution of the input space X as learning progresses, namely: 
+
+P(Xt)̸ = P(Xt′ ), ∀t̸ = t′, t, t ′ ∈ { 1, 2, . . . , T } (4) where P(Xt) denotes the marginal distribution of input images at the t-th incremental stage. Furthermore, different from IL, where the label space continuously expands over time (i.e., 
+
+Y1 ⊂ Y 2 ⊂ · · · ⊂ Y T ), the label space in DICD remains unchanged throughout all stages: 
+
+Y1 ≡ Y 2 ≡ · · · ≡ Y T ≡ { 0, 1} (5) where Yt denotes the label space at the t-th incremental stage, T represents the total number of incremental tasks, ⊂ denotes the proper subset operator, and ≡ indicates strict set equivalence. Equations (4) and (5) highlight the mismatch between a fixed label space and a drifting feature space. Due to domain shifts, identical land-cover categories often exhibit distinct visual characteristics across domains; for instance, a feature pattern indicating real changes in domain Dt−1 may merely reflect seasonal variations in domain Dt.Furthermore, since access to historical data D1: t−1 is restricted at stage t, optimizing θt
+
+(initialized from θt−1) solely on Dt using standard cross-entropy loss biases the model toward the current distribution P(Xt). This disrupts the previously established mapping P(X1: t−1) →Y1: t−1, leading to catastrophic forgetting of historical patterns. Therefore, the objective of DICD is to learn an optimal parameter set that balances current-domain adaptation and historical knowledge preservation under data-restricted conditions: 
+
+θ∗ 
+
+> T
+
+= arg min 
+
+> θT
+
+X
+
+> t=1
+
+E(Xt,Y t)∼D t [L (Φ( Xt; θ), Y t)] (6) where θ∗ 
+
+> T
+
+denotes the desired global optimal parameter set after completing all T incremental stages, E[·] represents the expectation operator corresponding to the empirical risk over domain 
+
+Dt, and L(·, ·) denotes the loss function measuring the discrepancy between predictions and ground-truth labels. Existing DICD methods typically mitigate catastrophic forgetting through parameter iso-lation and knowledge distillation. However, parameter isolation often underuses bitemporal feature interactions, while knowledge distillation may suffer from unreliable teacher super-vision under severe domain shifts. Effectively exploiting bitemporal discrepancy cues while preserving historical-domain knowledge therefore remains a key challenge for DICD. A detailed analysis is provided in the Appendix. 73.2. Overview of the proposed DG-FDD 
+
+To address knowledge confusion and unreliable distillation under domain shifts, we propose DG-FDD, a domain-incremental change detection framework built on a Siamese DeepLabV3+ architecture. As illustrated in Fig. 2, DG-FDD adopts a teacher-student scheme with a frozen teacher and a trainable student. Both networks use an ImageNet-pretrained ResNet-50 encoder with shared weights between the two temporal branches. During incremental learning, the encoder remains frozen, while only the lightweight adaptation modules and the current-domain decoder are updated. To explicitly incorporate bitemporal cues into incre-mental adaptation, DGDA is introduced into the shallow and intermediate feature extraction stages, where bitemporal feature discrepancies are used to recalibrate adapter responses in a change-sensitive manner. This enables the model to enhance change-relevant channels while suppressing background- and domain-specific interference. The high-level features are fur-ther processed by Atrous Spatial Pyramid Pooling (ASPP) and task-specific decoder heads to capture multi-scale context and produce change predictions. To mitigate forgetting under severe domain shifts, DG-FDD further employs a frequency-decoupled dual-track distillation strategy, where cross-domain hybrid features are synthesized by combining historical-domain amplitude priors with current-domain phase information. These synthesized features, together with original features, guide knowledge distillation to improve new-domain adaptation while preserving historical knowledge. By integrating difference-guided adaptation and frequency-domain knowledge transfer, DG-FDD jointly enhances cross-domain change semantic modeling and continual knowledge preservation in DICD.  
+
+> Fig. 2. Overall framework of the proposed DG-FDD.
+
+3.3. Difference-Guided Dynamic Adapter (DGDA) 
+
+Traditional parameter-efficient fine-tuning modules designed for single-temporal tasks typ-ically process bitemporal images through separate branches. Under cross-domain incremental scenarios, this temporal independence often causes the adapters to adapt to domain-specific style features rather than robust change semantics. To address this limitation, we propose DGDA. By introducing a bitemporal difference prior, DGDA leverages cross-temporal com-parison cues to guide the adapter channels to focus on change-relevant features. As illustrated 8in Fig. 3, the DGDA module is embedded in a parallel bypass manner after the residual blocks of the frozen backbone network (Layer 1–Layer 3). Given the feature representations at the l-th layer, the DGDA module operates through three main stages: temporal difference perception, joint feature modeling, and difference-guided recalibration. Through these opera-tions, change-relevant information is selectively enhanced, while domain-specific disturbances are suppressed, thereby aiming to enhance the robustness of feature representations under cross-domain incremental learning scenarios.  
+
+> Fig. 3. Architecture of the DGDA.
+
+3.3.1. Bitemporal difference prior estimation 
+
+Let F l 
+
+> in ,T 1
+
+, F l 
+
+> in ,T 2
+
+∈ RC×H×W denote the bitemporal feature maps output by the l-th residual block of the frozen backbone. In change detection, genuine change regions typically correspond to significant feature discrepancies between these bitemporal observations, whereas unchanged background regions tend to exhibit consistent semantic representations. To capture these discrepancies, we compute an absolute difference map Dl to serve as a prior indicator of change intensity: 
+
+Dl = F l 
+
+> in ,T 1
+
+− F l 
+
+> in ,T 2
+
+(7) where Dl encodes the spatial distribution of temporal discrepancies, providing an explicit guidance signal to help suppress domain-specific style variations. 93.3.2. Joint feature modeling and difference-guided channel attention 
+
+To simultaneously capture individual temporal content and cross-temporal change inten-sity, we adopt a joint channel-attention modeling strategy. Specifically, global average pooling (GAP) is applied to extract the global contextual descriptor of the i-th temporal feature (i ∈ { 1, 2}) and the global statistical descriptor of the absolute difference map at the l-th layer: 
+
+Zfeat ,i = GAP  F l
+
+> in ,T i
+
+ (8) 
+
+Zdiff = GAP  Dl (9) where Zfeat ,i represents the global contextual descriptor of the i-th temporal feature, and Zdiff 
+
+represents the global statistical discrepancy prior derived from the absolute difference map at the l-th layer. The two descriptors are concatenated along the channel dimension to construct a joint representation that integrates temporal semantic content with the change prior: 
+
+Zjoint ,i = [ Zfeat ,i ∥ Zdiff ] (10) where Zjoint ,i denotes the fused feature vector for the i-th temporal branch, and ∥ represents the concatenation operation along the channel dimension. Since both Zfeat ,i and Zdiff have a dimensionality of C, the joint vector Zjoint ,i has a dimensionality of 2C.Subsequently, a bottleneck MLP composed of two fully connected layers models the inter-channel dependencies, generating the difference-guided channel attention weight wi for each temporal branch: 
+
+wi = σ (W2 · δ (W1 · Zjoint ,i )) (11) where δ(·) and σ(·) denote the ReLU and Sigmoid activation functions, respectively. W1 ∈
+
+RC/r ×2C and W2 ∈ RC×C/r are learnable parameters, and r represents the reduction ratio. This design uses global bitemporal discrepancy statistics to activate change-relevant channels for each branch individually. 
+
+3.3.3. Difference-guided feature recalibration and residual injection 
+
+The channel weight wi acts as an adaptive gating mechanism. Under the guidance of Zdiff ,the model is encouraged to assign higher responses to channels associated with pronounced differences while suppressing those with weak variations. The original backbone features are recalibrated using this weight to help filter out change-irrelevant style information: 
+
+˜F lTi = F l 
+
+> in ,T i
+
+⊙ wi (12) where ˜F lTi represents the recalibrated feature map, and ⊙ denotes channel-wise multiplication. Finally, the recalibrated features are injected back into the backbone’s data flow via a residual connection, yielding the refined bitemporal feature pair output {F l 
+
+> out ,T 1
+
+, F l 
+
+> out ,T 2
+
+}:
+
+F l 
+
+> out ,T i
+
+= F l 
+
+> in ,T i
+
++ Conv 1×1
+
+ ˜F lTi
+
+
+
+(13) where F l 
+
+> out ,T i
+
+represents the refined output feature map for temporal branch Ti (i ∈ { 1, 2}), and Conv 1×1 denotes a 1 × 1 convolutional layer used to align channel dimensions. 10 3.3.4. Sparsity constraint strategy 
+
+The channel attention weight wl,i ∈ (0 , 1) Cl (for layer l and temporal branch Ti) determines the activation level of the adapter parameters. Without explicit regularization, the adapter may activate a large number of channels to overfit fine-grained, domain-specific textures, potentially blending semantic changes with background styles. To address this, we introduce an L1-style sparsity regularization constraint on the attention weights to encourage selective activation. Specifically, the sparsity loss LSparse is defined as the mean of the attention weights generated across all layers and temporal branches: 
+
+LSparse = 12L
+
+> L
+
+X
+
+> l=1 2
+
+X
+
+> i=1
+
+1
+
+ClClX
+
+> c=1
+
+wl,i,c 
+
+!
+
+(14) where L is the number of layers containing DGDA modules, Cl is the channel dimension at layer l, and wl,i,c denotes the attention weight of the c-th channel of temporal branch Ti at layer l.To prevent the trivial solution where all weights collapse to zero, LSparse is optimized jointly with task-specific losses . This regularization penalizes redundant channel activations, guiding the attention mechanism to selectively activate channels highly correlated with change semantics while suppressing background noise. 
+
+3.4. Frequency-Decoupled Knowledge Distillation with Cross-Domain Feature Synthesis (FDKD-CS) 
+
+Under domain shifts, teacher models trained on historical domains may produce biased representations for new-domain images. Direct knowledge distillation (KD) on such domain-discrepant inputs can introduce unreliable constraints, compromising the stability–plasticity trade-off. To alleviate this supervision degradation, we propose FDKD-CS. Exploiting the frequency characteristics of remote sensing imagery, FDKD-CS disentangles the amplitude spectrum, which mainly encodes domain-specific style variations, from the phase spectrum, which preserves domain-invariant structures and object boundaries. By recombining these components, FDKD-CS generates pseudo-historical style features with new-domain structural information, providing a reliable knowledge transfer pathway without accessing historical data. To enable cross-domain feature synthesis without violating the data privacy constraint of incremental learning, we introduce pre-stored historical amplitude prototypes, denoted as 
+
+¯AT1 
+
+> old
+
+and ¯AT2
+
+> old
+
+. Specifically, after training each historical domain, the frozen teacher model is used to extract high-level features from the corresponding domain. The amplitude spectra of the extracted features are obtained via FFT and averaged over all samples to construct the global amplitude prototypes: 
+
+¯ATi 
+
+> old
+
+= 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+F(F Ti 
+
+> n
+
+) , i ∈ { 1, 2} (15) where F Tk 
+
+> n
+
+denotes the high-level feature of the n-th historical sample from temporal branch 
+
+Tk, and N is the number of samples used for estimation. As illustrated in Fig. 4, FDKD-CS performs frequency-domain feature synthesis to con-struct cross-domain representations. Given the new-domain bitemporal features F T1 
+
+> new
+
+and 
+
+F T2 
+
+> new
+
+∈ RC×H×W extracted from the student backbone, a two-dimensional Fast Fourier Trans-form (2D FFT) is first applied to obtain their frequency-domain representations: 11 F  F Ti
+
+> new
+
+ (u, v ) = 
+
+> H−1
+
+X 
+
+> h=0
+> W−1
+
+X
+
+> w=0
+
+F Ti
+
+> new
+
+(h, w )e−j2π(uh H + vw W ) (16) where F  F Ti
+
+> new
+
+ (u, v ) denotes the complex spectral representation of spatial feature map F Ti
+
+> new
+
+at frequency coordinate (u, v ), and j represents the imaginary unit. 
+
+Fig. 4. Frequency-domain decoupled cross-domain feature synthesis pipeline. 
+
+These complex representations are further decomposed into amplitude spectra A  F Ti
+
+> new
+
+
+
+and phase spectra P  F Ti
+
+> new
+
+:
+
+A  F Ti
+
+> new
+
+ = F  F Ti
+
+> new
+
+ , P  F Ti
+
+> new
+
+ = ∠F  F Ti
+
+> new
+
+ (17) where |·| and ∠ denote the modulus operation and the phase extraction operator, respectively. To inject historical style properties while preserving the spatial structure of the new do-main, the style-related amplitude spectra A  F Ti
+
+> new
+
+ are discarded. We then pair the domain-invariant phase spectra P  F Ti
+
+> new
+
+ with the corresponding pre-stored global historical amplitude templates ¯ATi
+
+> old
+
+. The combined frequency representations are subsequently mapped back to the spatial domain via the 2D inverse Fast Fourier Transform (2D iFFT), yielding the single-temporal synthesized features F T1 
+
+> syn
+
+and F T2
+
+> syn
+
+:
+
+F Ti 
+
+> syn
+
+= F−1
+
+
+
+¯ATi 
+
+> old
+
+· ej·P  
+
+> 
+> FTi
+> new
+> 
+
+
+
+(18) where F−1(·) represents the 2D iFFT, and ej·P  
+
+> 
+> FTi
+> new
+> 
+
+forms the unit-modulus complex repre-sentation constructed from the phase spectrum. After inverse Fourier reconstruction, the synthesized bitemporal features are transformed into difference representations by temporal feature subtraction. Specifically, the synthesized difference feature Fsyn and the original new-domain difference feature Fnew are obtained as: 
+
+Fsyn = F T1 
+
+> syn
+
+− F T2
+
+> syn
+
+, Fnew = F T1 
+
+> new
+
+− F T2 
+
+> new
+
+(19) 12 The resulting difference representations are subsequently processed by the ASPP module and task-specific decoder heads for semantic prediction. To regularize the network and mitigate forgetting under severe domain shifts, we apply complementary alignment constraints at both the feature and decision levels. At the feature level, we introduce a phase-based structural consistency loss Lphase to align the bitemporal spatial structure of the student with the stable structural representations of the teacher: 
+
+Lphase = 12
+
+
+
+P  F T1
+
+> new
+
+ − P T1 
+
+> old
+> 22
+
++ P  F T2
+
+> new
+
+ − P T2
+
+> old
+> 22
+
+
+
+(20) where PT1 
+
+> old
+
+and PT2 
+
+> old
+
+represent the reference phase spectra generated by the teacher model pro-cessing the same inputs, and ∥·∥ 22 represents the mean squared error. No constraint is imposed on the amplitude spectrum, allowing the student to adaptively fit the style distributions of the new domain. At the decision level, the dual-track distillation loss LKD is enforced on the fused dif-ference features to maintain consistent predictions across both real and synthesized feature distributions: 
+
+LKD normal = LKL (σ (Logits S (Fnew )) , σ (Logits T (Fnew ))) (21) 
+
+LKD syn = LKL (σ (Logits S (Fsyn )) , σ (Logits T (Fsyn ))) (22) 
+
+LKD = 12
+
+ LKD normal + LKD syn 
+
+ (23) where LKL (·) is the Kullback–Leibler divergence, σ(·) denotes a normalization operation, and Logits S(·) and Logits T(·) represent the prediction logits produced by the student and teacher models at the old-task decoder head. This dual-track formulation ensures consistent decision-level boundaries, effectively pro-moting the stability-plasticity balance in continual cross-domain change detection. 
+
+3.5. Training Objective and Optimization 
+
+In the DICD framework, learning at stage t requires adapting the model to the current target domain Dt while preserving discriminative capabilities on previously learned domains 
+
+D1: t−1 under a data-free constraint. To establish this stability-plasticity balance, we formu-late a teacher-student optimization paradigm. The frozen historical model from the previous stage, denoted as Mt−1 (parameterized by θt−1), acts as the teacher to provide stable histor-ical supervision. Correspondingly, the current model Mt (parameterized by θt, initialized as 
+
+θt = θt−1) serves as the student network to be optimized. This dual-model framework guides representation learning by combining task-specific supervised loss with multileveled alignment constraints. To promote adaptation to the current domain, task-specific supervision is en-forced via a pixel-level cross-entropy loss LCE on Dt. For each batch of incoming bitemporal image pairs, the student network generates change predictions via the newly appended decoder branch. The task-supervised loss is formulated as: 
+
+LCE = − 1
+
+Npix 
+
+> Npix
+
+X
+
+> i=1
+
+h
+
+Y (i) 
+
+> t
+
+log 
+
+
+
+P (i)
+
+> t
+
+
+
++
+
+
+
+1 − Y (i)
+
+> t
+
+
+
+log 
+
+
+
+1 − P (i)
+
+> t
+
+i 
+
+(24) where Y (i) 
+
+> t
+
+∈ { 0, 1} denotes the pixel-level ground-truth change label, P (i) 
+
+> t
+
+= Mt(X(i); θnew )
+
+represents the predicted change probability produced by the student network, and Npix is the total number of pixels in a training batch. 13 To preserve historical knowledge during incremental adaptation, three complementary reg-ularization terms are jointly optimized. The feature-level phase consistency loss Lphase pre-serves domain-invariant spatial structures under domain shifts, while the dual-track distillation loss LKD maintains prediction consistency on both original and synthesized feature distribu-tions. Meanwhile, the sparsity constraint LSparse regularizes adapter activation by promoting selective channel utilization and reducing domain-specific overfitting. Accordingly, the student network is optimized by jointly considering task adaptation and knowledge preservation. The overall objective at incremental stage t is formulated as: 
+
+LTotal = LCE + λph (e)Lphase + LKD + LSparse , (25) where λph (e) is an adaptive coefficient controlling the contribution of phase consistency regularization during training. To avoid restricting early-stage adaptation to the target domain, a step-wise warm-up strategy is adopted for λph (e). Specifically, the phase consistency constraint is disabled in the first 20 epochs and activated afterward with a fixed weight of 0.1. The corresponding scheduling function is defined as: 
+
+λph (e) = 
+
+(
+
+0, e ≤ 20 ,
+
+0.1, e > 20 , (26) where e denotes the current training epoch. The complete incremental optimization pro-cedure at stage t is summarized in Algorithm 1. 
+
+Algorithm 1 Training Procedure of DG-FDD for Domain-Incremental Change Detection 
+
+Require: Previous model Mt−1, current-domain data Dt, historical amplitude prototypes ¯Aold 
+
+Ensure: Updated model Mt 
+
+> 1:
+
+Initialize Mt ← Mt−1; freeze teacher and backbone  
+
+> 2:
+
+for each epoch e do  
+
+> 3:
+
+for each bitemporal sample (XT1 
+
+> t
+
+, X T2 
+
+> t
+
+, Y t) do  
+
+> 4:
+
+Extract hierarchical features with Siamese encoder  
+
+> 5:
+
+Generate difference-aware representations using DGDA  
+
+> 6:
+
+Construct current-domain difference feature Fnew  
+
+> 7:
+
+Perform frequency-decoupled synthesis with historical amplitude and current phase to obtain Fsyn  
+
+> 8:
+
+Predict change maps using ASPP and task-specific decoder  
+
+> 9:
+
+Calculate LCE , LKD , Lphase and LSparse  
+
+> 10:
+
+Update Mt by minimizing LT otal  
+
+> 11:
+
+end for  
+
+> 12:
+
+end for  
+
+> 13:
+
+Store historical amplitude prototypes for future increments  
+
+> 14:
+
+return Mt
+
+14 4. Experimental results and discussion 
+
+4.1. Datasets description 
+
+Three high-resolution RSCD datasets, i.e., LEVIR-CD (Chen and Shi, 2020), CDD (Lebe-dev et al., 2018), and GZ-CD (Peng et al., 2021), are employed to construct continuous DICD scenarios for evaluating the effectiveness of the proposed method. The characteristics and cor-responding data splits of these datasets are summarized in Table 1. As illustrated in Fig. 5, these datasets exhibit considerable variations in land-cover distributions, background textures, and imaging conditions, reflecting the inherent heterogeneity across different remote sensing scenarios. To further quantify the domain discrepancy, Figs. 6–7 analyze the low-level visual statistics and high-level semantic feature distributions, respectively. The results demonstrate evident shifts in both color distributions and deep feature embeddings, confirming substantial cross-domain discrepancies among different datasets. Accordingly, the three datasets are se-quentially regarded as incremental domains D1, D2, and D3 to simulate realistic continuous DICD.  
+
+> Table 1 Detailed characteristics and split statistics of the three experimental datasets.
+
+Characteristic LEVIR-CD CDD GZ-CD 
+
+Image Mode RGB RGB RGB Capturing Time 2002–2018 Seasonal variations 2006–2019 Included Location Texas, USA Google Earth (Global) Guangzhou, China Spatial Resolution 0.5 m/pixel 0.03–1.0 m/pixel 0.55 m/pixel Original Size 1024 × 1024 4725 × 2700 ,
+
+1900 × 1000 1006 × 1168 to 
+
+4936 × 5224 
+
+Original Pairs 637 11 19 Cropped Size 256 × 256 256 × 256 256 × 256 
+
+Total Cropped Pairs 10,192 16,000 3,443 Dataset Split Pairs 7,120 : 1,024 : 2,048 10,000 : 3,000 : 3,000 2,753 : 345 : 345 (Train : Val : Test) (≈ 70% : 10% : 20% ) (62 .5% : 18 .75% : 18 .75% ) (≈ 80% : 10% : 10% ) 
+
+> Fig. 5. Multi-domain incremental change detection datasets.
+
+15 Fig. 6. Comparison of normalized color frequency in RGB channels among LEVIR-CD, CDD, and GZ-CD datasets.  
+
+> Fig. 7. t-distributed stochastic neighbor embedding (t-SNE) visualization of the high-level semantic feature distributions across LEVIR-CD, CDD, and GZ-CD.
+
+4.2. Implementation details 
+
+The proposed DG-FDD framework and all baseline methods are implemented in PyTorch. Experiments are conducted on two NVIDIA GeForce RTX 4060 Ti GPUs with 16 GB memory each. Both the student and teacher networks use ImageNet-pretrained ResNet-50 backbones, where the residual blocks and batch normalization layers are frozen throughout continual learning to reduce parameter-update interference. Only the DGDA modules and task-specific decoder heads are optimized. Random horizontal flipping, vertical flipping, and rotation are applied for data augmentation. To simulate real-world streaming scenarios, two-task and three-task cross-domain incremental settings are constructed, where models are trained se-quentially across domains (e.g., LEVIR-CD → CDD → GZ-CD) without accessing raw data from previous domains. For each task, the model is trained for 150 epochs with a batch size of 8 using the AdamW optimizer, with an initial learning rate of 5 × 10 −4 and a weight decay of 
+
+1 × 10 −4. A LambdaLR scheduler is used for smooth convergence, and the frequency-domain 16 phase consistency loss is activated after a 20-epoch warm-up with its weight fixed at 0.1. 
+
+4.3. Evaluation metrics 
+
+For each independent incremental task, four widely used metrics in CD are adopted for quantitative evaluation, including Precision, Recall, Intersection over Union (IoU), and F1-score. The corresponding formulations are given as follows: Precision = T P T P + F P (27) Recall = T P T P + F N (28) 
+
+F 1 = 2
+
+recall −1 + precision −1 (29) IoU = T P T P + F N + F P (30) where, True Positive ( T P ) denotes correctly classified changed pixels, False Positive ( F P )represents unchanged pixels incorrectly predicted as changed, True Negative ( T N ) indicates correctly classified unchanged pixels, and False Negative ( F N ) refers to missed changed pixels. While these conventional metrics evaluate the performance of a model on a specific domain, they fail to capture the degree of catastrophic forgetting in incremental learning. To quantify knowledge retention on previous domains after learning new ones, we follow the evaluation protocol of (Weng et al., 2024) and introduce the average performance degradation metrics 
+
+∆F1 and ∆IoU, which are defined as: 
+
+∆IoU = 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+IoU m,t − IoU b,t 
+
+IoU b,t 
+
+(31) 
+
+∆F1 = 1
+
+T
+
+> T
+
+X
+
+> t=1
+
+F1 m,t − F1 b,t 
+
+F1 b,t 
+
+(32) where T denotes the total number of learned tasks. IoU m,t and F1 m,t represent the performance of the incremental model m on task t after completing all training stages, while IoU b,t and F1 b,t denote the corresponding results of the single-task baseline model b.A smaller ∆F1 or ∆IoU indicates that the incremental model is closer to the upper-bound performance achieved by single-task training, suggesting milder forgetting and a better stability–plasticity trade-off. In contrast, larger values indicate more severe degradation of previously learned knowledge. 
+
+4.4. Competitors 
+
+To evaluate the effectiveness of DG-FDD, we compare it with representative CD and IL methods, including conventional training strategies, CD networks, and DIL approaches. 1) Single-task: Models are independently trained and evaluated on each domain using the full training data. Without incremental learning, this setting is unaffected by catas-trophic forgetting and serves as an empirical upper bound for single-domain performance. 17 2) FT: A basic IL baseline that sequentially fine-tunes the model on each new domain without any forgetting-mitigation mechanism. 3) FE: A parameter-freezing baseline that fixes the feature extractor after source-domain training and updates only the task-specific decoder during incremental learning. 4) BIT (Chen et al., 2022): A Transformer-based CD method that models global contextual relationships between bitemporal features for change detection. 5) STRobustNet (Zhang et al., 2025b): A robust CD method that addresses bitemporal spatiotemporal inconsistencies through global and sample-level contextual modeling. 6) MDIL (Garg et al., 2021): A DIL method that dynamically isolates domain-invariant and domain-specific parameters to balance knowledge retention and adaptation. 7) MDINet (Weng et al., 2024): A DIL method for multidomain CD that mitigates cross-domain knowledge interference through domain residual adaptation and hierarchical knowledge distillation. 8) FOCUS (Joham et al., 2025): A feature-replay-based IL method that stores historical features and imposes feature consistency constraints to mitigate catastrophic forgetting. 9) DI-FRCNN (Luo et al., 2026): A dual-teacher DIL method that combines pseudo-label supervision and knowledge-transfer constraints to facilitate new-domain adaptation while preserving previously learned knowledge. 
+
+4.5. Comparative analysis 4.5.1. Two-domain incremental learning analysis 
+
+Table 2 summarizes the results on the LEVIR → CDD two-domain incremental sequence, where LEVIR and CDD denote the historical and new domains after IL, respectively. The Single-task model provides the upper-bound performance by independently optimizing each domain. Direct fine-tuning (FT) achieves strong adaptation to CDD but incurs severe for-getting on LEVIR, reducing the F1 score to only 12 .55% . Similar degradation is observed in BIT and STRobustNet, demonstrating that feature adaptation alone cannot effectively preserve historical knowledge under domain shifts. The feature extraction strategy (FE) al-leviates forgetting by freezing most parameters and retains 89 .16% F1 on LEVIR, but its limited parameter updates restrict adaptation to CDD. Continual learning methods, includ-ing MDIL, FOCUS, and DI-FRCNN, provide improved stability-plasticity balance, yet still exhibit considerable performance degradation, with DI-FRCNN, MDIL, and FOCUS suffering decreases of −29 .70% in ∆F1, −31 .12% in ∆IoU, and −23 .25% in ∆IoU, respectively. MDINet further reduces forgetting through knowledge distillation, achieving relatively competitive per-formance with ∆F1 and ∆IoU of −4.01% and −7.03% . In comparison, the proposed method achieves a more favorable stability-plasticity balance. After IL, it obtains F1 scores of 90 .40% 
+
+and 96 .75% on LEVIR and CDD, respectively, with only 0.05% and 1.08% decreases from the corresponding Single-task models. The average degradation is limited to ∆F1 = −0.58% and 
+
+∆IoU = −1.12% , demonstrating superior knowledge retention while preserving effective adap-tation to the new domain. Fig. 8 presents qualitative comparisons under the LEVIR → CDD IL setting, where cyan and red regions denote omission and commission errors, respectively. In the new-domain CDD scenario, most existing methods exhibit degraded predictions under 18 Table 2 Detailed results of incremental experiments conducted on the LEVIR → CDD sequence for the proposed method and competing approaches. The arrow indicates the learning order. 
+
+Methods F1 (%) ∆F1 (%) IoU (%) ∆IoU (%) 
+
+LEVIR → CDD LEVIR → CDD Single-task 90 .45 97 .83 – 82 .57 95 .75 –BIT 40 .69 → 64 .34 −44 .62 25 .55 → 47 .43 −59 .76 
+
+STRobustNet 23 .77 → 89 .67 −41 .03 13 .49 → 81 .27 −49 .39 
+
+FT 12 .55 → 97 .02 −43 .48 6.69 → 94 .20 −46 .76 
+
+FE 89 .16 → 78 .40 −10 .64 80 .44 → 64 .47 −17 .77 
+
+MDIL 72 .18 → 79 .83 −19 .30 56 .47 → 66 .42 −31 .12 
+
+MDINet 84 .14 → 96 .81 −4.01 72 .63 → 93 .82 −7.03 
+
+FOCUS 73 .96 → 88 .22 −14 .03 58 .68 → 78 .93 −23 .25 
+
+DI-FRCNN 53 .61 → 79 .57 −29 .70 36 .62 → 66 .07 −43 .32 
+
+DG-FDD 90 .40 → 96 .75 −0.58 82 .48 → 93 .71 −1.12    
+
+> Fig. 8. Visual comparison of the proposed method and competing methods on the LEVIR →CDD incremental sequence.
+
+significant domain shifts caused by seasonal changes, snow coverage, and complex background textures. These variations mainly introduce commission errors in snow-covered and shadowed areas, as well as omission errors for small-scale building changes. For example, BIT and MDIL tend to generate false alarms in snow-covered regions, whereas FE, FOCUS, and DI-FRCNN produce fragmented predictions and inaccurate boundaries around narrow roads and building footprints, revealing limited adaptability to substantial appearance variations. In contrast, the proposed method effectively suppresses background-induced disturbances and achieves more complete change regions with refined spatial boundaries. In the historical-domain LEVIR sce-nario, several methods suffer from noticeable knowledge degradation after incremental learn-ing. BIT and STRobustNet show reduced sensitivity to previously learned change patterns, resulting in missing detections of certain building changes. Although MDIL, MDINet, and DI-FRCNN alleviate forgetting to some extent, residual omission errors and false responses remain around large building boundaries and shadow regions, indicating incomplete retention 19 of historical representations. By comparison, the proposed method preserves consistent de-tection capability across both domains, with improved structural completeness and boundary continuity, demonstrating its effectiveness in mitigating catastrophic forgetting while adapting to new-domain characteristics. To further assess the cross-domain generalization capability of the proposed method, Ta-ble 3 summarizes the results on six two-domain incremental learning sequences. Across all scenarios, competing methods exhibit different levels of performance degradation, whereas DG-FDD maintains stable performance under diverse domain transitions. Except for the GZ 
+
+→ CDD sequence, the performance variations of DG-FDD remain within −1.5% in terms of both ∆F1 and ∆IoU, demonstrating its effectiveness in preserving historical knowledge while adapting to unseen domains. Furthermore, positive transfer is observed in the LEVIR 
+
+→ GZ and CDD → GZ sequences, where the incremental model slightly exceeds the cor-responding Single-task upper bounds. This suggests that knowledge learned from previous domains can provide beneficial representations for subsequent adaptation, rather than merely preventing catastrophic forgetting. Overall, these results verify the robustness of DG-FDD under heterogeneous domain shifts and highlight the advantage of jointly optimizing domain adaptation and knowledge preservation in cross-domain continual learning. Fig. 9 presents                                                                                                                                                                                    
+
+> Table 3 Quantitative comparison under six two-domain cross-domain incremental sequences.
+> Methods LEVIR →CDD CDD →LEVIR GZ →LEVIR
+> ∆F1 (%) / ∆IoU (%) ∆F1 (%) / ∆IoU (%) ∆F1 (%) / ∆IoU (%) BIT −44 .62 /−59 .76 −49 .10 /−60 .00 −40 .82 /−54 .93
+> STRobustNet −41 .03 /−46 .76 −38 .79 /−44 .44 −33 .32 /−39 .88
+> FT −43 .48 /−49 .39 −39 .25 /−44 .76 −44 .94 /−50 .28
+> FE −10 .64 /−17 .77 −5.24 /−8.94 −9.50 /−15 .86
+> MDIL −19 .30 /−31 .12 −18 .66 /−28 .47 −30 .35 /−41 .93
+> MDINet −4.01 /−7.03 −1.75 /−3.27 −8.29 /−13 .10
+> FOCUS −14 .03 /−23 .25 −22 .56 /−34 .13 −42 .33 /−50 .39
+> DI-FRCNN −29 .70 /−43 .32 −19 .10 /−30 .85 −50 .91 /−64 .66
+> DG-FDD −0.58 /−1.12 −0.52 /−1.00 −0.67 /−1.18
+> Methods LEVIR →GZ GZ →CDD CDD →GZ
+> ∆F1 (%) / ∆IoU (%) ∆F1 (%) / ∆IoU (%) ∆F1 (%) / ∆IoU (%) BIT −18 .14 /−28 .40 −60 .78 /−73 .17 −36 .62 /−48 .78
+> STRobustNet −51 .51 /−58 .14 −48 .79 /−57 .34 −58 .97 /−69 .72
+> FT −55 .33 /−59 .17 −45 .70 /−51 .06 −40 .18 /−47 .59
+> FE −5.43 /−9.19 −10 .14 /−17 .31 −3.96 /−16 .70
+> MDIL −16 .28 /−25 .56 −27 .08 /−40 .77 −41 .57 /−50 .07
+> MDINet −0.58 /−1.02 −16 .22 /−23 .53 −0.86 /−1.65
+> FOCUS −13 .10 /−21 .20 −36 .02 /−45 .37 −11 .49 /−19 .52
+> DI-FRCNN −29 .49 /−30 .48 −21 .59 /−33 .39 −11 .55 /−19 .31
+> DG-FDD 0.82 /1.46 −1.10 /−2.02 0.67 /1.16
+
+qualitative comparisons under the LEVIR → GZ IL setting. Compared with the LEVIR →
+
+CDD scenario, the domain discrepancy between LEVIR and GZ is relatively moderate, pro-20 Fig. 9. Visual comparison of the proposed method and competing methods on the LEVIR → GZ incremental sequence. 
+
+viding an additional evaluation of model transferability under reduced domain shifts. In the new-domain GZ scenario, several methods still exhibit false detections caused by variations in urban background appearance and spatial textures. FT and BIT generate noticeable com-mission errors in complex background regions, while STRobustNet, FE, and MDIL produce more stable predictions but suffer from localized boundary deviations around building foot-prints. Although MDINet, FOCUS, and DI-FRCNN further alleviate these issues, fragmented structures and minor discontinuities remain in challenging areas. In comparison, the proposed method achieves more consistent change localization with improved structural continuity and boundary alignment, effectively reducing both false alarms and missed detections. Together with the LEVIR → CDD results, these observations demonstrate that DG-FDD maintains reliable adaptation capability across different levels of domain discrepancy, validating its ro-bustness under diverse cross-domain IL scenarios. 
+
+4.5.2. Three-domain continual cross-domain incremental analysis 
+
+Table 4 summarizes the results under the more challenging three-domain IL setting. Com-pared with the two-domain scenario, sequential adaptation across multiple domains introduces accumulated distribution shifts, leading to increased feature drift and more severe forgetting in most competing methods. As shown in Table 4, conventional approaches such as BIT and STRobustNet suffer from severe performance degradation, with ∆IoU dropping by more than 
+
+50% in multiple sequences. Other methods, including MDIL, FOCUS, and DI-FRCNN, also exhibit consistent performance deterioration as domain shifts accumulate. Although MDINet achieves relatively better stability, its ∆IoU still degrades to −7.03% , −1.61% , and −2.45% 
+
+across different sequences. In contrast, the proposed method maintains consistent performance across all three-domain settings, achieving ∆F1 values of −0.49% , −0.26% , and −1.32% , and 
+
+∆IoU values of −0.99% , −0.54% , and −2.40% , respectively. These results demonstrate that DG-FDD effectively mitigates cumulative forgetting during long-term domain evolution. Fig. 10 presents qualitative comparisons under the three-domain IL setting. With the accu-mulation of domain shifts, most competing methods exhibit progressive degradation in pre-diction quality, characterized by fragmented change regions, incomplete object structures, and inconsistent boundaries. These visual artifacts indicate the difficulty of preserving sta-21 Table 4 Quantitative comparison under three-domain continual cross-domain incremental sequences. 
+
+Methods LEVIR →CDD →GZ LEVIR →GZ →CDD CDD →LEVIR →GZ 
+
+∆F1 (%) & ∆IoU (%) ∆F1 (%) & ∆IoU (%) ∆F1 (%) & ∆IoU (%) BIT −40 .86 & −53 .00 −49 .82 & −64 .22 −50 .03 & −60 .97 
+
+STRobustNet −55 .25 & −62 .84 −63 .32 & −69 .82 −55 .26 & −62 .94 
+
+FT −43 .48 & −46 .76 −67 .04 & −65 .73 −54 .91 & −60 .63 
+
+FE −10 .64 & −17 .77 −10 .21 & −16 .97 −6.70 & −11 .24 
+
+MDIL −19 .30 & −31 .12 −51 .46 & −63 .33 −35 .20 & −47 .50 
+
+MDINet −4.01 & −7.03 −0.88 & −1.61 −1.43 & −2.45 
+
+FOCUS −27 .71 & −37 .19 −22 .48 & −33 .72 −22 .15 & −31 .42 
+
+DI-FRCNN −20 .98 & −32 .45 −34 .73 & −47 .84 −27 .39 & −39 .61 
+
+DG-FDD −0.49 & −0.99 −0.26 & −0.54 −1.32 & −2.40      
+
+> Fig. 10. Visual comparison of the proposed method and competing methods on the LEVIR →CDD →GZ incremental sequence.
+
+ble change representations during sequential domain adaptation. In contrast, the proposed method maintains more consistent change localization throughout all incremental stages, with improved object completeness and boundary continuity. It effectively preserves structural de-tails in complex background areas and large-scale building regions while reducing both false alarms and missed detections. These qualitative results are consistent with the quantitative evaluations in Table 4, further demonstrating the capability of DG-FDD to alleviate cumula-tive forgetting in long-term cross-domain continual learning. 22 4.6. Discussion 4.6.1. Effect of the phase-consistency loss weight under domain shifts 
+
+To investigate the impact of the phase-consistency loss weight λph on IL performance, a sensitivity analysis is conducted on the LEVIR → GZ sequence. Fig. 11 illustrates the variations of the average performance degradation metrics, ∆F1 and ∆IoU, under different 
+
+λph configurations. The results reveal a nonlinear relationship between λph and incremental performance. With a small λph , the phase-consistency constraint provides insufficient struc-tural regularization, limiting the preservation of historical representations and resulting in noticeable performance degradation. As λph increases to 0.1, both ∆F1 and ∆IoU achieve the best performance and become positive, indicating potential positive transfer by effectively preserving shared structural characteristics while allowing sufficient adaptation to the new domain. However, excessively increasing λph introduces overly strong structural constraints. When λph = 1 , the ∆IoU decreases by more than 30% , suggesting that excessive emphasis on structural consistency impedes adaptation to new-domain distributions and reduces model flexibility. Therefore, λph = 0 .1 provides an appropriate balance between historical knowl-edge preservation and new-domain adaptation, confirming the effectiveness of the proposed phase-consistency constraint in cross-domain IL.        
+
+> Fig. 11. Variations of ∆F1 and ∆IoU with respect to λph on the LEVIR →GZ sequence.
+
+4.6.2. Effect of the frequency-decoupled distillation strategy under domain shifts 
+
+This section investigates the influence of different KD strategies on incremental learning performance under domain shifts. Existing approaches generally rely on either response-based distillation (KD-FC) or intermediate feature-based distillation (KD-HD) to transfer histor-ical knowledge. Fig. 12 compares the average performance degradation metrics, ∆F1 and 
+
+∆IoU, under different distillation schemes, where zero indicates no degradation relative to the Single-task reference. As shown in Fig. 12, KD-FC exhibits considerable performance degradation under significant domain shifts, mainly because biased teacher predictions on new-domain samples provide unreliable supervision signals. KD-HD improves knowledge re-tention by introducing feature-level constraints; however, the transferred representations re-main affected by cross-domain distribution discrepancies. In contrast, FDKD-CS achieves 23 positive gains of 0.82% in ∆F1 and 1.46% in ∆IoU on the LEVIR → GZ sequence. By decou-pling domain-specific frequency components and synthesizing cross-domain features, FDKD-CS reduces distribution mismatch during knowledge transfer and establishes a more favorable stability-plasticity balance without requiring historical data replay.      
+
+> Fig. 12. Comparison of performance change rates ∆F1 and ∆IoU under different knowledge distillation strategies on the LEVIR →GZ sequence.
+
+4.6.3. Effect of difference-guided adaptation on cross-domain change representations 
+
+This section evaluates the impact of different adaptation strategies on change represen-tations under domain shifts. Three configurations are compared: the frozen backbone with-out adaptation, a parameter-isolation baseline with independent adapters, and the proposed DGDA module. Fig. 13 visualizes the channel-averaged activation maps from Layer 3 us-ing representative samples from three datasets. As shown in Fig. 13, the backbone without adaptation produces dispersed activations dominated by background regions under domain shifts. The responses extend to non-change areas, indicating that the model is sensitive to domain-specific appearance variations rather than discriminative change semantics. Intro-ducing independent adapters partially improves feature adaptation by enabling task-specific adjustment. However, without explicit bi-temporal difference guidance, the model remains unable to effectively separate true changes from temporal appearance variations, resulting in residual activations around irrelevant structures, such as road textures in LEVIR-CD and background patterns in CDD. In contrast, DGDA produces more compact and change-oriented activation responses across different domains. It suppresses irrelevant background responses while enhancing the spatial concentration of changed objects with clearer structural patterns. This improvement benefits from the explicit integration of bi-temporal difference priors, which guide channel-wise feature recalibration toward change-relevant information. Consequently, DGDA facilitates the disentanglement of domain-specific variations from transferable change semantics, yielding more discriminative representations for DICD. 24 Fig. 13. Visualization of channel-averaged feature responses under different adaptation strategies. 
+
+4.6.4. Ablation study 
+
+To investigate the contribution of each component, ablation experiments are conducted on the LEVIR → CDD → GZ sequence, with results summarized in Table 5. The Single-task model serves as the upper bound by independently training each domain and therefore avoids incremental forgetting. The Baseline (see Appendix A for implementation details), which employs only parameter isolation and conventional knowledge distillation, exhibits noticeable forgetting, with degradation of −3.47% in ∆F1 and −6.27% in ∆IoU. Adding DGDA to the Baseline reduces the degradation to −2.63% and −4.75% , respectively, while improving the GZ performance to 86 .77% F1 and 76 .63% IoU. This improvement demonstrates that difference-guided adaptation effectively enhances change-related representations by suppress-ing domain-specific interference. With only FDKD-CS, the degradation is further reduced to 
+
+−2.40% in ∆F1 and −4.39% in ∆IoU, achieving 87 .45% F1 and 77 .70% IoU on GZ. This indi-cates that frequency-decoupled distillation improves knowledge transfer by maintaining struc-tural consistency and reducing distribution mismatch across domains. When both DGDA and FDKD-CS are incorporated, the proposed model achieves the best performance, with degrada-tion limited to −0.49% in ∆F1 and −0.99% in ∆IoU, while obtaining 88 .24% F1 and 78 .96% 
+
+IoU on GZ. These results verify the complementary roles of DGDA and FDKD-CS: the for-mer improves domain adaptation through difference-aware representation learning, whereas the latter enhances historical knowledge preservation through frequency-guided distillation. The qualitative comparisons in Fig. 14 further support these observations. The Baseline pro-25 duces substantial false responses and missed detections across domains. DGDA improves object completeness in new domains, while FDKD-CS enhances structural consistency and suppresses residual noise. By integrating both modules, the full model generates more coher-ent predictions across all domains, achieving a favorable stability-plasticity trade-off.       
+
+> Table 5 Ablation study results on the LEVIR →CDD →GZ incremental sequence. A: Single-task; B: Baseline; C: Baseline+DGDA; D: Baseline+FDKD-CS; E: DG-FDD.
+
+Setting Step 1 LEVIR Step 2 CDD Step 3 GZ ∆F1 (%) 
+
+F1 (%) & IoU (%) F1 (%) & IoU (%) F1 (%) & IoU (%) & ∆IoU (%) 
+
+A 90 .45 & 82 .57 97 .83 & 95 .75 87 .03 & 77 .04 –B 88 .06 & 78 .67 93 .17 & 87 .21 84 .42 & 73 .05 −3.47 & −6.27 
+
+C 86 .03 & 75 .49 95 .19 & 90 .83 86 .77 & 76 .63 −2.63 & −4.75 
+
+D 86 .88 & 76 .81 94 .18 & 89 .00 87 .45 & 77 .70 −2.40 & −4.39 
+
+E 90 .17 & 82 .10 95 .32 & 91 .06 88 .24 & 78 .96 −0.49 & −0.99  
+
+> Fig. 14. Visualization results of different ablation configurations.
+
+4.7. Efficiency 
+
+To comprehensively evaluate the computational efficiency of DG-FDD during inference, three commonly used metrics are considered: the number of parameters (Parameters), floating-point operations (FLOPs), and per-image inference latency (Time). All methods are evaluated 26 under the same input resolution of 256 × 256 × 3, and the inference time is averaged over 100 random forward passes for reliable comparison. As reported in Table 6, different methods exhibit distinct trade-offs among model complexity, computational cost, and inference effi-ciency. BIT and STRobustNet employ lightweight Transformer-based architectures, resulting  
+
+> Table 6 Comparison of model efficiency
+
+Methods Model params (M) FLOPs (Gmac) Time (ms) 
+
+BIT 12 .40 10 .63 19 .94 
+
+STRobustNet 13 .73 20 .99 19 .43 
+
+FT 59 .63 115 .96 35 .53 
+
+FE 59 .63 115 .96 34 .66 
+
+MDIL 5.27 13 .07 98 .70 
+
+MDINet 41 .72 74 .04 26 .87 
+
+FOCUS 41 .81 74 .27 76 .52 
+
+DI-FRCNN 41 .81 74 .27 22 .23 
+
+DG-FDD 60 .15 115 .98 42 .25 
+
+in relatively low computational overhead. However, their limited adaptation mechanisms make them less effective in preserving historical knowledge under cross-domain incremental learn-ing. MDIL reduces the model size to 5.27 M parameters through parameter isolation, but introduces additional inference latency ( 98 .70 ms) due to its dynamic routing strategy, which requires sequential decision operations. FOCUS and DI-FRCNN are both implemented on the same ResNet-50 backbone for fair comparison. Therefore, they share identical parameter counts ( 41 .81 M) and computational costs ( 74 .27 GMACs). However, FOCUS introduces ad-ditional channel-consistency masking and feature reconstruction operations during inference, resulting in higher latency ( 76 .52 ms) compared with DI-FRCNN ( 22 .23 ms). Compared with these methods, DG-FDD introduces moderate computational overhead, with 60 .15 M parame-ters, 115 .98 GMACs, and 42 .25 ms inference time. The additional cost mainly originates from the DGDA module and the multi-head decoder architecture, which introduce difference-guided feature recalibration and task-specific parameter storage, respectively. Nevertheless, during inference, only the shared backbone and the decoder corresponding to the current domain are activated, avoiding unnecessary computational redundancy. Combined with the perfor-mance results in Tables 1 and 2, DG-FDD achieves substantially improved knowledge retention and new-domain adaptation compared with FT while maintaining acceptable computational complexity. These results demonstrate that the proposed difference-guided adaptation and frequency-decoupled distillation mechanisms provide an effective stability–plasticity trade-off with practical inference efficiency, making DG-FDD suitable for domain-incremental change detection. 
+
+5. Conclusion 
+
+To address catastrophic forgetting in high-resolution RSCD under continual domain shifts, this paper proposed DG-FDD, a domain-incremental change detection framework that inte-grates difference-guided dynamic adaptation and frequency-decoupled distillation. By combin-ing parameter-efficient adaptation with frequency-domain knowledge regularization, DG-FDD 27 enables effective adaptation to new domains while preserving historical knowledge without accessing previous data. Experiments on LEVIR-CD, CDD, and GZ-CD show that DG-FDD consistently outperforms state-of-the-art methods under both two-task and three-task incremental settings, effectively mitigating catastrophic forgetting while maintaining strong performance on new domains. In several cross-domain scenarios, the method further achieves positive transfer, demonstrating its robustness for continual cross-domain RSCD. Future work will extend the framework to more challenging conditions, including severe class imbalance, multimodal optical–SAR change detection, and long-term large-scale domain shifts. 
+
+Appendix A. Knowledge confusion and distillation failure in existing incremental methods 
+
+To alleviate catastrophic forgetting, existing DICD methods typically integrate parameter isolation with knowledge distillation strategies for optimization. Parameter isolation meth-ods generally freeze the shared backbone parameters θshared , while introducing a small set of domain-specific parameters θt 
+
+> specific
+
+at the current stage t, so as to reduce interference from new-domain learning on historical knowledge. However, most of these approaches are derived from single-image classification tasks, and their adaptation modules tend to apply independent and identical feature refinement operations to bi-temporal inputs Xt1 and Xt2 :
+
+˜F t1 = A(F t1 ; θt
+
+> specific
+
+) (A.1) 
+
+˜F t2 = A(F t2 ; θt
+
+> specific
+
+) (A.2) where A(·) denotes the adaptation operator; F t1 and F t2 represent deep feature embeddings extracted from the frozen shared backbone for the two temporal inputs, respectively; and ˜F t1 ,
+
+˜F t2 denote the recalibrated features after adaptation. Such independent temporal modeling lacks explicit bi-temporal interaction, and the learned 
+
+θt 
+
+> specific
+
+in single-stream adapters tends to overfit local appearance patterns of individual im-ages rather than true change semantics. As a result, knowledge confusion is exacerbated under cross-domain scenarios. This highlights the necessity of constructing a parameter-decoupled mechanism that explicitly exploits bi-temporal difference priors, thereby improving the sta-bility of change representation learning. Another mainstream paradigm adopts knowledge distillation as a functional regularization strategy, where the output distribution of the current model Φt is constrained to match that of the frozen previous model Φt−1, thereby transferring historical knowledge: 
+
+Ltrad KD = 1
+
+H × W
+
+X
+
+> h,w
+
+KL  P (h,w ) 
+
+> t−1
+
+(Xt) ∥ P (h,w ) 
+
+> t
+
+(Xt) (A.3) where KL (· ∥ · ) denotes the Kullback–Leibler divergence measuring distribution discrepancy; 
+
+P (h,w ) 
+
+> t
+
+(Xt) represents the predicted probability distribution at spatial location (h, w ) of the current model for input Xt; and P (h,w ) 
+
+> t−1
+
+(Xt) corresponds to the frozen previous model. However, conventional distillation assumes a certain degree of overlap between old and new domain distributions, such that Φt−1 can still produce meaningful soft labels for Xt. In DICD scenarios, severe domain shift leads to a significant deviation of Xt from the training distribution of the old model, and thus Pt−1(Xt) becomes highly uncertain: 
+
+Pt−1(Xt) ≈ Noise , when P(Xt) ≫ P(Xt−1) (A.4) 28 Under this condition, directly applying distillation introduces noisy supervisory signals into optimization, resulting in semantic drift and degraded knowledge transfer, thereby weakening the effectiveness of the constraint. Consequently, under limited access to historical data, it becomes necessary to design a feature transmission mechanism capable of suppressing domain-style interference and reconstructing the old-domain feature distribution. This forms the primary motivation for introducing frequency-domain decoupling and cross-domain pseudo-distribution synthesis in this work. 
+
+CRediT authorship contribution statement 
+
+Daifeng Peng : Writing – review & editing, Writing – original draft, Supervision, Fund-ing acquisition, Formal analysis, Conceptualization. Yaning Li : Writing –original draft& editing, Visualization, Methodology, Software, Conceptualization. Haiyan Guan : Writing –review&editing, Visualization, Formal analysis. 
+
+Declaration of competing interest 
+
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper. 
+
+Acknowledgements 
+
+This work was supported the National Natural Science Foundation of China (42371449, 41801386). 
+
+References 
+
+Bandara, W.G.C., Patel, V.M., 2022. A transformer-based siamese network for change detec-tion, in: IGARSS 2022-2022 IEEE International Geoscience and Remote Sensing Sympo-sium, IEEE. pp. 207–210. Bandara, W.G.C., Patel, V.M., 2025. Deep metric learning for unsupervised remote sensing change detection, in: 2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV), pp. 5125–5135. Ceccon, M., Dalle Pezze, D., Fabris, A., Susto, G.A., 2024. Multi-label continual learning for the medical domain: A novel benchmark, in: Proceedings of the Winter Conference on Applications of Computer Vision, pp. 7163–7172. Chen, D., Liang, X., Wang, L., Guo, Q., Zhang, J., 2025. Global difference-aware mamba for hyperspectral image change detection. IEEE Transactions on Geoscience and Remote Sensing 63, 1–14. Chen, H., Qi, Z., Shi, Z., 2022. Remote sensing image change detection with transformers. IEEE Transactions on Geoscience and Remote Sensing 60, 1–14. Chen, H., Shi, Z., 2020. A spatial-temporal attention-based method and a new dataset for remote sensing image change detection. Remote Sensing 12, 1662. Chen, H., Song, J., Han, C., Xia, J., Yokoya, N., 2024. Changemamba: Remote sensing change detection with spatiotemporal state space model. IEEE Transactions on Geoscience and Remote Sensing 62, 1–20. 29 Cheng, G., Huang, Y., Li, X., Lyu, S., Xu, Z., Zhao, H., Zhao, Q., Xiang, S., 2024. Change detection methods for remote sensing in the last decade: A comprehensive review. Remote Sensing 16, 2355. Das, S., Angadi, D.P., 2022. Land use land cover change detection and monitoring of urban growth using remote sensing and gis techniques: a micro-level study. GeoJournal 87, 2101– 2123. Daudt, R.C., Le Saux, B., Boulch, A., Gousseau, Y., 2018. Urban change detection for multispectral earth observation using convolutional neural networks. Remote Sensing 10, 471. Douillard, A., Chen, Y., Dapogny, A., Cord, M., 2021. Plop: Learning without forgetting for continual semantic segmentation, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp. 4040–4050. Garg, P., Saluja, R.G., Balasubramanian, V.N., Arora, C., Subramanian, A., Jawahar, C.V., 2021. Multi-domain incremental learning for semantic segmentation, in: Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision, pp. 761–771. Hou, H., Wang, Y., Qin, Q., Tan, Y., Liu, T., 2025. Multi-scale feature fusion based on difference enhancement for remote sensing image change detection. Symmetry 17, 590. Hu, Y., Ren, L., Jiang, H., Guo, K., Liu, T.., 2026. Language-guided contrastive learning and difference enhancement for semantic change detection in remote sensing images. Remote Sensing 18, 964. Huang, W., Ding, M., Deng, F., 2024. Domain-incremental learning for remote sensing se-mantic segmentation with multifeature constraints in graph space. IEEE Transactions on Geoscience and Remote Sensing 62, 1–15. Iscen, A., Zhang, J., Lazebnik, S., Schmid, C., 2020. Memory-efficient incremental learning through feature adaptation, in: Computer Vision – ECCV 2020, pp. 699–715. Joham, S.J., Thaler, F., Hadzic, A., Urschler, M., 2025. Focus: Feature replay with optimized channel-consistent dropout for u-net skip-connections, in: Medical Image Computing and Computer Assisted Intervention – MICCAI 2025, pp. 219–229. Khan, S.M., Shafi, I., Butt, W.H., de la Torre Diez, I., López Flores, M.A., Castanedo Galán, J., Ashraf, I., 2023. A systematic review of disaster management systems: approaches, challenges, and future directions. Land 12, 1514. Kirkpatrick, J., Pascanu, R., Rabinowitz, N., Veness, J., Desjardins, G., Rusu, A.A., Milan, K., Quan, J., Ramalho, T., Grabska-Barwinska, A., Hassabis, D., Clopath, C., Kumaran, D., Hadsell, R., 2017. Overcoming catastrophic forgetting in neural networks. Proceedings of the National Academy of Sciences 114, 3521–3526. Lebedev, M.A., Vizilter, Y.V., Vygolov, O.V., Knyaz, V.A., Rubis, A.Y., 2018. Change detection in remote sensing images using conditional adversarial networks. The International Archives of the Photogrammetry, Remote Sensing and Spatial Information Sciences 42, 565– 571. 30 Lee, Y., Lee, D., Kwak, T., Kim, Y., 2025. Er-pass: Experience replay with performance-aware submodular sampling for domain-incremental learning in remote sensing. Remote Sensing 17, 3233. Lei, T., Geng, X., Ning, H., Lv, Z., Gong, M., Jin, Y., Nandi, A.K., 2023. Ultralightweight spatial–spectral feature cooperation network for change detection in remote sensing images. IEEE Transactions on Geoscience and Remote Sensing 61, 1–14. Li, J., Yan, Z., Diao, W., Zhang, Y., Zhu, Z., Tian, Y., Sun, X., 2026a. Multi-domain incremental learning for semantic segmentation via visual domain prompt in remote sensing data. Remote Sensing 18, 464. Li, S., Chen, S., Fan, Z., Li, Z., Zhang, Z., Yang, X., Zhang, S., 2026b. Diff-conformer: A dual-input difference-aware convolutional transformer network for building change detection. IEEE Access 14, 73180–73188. Li, Z., Hoiem, D., 2018. Learning without forgetting. IEEE Transactions on Pattern Analysis and Machine Intelligence 40, 2935–2947. Li, Z., Liu, F., Yang, W., Peng, S., Zhou, J., 2022. A survey of convolutional neural networks: Analysis, applications, and prospects. IEEE Transactions on Neural Networks and Learning Systems 33, 6999–7019. Luo, G., Sun, J., Jin, L., Zhou, Y., Xu, Q., Fu, R., Sun, X., Ji, R., 2026. Domain incremental learning for object detection. Pattern Recognition 170, 111882. Ma, Y., Chen, S., Ermon, S., Lobell, D.B., 2024. Transfer learning in environmental remote sensing. Remote Sensing of Environment 301, 113924. Mallya, A., Lazebnik, S., 2018. Packnet: Adding multiple tasks to a single network by iter-ative pruning, in: Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, pp. 7765–7773. Paranjape, J.N., De Melo, C., Patel, V.M., 2025. A mamba-based siamese network for re-mote sensing change detection, in: 2025 IEEE/CVF Winter Conference on Applications of Computer Vision (WACV), pp. 1186–1196. Peng, D., Bruzzone, L., Zhang, Y., Guan, H., Ding, H., Huang, X., 2021. Semicdnet: Asemisupervised convolutional neural network for change detection in high resolution remote-sensing images. IEEE Transactions on Geoscience and Remote Sensing 59, 5891–5906. Peng, D., Liu, X., Zhang, Y., Guan, H., Li, Y., Bruzzone, L., 2025. Deep learning change detection techniques for optical remote sensing imagery: Status, perspectives and challenges. International Journal of Applied Earth Observation and Geoinformation 136, 104282. Peng, D., Zhang, Y., Guan, H., 2019. End-to-end change detection for high resolution satellite images using improved unet++. Remote Sensing 11, 1382. Rui, X., Li, Z., Cao, Y., Zhang, T., Sun, X., 2023. Dilrs: Domain-incremental learning for semantic segmentation in multi-source remote sensing data. Remote Sensing 15, 2541. 31 Sha, A.S., Nunes, B., Haller, A., 2026. Selective forgetting in machine learning and beyond: A survey. ACM Computing Surveys 58, Article 241. Shao, Y., Li, Y., Han, X., 2025. Contrastive dual-pool feature adaption for domain incremental remote sensing scene classification. Remote Sensing 17, 308. Wang, L., Zhang, X., Su, H., Zhu, J., 2024. A comprehensive survey of continual learning: Theory, method and application. IEEE Transactions on Pattern Analysis and Machine Intelligence 46, 5362–5383. Wang, M., Fang, S., Li, Y., Zhang, X., Li, Z., 2025. A hybrid cnn-transformer network with difference enhancement and frequency fusion for remote sensing image change detection. Applied Intelligence 56, 8. Weng, L., Yang, W., Hu, B., Han, P., Xue, S., Zhang, Y., Li, H., Jin, J., Bu, S., 2024. Mdinet: Multidomain incremental network for change detection. IEEE Transactions on Geoscience and Remote Sensing 62, 1–15. Weng, X., Pang, C., Li, J., Sun, X., Xia, G.S., 2026. Class-domain incremental segmentation for remote sensing images. IEEE Transactions on Geoscience and Remote Sensing 64, 1–16. Xu, L., Xie, H., Qin, S.J., Tao, X., Wang, F.L., 2026. Parameter-efficient fine-tuning methods for pretrained language models: A critical review and assessment. IEEE Transactions on Pattern Analysis and Machine Intelligence 48, 6107–6126. Xuan, S., Yang, M., Zhang, S., 2025. Incremental model enhancement via memory-based contrastive learning. International Journal of Computer Vision 133, 65–83. Yang, J., Wan, H., Shang, Z., 2025. Enhanced hybrid cnn and transformer network for remote sensing image change detection. Scientific Reports 15, 10161. Zhan, T., Tian, Q., Zhu, Y., Lan, J., Dang, Q., Gong, M., 2025. Difference-aware multiscale feature aggregation network for building change detection. IEEE Transactions on Geoscience and Remote Sensing 63, 1–15. Zhang, C., Wang, L., Cheng, S., Li, Y., 2022. Swinsunet: Pure transformer network for remote sensing image change detection. IEEE Transactions on Geoscience and Remote Sensing 60, 1–13. Zhang, H., Chen, H., Zhou, C., Chen, K., Liu, C., Zou, Z., Shi, Z., 2024. Bifa: Remote sensing image change detection with bitemporal feature alignment. IEEE Transactions on Geoscience and Remote Sensing 62, 1–17. Zhang, H., Chen, K., Liu, C., Chen, H., Zou, Z., Shi, Z., 2025a. Cdmamba: Incorporating local clues into mamba for remote sensing image binary change detection. IEEE Transactions on Geoscience and Remote Sensing 63, 1–16. Zhang, H., Teng, Y., Li, H., Wang, Z., 2025b. Strobustnet: Efficient change detection via spatial–temporal robust representations in remote sensing. IEEE Transactions on Geo-science and Remote Sensing 63, 1–15. 32 Zhao, Y., Celik, T., Liu, N., Gao, F., Li, H.C., 2024. Sslchange: A self-supervised change detection framework based on domain adaptation. IEEE Transactions on Geoscience and Remote Sensing 62, 1–14. Zheng, X., Lin, X., Qing, L., Ou, X., 2025. Semantic-aware remote sensing change detection with multi-scale cross-attention. Sensors 25, 2813. Zhou, D.W., Cai, Z.W., Ye, H.J., Zhan, D.C., Liu, Z., 2025. Revisiting class-incremental learn-ing with pre-trained models: Generalizability and adaptivity are all you need. International Journal of Computer Vision 133, 1012–1032. Zhu, Y., Shi, C., Wang, D., Tang, J., Wei, Z., Wu, Y., Li, G., Yang, S., 2024. Rethinking query-based transformer for continual image segmentation, in: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR), pp. 4595–4606. 33
