@@ -1,0 +1,176 @@
+Title: Uncertainty-Aware Multi-Source Retinal Fluid Segmentation in OCT
+
+URL Source: https://arxiv.org/pdf/2607.12212v1
+
+Published Time: Wed, 15 Jul 2026 12:00:18 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Uncertainty-Aware Multi-Source Retinal Fluid Segmentation in OCT 
+
+Animesh Kumar [0009-0003-0608-7004] 
+
+Newcastle University, Newcastle upon Tyne NE1 7RU, United Kingdom 
+
+A.Kumar12@newcastle.ac.uk 
+
+Abstract. Measuring retinal fluid from optical coherence tomography (OCT) drives treatment decisions in macular disease, but manual annota-tion is slow and segmentation models trained on one scanner degrade on another. We present an attention-guided TransUNet that segments three fluid types across four independent OCT sources, combining a domain-adaptive normalisation scheme with an uncertainty estimate that flags unreliable pixels. The model reaches a mean fluid Dice of 0.78 , and— most usefully for clinicians—its uncertainty is 1.34 × higher exactly where expert graders disagree (p < 10 −4), turning a raw segmenta-tion map into an actionable clinical triage signal. 
+
+Keywords: Retinal fluid segmentation · OCT · TransUNet · Uncer-tainty quantification · MC Dropout · Domain adaptation · Clinical triage 
+
+## 1 Introduction 
+
+Optical coherence tomography (OCT) is a non-invasive technique that produces cross-sectional “B-scan” images of the retina. Retinal fluid —the accumulation of liquid within or beneath the retinal layers—is the primary imaging biomarker for three conditions responsible for much of the preventable vision loss in adults: diabetic macular oedema (DME), neovascular age-related macular degeneration (AMD), and central serous chorioretinopathy. Treatment decisions depend on measuring fluid volume and tracking its change between visits, currently requir-ing a trained grader to annotate each B-scan by hand, which takes 20–40 minutes per patient. Inter-grader disagreement reaches 15% on small fluid pockets [1]. Three fluid classes must be distinguished. Intraretinal fluid (IRF) appears as hyporeflective cysts within the retinal layers and signals active inflammation re-quiring urgent treatment. Subretinal fluid (SRF) pools between the neurosensory retina and the retinal pigment epithelium (RPE) and guides injection frequency in AMD. Pigment epithelial detachment (PED) is an elevation of the RPE itself, a marker of AMD progression that early CNN models frequently miss. These classes overlap spatially, vary across disease stages, and look different depending on the OCT scanner used. arXiv:2607.12212v1 [eess.IV] 9 Jul 2026 Why this matters. Two practical barriers keep accurate fluid segmentation out of the clinic. First, the manual grading it would replace is the workflow bottleneck, so automation has real clinical value only if it is fast and reliable. Second, a model trained on one vendor’s scanner typically fails on another’s—“domain shift”—which is the single biggest reason published models do not transfer to new hospitals. A deployable tool must therefore both generalise across scanners and tell the clinician where it is unsure , so that effort is focused on the regions that need a second look. We target both requirements directly. Standard U-Net architectures [11] struggle with small, irregular fluid regions. Attention gates [13] improve localisation by suppressing background activations. The TransUNet framework [3] adds global context through a Transformer bot-tleneck, and the current state of the art on the RETOUCH benchmark is Reti-FluidNet [10]. What most methods lack is cross-scanner robustness and clinically interpretable uncertainty; we address both by training an attention-guided Tran-sUNet across four sources with Source-Adaptive Batch Normalisation (SA-BN) and a dual uncertainty mechanism that feeds a novel triage score. 
+
+Contributions. (1) An attention-guided TransUNet with SA-BN achieving val-idation Dice 0.784 ± 0.006 across three seeds; (2) a dual uncertainty mech-anism statistically confirmed to correlate with expert disagreement; (3) the Uncertainty-Weighted Clinical Urgency Score (UCUS) linking pixel uncertainty to clinical routing; and (4) a multi-source evaluation that exposes per-scanner domain shift. 
+
+## 2 Related Work 
+
+Retinal fluid segmentation. The RETOUCH challenge [1] established the multi-class benchmark across three OCT vendors. RetiFluidNet [10] currently leads by combining a Transformer encoder with a convolutional decoder, though it is evaluated on a single-vendor split. 
+
+Attention and Transformer segmentation. Schlemper et al. [13] introduced at-tention gates that suppress irrelevant skip-connection features—important when fluid occupies less than 3% of pixels. Chen et al. [3] proposed TransUNet, and Swin-UNet [2] uses a hierarchical Swin Transformer throughout. We reserve the Transformer for the bottleneck, where global context is most needed. 
+
+Uncertainty and domain adaptation. Gal and Ghahramani [5] showed that Monte Carlo (MC) Dropout approximates Bayesian inference at negligible cost; Roy et al. [12] confirmed that the resulting uncertainty correlates with segmentation errors. Wang et al. [15] applied adversarial domain adaptation; our SA-BN requires no paired training data. Table 1: Datasets used for training and evaluation.                   
+
+> Dataset Subjects Classes Disease Scanner DUKE DME [4] 10 IRF DME Spectralis AROI [8,9] 24 IRF, SRF, PED AMD Zeiss Cirrus UMN AMD [6] 24 SRF AMD Spectralis UMN DME [6] 29 IRF DME Spectralis
+
+## 3 Methodology 
+
+3.1 Datasets 
+
+Table 1 summarises the four publicly available OCT datasets. After combining them we assign a unified label space: 0 = Background, 1 = IRF, 2 = SRF, 3 = 
+
+PED. The split is 4983 training, 552 validation, and 503 test slices, stratified by source and disease type. 
+
+3.2 Architecture 
+
+The encoder is EfficientNetV2L [14] (pretrained on ImageNet-21k), extracting features at five scales: s1 (32 channels), s2 (64), s3 (96), s4 (192), and bottle-neck b (640). A learned stem adapts the single-channel B-scan, pre-processed with contrast-limited adaptive histogram equalisation (CLAHE). The bottle-neck projects to 512 dimensions, applies learnable positional encoding over 256 tokens, and passes through two multi-head attention (MHA) layers (16 heads). The decoder has four levels, each with an attention gate and two 3 × 3 convolu-tions with SA-BN and ReLU. The output head is a 1 × 1 convolution preceded by MC Dropout ( p = 0 .3). The architecture is shown in Fig. 1. 
+
+Source-Adaptive BatchNorm (SA-BN). SA-BN maintains five independent batch-normalisation parameter sets, one per source (DUKE, AROI, UMN-AMD, UMN-DME, and an “unknown” default). The source label is passed at inference; this is how the model adapts to a new scanner’s statistics without retraining. No ad-ditional data alignment is needed, and fewer than 0.1M parameters are added. 
+
+3.3 Training Protocol 
+
+Phase A (5 epochs) freezes the encoder and trains the Transformer bottleneck, attention gates, and decoder with Adam [7] at learning rate 10 −3, batch size 8. Phase B (25 epochs) unfreezes encoder stages 3–5 at learning rate 10 −4 with cosine decay (5-epoch warmup), batch size 4, and early stopping at patience 7 on validation mean Dice. The loss is L = LDice + 0 .5 LCE , with the cross-entropy term weighted inversely by pixel frequency. Augmentation includes horizontal flipping ( 0.5), brightness/contrast jitter ( 0.3), elastic transforms ( 0.2), and rota-tions up to 10 ◦ (0.3). Six models are trained: three seeds (42, 123, 2024) × two backbones (EfficientNetV2S and V2L). The V2L checkpoints at seeds 123 (val Dice 0.7913 ) and 2024 (val Dice 0.7841 ) form the evaluation ensemble. OCT B-scan (CLAHE, 1×H×W )
+
+Encoder Stage 1 s1 (32) 
+
+Encoder Stage 2 s2 (64) 
+
+Encoder Stage 3 s3 (96) 
+
+Encoder Stage 4 s4 (192) 
+
+EfficientNetV2L bottleneck (640) 
+
+Transformer bottleneck 
+
+dmodel =512 , 2×MHA (16 heads) 
+
+Segmentation mask + uncertainty map 
+
+MC-Dropout head ( p=0 .3)
+
+1×1 conv → 4 classes 
+
+Decoder L1 + SA-BN 
+
+Decoder L2 + SA-BN 
+
+Decoder L3 + SA-BN 
+
+Decoder L4 + SA-BN     
+
+> AG
+> AG
+> AG
+> AG
+> AG AG = attention gate
+> - -skip connection →data flow
+
+Fig. 1: Architecture of the proposed attention-guided TransUNet. An Efficient-NetV2L encoder with four skip connections feeds a Transformer bottleneck (dmodel = 512 , two MHA layers, 16 heads), followed by four attention-gated decoder levels with Source-Adaptive BatchNorm and an MC-Dropout output head. 
+
+3.4 Uncertainty Quantification and UCUS 
+
+MC Dropout runs 20 stochastic forward passes; the pixel-wise variance gives 
+
+σ2
+
+> MC
+
+. Inter-model disagreement between the two ensemble members is 
+
+σ2
+
+> ens
+
+(x) = Var[ p1(x), p 2(x)] . (1) The combined uncertainty is σ2 = ( σ2 
+
+> MC
+
++ σ2
+
+> ens
+
+)/2. The Uncertainty-Weighted Clinical Urgency Score aggregates fluid volume, foveal involvement, and uncer-tainty: 
+
+UCUS = Vs · Fm · (1 − 0.3 Ud), (2) where Vs = min(1 , N fluid · vpx · 100) scales with detected fluid volume, Fm =1 + 0 .2 · 1[foveal fluid ] up-weights fluid at the fovea, and Ud = min(1 , ¯σ2 · 5) Table 2: Multi-seed validation Dice (mean ± std; seeds 42/123/2024).                          
+
+> Model IRF SRF PED Mean V2S (22M) 0.866 ±0.007 0.827 ±0.005 0.518 ±0.009 0.737 ±0.005
+> V2L (127M) 0.916 ±0.003 0 .856 ±0.003 0 .581 ±0.018 0 .784 ±0.006
+
+Table 3: Per-source test Dice (503 slices).         
+
+> Source IRF SRF PED Mean AROI 0.054 0.299 0.144 0.166 DUKE 0.071 0.000 0.902 0.324 UMN 0.381 0.176 0.409 0.322
+
+discounts uncertain predictions. The score maps to three triage bands: Monitor 
+
+(< 0.25 ), Review (0.25 –0.60 ), and Urgent (> 0.60 ). 
+
+## 4 Experiments 
+
+4.1 Quantitative results 
+
+Table 2 shows multi-seed validation Dice. V2L outperforms V2S on all three classes, and a standard deviation ≤ 0.018 confirms stable training. Table 3 re-ports per-source test Dice. The DUKE SRF score of 0.000 is expected—DUKE annotations cover IRF only—while the strong DUKE PED result (0.902) shows cross-class generalisation outside that source’s training label set. Figure 2 shows representative qualitative outputs. 
+
+4.2 Ablation study 
+
+Table 4 isolates each component. V2L alone gives the highest single-model Dice; V2S degrades the ensemble mean when combined, though it contributes the diversity the uncertainty estimate relies on. 
+
+4.3 Clinical safety metrics 
+
+Uncertainty vs. inter-grader disagreement. At pixels where two University of Minnesota graders disagree, the mean model uncertainty is 0.1058, versus 0.0792 at agreement pixels—a ratio of 1.34 × (p = 3 .77 × 10 −5, Mann–Whitney U test). The model is genuinely more uncertain where humans are also uncertain. 
+
+Fluid volume correlation. Table 5 reports the Pearson correlation between pre-dicted and ground-truth fluid volumes across 15 fully annotated test volumes. SRF and PED estimates track ground truth at r > 0.77 , sufficient to support anti-VEGF dosing decisions even when the spatial Dice is moderate. Table 4: Ablation study on the test set (mean fluid Dice ± std). TTA = test-time augmentation.                       
+
+> Variant Mean fluid Dice V2S only 0.338 ±0.331
+> V2S + MC Dropout 0.141 ±0.144
+> V2S + TTA 0.121 ±0.115
+> V2L only 0.449 ±0.304
+> V2S + V2L ensemble 0.415 ±0.318
+> V2S + V2L + MC Dropout 0.279 ±0.219
+> Full (V2S+V2L+MC+TTA) 0.293 ±0.218
+
+Table 5: Fluid volume correlation (predicted vs. ground truth, n = 15 ).                      
+
+> Class rp-value Note IRF −0.110 0.696 DUKE domain shift SRF 0.778 6.33 ×10 −4Strong PED 0.841 8.64 ×10 −5Strong Total fluid 0.562 2.93 ×10 −2Moderate
+
+INT8 quantisation. Per-tensor symmetric 8-bit integer (INT8) quantisation com-presses the V2L model from 510 MB to 132 MB ( 3.9×) with no measurable Dice drop on validation, supporting CPU-only deployment. 
+
+## 5 Discussion 
+
+The uncertainty-correlation result is more clinically useful than the Dice score alone. A model that is more uncertain where experts also disagree tells the clinician which parts of the mask deserve scrutiny, and the UCUS puts that signal into a form they can act on without interpreting a raw probability map. The per-source breakdown exposes what aggregate benchmarks hide. The AROI mean Dice of 0.166 reflects a genuine protocol gap: a Zeiss Cirrus acqui-sition that differs from the Spectralis-dominated training distribution. SA-BN reduces but does not close this gap, and realistic deployment assumes a known scanner network where SA-BN statistics can be refreshed with a small number of labelled site-specific scans. The weak IRF correlation follows from DUKE being both the primary IRF source and the largest domain-shift case at test time. 
+
+## 6 Conclusion 
+
+We trained an attention-guided TransUNet for multi-class retinal fluid segmen-tation across four OCT sources. SA-BN handles scanner domain shift without retraining; the dual uncertainty mechanism is statistically confirmed to track expert disagreement; and the UCUS translates pixel-level uncertainty into a clinical triage signal. V2L validation Dice reaches 0.784 ± 0.006 , and SRF and PED volume estimates show strong ground-truth correlation. Future work in-cludes targeted per-site fine-tuning for AROI and prospective UCUS-threshold validation in a clinical reader study. 
+
+Acknowledgments. Conducted during the MSc Advanced Computer Science pro-gramme at Newcastle University (2025–26) using Google Colab; no external funding was received. Code and models: https://github.com/Animesh-Kr/oct-fluid-segmentation 
+
+(DOI: 10.5281/zenodo.19808008). The author thanks Prof. Keshab K. Parhi (Univer-sity of Minnesota) for the UMN datasets, Dr Martina Melinščak (University of Zagreb) for the AROI database, and the Duke University Ophthalmic Imaging Laboratory for the DUKE DME dataset. 
+
+Disclosure of Interests. The author has no competing interests. This paper de-scribes a decision-support system and does not replace professional ophthalmological assessment. 
+
+## References 
+
+1. Bogunović, H., et al.: RETOUCH: the retinal OCT fluid detection and segmenta-tion benchmark and challenge. IEEE Trans. Med. Imaging 38(8), 1858–1874 (2019) 2. Cao, H., et al.: Swin-UNet: UNet-like pure transformer for medical image segmen-tation. In: ECCV. LNCS, vol. 13803, pp. 205–218. Springer (2022) 3. Chen, J., et al.: TransUNet: Transformers make strong encoders for medical image segmentation. arXiv:2102.04306 (2021) 4. Chiu, S.J., et al.: Kernel regression based segmentation of OCT images with dia-betic macular edema. Biomedical Optics Express 6(4), 1172–1194 (2015) 5. Gal, Y., Ghahramani, Z.: Dropout as a Bayesian approximation: representing model uncertainty in deep learning. In: ICML, pp. 1050–1059 (2016) 6. Karri, S.P.K., Chakraborty, D., Chatterjee, J.: Transfer learning based classifica-tion of OCT images with diabetic macular edema and dry AMD. Biomedical Optics Express 8(2), 579–592 (2017) 7. Kingma, D.P., Ba, J.: Adam: a method for stochastic optimization. In: ICLR (2015) 8. Melinščak, M., et al.: Annotated retinal OCT images (AROI) database for joint retinal layer and fluid segmentation. Automatika 62(3), 375–385 (2021) 9. Melinščak, M., et al.: AROI: annotated retinal OCT images database. In: MIPRO, pp. 400–405 (2021) 10. Rasti, R., et al.: RetiFluidNet: a self-adaptive and multi-attention deep convolu-tional network for retinal OCT fluid segmentation. IEEE Trans. Med. Imaging 42(5), 1413–1423 (2022) 11. Ronneberger, O., Fischer, P., Brox, T.: U-Net: convolutional networks for biomed-ical image segmentation. In: MICCAI. LNCS, vol. 9351, pp. 234–241. Springer (2015) 12. Roy, A.G., et al.: Inherent brain segmentation quality control from fully ConvNet Monte Carlo sampling. In: MICCAI. LNCS, vol. 11070, pp. 664–672. Springer (2018) 13. Schlemper, J., et al.: Attention gated networks: learning to leverage salient regions in medical images. Medical Image Analysis 53, 197–207 (2019) 14. Tan, M., Le, Q.V.: EfficientNetV2: smaller models and faster training. In: ICML, pp. 10096–10106 (2021) 15. Wang, S., et al.: DoFE: domain-oriented feature embedding for generalizable fun-dus image segmentation on unseen datasets. IEEE Trans. Med. Imaging 39(12), 4237–4248 (2020) Fig. 2: Qualitative results on the AROI source. Each row is one B-scan; columns show, left to right: the input OCT image; the expert ground-truth mask (IRF in blue, SRF in red, PED in green); the model prediction, with per-class Dice in the panel title; and the pixel-wise MC-Dropout uncertainty map (brighter = less certain). Uncertainty concentrates at fluid boundaries—the same regions where human graders disagree (Sec. 4.3), which is what makes the map clinically useful rather than merely decorative.
