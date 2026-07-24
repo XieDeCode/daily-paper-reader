@@ -1,0 +1,934 @@
+Title: GeoThreat: Transferable Targeted Adversarial Attacks on Large Vision-Language Models for Remote Sensing Image Interpretation
+
+URL Source: https://arxiv.org/pdf/2607.21036v1
+
+Published Time: Fri, 24 Jul 2026 00:47:19 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+MANUSCRIPT UNDER REVIEW 1
+
+# GeoThreat: Transferable Targeted Adversarial Attacks on Large Vision-Language Models for Remote Sensing Image Interpretation 
+
+Yimin Fu, Yuefeng Bai, Baicheng Pan, Zhunga Liu, Michael K. Ng 
+
+Abstract —Adversarial attacks against large vision-language models (LVLMs) serve as an effective means of assessing their robustness in cross-modal semantic understanding. Existing studies mainly focus on corrupting visual inputs to induce predefined erroneous re-sponses in general vision-language tasks, whereas corresponding investigations in remote sensing fields remain largely underexplored. Compared with natural image understanding, remote sensing image interpretation requires joint reasoning over local discriminative cues and global scene context. This poses additional challenges to achieving transferable semantic manipulation toward specified responses under black-box settings. To tackle these challenges, we propose GeoThreat, a transferable targeted adversarial attack method against LVLMs for remote sensing image interpretation. Specifically, GeoThreat modulates adversarial representations in accordance with the target content at both conceptual and perceptual levels. The class tokens from surrogate image encoders are employed as conceptual representations, while perceptual representations are distilled from patch tokens of the adversarial example through collaborative importance estimation. Beyond merely rolling out attention scores across layers, we incorporate adversarial-target similarity gradients to more faithfully characterize the relevance of local visual cues to the intended semantic manipulation. The perceptual representations are then dynamically aligned with target patch tokens in a cross-attentive manner, facilitating the adaptation of local cues toward designated semantic details. Finally, adversarial perturbations are iteratively updated via ensemble-based joint optimization of conceptual calibration and perceptual adaptation. Extensive experiments across diverse LVLMs demonstrate the superiority of GeoThreat in both transferability and controllability. The code will be released at https://github.com/fuyimin96/GeoThreat upon acceptance. 
+
+Index Terms —Adversarial attack, large vision-language model, model robustness, remote sensing. 
+
+✦
+
+1 INTRODUCTION 
+
+# THE exceptional multimodal understanding and rea-soning capabilities of large vision-language mod-els (LVLMs) [1]–[5] have fostered their widespread adoption across diverse applications. Alongside this growing adop-tion, their vulnerability to adversarial perturbations has also raised substantial safety concerns [6], [7]. To support reliable deployment in practice, adversarial attacks against LVLMs [8] have been increasingly investigated as an effec-tive approach for assessing model robustness and revealing potential weaknesses. Given the imperceptibility of visual perturbations and their disruptive effect on cross-modal alignment [9], existing methods typically craft adversarial examples based on input images to mislead LVLMs into generating erroneous responses. Since the model parameters and internal implementa-tions of LVLMs are often inaccessible in practice, espe-cially for commercial proprietary models, adversarial at-tacks against LVLMs are typically formulated under black-box settings [10], [11]. Depending on the task objective, ad-versarial attacks against LVLMs can be further categorized into untargeted [12] and targeted [13] forms. Beyond solely inducing erroneous responses, targeted attacks further re-
+
+(Corresponding authors: Michael K. Ng; Zhunga Liu.) The first two authors contributed equally to this work. Yimin Fu, Baicheng Pan, and Michael K. Ng are with the Department of Mathematics, Hong Kong Baptist University, Hong Kong, China (e-mail: fuy-imin@hkbu.edu.hk; baichengpan@life.hkbu.edu.hk; michael-ng@hkbu.edu.hk). Yuefeng Bai and Zhunga Liu are with the School of Automation, North-western Polytechnical University, Xi’an, 710072, China (e-mail: baiyue-feng@mail.nwpu.edu.cn; liuzhunga@nwpu.edu.cn). GPT-5-mini                  
+
+> Qwen2.5-VL
+> GeoChat
+> . . .
+> Inference on Adversarial Image
+> Aerial view of a busy multilane roadway
+> with several cars and an overpass.
+> LVLMs Input Image
+> Adversarial Example
+> The image shows an aerial view of a
+> highway with ... vehicles traveling on it.
+> Aroad with a lot of vehicles driving on it.
+> Inference on Input Image
+> Aerial view showing two large cargo ships
+> moored side-by-side at a riverside dock.
+> The image shows a satellite view of a
+> docked ship with multiple containers ...
+> Two large ships are close to each other at
+> the center of the image.
+
+Fig. 1: Illustration of GeoThreat for transferable targeted adversarial attacks against LVLMs in remote sensing image interpretation. quire controllable semantic manipulation toward specified intents, which is regarded as the most realistic and chal-lenging attack scenario. Existing methods typically enhance the transferability and controllability of such targeted se-mantic manipulation by matching representations between adversarial examples and target samples, with pretrained CLIP [14] image encoders commonly adopted as surro-gates. To further enhance adversarial transferability, model ensemble [15]–[17] techniques are commonly employed to effectively exploit shared vulnerabilities across models, with perturbation updates derived from aggregated gradients over multiple surrogates. arXiv:2607.21036v1 [cs.CV] 23 Jul 2026 MANUSCRIPT UNDER REVIEW 2
+
+Despite continued progress in misleading LVLMs to-ward specified responses under black-box settings, cur-rent research has predominantly focused on general vision-language tasks [18]. With the increasing adoption of LVLMs in remote sensing [19]–[22], ensuring reasoning over remote sensing images has become a pressing requirement, espe-cially in security-critical scenarios such as disaster assess-ment [23] and urban monitoring [24]. However, research on targeted adversarial attacks against LVLMs for remote sensing image interpretation remains underexplored. Com-pared with natural image understanding, the accurate inter-pretation of remote sensing images requires joint reasoning over local discriminative cues and global scene context [25], which introduces distinct challenges for achieving trans-ferable semantic manipulation toward specified responses. In terms of transferability, the joint global-local reasoning paradigm exhibits substantial inter-model discrepancies, making adversarial example generation more prone to over-fitting to surrogate-specific information. In addition, the am-biguous content relevance of local perceptual cues, together with their complex dependencies on global scene context, further complicates the realization of controllable semantic manipulation toward specified responses. Therefore, in this case, the generation of adversarial examples requires not only global conceptual matching with target samples, but also local perceptual alignment with the designated seman-tics. Building upon this insight, we propose GeoThreat, a transferable targeted adversarial attack method against LVLMs for remote sensing image interpretation. Specifically, GeoThreat addresses the transferability and controllability bottlenecks of attacks on LVLM-based remote sensing image interpretation through target-oriented representation modu-lation at both conceptual and perceptual levels. During each iteration, the adversarial example and the target image are fed into the surrogate image encoder, where the extracted class tokens are employed to perform conceptual calibra-tion. Meanwhile, by integrating cross-layer attention with adversarial-target similarity, adversarial patch tokens that are relevant to the intended semantic manipulation are se-lectively identified as perceptual representations. Then, the alignment between perceptual representations and target patch tokens is performed in a cross-attentive manner [26], thereby driving the adaptation of local perceptual cues toward the designated semantics. Finally, adversarial exam-ple generation is guided by a joint optimization strategy of conceptual calibration and perceptual adaptation over model ensembles. Extensive experiments across various LVLMs demonstrate that the proposed method outperforms state-of-the-art attack methods. As illustrated in Fig. 1, GeoThreat successfully steers the interpretations of both general-purpose [3], [4] and remote sensing-specific [19] LVLMs toward the semantics of the target image under black-box settings. Our main contribution can be summarized as follows: 1) We propose GeoThreat, a transferable targeted at-tack for LVLM-based remote sensing image inter-pretation, enabling controllable semantic manipula-tion through coordinated conceptual calibration and perceptual adaptation. 2) We develop a collaborative importance estimation approach to identify critical adversarial patch to-kens and adapt their encoded perceptual cues to-ward the designated semantics in a cross-attentive manner. 3) We design a joint adversarial optimization strategy over ensemble surrogate models to effectively en-hance the transferability and controllability of tar-geted adversarial examples against LVLMs. 4) We thoroughly benchmark adversarial attacks across general-purpose and remote sensing-specific LVLMs for remote sensing image interpretation. The comprehensive robustness assessment reveals po-tential weaknesses of current LVLMs and provides a deeper understanding of their security risks in remote sensing tasks. The remainder of this paper is organized as follows. Section 2 reviews the related work. Section 3 introduces the problem formulation and technical details of the proposed method. Section 4 reports the experimental results and cor-responding analyses. Finally, Section 5 concludes this paper and outlines potential directions for future research. 
+
+2 RELATED WORKS 
+
+2.1 Large Vision-Language Models 
+
+Benefiting from their strong cross-modal understanding and reasoning capability, LVLMs have achieved substantial progress on diverse vision-language tasks, including image captioning [27], visual question answering [28], and cross-modal retrieval [29]. In terms of architecture, an LVLM [18] typically couples a pretrained vision encoder [14], [30] with a large language model (LLM) [31] through a cross-modal alignment module, which projects visual patch em-beddings into the input space of the LLM. Li et al. [32] proposed BLIP-2, an efficient pre-training framework that employs a lightweight Querying Transformer to bridge the modality gap between image encoders and language models. To enable general-purpose visual assistance, Liu et al. [1] introduced LLaVA, which extends instruction tuning to multimodal scenarios with GPT-4-generated instruction data. Zhu et al. [33] introduced MiniGPT-4, which aligns frozen visual features with an LLM through a lightweight projection layer to enable fluent vision-grounded language generation. In addition to the aforementioned open-source LVLMs, closed-source commercial LVLMs, such as GPT-5 [34], Claude [35], and Gemini [36], have demonstrated advanced multimodal understanding and reasoning capa-bilities, benefiting from large-scale training data and system-level optimization. In addition to general vision-language applications, growing research efforts have also been devoted to advanc-ing the adoption of LVLMs in the remote sensing domain. As an early exploration of remote sensing-specific vision-language foundation models, Liu et al. [37] proposed Re-moteCLIP to learn semantically rich visual features. Based on a high-quality remote sensing image captioning dataset, Hu et al. [38] systematically benchmarked VLMs for remote sensing vision-language understanding. Kuckreja et al. [19] developed GeoChat, a multitask conversational assistant MANUSCRIPT UNDER REVIEW 3
+
+for remote sensing image interpretation with strong spatial grounding and reasoning capabilities. To compensate for the insufficient consideration of geospatial variability, Muhtar et al. [39] leveraged volunteered geographic information to empower remote sensing image understanding of LVLMs. Zhan et al. [40] unified multi-granularity remote sensing vision-language tasks through large-scale instruction data and a two-stage fine-tuning strategy. Zhang et al. [41] designed EarthGPT, which unifies diverse remote sensing interpretation tasks across multi-sensor imagery. For tem-poral earth observation data, Irvin et al. [20] proposed TEOChat, which leverages image references in prompts to enable conversational understanding of remote sensing image sequences. 
+
+2.2 Adversarial Attacks on LVLMs 
+
+Conventional adversarial attacks mainly aim to induce in-correct predictions in image classification tasks under white-box [42]–[44] or black-box [11], [45] settings, depending on the accessibility of the victim model. In comparison, adver-sarial attacks against LVLMs are often formulated under a targeted paradigm, aiming to steer model responses toward predefined erroneous content. Given that LVLMs are often deployed as proprietary services in practice, such semantic manipulation is typically achieved by crafting transferable adversarial examples on surrogate vision encoders. Zhao et al. [13] developed AttackVLM to craft trans-ferable visual perturbations against LVLMs by matching image or text embeddings in pretrained vision-language models under black-box settings. For further adversarial transferability improvement, Dong et al. [46] incorporated frequency-domain transformations and model ensembling to exploit common weaknesses across model architectures. Guo et al. [47] introduced AdvDiffVLM, a diffusion-based attack framework that embeds adversarial objectives into the denoising process to generate transferable visual per-turbations against LVLMs. To overcome the scalability lim-itations caused by the reliance on target labels, Zhang et al. [48] proposed AnyAttack, a self-supervised attack frame-work through large-scale pre-training. Beyond the output perspective, increasing attention has been paid to steering LVLM responses toward designated semantics by exploiting intermediate representations of vision encoders. Li et al. [16] induced desired misinterpretations in closed-source LVLMs by aligning locally cropped adversarial images with target images in the embedding space. To improve generalization across diverse tasks, Mei et al. [49] proposed the vision encoder attack (VEAttack), which generates downstream-agnostic perturbations through token-level disruption of image features. Jia et al. [17] proposed FOA-Attack, which reformulates local feature alignment as an optimal transport problem to alleviate overfitting to surrogate-specific charac-teristics. Instead of directly using entangled patch features, Nie et al. [50] improved the controllability of semantic shifts in LVLMs by targeting disentangled value features. Li et al. [51] proposed a multi-paradigm collaborative at-tack (MPCAttack) approach to jointly optimize aggregated visual-textual features, thereby mitigating the transferability limitation caused by insufficient representation diversity. 
+
+2.3 Adversarial Machine Learning in Remote Sensing 
+
+Beyond general computer vision and multimodal tasks, ad-versarial machine learning has also evolved into an ongoing attack-defense race in the field of remote sensing to ensure security and trustworthiness. On the attack side, Xu et al. [52] first provided a sys-tematic assessment of adversarial threats to deep neural networks (DNNs) for remote sensing scene classification, covering both targeted and untargeted attack scenarios. In addition, Chen et al. [53] conducted an empirical study to further reveal the vulnerability of DNN-based remote sensing scene classification models to adversarial examples. By incorporating intermediate-layer representation mixing into perturbation generation, Xu et al. [54] proposed a mixup attack to enhance adversarial transferability against remote sensing scene classifiers. Fu et al. [55] integrated transformations in both the spatial and frequency domains to enrich the simulation of target-related input patterns, thereby further enhancing the effectiveness of black-box attacks. In addition to image classification, Sun et al. [56] enhanced attack effectiveness in optical remote sensing ob-ject detection through importance-aware candidate selec-tion. Based on a mask-constrained perturbation generation strategy, Bai et al. [57] realized a stealthy attack on specific victim classes for remote sensing semantic segmentation. Recently, Fu et al. [58] reinforced adversarial transferability in remote sensing scene classification through a coordinated action-execution pipeline for transformation composition. For other remote sensing modalities, Shi et al. [59] inves-tigated the impact of adversarial examples on hyperspectral image (HSI) interpretation, showing that spectral-spatial representations can be substantially disrupted. Li et al. [60] further improved the efficiency of attacks for HSI classifica-tion by leveraging sparse unmixing to generate physically consistent class-specific perturbations. Based on the unique imaging mechanism of synthetic aperture radar (SAR), Peng et al. [61] proposed a scattering model-guided adversarial attack for SAR target recognition. In parallel with the attack side, increasing efforts have also been devoted to defense strategies for improving adver-sarial robustness in remote sensing. Su et al. [62] proposed a reconstruction-assisted adversarial training framework to mitigate the interference of adversarial perturbations on re-mote sensing scene classification. Benefiting from the strong denoising capability of diffusion models, Yu et al. [63] devel-oped a universal defense framework to restore adversarial examples to underlying data distributions. Qi et al. [64] integrated self-supervised spectral reconstruction and dy-namic graph embedding to mitigate the adverse influence of adversarial perturbations. Pathak et al. [65] improved the reliability of drone-based object detection by formulating the defense against patch attacks as a recovery task for adversarially occluded object regions. To defend against ad-versarial attacks in HSI classification, Xu et al. [66] exploited global contextual information to enhance the adversarial robustness of DNNs. Guided by the scattering priors, Liu et al. [67] employed a bi-directional information bottleneck to remove class-irrelevant information and suppress adver-sarial interference in SAR target recognition. MANUSCRIPT UNDER REVIEW 400000 
+
+> Model 3
+
+CIE 
+
+> Block Shuffle
+> Adversarial
+> Example Target Image
+> Update
+> 𝐀 𝐀𱀀𝐀
+
+GeoThreat 
+
+> Model 2
+> Model 1
+
+CPA 
+
+00000   
+
+> ×
+> ××
+> 𝐀 𝐀𱀀𝐀 (𝐀 𝐀𱀀𝐀 ,𝐀 𝐀𱀀𝐀
+> 𝐀 )
+> 𝐀 𝐀 𱀀 ,𝐀
+> 𝐀 𱀀 ,𝐀
+> Grad
+
+𝐀 𝐀 ＋    
+
+> ATTN Grad I
+> 𝐀 𝐀 𝐀 𝐀 −𝐀 𝐀 𝐀
+
+× × ×
+
+> Multi-Head
+> ATTN Block
+
+×L
+
+Collaborative Importance Estimation (CIE) 
+
+> 𝐀𪠀𱀀𝐀𝐀  − 𝐀𝐀𝐀𵐀𝐀𝐀𝐀𱀀𝐀
+> 𝐀 𝐀𵐀𪠀
+> 𝐀 𝐀𴐀𝐀𝐀𝐀
+> 𝐀
+> 𝐀𱀀𝐀𝐀𝐀𴐀𝐀
+> 𝐀𱀀𝐀𝐀𝐀𴐀𝐀
+> 𝐀𱀀𝐀𝐀𝐀𴐀𝐀
+> 𝐀𱀀𝐀𝐀𝐀𴐀𝐀
+> 𝐀𱀀𝐀𝐀𝐀𴐀𝐀
+> 𝐀𱀀𝐀𝐀𝐀𴐀𝐀
+> 𝐀𱀀𝐀𝐀𝐀𴐀𝐀
+> 𝐀𱀀𝐀𝐀𝐀𴐀𝐀
+> 𝐀𱀀𪠀𝐀 𪠀𱀀𝐀
+
+Cross-Attentive Percepetual Adaption (CPA) 
+
+𝐀 
+
+𝐀 ∑
+
+# ＋
+
+𝐀  
+
+> Model 1
+> Frozen
+> Trainable
+> Cosine
+> Similarity
+> Patch
+> Token
+> CLS
+> Token
+> Model 1
+> Bidirectional
+> Constarint
+> 0.5 0.2 0.1 0.2
+> Correspondence Weights
+
+# ＋ Addition 
+
+> 𝐀 𝐀𵐀𪠀
+> Multiplication
+> 𝐀 𝐀𱀀𝐀
+> 𝐀 𝐀𱀀𝐀
+> 𝐀
+> 𝐀𱀀𪠀𝐀 𪠀𱀀𝐀
+> ATTN
+> 𝐀 𝐀𱀀𝐀 ,𝐀 :𝐀
+> 𝐀𝐀𝐀𵐀𪠀𝐀
+> 𝐀𝐀𝐀𵐀𪠀𝐀
+> 𝐀𝐀𝐀𵐀𪠀𝐀
+> 𝐀𝐀𝐀𵐀𪠀𝐀
+
+𝐀 
+
+𝐀𱀀𝐀 𝐀 
+
+> 𝐀𝐀𝐀𵐀𪠀𝐀
+> 𝐀𝐀𝐀𵐀𪠀𝐀
+
+Fig. 2: Illustration of GeoThreat for transferable targeted adversarial attacks against LVLMs in remote sensing image interpretation. The proposed attack pipeline comprises three key components: collaborative importance estimation, cross-attentive perceptual adaptation, and ensemble-based joint adversarial optimization. 
+
+3 METHODOLOGY 
+
+The pipeline of the proposed GeoThreat for generating transferable targeted adversarial examples against LVLMs is illustrated in Fig. 2. The randomly block-shuffled adversar-ial example, together with its corresponding target image, is first fed into the pretrained vision encoder. Then, criti-cal patch tokens of the adversarial example are identified through a collaborative importance estimation approach. Finally, guided by the joint optimization of conceptual cal-ibration and perceptual adaptation, the adversarial exam-ple is iteratively updated over the surrogate ensemble. In this section, we first introduce the problem formulation of transferable targeted attacks for LVLM-based remote sens-ing image interpretation. Then, we present the technical details of GeoThreat for improving the transferability and controllability of targeted semantic manipulation. 
+
+3.1 Problem Formulation 
+
+Given a remote sensing image x and a textual query q,remote sensing image interpretation with an LVLM gϕ(·)
+
+can be represented as generating a response y conditioned on the multimodal input pair: 
+
+y = gϕ(x, q ), (1) where ϕ denotes the parameters of the LVLM. Under the targeted attack scenario, the objective of adversarial attacks on LVLMs is to steer the model outputs toward designated semantics of the target image xt. Since the parameters ϕ of the victim LVLM are often inaccessible in practice, directly performing such semantic manipulation based on output-level information is infeasible. In this case, existing methods typically employ a pretrained vision encoder fθ (·) as a surrogate to realize transfer-based attacks. Specifically, the attack process is formulated as a constrained optimization problem, where visual perturbations δ are iteratively up-dated by aligning the representations of the adversarial image ˜x = x + δ and the target image xt:
+
+min  
+
+> ∥δ∥∞≤ϵ
+
+L (fθ (˜ x), f θ (xt)) , (2) where ϵ denotes the maximum perturbation magnitude un-der ℓ∞-norm constraint. The loss function L(·, ·) is used to measure the representation discrepancy. To further enhance the transferability, an ensemble of surrogate vision encoders 
+
+F = {f sθ }Ss=1 with size S is commonly adopted to provide aggregated guidance for adversarial example generation: 
+
+Lens (˜ x, x t) = 1
+
+|F| 
+
+X 
+
+> fθ∈F
+
+L (fθ (˜ x), f θ (xt)) . (3) Starting from ˜x0 = x, the adversarial example at the k-th iteration is updated as: 
+
+˜xk = Clip x,ϵ (˜ xk−1 − α · sign( ∇˜xk−1 Lens (˜ xk−1, x t))) , (4) where Clip x,ϵ (·) denotes the pixel-wise clipping operation, and α is the attack step size. For clarity, the following derivation is presented within a single iteration. Unless otherwise specified, the iteration superscript is omitted, and the current adversarial example is denoted by ˜x.MANUSCRIPT UNDER REVIEW 5
+
+3.2 Collaborative Importance Estimation 
+
+Existing adversarial attack methods typically mislead black-box LVLMs into producing specified outputs by matching global visual representations between adversarial and tar-get images. Due to the complex spatial heterogeneity and contextual dependencies inherent in remote sensing images, their interpretation is commonly grounded in joint reason-ing over local discriminative cues and global scene con-text. In this case, optimization signals derived solely from global conceptual calibration are insufficient to support transferable targeted semantic manipulation, necessitating the incorporation of local discriminative cues into adversar-ial example generation. A commonly adopted approach to identify critical image patches is to roll out attention scores across transformer layers. However, such attention scores mainly reflect the decision relevance of patch tokens for the input image, rather than their responsiveness in driving the transition toward the target semantics. Consequently, per-turbation optimization may become overly biased toward surrogate-specific recognition patterns of the input image, thereby further limiting the effectiveness of transferable targeted attacks. To overcome this limitation, we develop a collabora-tive importance estimation approach to identify adversarial patch tokens that are both decision-relevant and target-responsive. First, the adversarial example ˜x and the target image xt are fed into a surrogate vision encoder fθ (·), e.g., a transformer-based CLIP image encoder, to extract token-wise visual representations: 
+
+fθ (˜ x) = 
+
+h
+
+˜zcls ; ˜Zpatch 
+
+i
+
+= [˜ zcls ; ˜ z1, . . . , ˜zN ] ,fθ (xt) = 
+
+h
+
+zt
+
+> cls
+
+; Zt
+
+> patch
+
+i
+
+= zt
+
+> cls
+
+; zt
+
+> 1
+
+, . . . , ztN
+
+ ,
+
+(5) where ˜zcls , ztcls ∈ Rd denote the class tokens of the ad-versarial and target images, respectively. ˜Zpatch = {˜zi}Ni=1 ,
+
+Zt 
+
+> patch
+
+= {zti}Ni=1 ∈ RN ×d denote their corresponding patch-token sequences with embedding dimension d. Then, con-ceptual calibration is performed by maximizing the cosine similarity between the adversarial and target class tokens: 
+
+Lcon = 1 − cos  ˜zcls , zt
+
+> cls
+
+ = 1 − ⟨˜zcls , zt
+
+> cls
+
+⟩∥˜zcls ∥2 ∥zt
+
+> cls
+
+∥2
+
+, (6) where ⟨· , ·⟩ is the inner product, and ∥·∥ is the ℓ2-norm. Meanwhile, the adversarial-target similarity is further lever-aged to estimate the importance of adversarial patch tokens in driving the intended semantic manipulation. During the forward pass of the adversarial example through the sur-rogate vision encoder, the self-attention matrix in the h-th head of the l-th layer is computed as: 
+
+˜Al,h = Softmax 
+
+
+
+˜Ql,h 
+
+ ˜Kl,h 
+
+⊤
+
+√dh
+
+ ∈ R(N +1) ×(N +1) , (7) where ˜Ql,h and ˜Kl,h are the query and key matrices of the adversarial token sequence in the h-th attention head in the 
+
+l-th layer, and dh denotes the dimension of each attention head. Instead of relying solely on attention weights, we estimate patch importance at each layer by integrating atten-tion weights with their corresponding conceptual-similarity sensitivities across Nh attention heads: 
+
+˜Rl = Norm row I + 1
+
+NhNhX
+
+> h=1
+
+ReLU 
+
+ ˜Al,h ⊙ ∇ l,h !
+
+, (8) where the sensitivity term is defined as 
+
+∇l,h = ∂ cos (˜ zcls , zt
+
+> cls
+
+)
+
+∂ ˜Al,h ∈ R(N +1) ×(N +1) . (9) Here, ReLU( ·), I, Norm row (·), and ⊙ denote the ReLU ac-tivation function, identity matrix, row-wise normalization, and element-wise multiplication, respectively. On this basis, the collaborative importance matrix is obtained through suc-cessive matrix multiplication across L transformer layers: 
+
+˜R = ˜RL ˜RL−1 · · · ˜R1 ∈ R(N +1) ×(N +1) . (10) Finally, critical adversarial patch tokens are identified ac-cording to the class-to-patch scores in the collaborative importance matrix. The indices of the top-ρ patch tokens are selected as: 
+
+Iρ = Top ρ
+
+ ˜Rcls ,1: N
+
+
+
+, ρ ∈ (0 , 1] , (11) where ˜Rcls ,1: N represents the importance scores associated with the class-token row, with the self-relevance term ex-cluded. The selected patch tokens are employed as percep-tual representations for subsequent adaptation of local cues: 
+
+˜Zper = ˜Zpatch [Iρ] ∈ RNρ×d, (12) where Nρ = ⌈ρN ⌉.
+
+3.3 Cross-Attentive Perceptual Adaptation 
+
+Upon identifying critical perceptual representations, adapt-ing local perceptual cues toward the designated semantics hinges on appropriate target correspondence modeling and representation alignment. Given the spatial heterogeneity and complex semantic interdependencies in remote sensing images, the complete target patch-token sequence provides a more comprehensive semantic reference for establishing target-aware correspondences. In addition, compared with a fixed alignment scheme, adaptive representation alignment conditioned on the collective dependencies between percep-tual representations and target patch tokens enables more controllable semantic manipulation. Motivated by this insight, we perform the adaptation of local perceptual cues toward the designated semantics in a cross-attentive manner. Specifically, the perceptual repre-sentations ˜Zper and the target-image patch-token sequence 
+
+Zt 
+
+> patch
+
+are used as queries and keys, respectively, to compute the cross-attentive patch-level affinity matrix 
+
+M =˜Zper 
+
+
+
+Zt
+
+> patch
+
+⊤
+
+√d ∈ RNρ×N . (13) MANUSCRIPT UNDER REVIEW 6
+
+Then, bidirectional correspondence distributions are de-rived from the affinity matrix by applying temperature-scaled softmax normalization along different dimensions: 
+
+P˜x→xt 
+
+> ij
+
+= exp ( Mij /τ )
+
+PNj′=1 exp ( Mij ′ /τ ) , P˜x→xt ∈ RNρ×N ,
+
+Pxt→˜xji = exp ( Mij /τ )
+
+PNρ 
+
+> i′=1
+
+exp ( Mi′j /τ ) , Pxt→˜x ∈ RN ×Nρ ,
+
+(14) where τ is the temperature parameter. A˜x→xt and Axt→˜x
+
+quantify the correspondence weights from adversarial per-ceptual representations to target patch tokens and from tar-get patch tokens to adversarial perceptual representations, respectively. Afterward, the two directional distributions are integrated into mutual correspondence weights to more faithfully characterize the adversarial-target dependencies for adapting local cues toward the designated semantic details: 
+
+P = Norm row 
+
+
+
+P˜x→xt ⊙  Pxt→˜x⊤
+
+∈ RNρ×N . (15) Based on the mutual correspondence weights, target patch tokens are aggregated to form query-conditioned semantic references: 
+
+Zref = PZ t 
+
+> patch
+
+∈ RNρ×d. (16) Finally, the adaptation of local perceptual cues is performed by adaptively aligning their representations with the corre-sponding target semantic references: 
+
+Lper = 1 − 1
+
+NρNρ
+
+X
+
+> i=1
+
+cos (˜ zper ,i , zref ,i )= 1 − 1
+
+NρNρ
+
+X
+
+> i=1
+
+⟨˜zper ,i , zref ,i ⟩∥˜zper ,i ∥2 ∥zref ,i ∥2
+
+,
+
+(17) where ˜zper ,i and zref ,i denote the i-th rows of ˜Zper and Zref ,respectively. 
+
+3.4 Joint Adversarial Optimization 
+
+Without access to the internal information of victim LVLMs under black-box settings, a common transferability-enhancement strategy is to leverage an ensemble of sur-rogate models to provide more generalizable optimization signals for perturbation update. In GeoThreat, beyond cou-pling global conceptual and local perceptual losses, hetero-geneity among surrogate vision encoders also introduces inconsistency into the collaborative importance matrices. Therefore, the coherent integration and harmonization of surrogate-derived information within the ensemble are cru-cial for further strengthening the transferability and control-lability of the generated adversarial examples. In pursuit of this objective, we design a joint adversarial optimization strategy over an ensemble of surrogate vision encoders to steer adversarial example generation toward the designated semantics. Given an ensemble of S surrogate vision encoders F = {fθs }Ss=1 , the token-wise visual repre-sentations of the adversarial example ˜x and the target image 
+
+xt extracted by each surrogate are denoted as follows: 
+
+fθs (˜ x) = [˜ zs
+
+> cls
+
+; ˜ zs
+
+> 1
+
+, . . . , ˜zsNs ] = [˜ zs
+
+> cls
+
+; ˜Zs
+
+> patch
+
+] ∈ R(Ns+1) ×ds ,fθs (xt) = [ zt,s 
+
+> cls
+
+; zt,s  
+
+> 1
+
+, . . . , zt,s Ns ] = [ zt,s 
+
+> cls
+
+; Zt,s 
+
+> patch
+
+] ∈ R(Ns+1) ×ds ,
+
+(18) where Ns and ds denote the number of patch tokens and the token embedding dimension associated with the s-th sur-rogate encoder, respectively. Accordingly, the collaborative importance matrix over its token sequence can be calculated as: 
+
+˜Rs ∈ R(Ns+1) ×(Ns+1) , (19) where the importance scores associated with the class token are denoted as: 
+
+˜rs = ˜Rs 
+
+> cls ,1: Ns
+
+∈ RNs . (20) Then, each patch-level importance vector is reshaped into a two-dimensional importance map with the same spatial layout as the patch grid of fθs (·):
+
+˜Us = Reshape(˜ rs; Hs, W s) ∈ RHs×Ws , (21) where HsWs = Ns. To mitigate the spatial granularity discrepancies induced by different input patch sizes across surrogate encoders, the ensemble importance maps are sub-sequently interpolated to the input-image resolution and aggregated as: 
+
+U = 1
+
+S
+
+> S
+
+X
+
+> s=1
+
+Interp 
+
+ ˜Us; H, W 
+
+
+
+∈ RH×W . (22) where Interp( ·; H, W ) denotes bilinear interpolation that resizes each importance map to the height H and width 
+
+W of the input image. Afterward, when identifying critical adversarial patch tokens from the patch-token sequence of each surrogate encoder, the aggregated importance map is resampled to the spatial resolution of the corresponding patch grid and flattened into a surrogate-specific importance vector: 
+
+rs 
+
+> agg
+
+= Flatten (Interp ( U; Hs, W s)) ∈ RNs , (23) and the surrogate-specific perceptual representations can be obtained following Eqs. (11) and (12): 
+
+˜Zs 
+
+> per
+
+= ˜Zs
+
+> patch
+
+Isρ
+
+ , Isρ = Top ρ
+
+ rs
+
+> agg
+
+ . (24) Subsequently, cross-attentive local perceptual adaptation over the surrogate ensemble is performed through: 
+
+Lens per = 1 − 1
+
+S
+
+> S
+
+X
+
+> s=1
+
+1
+
+N sρN sρ
+
+X
+
+> i=1
+
+D
+
+˜zs
+
+> per ,i
+
+, zs
+
+> ref ,i
+
+E
+
+˜zs  
+
+> per ,i 2
+
+zs 
+
+> ref ,i 2
+
+, (25) where N sρ = ⌈ρN s⌉, and zs 
+
+> ref ,i
+
+denotes the surrogate-specific target semantic reference associated with each selected ad-versarial patch token. In parallel, ensemble-level global con-ceptual calibration is carried out by: 
+
+Lens con = 1 − 1
+
+S
+
+> S
+
+X
+
+> s=1
+
+D
+
+˜zs
+
+> cls
+
+, zt,s 
+
+> cls
+
+E
+
+∥˜zs
+
+> cls
+
+∥2 zt,s  
+
+> cls 2
+
+. (26) Finally, the joint optimization for adversarial example gen-eration can be represented as a weighted objective: 
+
+Ljoint = Lens con + λLens per , (27) where λ is used to control the loss contributions of concep-tual calibration and perceptual adaptation. MANUSCRIPT UNDER REVIEW 7
+
+Algorithm 1: The GeoThreat Attack Algorithm 
+
+Input: Clean image x and target image xt, surrogate model ensemble F = {fθs }Ss=1 , patch selection ratio ρ, temperature parameter τ ,weighting coefficient λ, perturbation magnitude ϵ, number of iterations K, step size α, and momentum coefficient μ.
+
+Output: The adversarial example ˜x. 
+
+> 1
+
+Initialize: ˜x0 = x, g0 = 0 . 
+
+> 2
+
+for k = 1 to K do  
+
+> 3
+
+Apply random block shuffling to ˜xk−1; 
+
+> 4
+
+for s = 1 to S do  
+
+> 5
+
+Extract the token-wise visual representations of ˜xk−1 and xt with f sθ by Eq. (18);  
+
+> 6
+
+Estimate the collaborative importance matrix 
+
+˜Rs by Eq. (19);  
+
+> 7
+
+Aggregate the importance maps by Eq. (22);  
+
+> 8
+
+for s = 1 to S do  
+
+> 9
+
+Get the surrogate-specific perceptual representations by Eqs. (23) and (24);  
+
+> 10
+
+Estimate the target semantic references by Eqs. (13) - (16);  
+
+> 11
+
+Compute Ljoint by Eqs. (25) - (27);  
+
+> 12
+
+gk = μ · gk−1 + ∇˜xk−1 Ljoint ; 
+
+> 13
+
+˜xk = Clip x,ϵ (˜ xk−1 − α · sign( gk)) ; 
+
+> 14
+
+end for  
+
+> 15
+
+return ˜x = ˜ xK
+
+4 EXPERIMENTS 
+
+4.1 Experimental Setup 
+
+4.1.1 Dataset 
+
+We conduct experiments on three widely used remote sens-ing image datasets, UCM [68], SIRI-WHU [69], and AID [70], to evaluate the targeted attack performance of different methods against LVLMs for remote sensing image inter-pretation. Specifically, the evaluation involves two major remote sensing image interpretation tasks, i.e., image cap-tioning and image classification. For the image captioning task, we randomly construct 500 image pairs from the UCM and SIRI-WHU datasets, with each pair comprising images from different land-cover types that are alternately treated as the source and target images during adversarial attack generation. For the image classification task, we select ten fixed source-target class pairs from the AID dataset, with 50 images sampled from each class, and aim to mislead LVLM predictions on source images toward the corresponding target classes under a zero-shot setting. During the exper-iments, the input resolution of all images is set to 224 × 224 .
+
+4.1.2 Model Architectures 
+
+In our experiments, we adopt five CLIP variants [14] as ensemble surrogate models for adversarial example gener-ation, including ViT-B/32, ViT-B/16, ViT-L/14, ViT-H/14, and ViT-g/14. We evaluate the transferable targeted attack performance across seven LVLMs, covering three general-purpose open-source models (InstructBLIP [2], LLaVA-1.5-7B [1], and Qwen2.5-VL-7B [71]), two commercial propri-etary models (GPT-5-mini [34] and Gemini-2.5-Flash [72], and two remote sensing-specific models (GeoChat [19] and TeoChat [20]). For the image captioning and classification tasks, the text prompts for these models are set to “Describe the image in one concise sentence.” and “This image belongs to which remote sensing scene category in the following category list?”, respectively. 
+
+4.1.3 General Implementation 
+
+During iterative perturbation generation, all attack methods are implemented under a unified setting to ensure a fair comparison. Specifically, the maximum perturbation mag-nitude ϵ under the ℓ∞-norm constraint is set to 16 /255 , and adversarial examples are optimized for 300 iterations with a step size of α = 1 /255 . For the hyperparameter config-uration of GeoThreat, the selection ratio ρ of adversarial patch tokens, temperature parameter τ , and loss weighting coefficient λ are set to 0.5, 0.1, and 0.5, respectively. The ex-periments are implemented within the PyTorch framework and executed on NVIDIA RTX 4090 GPUs. 
+
+4.1.4 Evaluation Metrics 
+
+To evaluate the effectiveness of the proposed method, we adopt the following metrics to assess the targeted attack performance against LVLMs for remote sensing image in-terpretation across different tasks. For attacks on the image captioning task, we follow the commonly used LLM-as-a-judge protocol [16], [17]. Specifically, we measure the semantic similarity between the textual descriptions gener-ated by the same model for the adversarial example and the corresponding target image using GPTScore [73]. The attack is considered successful when the similarity score exceeds 0.5. The attack performance is quantified by the overall attack success rate (ASR) and the average similarity score (AvgSim). For the image classification task, attack success is instead defined at the label level, i.e., whether the prediction of the adversarial example can be shifted from its ground-truth class toward the predefined target class. 
+
+4.2 Experimental Results 
+
+To demonstrate the effectiveness of our proposed method, we compare the attack performance of GeoThreat with eight advanced adversarial attack methods for LVLMs, including AttackVLM [13], AdvDiffVLM [47], AnyAttack [48], SSA-CWA [46], M-Attack [16], VEAttack [49], FOA-Attack [17], and V-Attack [50]. 
+
+4.2.1 Quantitative Analysis 
+
+The comparison results of transferable targeted attacks on image captioning under different source-target settings are presented in Tables 1 and 2. The first row of each ta-ble reports the attack-free results on clean inputs, which serve as a reference for more clearly assessing the ex-tent of target-oriented semantic manipulation induced by each adversarial attack method. According to the results, GeoThreat consistently achieves the strongest attack perfor-mance across all evaluated LVLMs, outperforming existing methods by a substantial margin. Specifically, on generic open-source LVLMs, GeoThreat achieves an average ASR of 81.9%, outperforming recent state-of-the-art LVLM attack MANUSCRIPT UNDER REVIEW 8
+
+TABLE 1: Transferable targeted attack performance on image captioning under the UCM → SIRI-WHU setting. 
+
+Method Model InstructBlip LLaVa-1.5-7B Qwen2.5-VL-7B GPT-5-mini GeoChat TeoChat ASR AvgSim ASR AvgSim ASR AvgSim ASR AvgSim ASR AvgSim ASR AvgSim 
+
+Clean / 0.0 0.16 0.0 0.08 0.0 0.15 0.0 0.16 0.0 0.13 0.0 0.14 AttackVLM [13] B/32 5.8 0.19 2.4 0.11 13.4 0.23 11.0 0.21 5.0 0.20 7.0 0.19 B/16 8.0 0.21 2.4 0.12 13.0 0.24 11.8 0.22 3.8 0.20 5.4 0.18 L/14 8.0 0.20 4.6 0.14 10.6 0.22 2.4 0.18 11.0 0.22 8.6 0.20 H/14 22.0 0.31 6.2 0.15 25.2 0.32 4.6 0.20 16.0 0.24 23.0 0.29 g/14 20.8 0.30 4.4 0.13 24.6 0.33 4.0 0.20 13.0 0.22 21.6 0.28 Ensemble 42.0 0.44 18.6 0.25 36.0 0.40 8.8 0.24 30.2 0.34 38.2 0.41 AdvDiffVLM [47] Ensemble 3.0 0.16 1.4 0.10 4.6 0.14 2.0 0.17 2.8 0.17 4.6 0.17 AnyAttack [48] Ensemble 2.8 0.17 1.0 0.10 5.2 0.18 2.0 0.17 4.0 0.16 4.2 0.17 SSA-CWA [46] Ensemble 64.4 0.59 47.2 0.48 64.8 0.60 29.6 0.36 45.2 0.44 59.8 0.55 M-Attack [16] Ensemble 46.6 0.46 21.8 0.27 40.4 0.43 11.8 0.26 32.8 0.36 42.0 0.43 VEAttack [49] Ensemble 40.6 0.42 14.4 0.22 32.8 0.38 9.4 0.23 26.6 0.32 44.6 0.43 FOA-Attack [17] Ensemble 57.4 0.52 23.8 0.30 48.6 0.47 15.2 0.27 37.4 0.40 53.4 0.50 V-Attack [50] Ensemble 23.0 0.28 10.2 0.21 19.8 0.25 13.2 0.22 22.4 0.28 15.8 0.25 
+
+GeoThreat Ensemble 88.0 0.73 73.2 0.62 78.6 0.67 50.0 0.50 72.0 0.63 70.8 0.61 
+
+TABLE 2: Transferable targeted attack performance on image captioning under the SIRI-WHU → UCM setting. 
+
+Method Model InstructBlip LLaVa-1.5-7B Qwen2.5-VL-7B GPT-5-mini GeoChat TeoChat ASR AvgSim ASR AvgSim ASR AvgSim ASR AvgSim ASR AvgSim ASR AvgSim 
+
+Clean / 0.0 0.16 0.0 0.09 0.0 0.16 0.0 0.17 0.0 0.14 0.0 0.15 AttackVLM [13] B/32 8.2 0.22 2.2 0.13 12.8 0.24 6.6 0.22 7.6 0.19 6.6 0.19 B/16 7.2 0.21 2.8 0.14 11.2 0.24 4.4 0.21 8.8 0.20 7.2 0.19 L/14 21.8 0.30 12.2 0.23 19.0 0.30 5.8 0.21 20.8 0.28 13.8 0.26 H/14 36.6 0.40 10.6 0.21 33.6 0.39 6.4 0.22 15.4 0.25 36.2 0.40 g/14 33.6 0.38 7.2 0.18 28.2 0.36 6.2 0.22 13.6 0.24 32.6 0.38 Ensemble 64.8 0.57 36.4 0.38 51.6 0.51 18.2 0.31 39.8 0.39 54.6 0.52 AdvDiffVLM [47] Ensemble 1.8 0.16 1.0 0.10 3.6 0.17 1.8 0.17 2.6 0.13 3.6 0.16 AnyAttack [48] Ensemble 3.2 0.17 1.0 0.10 5.2 0.18 1.6 0.17 4.0 0.16 4.2 0.17 SSA-CWA [46] Ensemble 72.6 0.67 54.8 0.54 70.2 0.63 39.4 0.42 55.2 0.53 60.4 0.57 M-Attack [16] Ensemble 60.8 0.55 36.4 0.39 52.8 0.52 20.4 0.32 38.6 0.41 56.0 0.52 VEAttack [49] Ensemble 56.4 0.52 24.8 0.31 42.8 0.45 15.8 0.29 30.6 0.36 53.2 0.53 FOA-Attack [17] Ensemble 69.4 0.61 44.4 0.44 59.6 0.55 24.8 0.36 48.4 0.46 61.4 0.57 V-Attack [50] Ensemble 47.8 0.46 32.8 0.36 37.4 0.38 33.4 0.36 44.8 0.42 38.4 0.42 
+
+GeoThreat Ensemble 88.0 0.76 80.8 0.69 83.0 0.72 70.6 0.61 75.0 0.64 72.6 0.64 InstructBLIP      
+
+> (66.4)
+> LLaVA-1.5-7B
+> (54.4)
+> Qwen2.5-VL-7B
+> (62.2)
+> GeoChat
+> (78.2)
+> TEOChat
+> (83.6)
+> GPT-5-mini
+> (48.8)
+> AttackVLM M-Attack SSA-CWA FOA-Attack V-Attack GeoThreat
+
+Fig. 3: Attack success rates of different methods across various LVLMs on the remote sensing image classification task based on the AID dataset. methods VEAttack and V-Attack by 46.6% and 53.4%, re-spectively. Such superiority in transferability and controlla-bility remains evident on remote sensing-specific LVLMs, on which GeoThreat still achieves ASRs exceeding 70%. Moreover, compared with FOA-Attack, which also exploits local representations for black-box semantic manipulation, GeoThreat achieves an overall AvgSim above 0.65 across different LVLMs, clearly surpassing the approximately 0.45 obtained by FOA-Attack. This demonstrates that our pro-posed method can more effectively adapt local perceptual cues toward the designated semantics. Notably, among the compared methods, SSA-CWA achieves stronger attack per-formance on LVLM-based remote sensing image interpreta-tion than several advanced attacks that are more effective in natural image understanding scenarios. This is mainly attributed to the block-wise random shuffling operation, which encourages the exploration of local perceptual cues across diverse spatial layouts during adversarial example generation. Furthermore, the use of model ensemble tech-niques offers clear advantages over a single surrogate model MANUSCRIPT UNDER REVIEW 9Adversarial Example Target Image Adversarial Example Target Image                                                                   
+
+> “Describe the image in one
+> concise sentence.”
+> GeoChat
+> “...a city with a large
+> building at the center and a
+> roundabout at the top right. ”
+> GPT -5-mini
+> “... urban building complex
+> with multiple internal
+> courtyards casting... ”
+> “Describe the image in one
+> concise sentence.”
+> “Describe the image in one
+> concise sentence.”
+> LLaVa -1.5 -7B
+> “Acityscape with a large
+> building and a clock tower. ”
+> “Describe the image in one
+> concise sentence.”
+> TeoChat
+> “A satellite image of a city
+> with a roundabout at the
+> bottom right. ”
+> “...a cityscape featuring a
+> large, symmetrical building
+> complex surrounded ... ”
+> “Describe the image in one
+> concise sentence.”
+> Qwen2.5 -VL -7B
+> Gemini -2.5 -flash
+> “...several large, geometric
+> urban building complexes ,
+> one of which casts a ... ”
+> “Describe the image in one
+> concise sentence.”
+> “Describe the image in one
+> concise sentence.”
+> GeoChat
+> “The image shows a large
+> gray liquid -cargo -ship at
+> the center of the scene. ”
+> GPT -5-mini
+> “...a harbor pier with a
+> large ship docked alongside
+> and smaller boats nearby. ”
+> “Describe the image in one
+> concise sentence.”
+> “Describe the image in one
+> concise sentence.”
+> LLaVa -1.5 -7B
+> “A large ship is docked at a
+> pier. ”
+> “Describe the image in one
+> concise sentence.”
+> TeoChat
+> “A gray large ship is at
+> the center of the image. ”
+> “... harbor with several boats
+> docked at a pier, surrounded
+> by land and water .”
+> “Describe the image in one
+> concise sentence.”
+> Qwen2.5 -VL -7B
+> Gemini -2.5 -flash
+> “An aerial view depicts a
+> space shuttle docked at a
+> pier in a body of water .”
+> “Describe the image in one
+> concise sentence.”
+> “Describe the image in one
+> concise sentence.”
+> GeoChat
+> “A mostly white vehicle is
+> parked at the building at
+> the top right of the image. ”
+> GPT -5-mini
+> “Aerial view of a densely
+> packed parking lot with
+> rows of parked cars ... ”
+> “Describe the image in one
+> concise sentence.”
+> “Describe the image in one
+> concise sentence.”
+> LLaVa -1.5 -7B
+> “Aparking lot filled with
+> cars and a few trucks .”
+> “Describe the image in one
+> concise sentence.”
+> TeoChat
+> “A satellite image of a
+> city with a large amount
+> of vehicles .”
+> “...a parking lot filled with
+> numerous cars arranged in
+> designated spaces. ”
+> “Describe the image in one
+> concise sentence.”
+> Qwen2.5 -VL -7B
+> Gemini -2.5 -flash
+> “An aerial view shows a
+> densely packed parking lot
+> filled with numerous cars .”
+> “Describe the image in one
+> concise sentence.”
+> “Describe the image in one
+> concise sentence.”
+> GeoChat
+> “...number of ships , mostly
+> white, anchored in various
+> harbors and in the water. ”
+> GPT -5-mini
+> “...a marina showing
+> multiple docks with boats
+> moored in their slips. ”
+> “Describe the image in one
+> concise sentence.”
+> “Describe the image in one
+> concise sentence.”
+> LLaVa -1.5 -7B
+> “A large number of boats
+> are docked in a marina .”
+> “Describe the image in one
+> concise sentence.”
+> TeoChat
+> “16 harbors are present in
+> the image, with 16 ships
+> anchored in them. ”
+> “...a marina with numerous
+> boats docked at slips,
+> surrounded by a paved... ”
+> “Describe the image in one
+> concise sentence.”
+> Qwen2.5 -VL -7B
+> Gemini -2.5 -flash
+> “A grainy, high -angle view
+> captures a marina densely
+> packed with boats .”
+> “Describe the image in one
+> concise sentence.”
+> Adversarial Example Target Image Adversarial Example Target Image
+
+Fig. 4: Illustration of GeoThreat for transferable targeted adversarial attacks against LVLMs in the remote sensing image captioning task. Target-related semantic errors are highlighted in red. in achieving transferable targeted adversarial attack, as it helps reduce surrogate-specific biases and provides more generalizable guidance for perturbation update. In addition to the image captioning task, we further report the targeted attack performance of different methods against LVLMs on the image classification task, with the results presented in Fig. 3. We can see that GeoThreat uni-formly achieves the highest ASRs across different LVLMs, indicating its strong capability to mislead model predic-tions toward the predefined target classes. This further confirms its superiority in both transferability and control-lability when inducing targeted semantic manipulation. For the other methods, V-Attack exhibits relatively balanced and competitive attack performance on the image classi-fication task. This can be mainly attributed to the accu-rate identification of concept-relevant local value features, which facilitates target-oriented mapping of category se-mantics. Regarding the victim LVLMs, the remote sensing-specific models, i.e., GeoChat and TeoChat, exhibit more pronounced vulnerability to adversarial perturbations. This further reveals potential reliability risks in LVLM-based remote sensing image interpretation, underscoring the ne-cessity of investigating the adversarial robustness of LVLMs in the remote sensing domain. 
+
+4.2.2 Qualitative Analysis 
+
+Beyond the quantitative analysis above, we further conduct qualitative analysis to more intuitively demonstrate how GeoThreat misleads LVLM-generated interpretation results for remote sensing images toward specified responses under black-box settings. First, we present adversarial examples generated by GeoThreat, together with the corresponding captioning re-sults from different LVLMs, in Fig. 4. The outputs of open-source, commercial closed-source, and remote sensing-specific LVLMs are displayed in blue, green, and orange panels, respectively. According to the results, by introducing visually imperceptible perturbations, GeoThreat can suc-cessfully steer the interpretation results of different LVLMs toward the corresponding semantics of the target images. For example, given an input image of a residential area, both the overall scene description and the key object identifica-tion are redirected to parking lots and cars. This indicates the effectiveness of the proposed attack method in shifting the joint local-global reasoning process for remote sensing image interpretation. Then, we further conduct a Grad-CAM-based qualita-tive analysis to examine the transferable targeted attack behavior of GeoThreat on the remote sensing image clas-sification task. Specifically, in Fig. 5, we visualize clean input images, corresponding target images, and adversarial examples generated by GeoThreat, together with the Grad-CAM of InstructBLIP, LLaVA-1.5-7B, and GeoChat during scene-category prediction. Although the visual differences between clean and adversarial images are subtle, the atten-tion of different LVLMs is largely shifted away from the original evidence supporting correct classification toward irrelevant regions. As a representative case illustrated in the last row, different victim LVLMs attend to water-surface regions that serve as primary evidence for port recognition in the adversarial example, instead of the shoreline regions that support beach recognition under clean conditions. 
+
+4.3 Ablation Studies 
+
+4.3.1 Contribution of Each Part 
+
+GeoThreat involves three main parts during adversarial ex-ample generation: joint modulation of conceptual and per-MANUSCRIPT UNDER REVIEW 10 
+
+Fig. 5: Visualization of the attention shift induced by the proposed GeoThreat on the image classification task. The first three columns correspond to the clean input image, target image, and adversarial example, respectively, while the remaining paired columns show the Grad-CAM responses of InstructBLIP, LLaVA-1.5-7B, and GeoChat on clean inputs and adversarial examples. TABLE 3: Ablation study on joint conceptual-perceptual representation modulation.                           
+
+> Strategy LLaVa-1.5-7B TeoChat GPT-5-mini ASR AvgSim ASR AvgSim ASR AvgSim Conceptual 61.8 0.57 66.6 0.58 42.2 0.45
+> Perceptual 53.8 0.51 65.2 0.57 36.6 0.41
+> Joint 73.2 0.62 70.8 0.61 50.0 0.50
+
+ceptual representations, collaborative importance estima-tion (CIE), and cross-attentive perceptual adaptation (CPA). In this subsection, we conduct ablation experiments on the image captioning task to validate the contribution of each part to enabling transferable and controllable semantic manipulation. Specifically, under the UCM → SIRI-WHU setting, we evaluate the attack performance of GeoThreat under different configurations of the relevant parts, using LLaVA-1.5-7B, TeoChat, and GPT-5-mini as victim models. First, we validate the effectiveness of joint conceptual-perceptual representation modulation, which serves as our central design rationale for tackling the challenge arising from the distinctive reasoning paradigm of remote sensing image interpretation in achieving transferable targeted at-tacks. The attack performance against different LVLMs is reported in Table 3, where using either global conceptual matching or local perceptual alignment alone to guide ad-versarial example generation leads to a clear performance TABLE 4: Ablation experiments about contributions of CIE and CPA.                                      
+
+> CIE CPA LLaVa-1.5-7B TeoChat GPT-5-mini ASR AvgSim ASR AvgSim ASR AvgSim
+> ✘✘64.6 0.56 67.0 0.57 42.6 0.45
+> ✔✘69.2 0.60 68.2 0.58 45.0 0.46
+> ✘✔66.8 0.59 66.6 0.57 44.2 0.48
+> ✔✔73.2 0.62 70.8 0.61 50.0 0.50
+
+TABLE 5: Ablation experiments about the identification approach of critical adversarial patch tokens.                                 
+
+> Approach LLaVa-1.5-7B TeoChat GPT-5-mini ASR AvgSim ASR AvgSim ASR AvgSim Random 66.6 0.57 67.2 0.58 45.4 0.47
+> Attention 67.2 0.57 68.4 0.59 45.6 0.46
+> Gradient 67.8 0.58 69.8 0.60 49.6 0.49
+> Collabrative 73.2 0.62 70.8 0.61 50.0 0.50
+
+gap compared with their joint use. Therefore, the adoption of joint representation modulation is essential for enhanc-ing targeted black-box attack efficacy against LVLM-based remote sensing interpretation. Then, we compare the attack performance of different combinations of the remaining two parts related to local perceptual adaptation, with the results reported in Table 4. We adopt a uniform alignment scheme between all patch tokens of the adversarial example and those of the target image as the baseline. We observe that the individual use of each part brings only moderate im-provements, whereas their coordination yields substantially stronger transferable targeted attack effects. This indicates that accurate identification of critical adversarial patches and appropriate modeling of target correspondences are both indispensable for adapting local perceptual cues to-ward the designated semantics. 
+
+4.3.2 Identification of Critical Adversarial Patch Tokens 
+
+When determining local perceptual representations, we de-velop a collaborative importance estimation approach to identify adversarial patch tokens that are both decision-relevant and target-responsive. To justify this design choice in critical adversarial patch identification, we compare the attack performance of GeoThreat under the UCM → SIRI-WHU attack protocol, where critical adversarial patches are identified using different importance-estimation ap-proaches. MANUSCRIPT UNDER REVIEW 11 InstructBLIP Qwen2.5-VL-7B GeoChat TEOChat      
+
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> ASR (%)
+> λ= 0.1
+> λ= 0.3
+> λ= 0.5
+> λ= 0.7
+> λ= 1.0
+
+(a) λInstructBLIP Qwen2.5-VL-7B GeoChat TEOChat       
+
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> ASR (%)
+> ρ= 0.1
+> ρ= 0.3
+> ρ= 0.5
+> ρ= 0.7
+> ρ= 0.9
+
+(b) ρ
+
+Fig. 6: Attack success rate of adversarial examples generated by GeoThreat with different settings of λ and ρ.Table 5 reports ASR and AvgSim under different importance-estimation approaches. Here, Random denotes randomly selecting a fixed proportion of adversarial patch tokens as perceptual representations. Attention and Gradi-ent denote using rolled-out attention scores and conceptual-similarity sensitivities as the importance-estimation crite-rion, respectively. According to the results, selecting adver-sarial patches solely based on attention scores does not bring evident gains over random selection in driving the target-oriented semantic transition. In comparison, using patch tokens selected according to conceptual-similarity sensitiv-ities as perceptual representations yields relatively better attack performance. By integrating attention weights with their corresponding conceptual-similarity sensitivities, the proposed collaborative importance estimation approach can most effectively steer the outputs of different victim models toward the target semantics. 
+
+4.3.3 Hyperparameter Analysis 
+
+In this subsection, we investigate how different settings of key hyperparameters in GeoThreat affect transferable tar-geted attack performance, including the adversarial patch-token selection ratio ρ and the loss weighting coefficient λ.Specifically, under the SIRI-WHU → UCM setting, we com-pare the attack success rates of GeoThreat across different hyperparameter values. First, to avoid the influence of patch selection, we use all adversarial patch tokens as perceptual representations and conduct joint adversarial optimization under different values of λ ranging from 0.1 to 1.0. The results presented in Fig. 6a indicate that a moderate λ yields better attack performance, whereas assigning an overly large weight to local perceptual adaptation can compromise global concep-tual calibration and lead to performance degradation. Then, we first fix λ to 0.5 and vary ρ from 0.1 to 0.9. As shown in Fig. 6b, the attack performance against different LVLMs initially increases as ρ becomes larger, but tends to decline when excessive adversarial patch tokens are selected. This is because the land-cover semantics encoded in the image cannot be sufficiently characterized by a limited number of adversarial patch tokens, whereas excessive patch selection can introduce redundant information and dilute the focus on discriminative cues. Given the above analysis, we set both λ and ρ to 0.5 in GeoThreat. 
+
+5 CONCLUSION 
+
+In this paper, we have proposed GeoThreat, a transfer-able targeted attack for LVLM-based remote sensing im-age interpretation. In response to the challenges arising from the joint global-local reasoning paradigm for black-box targeted attacks, GeoThreat guides adversarial example generation through coordinated modulation of conceptual and perceptual representations. Specifically, the class token of the adversarial example is aligned with that of the target image to perform global conceptual calibration. Meanwhile, at the perceptual level, critical adversarial patch tokens are identified through collaborative importance estimation and cross-attentively adapted toward the designated semantics. Finally, adversarial perturbations are iteratively updated through a joint adversarial optimization strategy over an ensemble of surrogate vision encoders to enable more trans-ferable and controllable semantic manipulation. Extensive experiments on image captioning and image classification across multiple remote sensing datasets demonstrate that GeoThreat consistently outperforms existing attack methods against diverse LVLMs. Beyond the performance superi-ority, the established benchmark reveals potential security and reliability risks in LVLM-based remote sensing image interpretation, highlighting the importance of exploring ad-versarial robustness in the remote sensing field amid the rise of LVLMs. 
+
+REFERENCES 
+
+[1] H. Liu, C. Li, Q. Wu, and Y. J. Lee, “Visual instruction tuning,” 
+
+Advances in Neural Information Processing Systems , vol. 36, pp. 34 892–34 916, 2023. [2] W. Dai, J. Li, D. Li, A. Tiong, J. Zhao, W. Wang, B. Li, P. N. Fung, and S. Hoi, “Instructblip: Towards general-purpose vision-language models with instruction tuning,” Advances in Neural Information Processing Systems , vol. 36, pp. 49 250–49 267, 2023. [3] J. Achiam, S. Adler, S. Agarwal, L. Ahmad, I. Akkaya, F. L. Aleman, D. Almeida, J. Altenschmidt, S. Altman, S. Anadkat et al. ,“Gpt-4 technical report,” arXiv preprint arXiv:2303.08774 , 2023. [4] P. Wang, S. Bai, S. Tan, S. Wang, Z. Fan, J. Bai, K. Chen, X. Liu, J. Wang, W. Ge et al. , “Qwen2-vl: Enhancing vision-language model’s perception of the world at any resolution,” arXiv preprint arXiv:2409.12191 , 2024. [5] Y. Li, Y. Zhang, C. Wang, Z. Zhong, Y. Chen, R. Chu, S. Liu, and J. Jia, “Mini-gemini: Mining the potential of multi-modality vision language models,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [6] X. Yuan, P. He, Q. Zhu, and X. Li, “Adversarial examples: Attacks and defenses for deep learning,” IEEE Transactions on Neural Networks and Learning Systems , vol. 30, no. 9, pp. 2805–2824, 2019. MANUSCRIPT UNDER REVIEW 12 
+
+[7] X. Liu, Y. Zhu, Y. Lan, C. Yang, and Y. Qiao, “Safety of multimodal large language models on images and text,” in Proceedings of the International Joint Conference on Artificial Intelligence , 2024, pp. 8151– 8159. [8] D. Liu, M. Yang, X. Qu, P. Zhou, Y. Cheng, and W. Hu, “A survey of attacks on large vision–language models: Resources, advances, and future trends,” IEEE Transactions on Neural Networks and Learning Systems , 2025. [9] X. Cui, A. Aparcedo, Y. K. Jang, and S.-N. Lim, “On the robustness of large multimodal models against image adversarial attacks,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 24 625–24 634. [10] Y. Liu, X. Chen, C. Liu, and D. Song, “Delving into transferable adversarial examples and black-box attacks,” in Proceedings of the International Conference on Learning Representations , 2017. [11] M. Zheng, X. Yan, Z. Zhu, H. Chen, and B. Wu, “Blackboxbench: A comprehensive benchmark of black-box adversarial attacks,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [12] Z. Yin, M. Ye, T. Zhang, T. Du, J. Zhu, H. Liu, J. Chen, T. Wang, and F. Ma, “Vlattack: Multimodal adversarial attacks on vision-language tasks via pre-trained models,” Advances in Neural Infor-mation Processing Systems , vol. 36, pp. 52 936–52 956, 2023. [13] Y. Zhao, T. Pang, C. Du, X. Yang, C. Li, N.-M. Cheung, and M. Lin, “On evaluating adversarial robustness of large vision-language models,” in Advances in Neural Information Processing Systems , 2023. [14] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agar-wal, G. Sastry, A. Askell, P. Mishkin, J. Clark et al. , “Learning transferable visual models from natural language supervision,” in Proceedings of the International Conference on Machine Learning ,2021, pp. 8748–8763. [15] J. Chen, H. Chen, K. Chen, Y. Zhang, Z. Zou, and Z. Shi, “Diffusion models for imperceptible and transferable adversarial attack,” 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence ,vol. 47, no. 2, pp. 961–977, 2024. [16] Z. Li, X. Zhao, D.-D. Wu, J. Cui, and Z. Shen, “A frustratingly simple yet highly effective attack baseline: Over 90% success rate against the strong black-box models of gpt-4.5/4o/o1,” in 
+
+Advances in Neural Information Processing Systems , vol. 38, 2025. [17] X. Jia, S. Gao, S. Qin, T. Pang, C. Du, Y. Huang, X. Li, Y. Li, B. Li, and Y. Liu, “Adversarial attacks against closed-source mllms via feature optimal alignment,” in Advances in Neural Information Processing Systems , 2025. [18] J. Zhang, J. Huang, S. Jin, and S. Lu, “Vision-language models for vision tasks: A survey,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 46, no. 8, pp. 5625–5644, 2024. [19] K. Kuckreja, M. S. Danish, M. Naseer, A. Das, S. Khan, and F. S. Khan, “Geochat: Grounded large vision-language model for remote sensing,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 27 831–27 840. [20] J. Irvin, E. Liu, J. Chen, I. Dormoy, J. Kim, S. Khanna, Z. Zheng, and S. Ermon, “Teochat: A large vision-language assistant for temporal earth observation data,” in Proceedings of the International Conference on Learning Representations , 2025. [21] X. Weng, C. Pang, and G.-S. Xia, “Vision-language modeling meets remote sensing: Models, datasets, and perspectives,” IEEE Geoscience and Remote Sensing Magazine , 2025. [22] J. Chai, L. Jiao, X. Lu, L. Li, F. Liu, L. Sun, X. Liu, W. Ma, and W. Li, “Like human rethinking: Contour transformer autoregres-sion for referring remote sensing interpretation,” IEEE Transactions on Pattern Analysis and Machine Intelligence , 2026. [23] Z. Chen, E. Asadi Shamsabadi, S. Jiang, L. Shen, and D. Dias-da Costa, “Integration of large vision language models for efficient post-disaster damage assessment and reporting,” Nature Commu-nications , 2026. [24] H. Lin, C. Zhang, D. Hong, K. Dong, and C. Wen, “Fedrsclip: Federated learning for remote sensing scene classification using vision-language models,” IEEE Geoscience and Remote Sensing Mag-azine , 2025. [25] J. Li, X. Huang, and J. Gong, “Deep neural network for remote-sensing image interpretation: Status and perspectives,” National Science Review , vol. 6, no. 6, pp. 1082–1086, 2019. [26] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser, and I. Polosukhin, “Attention is all you need,” 
+
+Advances in Neural Information Processing Systems , vol. 30, 2017. [27] Y. Lu, X. Wang, Z. Chen, X. Xu, and C. Shen, “Benchmarking large vision-language models via directed scene graph for comprehen-sive image captioning,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2025. [28] D.-T. Luu, V.-T. Le, and D. M. Vo, “Questioning, answering, and captioning for zero-shot detailed image caption,” in Proceedings of the Asian Conference on Computer Vision , 2024, pp. 242–259. [29] T. Wang, F. Li, L. Zhu, J. Li, Z. Zhang, and H. T. Shen, “Cross-modal retrieval: A systematic review of methods and future di-rections,” Proceedings of the IEEE , vol. 112, no. 11, pp. 1716–1754, 2024. [30] M. Caron, H. Touvron, I. Misra, H. J´ egou, J. Mairal, P. Bojanowski, and A. Joulin, “Emerging properties in self-supervised vision transformers,” in Proceedings of the IEEE/CVF International Confer-ence on Computer Vision , 2021, pp. 9650–9660. [31] Y. Chang, X. Wang, J. Wang, Y. Wu, L. Yang, K. Zhu, H. Chen, X. Yi, C. Wang, Y. Wang et al. , “A survey on evaluation of large language models,” ACM Transactions on Intelligent Systems and Technology ,vol. 15, no. 3, pp. 1–45, 2024. [32] J. Li, D. Li, S. Savarese, and S. C. H. Hoi, “Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large language models,” in Proceedings of the 40th International Con-ference on Machine Learning , ser. Proceedings of Machine Learning Research, vol. 202. PMLR, 2023, pp. 19 730–19 742. [33] D. Zhu, J. Chen, X. Shen, X. Li, and M. Elhoseiny, “Minigpt-4: Enhancing vision-language understanding with advanced large language models,” in Proceedings of the International Conference on Learning Representations , 2024. [34] OpenAI, “Gpt-5 system card,” OpenAI, Tech. Rep., 2025. [35] Anthropic, “System card: Claude opus 4 & claude sonnet 4,” Anthropic, Tech. Rep., 2025. [36] Gemini Team, “Gemini: A family of highly capable multimodal models,” arXiv preprint arXiv:2312.11805 , 2023. [37] F. Liu, D. Chen, Z. Guan, X. Zhou, J. Zhu, Q. Ye, L. Fu, and J. Zhou, “Remoteclip: A vision language foundation model for re-mote sensing,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 62, pp. 1–16, 2024. [38] Y. Hu, J. Yuan, C. Wen, X. Lu, Y. Liu, and X. Li, “Rsgpt: A remote sensing vision language model and benchmark,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 224, pp. 272–286, 2025. [39] D. Muhtar, Z. Li, F. Gu, X. Zhang, and P. Xiao, “Lhrs-bot: Em-powering remote sensing with VGI-enhanced large multimodal language model,” in Proceedings of the European Conference on Computer Vision , 2024. [40] Y. Zhan, Z. Xiong, and Y. Yuan, “Skyeyegpt: Unifying remote sensing vision-language tasks via instruction tuning with large language model,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 221, pp. 64–77, 2025. [41] W. Zhang, M. Cai, T. Zhang, Y. Zhuang, and X. Mao, “Earthgpt: A universal multi-modal large language model for multi-sensor im-age comprehension in remote sensing domain,” IEEE Transactions on Geoscience and Remote Sensing , 2024. [42] A. Kurakin, I. Goodfellow, and S. Bengio, “Adversarial machine learning at scale,” in Proceedings of International Conference on Learning Representations , 2016. [43] A. Kurakin, I. J. Goodfellow, and S. Bengio, “Adversarial examples in the physical world,” in Proceedings of the International Conference on Learning Representations Workshop , 2017. [44] A. Madry, A. Makelov, L. Schmidt, D. Tsipras, and A. Vladu, “Towards deep learning models resistant to adversarial attack,” in Proceedings of the International Conference on Learning Representa-tions , 2018. [45] Y. Dong, F. Liao, T. Pang, H. Su, J. Zhu, X. Hu, and J. Li, “Boosting adversarial attacks with momentum,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2018, pp. 9185–9193. [46] Y. Dong, H. Chen, J. Chen, Z. Fang, X. Yang, Y. Zhang, Y. Tian, H. Su, and J. Zhu, “How robust is google’s bard to adversarial image attacks?” arXiv preprint arXiv:2309.11751 , 2023. [47] Q. Guo, S. Pang, X. Jia, Y. Liu, and Q. Guo, “Efficient genera-tion of targeted and transferable adversarial examples for vision-language models via diffusion models,” IEEE Transactions on Infor-mation Forensics and Security , 2024. [48] J. Zhang, J. Ye, X. Ma, Y. Li, Y. Yang, J. Sang, and D.-Y. Yeung, “Anyattack: Towards large-scale self-supervised adversarial at-tacks on vision-language models,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2025. [49] H. Mei, Z. Wang, S. You, M. Dong, and C. Xu, “VEAttack: Downstream-agnostic vision encoder attack against large vision MANUSCRIPT UNDER REVIEW 13 
+
+language models,” in International Conference on Learning Represen-tations , 2026. [50] S. Nie, J. Zhang, J. Yan, S. Shan, and X. Chen, “V-attack: Targeting disentangled value features for controllable adversarial attacks on lvlms,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2026, pp. 42 257–42 267. [51] Y. Li, T. Xu, C. Hu, T. Zhou, X.-J. Wu, and J. Kittler, “Multi-paradigm collaborative adversarial attack against multi-modal large language models,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2026. [52] Y. Xu, B. Du, and L. Zhang, “Assessing the threat of adversarial examples on deep neural networks for remote sensing scene clas-sification: Attacks and defenses,” IEEE Transactions on Geoscience and Remote Sensing , vol. 59, no. 2, pp. 1604–1617, 2020. [53] L. Chen, Z. Xu, Q. Li, J. Peng, S. Wang, and H. Li, “An empirical study of adversarial examples on remote sensing image scene classification,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 59, no. 9, pp. 7419–7433, 2021. [54] Y. Xu and P. Ghamisi, “Universal adversarial examples in remote sensing: Methodology and benchmark,” IEEE Transactions on Geo-science and Remote Sensing , vol. 60, pp. 1–15, 2022. [55] Y. Fu, Z. Liu, and J. Lyu, “Transferable adversarial attacks for remote sensing object recognition via spatial-frequency co-transformation,” IEEE Transactions on Geoscience and Remote Sens-ing , 2024. [56] X. Sun, G. Cheng, H. Li, H. Peng, and J. Han, “Task-specific importance-awareness matters: On targeted attacks against object detection,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 34, no. 11, pp. 11 619–11 629, 2024. [57] T. Bai, Y. Cao, Y. Xu, and B. Wen, “Stealthy adversarial examples for semantic segmentation in remote sensing,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–17, 2024. [58] Y. Fu, Y. Bai, J. Lyu, B. Pan, Z. Liu, and M. K. Ng, “Transferability reinforcement of adversarial attacks for remote sensing image classification via hierarchical transformation composition,” IEEE Transactions on Geoscience and Remote Sensing , 2026. [59] C. Shi, Y. Dang, L. Fang, Z. Lv, and M. Zhao, “Hyperspectral image classification with adversarial attack,” IEEE Geoscience and Remote Sensing Letters , vol. 19, pp. 1–5, 2022. [60] H. Li, K. Dang, M. Gong, A. Qin, Y. Zhou, Y. Wu, and L. Xing, “Sparse unmixing guided adversarial attack for hyperspectral image classification,” IEEE Transactions on Circuits and Systems for Video Technology , 2025. [61] B. Peng, B. Peng, J. Zhou, J. Xie, and L. Liu, “Scattering model guided adversarial examples for sar target recognition: Attack and defense,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 60, pp. 1–17, 2022. [62] Y. Su, G. Zhang, S. Mei, J. Lian, Y. Wang, and S. Wan, “Reconstruction-assisted and distance-optimized adversarial training: A defense framework for remote sensing scene classifica-tion,” IEEE Transactions on Geoscience and Remote Sensing , vol. 61, pp. 1–13, 2023. [63] W. Yu, Y. Xu, and P. Ghamisi, “Universal adversarial defense in remote sensing based on pre-trained denoising diffusion models,” 
+
+International Journal of Applied Earth Observation and Geoinformation ,vol. 133, p. 104131, 2024. [64] J. Qi, Z. Gong, X. Liu, C. Chen, and P. Zhong, “Masked spatial– spectral autoencoders are excellent hyperspectral defenders,” 
+
+IEEE Transactions on Neural Networks and Learning Systems , vol. 36, no. 2, pp. 3012–3026, 2024. [65] S. Pathak, S. Shrestha, and A. AlMahmoud, “Model agnostic defense against adversarial patch attacks on object detection in unmanned aerial vehicles,” in Proceedings of the 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems , 2024, pp. 2586–2593. [66] Y. Xu, B. Du, and L. Zhang, “Self-attention context network: Addressing the threat of adversarial attacks for hyperspectral image classification,” IEEE Transactions on Image Processing , vol. 30, pp. 8671–8685, 2021. [67] Z. Liu, J. Lyu, and Y. Fu, “Scattering-guided class-irrelevant fil-tering for adversarially robust sar automatic target recognition,” 
+
+Signal Processing , vol. 239, p. 110273, 2026. [68] Y. Yang and S. Newsam, “Bag-of-visual-words and spatial exten-sions for land-use classification,” in Proceedings of the 18th ACM SIGSPATIAL International Conference on Advances in Geographic Information Systems , 2010, pp. 270–279. [69] Zhao, Bei and Zhong, Yanfei and Xia, Guisong and Zhang, Liang-pei, “Dirichlet-derived multiple topic scene classification model for high spatial resolution remote sensing imagery,” IEEE Transac-tions on Geoscience and Remote Sensing , vol. 54, no. 4, pp. 2108–2123, 2015. [70] G.-S. Xia, J. Hu, F. Hu, B. Shi, X. Bai, Y. Zhong, and L. Zhang, “Aid: A benchmark data set for performance evaluation of aerial scene classification,” IEEE Transactions on Geoscience and Remote Sensing ,vol. 55, no. 7, pp. 3965–3981, 2017. [71] S. Bai, K. Chen, X. Liu, J. Wang, W. Ge, S. Song, K. Dang, P. Wang, S. Wang, J. Tang et al. , “Qwen2.5-vl technical report,” arXiv preprint arXiv:2502.13923 , 2025. [72] G. Comanici, E. Bieber, M. Schaekermann et al. , “Gemini 2.5: Push-ing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities,” arXiv preprint arXiv:2507.06261 , 2025. [73] J. Fu, S. K. Ng, Z. Jiang, and P. Liu, “Gptscore: Evaluate as you desire,” in Proceedings of the North American Chapter of the Asso-ciation for Computational Linguistics: Human Language Technologies ,2024, pp. 6556–6576.
