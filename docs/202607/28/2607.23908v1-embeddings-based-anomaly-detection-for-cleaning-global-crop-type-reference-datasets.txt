@@ -1,0 +1,317 @@
+Title: Embeddings based Anomaly Detection for Cleaning Global Crop Type Reference Datasets
+
+URL Source: https://arxiv.org/pdf/2607.23908v1
+
+Published Time: Tue, 28 Jul 2026 01:24:25 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Embeddings based Anomaly Detection for Cleaning Global Crop Type Reference Datasets 
+
+Syed Roshaan Ali Shah 1⋆, Kristof Van Tricht 1⋆, Christina Butsko 1, Jeroen Degerickx 1, and Zoltan Szantoi 2 
+
+> 1
+
+VITO Remote Sensing, Mol, Belgium  
+
+> 2
+
+European Space Agency (ESA), Frascati, Italy 
+
+Abstract. High quality reference data remain a critical bottleneck for crop-type mapping at any spatial and temporal scale. Operational sys-tems such as WorldCereal aggregate labels from heterogeneous sources such as parcel registers, national databases, field surveys, and map-derived products, each with their own biases, coverage gaps and unknown label noise. Simple global rules are inadequate, since crop phenology and observation conditions vary strongly across regions and seasons. In this study, we focus on a single, operationally relevant question: whether embeddings produced through geospatial foundation models are a viable basis for cleaning the reference data. We propose a practical, locality-aware, embedding-based anomaly (EBA) detection framework that op-erates on the embeddings of a pretrained Earth-observation encoder. We score each labelled sample against other samples of the same crop in the same area using a pretrained embedding, flag the ones that stand out, and test whether removing or down-weighting them before training yields a better model. We establish that the flagged points are genuinely mislabelled or mis-placed in two independent ways: against synthetic ground truth, the detector concentrates injected label errors 2.5–5× above chance in its flagged set (detection AUROC up to 0.84 ); and on real data, a model-independent test shows that removing or confidence-weighting the flagged held-out points raises measured accuracy in trained models, for both crop type and land cover. Acting on the flags then improves the WorldCereal crop-type model across five macro-regions, evaluated on a fixed held-out split under three views. We find conservative cleaning helps while over-cleaning hurts. The EBA detector approach is designed to be reproducible and exten-sible, and can serve as a template for cleaning large, noisy Earth obser-vation reference datasets beyond crop mapping. The reference code is available through the GitHub repository. 
+
+Keywords: Anomaly detection · Label noise · Earth observation em-beddings · Crop-type mapping · WorldCereal  
+
+> ⋆
+
+These authors contributed equally. arXiv:2607.23908v1 [cs.CV] 27 Jul 2026 2 Embedding-based Outlier Detection for Crop Reference Data 
+
+# 1 Introduction 
+
+Supervised and semi-supervised crop-type mapping at global scale depends crit-ically on access to harmonised, reliable reference data. In practice such labels are assembled from diverse sources: parcel-level registers such as LPIS in Eu-rope, national databases, field surveys like LUCAS [7], contractor datasets, and increasingly map-derived labels from national or global products such as the USDA Cropland Data Layer [2]. Each source carries its own spatial footprint, class definitions, temporal coverage and error modes. Combined into a single training pool, the resulting global dataset exhibits unknown label noise, regional inconsistencies and artefacts from the underlying maps and sampling strategies, a recurring obstacle in deploying global crop-mapping models [5]. Label noise is known to degrade supervised learning and is the subject of a large literature on its characterisation and mitigation [10, 15, 16, 22]; it is especially damaging for land-cover and crop mapping from satellite image time series [8, 18]. The notion of an outlier in Earth-observation (EO) data is itself dual. Some outliers are genuine extreme events such as droughts, floods or heatwaves that are environmentally real and may be scientifically valuable [9]; others are label errors or artefacts that should be cleaned before training. Our focus is the latter: identifying samples whose representation is highly anomalous relative to other samples of the same declared class in the same locality, a strong indicator of mislabelling rather than of an interesting extreme event. WorldCereal [21,25] is an open, modular system developed under ESA fund-ing to provide global-scale products. It combines a reference-data module, in-gestion and harmonisation pipelines, multi-modal feature extraction and learn-ing components to deliver crop extent, crop-type and irrigation maps at sea-sonal scales. Its Reference Data Module (RDM) [1] hosts harmonised reference datasets, exposes flexible querying and download, and lets external contributors upload and share samples. The RDM is thus the central entry point for training data, but at the same time concentrates the challenge of combining heteroge-neous, noisy labels. Two characteristics make anomaly detection in this setting non-trivial. First, there is no global, invariant signature for any crop that would hold across cli-mates, management practices and sensor conditions: what a normal example looks like for winter wheat in temperate Europe differs entirely from irrigated rice in the tropics or mixed-cropping systems in semi-arid regions. Second, mod-ern EO pipelines increasingly summarise rich, multi-modal time series with self-supervised representation models [6, 11, 20, 23], in whose feature space distinct classes may still overlap. Anomaly detection must therefore be local in space and label domain, and robust to high intra-class variability [17]. Many such errors are invisible in a basemap or RGB chip and surface only in the multi-temporal, multi-modal signal. These self-supervised representation model pipelines already produce, for every reference sample, a compact embedding vector that summarises its full multi-modal time series. We study whether such embeddings are a viable basis for cleaning the reference data, and we develop a locality-aware anomaly de-Embedding-based Outlier Detection for Crop Reference Data 3
+
+tector that operates directly on them. The method is presented in the context of the WorldCereal crop-type dataset but is designed to generalise to other EO reference collections. We make three contributions: (i) a generic local-slice formulation of outlier detection for labelled EO reference data, in which each sample is judged only against same-class neighbours in the same locality; (ii) an embedding-based de-tector that combines centroid distance and local neighbour structure into an anomaly score with graded categories and a confidence output; and (iii) an eval-uation combining ground-truthed synthetic-noise recovery, a model-independent test on real data, and a downstream study on the operational WorldCereal model across five macro-regions. Outlier detection here is not the detection of an absolute property of a point but of a point being unusual relative to a chosen reference set; that set is therefore constructed explicitly as the local slice, and all scoring is relative to it. 
+
+# 2 Data and Methods 
+
+2.1 Reference data 
+
+We work with labelled reference data of the kind hosted in repositories such as the WorldCereal Reference Data Module (RDM) [1], which can serve crop mapping at any scale. Each sample is a point, typically a field centroid, with a geographic coordinate and a land-cover and crop-type label. For crop-mapping analyses these samples are paired with co-located multi-temporal Earth-observation sig-nals, typically optical (Sentinel-2), radar (Sentinel-1), meteorological and terrain variables, and optionally other sources. For WorldCereal, the temporal observa-tions are composited into twelve monthly timesteps. The current global coverage of WorldCereal is on the order of several million samples, including both land-cover and crop-type labels. For analysis we group the detailed labels into a coarser legend, for example merging winter, spring and durum wheat into a single wheat class, or combining minor crops into groups such as fibre crops, so that each class has enough samples in a given area to define a meaningful reference population against which outliers can be judged. 
+
+# 3 Embedding-based anomaly detection 
+
+3.1 EO embeddings 
+
+For each training sample a pretrained EO encoder produces a fixed-size vector representation of its local multi-temporal environment. We compute here em-beddings for outlier detection through a Presto-style model [23], which is very lightweight and suitable for this kind of analysis. To initially not have leakage of labels into the embeddings, we rely on the official pretrained weights to com-pute them. We align the embedding computation around the valid time when 4 Embedding-based Outlier Detection for Crop Reference Data 
+
+the crop was observed to be on the ground [14]. The EBA detector itself treats them as just d-dimensional vectors (here d=128 ) and does not depend on the architecture, requiring only that samples with similar crop types and observation conditions map to nearby vectors. 
+
+3.2 Local slices in embedding space 
+
+To avoid global assumptions about crop signatures, we operate on spatially local, label-consistent slices . A slice is the set of samples sharing a cell of an H3 grid [24] at a chosen level L (for example L ∈ { 1, 2, 3}), a label in the chosen label domain (either croptype or landcover), and optionally further grouping attributes such as year or source dataset. The data are grouped by the keys 
+
+slice key = ( h3 cell , label ) [ + dataset id , year ].
+
+Slices with fewer than a configurable minimum number of samples (for example 
+
+50 ) are merged with neighbours up to a certain range, and if still undersized they are excluded from scoring, since a stable reference cannot be defined from too few points. For a slice with N samples and embeddings E ∈ RN ×d we compute, for each sample i, its cosine distance to the slice centroid c,
+
+dcentroid  
+
+> i
+
+= 1 − cos  θ(Ei, c ),
+
+and the mean cosine distance to its k nearest neighbours within the slice. The two terms are complementary: the centroid distance measures how far a point lies from the bulk of its declared crop-type or land-cover class in that slice, while the neighbour distance catches points that sit apart even from nearby samples of the same class. For moderate slice sizes we compute both exactly from the full pairwise distance matrix and for large slices we use an approximate nearest-neighbour index to avoid quadratic cost. 
+
+3.3 Score normalization and combination 
+
+Raw distances are mapped to approximate [0 , 1] anomaly scores using slice-specific empirical percentiles. For a distance vector d within a slice, with pmin , p max 
+
+its qmin and qmax percentiles, 
+
+si = clip 
+
+ di − pmin 
+
+pmax − pmin + ε , 0, 1
+
+
+
+,
+
+applied separately to the centroid and neighbour distances and averaged into a single score Si = 12 scentroid  
+
+> i
+
++ 12 skNN  
+
+> i
+
+. From Si we additionally derive a rank-based score Srank  
+
+> i
+
+, obtained by mapping the within-slice order of Si to [0 , 1] , and a robust z-score Sz 
+
+> i
+
+based on the slice median and median absolute deviation (MAD). These three capture complementary views of how unusual a sample is, so we combine them into a single equal-weighted mean _score so that no single statistic can dominate: 
+
+mean _score i = 13
+
+ Si + Srank  
+
+> i
+
++ Sz
+
+> i
+
+.Embedding-based Outlier Detection for Crop Reference Data 5    
+
+> Fig. 1: Mapping from the within-slice anomaly score to confidence_nonoutlier , for the default and tightened operating points. Confidence stays at 1over most of the score range and collapses only in the extreme tail.
+
+3.4 Flagging and grading outliers 
+
+Within each slice we flag a sample as anomalous when its score sits far above the slice’s typical value. We use the median absolute deviation (MAD), a standard robust outlier rule [12]. A sample is flagged when its score exceeds the slice median by more than k MADs, with k=4 , which keeps flags rare in clean slices. We additionally cap the flagged share of any slice at 10% so that a few heavy-tailed slices cannot dominate. Simpler percentile or fixed-threshold rules are possible, but the MAD rule adapts to each slice’s own spread and is itself robust to the outliers it must detect, which is why we prefer it. Rather than a single yes/no decision, we grade each sample by how strongly it stands out, so that downstream training can choose how aggressively to clean: 
+
+– normal: not flagged; treated as reliable. 
+
+– flagged: above the MAD threshold; a mild anomaly. 
+
+– suspect: flagged and among the extreme samples (e.g. Srank  
+
+> i
+
+> 0.98 ). 
+
+– candidate: the most extreme of all (e.g. > 0.99 ). The cleaning experiments use these grades as options: candidates are the first to remove, while extending removal to suspects and flagged points discards pro-gressively more. 
+
+3.5 From mean score to confidence 
+
+The mean _score takes continuous values in [0 , 1] , but only its upper end reli-ably separates genuine outliers and most lower range covers the variations in actual samples of a class. To turn it into a usable soft weight for downweight-ing we therefore generate confidence_nonoutlier , which stays near 1 over the bulk of the range of mean_score and falls only for the highest scores. It is 6 Embedding-based Outlier Detection for Crop Reference Data 
+
+obtained from mean _score by an accelerating decay with a knee at t: writing 
+
+y = clip  (mean _score − t)/(1 − t), 0, 1,
+
+confidence_nonoutlier = cmin + (1 − cmin ) exp 
+
+
+
+− γ y
+
+> 1−y
+
+
+
+,
+
+with a floor cmin . A point scoring below t keeps confidence 1, and only the extreme tail is penalised; γ controls how sharply confidence collapses as the score approaches 1 (Fig. 1). We report two operating points: a default setting ( t=0 .975 , γ =0 .30 ) and a tightened one ( t=0 .95 , γ=0 .23 ) that starts penalising slightly earlier and harder. Finally, we apply this down-weighting only to points the slice threshold already flagged, all unflagged points keep confidence 1.
+
+3.6 Robustness Measures Robust reference centroid: The centroid c is the reference against which anomalies are measured, and computing it as the plain mean is fragile. The very outliers we wish to detect pull the mean toward themselves, deflating their own distance and masking them, the classical masking/swamping problem in robust statistics [12, 19]. We therefore use a contamination-resistant trimmed centroid, starting from the mean, we measure the cosine distance of every point, discard the farthest fraction τ (set to at least the maximum expected outlier fraction), recompute the mean on the retained inlier core, and iterate to convergence, 
+
+c(t+1) = mean 
+
+
+
+{Ei : dcentroid  
+
+> i
+
+(c(t)) ≤ Q1−τ }
+
+
+
+,
+
+where Q1−τ is the (1 − τ ) quantile of the distances to c(t).
+
+Down-weighting flags in uninformative neighbourhoods: A distance-to-reference score is only meaningful where the embedding actually separates the relevant classes. With a frozen encoder this can fail in areas whose representation does not distinguish the crops in question, producing flags that reflect a weak embedding rather than a genuine label error. We therefore estimate, for each neighbourhood, how well its classes are separated, using a silhouette-style ratio of between-class to within-class distance (and a simple concentration measure where only one class is present). Where this separability is very low we pull the confidence of any flags there back to 1. In practice the gate triggers rarely, it is a safeguard against degenerate neighbourhoods. 
+
+Consistency of the confidence and flagged outputs: The EBA detector gives both a discrete grading Sec. 3.4 and the continuous confidence_nonoutlier ∈
+
+[0 , 1] Sec. 3.5, where a value near 1 means the sample is confidently a clean, non-outlier example and a value near 0 means a likely error. Because the un-derlying score is a within-slice rank, the single highest-scoring sample of every Embedding-based Outlier Detection for Crop Reference Data 7
+
+slice, including a perfectly clean one, receives a high anomaly score and would therefore be given a low confidence purely for being its slice’s relative maximum. To prevent this, we tie the continuous confidence to the discrete flag, therefore any sample in the normal grading category keeps confidence 1, and the decay adjusts only the confidence of samples that were already flagged. The whole pipeline is openly available at https://github.com/WorldCereal/ EBA_detector 
+
+# 4 Experimental design and results 
+
+The evaluation addresses three questions: whether the flagged points are gen-uinely mislabelled, whether acting on them improves a downstream classifier, and whether the benefit survives into the full-scale WorldCereal crop-type mapping pipeline, applied as a two-task model finetuning across five macro-regions. We do tests against synthetic corruptions in the labels and see how accu-rately the detector can flag those corruptions. We also do a sweep running a fast gradient-boosted proxy catboost model on different variations of outlier treatments, and finally we run the full dual-head WorldCereal finetuning trainer on data points across five macro-regions. Outlier treatments are applied to the training split only, the held-out split is fixed across all conditions and is split spatially ( H3 cell and source dataset) to prevent leakage. Downstream metrics are reported on three views of that fixed split: full (all points kept), cand. re-moved (detector-flagged candidates deleted) and conf. weighted (each point weighted by its confidence_nonoutlier ). We sweep five regions × eleven training treatments × two detector operating points (a default and a tightened -threshold configuration),whereas for worldcereal runs we use a single seed, so from re-peated baselines we estimate a run-to-run noise floor of ≈ 0.8 macro-F1 points and emphasize effects consistent in sign across regions. 
+
+4.1 The detector recovers genuine label errors 
+
+Test 1: controlled synthetic ground truth. Because the real error process is unob-served, we create ground truth by injecting label noise into otherwise-trusted la-bels and measuring how well the detector recovers it, re-running the full per-slice pipeline on the corrupted labels. Three corruption models mirror real WorldCe-real error modes: gross (relabel to a random present class), subtle (relabel to a class that co-occurs in the same H3 cell, a confusable-class error), and 
+
+whole-dataset (corrupt every point within the same source dataset, mimick-ing a dataset digitised against the wrong legend). Crucially, the detector is a 
+
+per-slice, high-precision decision: we therefore report the enrichment of planted errors in the flagged set (how many times above the base rate they are concen-trated), and detection Area under the ROC curve (AUROC), all on the popula-tion the detector actually scores (slices large enough to define a centroid). 8 Embedding-based Outlier Detection for Crop Reference Data Gross Subtle Region AUROC Enrich. × AUROC Enrich. ×                           
+
+> Eastern Africa 0.66 2.5 0.67 2.6 Middle Africa 0.83 4.5 0.75 3.3 South-Eastern Asia 0.84 5.0 0.66 3.0 South America 0.83 4.9 0.76 3.6 Southern Asia 0.79 4.3 0.75 3.8
+> Table 1: Synthetic-noise recovery (crop type). Enrichment is the concentration of planted errors in the flagged set relative to chance. Whole-dataset corruption case is omitted as it sits at chance ( ≈1.0×, AUROC ≈0.50 ) for the EBA detector.
+> Fig. 2: Enrichment of planted label errors in the flagged set, by region and corruption mode. Scattered errors (gross, subtle) are concentrated 2.5–5×above chance; whole-dataset corruption sits at chance, the expected limit of a per-slice detector.
+
+The flagged set is strongly enriched with the planted errors (Tab. 1, Fig. 2). Gross errors are concentrated 4.3–5.0× above chance in four of five regions (top-
+
+5% lift up to 9× with AUROC up to 0.84 ), and subtle confusable-class errors, the harder and more realistic case, are still enriched 3.0–3.8× (AUROC ≈ 0.72 ). Detection is strongest at the low noise rates that dominate real reference data and degrades gracefully as noise grows (Fig. 3). This is as the embedding centroid gets affected too heavily, or the noise clusters grow too big so the detected "outliers" are no longer planted "outliers". Eastern Africa is the weakest region (2.5×, AUROC 0.66 ), even there the flags are 2.5× enriched. Possible reasons Eastern Africa may relate to smallholder farming and mixed cropping leading to a reduced chance of identifying noise and also possibly due to limited separability of the frozen embeddings there. The case of whole-dataset corruption is the one exception where per-slice detection is at chance ( ≈ 1.0×, AUROC ≈ 0.50 ), because a fully corrupted dataset may even corrupt the centroid of its own slices and so cannot look anomalous relative to it. We find that the EBA detector helps find scattered label errors, and not systematically mislabelled whole datasets. Embedding-based Outlier Detection for Crop Reference Data 9                                        
+
+> Fig. 3: Detection AUROC vs. injected noise rate (mean over regions; band is ±1s.d.). Recovery is strongest at the low rates typical of real reference data and degrades gracefully; whole-dataset corruption stays at chance. Detector Task ∆macro-F1 ∆wtd-F1 ∆acc. tightened Crop type +0 .59 (54/55) +0 .30 (55/55) +0 .30 (55/55) tightened Land cover +0 .81 (55/55) +0 .65 (55/55) +0 .66 (55/55) default Crop type +0 .39 (54/55) +0 .20 (55/55) +0 .21 (55/55) default Land cover +0 .54 (55/55) +0 .42 (55/55) +0 .43 (55/55)
+> Table 2: Model-independent test-view lift. For a fixed trained model, down-weighting the flagged held-out points by confidence changes the measured score by the mean shown (points), with the number of models improved out of 55 (5regions ×11 treat-ments). The lift is positive almost everywhere, for every metric and both tasks.
+
+Test 2: model-independent test on real data. The same conclusion holds without any synthetic noise. For any fixed trained model, we re-score its predictions on the held-out set after removing the detector-flagged points or down-weighting them by confidence. Because the model is unchanged and only the treatment of the test labels differs, any rise in the measured score potentially signals the flagged points carried disproportionately wrong labels. The effect is essentially deterministic (Tab. 2, Fig. 4): across the 55 trained models per detector con-figuration, down-weighting the flagged points raises macro-F1, weighted-F1 and accuracy in 54 /55 models for crop type and 55 /55 for land cover. It holds for both detector configurations, so the conclusion does not depend on a threshold choice. We cannot fully rule out that a valid observation which is fully out of distri-bution (>MAD 4.0) may be marked as an outlier as well. Some evidence that point to actual mislabelled identifications to counter this are the visualized sur-faced points (Fig. S1), the recovery of synthetic mislabelled points (Fig. 3) and the ablation with the finetuned encoder (Fig. 9). However, some iterations still may be needed to identify true noise, that doesn’t include the valid signal range around the centroids too much. 10 Embedding-based Outlier Detection for Crop Reference Data    
+
+> Fig. 4: Cleaning the test labels of a fixed (baseline) model raises its measured macro-F1 in every region, for both tasks. Only the flagged points are removed (light) or confidence-weighted (dark); the model is identical.
+
+4.2 Cleaning the training labels improves downstream models 
+
+WorldCereal regional model trainings We train the dual-head (land cover + crop type) WorldCereal model under each treatment across all five regions. With the tightened detector Sec. 3.5 the best outlier treatment improves crop-type macro-F1 in all five regions ( +1 .2 to +3 .4, mean +2 .1) and land cover in all five (+0 .3 to +1 .7); with the default detector four of five improve (Tab. 3, Fig. 5). The benefit is realised by conservative treatment: across regions the strongest policies are candidate removal and confidence/quality weighting, whereas ag-gressively dropping all flagged points is the worst policy on average discarding hard-but-sometimes-correct boundary samples. The one configuration that leads to worse performance is South America ( −1.0 crop type), a region with seasonal-ity and legend-alignment issues, tightening the detector parameters still recovers it ( +1 .2).The best outlier treatment in the regional training pipelines is region dependent: for some cleaner regions only dropping candidate outlier Sec. 3.4 shows best performance, whereas for noisier regions, stronger filtering proves optimal. 
+
+Fast proxy. To iterate through the different treatment options and with multiple seed values so that we get an estimate of the noise, we trained a gradient-boosted classifier (CatBoost) on the frozen embeddings, varying only the training data per Tab. 4 (three seeds). Across the regions available, the most reliable treatment was confidence-thresholded filtering ( filter_0.90 , mean +0 .7 macro-F1), and aggressive removal of all flagged points is again the worst ( −1.1), echoing the full worldcereal training outcome of “don’t over-clean” signal. Macro-F1 over many rare crops was noisy at three seeds. 
+
+4.3 Where the gains come from 
+
+Because macro-F1 weights all classes equally, an improvement is informative only if it comes from the hard classes, and it does (Fig. 6). The crop-type gain is Embedding-based Outlier Detection for Crop Reference Data 11 Region Task baseline best ∆                                     
+
+> Eastern Africa CT 0.342 0.362 +2.0
+> Middle Africa CT 0.786 0.820 +3.4
+> South-Eastern Asia CT 0.905 0.926 +2.2
+> South America CT 0.584 0.596 +1.2 Southern Asia CT 0.714 0.729 +1.5
+> Eastern Africa LC 0.592 0.602 +1.0 Middle Africa LC 0.706 0.719 +1.3
+> South-Eastern Asia LC 0.804 0.821 +1.7
+> South America LC 0.753 0.756 +0.4 Southern Asia LC 0.675 0.678 +0.3
+> Table 3: Macro-F1 (full test view, tightened detector): best outlier treatment vs. untreated baseline. All ten region ×task cells improve
+> Fig. 5: Crop-type model improvement of the best treatment over baseline, per re-gion/detector configuration. Shaded band is ±0.8-point noise floor. The default detec-tor regresses only on South America; tightened detector is positive in all five regions.
+
+carried almost entirely by rare, confusable crops while well-populated majority crops are unchanged: in Southern Asia millet improves by +15 F1 points, with further gains on oilseeds, fodder grasses and minor cereals elsewhere; smaller classes gain the most (Fig. 7). The per-class test-view lift is likewise positive across the great majority of classes and regions (Fig. 8). 
+
+4.4 Ablations 
+
+Detector operating point. Running the whole grid under both the default and the tightened confidence mapping (Fig. 1) leaves the conclusions unchanged in sign: the model-independent test-view lift is present under both and slightly larger under the tightened detector, which also gives the stronger operational result (best-treatment mean +2 .1 vs. +1 .4 crop-type macro-F1; positive in 5/5 vs. 4/5
+
+regions, recovering South America). 
+
+Encoder. The detector treats the embedding as an opaque vector, so a stronger encoder should expose label errors more sharply. Re-running the synthetic-12 Embedding-based Outlier Detection for Crop Reference Data Scenario Train treatment Notes                
+
+> baseline none reference
+> drop_candidate remove candidates conservative removal
+> drop_suspect remove cand.+susp.
+> drop_flagged remove all flagged aggressive removal
+> downweight_* w= conf 1,2,4keep all, soft weight
+> filter_0.90/0.95 drop conf. < τ threshold filter
+> Table 4: Outlier-treatment scenarios applied to the training split.
+> Fig. 6: Per-class crop-type F1 change (best model vs. baseline) by region. Gains con-centrate on rare/confusable crops; majority crops are unaffected.
+
+recovery test on embeddings from the global fine-tuned WorldCereal encoder rather than the vanilla one improves synthetic error recovery rates across the board: gross-error enrichment rises from 4.3× to 4.9× (AUROC 0.79 → 0.84 )and subtle-error enrichment from 3.3× to 3.7× (0.72 → 0.75 , Fig. 9). The down-stream signal persists, with the best treatment improving crop-type macro-F1 in every available region under the fine-tuned encoder, including South America (+2 .0), and the test-view lift positive in 30 /30 models. Because the detector is agnostic to the embedding length, the same pipeline runs unchanged on representations from other encoders; we provide tooling to score 64 -dimensional AlphaEarth [4] embeddings, and as a qualitative example run the EBA detector on AlphaEarth embeddings of the Southern Asia region, the detector surfaces analogous misplaced and mislabelled points (Fig. S1, lower panel), showing again that an encoder with richer representations will surface labeling anomalies in the reference datasets using the EBA detector workflow. 
+
+# 5 Discussion 
+
+The embedding-based approach scores anomalies on a representation that inte-grates temporal, spectral and contextual information (location, topography etc) into a compact vector, so detection is decoupled from low-level preprocessing choices such as interpolation and modality scaling. Locality via H3 slicing en-sures that each sample is judged against nearby, with label-consistent neighbours rather than against global statistics dominated by dense regions and crops. The robustness mechanisms of Sec. 3.6 target the specific ways this can fail in practice: the trimmed centroid removes self-masking by outliers; the safeguard Embedding-based Outlier Detection for Crop Reference Data 13   
+
+> Fig. 7: Per-class crop-type F1 gain vs. class support
+> Fig. 8: Per-class test-view lift for a fixed baseline model (deltas +ve from the full view).
+
+against degenerate neighbourhoods Sec. 3.6 prevents an uninformative embed-ding geometry from manufacturing flags; group-level aggregation surfaces whole datasets that are systematically off but that point-wise neighbours hide; and only flagged samples receive confidence-based soft weighting. A key consideration is that embeddings generally come from a frozen, un-fine-tuned encoder, so outlier scores are only as good as the separation that this generic representation provides for a given region and class. We validate if the embeddings of the slices aren’t completely meaningless, but it still does not create separation if the encoder lacks it. This suggests an upside in choosing a highly discriminative encoder for the target application, in which a cleaner training set yields a better fine-tuned encoder, whose embeddings in turn support better accuracies. The fine-tuning of Sec. 4.2 and the encoder ablation of Sec. 4.4 shows that better encoder embeddings yields sharper recovery of planted errors. Several limitations remain. In regions or classes with very few samples per slice, statistical anomaly detection is inherently unreliable; the minimum slice size, resolution-aware merging and neutral scoring mitigate but cannot elim-inate this. Embeddings inherit any systematic bias of the pretrained model, 14 Embedding-based Outlier Detection for Crop Reference Data  
+
+> Fig. 9: Synthetic-noise recovery with the vanilla vs. fine-tuned WorldCereal global encoder (crop type, mean over regions). A stronger encoder concentrates planted errors more strongly in the flagged set, for both gross and subtle noise.
+
+which propagates into the scores. Some flagged points correspond to legitimate but rare management practices or mixed pixels rather than hard label errors, so the choice of which categories to remove versus down-weight is a precision/recall trade-off best set per application, which is why we report the full removal-to-weighting spectrum rather than a single operating point. Finally, as Sec. 4.1 shows, the point-wise detector collapses against whole-dataset corruption, sug-gesting that systematically mislabelled datasets remains harder than detecting scattered errors. Finally, while we run the detector on AlphaEarth embeddings as a qualitative check, a full downstream benchmark across other geospatial foundation models is left to future work. The framework extends naturally to active learning, in which candidate anomalies are routed to experts whose feedback refines thresholds, to comple-menting the distance and neighbour score with off-the-shelf detectors such as isolation forests [13] or the local outlier factor [3] applied to the same embed-dings; and to explicit label-noise modelling in the downstream model. 
+
+# 6 Conclusion 
+
+We presented a locality-aware, embedding-based framework for detecting and treating outlier samples in large-scale Earth-observation reference datasets, with crop-type and landcover training data as the target application. Beyond the core slice-wise scoring, we contributed robustness mechanisms that close con-crete gaps in embedding-space detection, a contamination-resistant centroid, a gating that accounts for the potential collapse of the un-fine-tuned encoder in a region, group-level aggregation for systematically mislabelled datasets. Two independent tests establish that the flagged points are genuinely mislabelled, against synthetic ground truth and through a model-independent test on real data, and a downstream evaluation on a fast proxy and the WorldCereal style model shows that conservative cleaning improves crop-type accuracy across re-gions while over-cleaning hurts. The result is a pipeline for embedding-space based label cleaning, and a clear path toward strengthening it further. Embedding-based Outlier Detection for Crop Reference Data 15 
+
+Acknowledgements. This work was carried out within the WorldCereal project. The WorldCereal project is funded by the European Space Agency (ESA) under grant no. 4000130569/20/I-NB. 
+
+# References 
+
+1. Boogaard, H., Pratihast, A.K., Laso Bayas, J.C., Karanam, S., Fritz, S., Van Tricht, K., Degerickx, J., Gilliams, S.: Building a community-based open harmonised refer-ence data repository for global crop mapping. PLoS ONE 18 (7), e0287731 (2023). 
+
+https://doi.org/10.1371/journal.pone.0287731 
+
+2. Boryan, C., Yang, Z., Mueller, R., Craig, M.: Monitoring us agriculture: The us department of agriculture, national agricultural statistics service cropland data layer program. Geocarto International 26 (5), 341–358 (2011). https://doi.org/ 10.1080/10106049.2011.562309 
+
+3. Breunig, M.M., Kriegel, H.P., Ng, R.T., Sander, J.: LOF: Identifying density-based local outliers. In: ACM SIGMOD International Conference on Management of Data. pp. 93–104 (2000). https://doi.org/10.1145/342009.335388 
+
+4. Brown, C.F., Kazmierski, M.R., Pasquarella, V.J., Rucklidge, W.J., Samsikova, M., Zhang, C., Shelhamer, E., Lahera, E., Wiles, O., Ilyushchenko, S., et al.: Alphaearth foundations: An embedding field model for accurate and efficient global mapping from sparse label data. arXiv preprint arXiv:2507.22291 (2025) 5. Butsko, C., Tseng, G., Van Tricht, K., Milli, G., Rolnick, D., Cartuyvels, R., Becker-Reshef, I., Szantoi, Z., Kerner, H.: Deploying geospatial foundation models in the real world: Lessons from WorldCereal. In: Proceedings of the TerraBytes ICML Workshop: Towards Global Datasets and Models for Earth Observation. Proceedings of Machine Learning Research, vol. 292, pp. 13–31. PMLR (2025), 
+
+https://proceedings.mlr.press/v292/butsko25a.html 
+
+6. Cong, Y., Khanna, S., Meng, C., Liu, P., Rozi, E., He, Y., Burke, M., Lobell, D.B., Ermon, S.: SatMAE: Pre-training transformers for temporal and multi-spectral satellite imagery. In: Advances in Neural Information Processing Systems (NeurIPS) (2022) 7. d’Andrimont, R., Yordanov, M., Martinez-Sanchez, L., Eiselt, B., Palmieri, A., Dominici, P., Gallego, J., Reuter, H.I., Joebges, C., Lemoine, G., van der Velde, M.: Harmonised LUCAS in-situ land cover and use database for field surveys from 2006 to 2018 in the european union. Scientific Data 7, 352 (2020). https://doi. org/10.1038/s41597-020-00675-z 
+
+8. Elmes, A., Alemohammad, H., Avery, R., Caylor, K., Eastman, J.R., Fishgold, L., Friedl, M.A., Jain, M., Kohli, D., Laso Bayas, J.C., Jepsen, T., Raveling, J., Wang, J., Welch, B., Wrona, D., Zhu, Z.: Accounting for training data error in machine learning applied to earth observations. Remote Sensing 12 (6), 1034 (2020). https: //doi.org/10.3390/rs12061034 
+
+9. Flach, M., Gans, F., Brenning, A., Denzler, J., Reichstein, M., Rodner, E., Bathi-any, S., Bodesheim, P., Guanche, Y., Sippel, S., et al.: Multivariate anomaly de-tection for earth observations: a comparison of algorithms and feature extraction techniques. Earth System Dynamics 8(3), 677–696 (2017) 10. Frénay, B., Verleysen, M.: Classification in the presence of label noise: A sur-vey. IEEE Transactions on Neural Networks and Learning Systems 25 (5), 845–869 (2014). https://doi.org/10.1109/TNNLS.2013.2292894 16 Embedding-based Outlier Detection for Crop Reference Data 11. Jakubik, J., Roy, S., Phillips, C.E., Fraccaro, P., Godwin, D., Zadrozny, B., Szwar-cman, D., Gomes, C., Nyirjesy, G., Edwards, B., Kimura, D., Simumba, N., Chu, L., Mukkavilli, S.K., Lambhate, D., Das, K., Bangalore, R., Oliveira, D., Muszyn-ski, M., Ankur, K., Ramasubramanian, M., Gurung, I., Khallaghi, S., Li, H.S., Cecil, M., Ahmadi, M., Kordi, F., Alemohammad, H., Maskey, M., Ganti, R., Weldemariam, K., Ramachandran, R.: Foundation models for generalist geospatial artificial intelligence. arXiv preprint arXiv:2310.18660 (2023) 12. Leys, C., Ley, C., Klein, O., Bernard, P., Licata, L.: Detecting outliers: Do not use standard deviation around the mean, use absolute deviation around the median. Journal of Experimental Social Psychology 49 (4), 764–766 (2013). https://doi. org/10.1016/j.jesp.2013.03.013 
+
+13. Liu, F.T., Ting, K.M., Zhou, Z.H.: Isolation forest. In: IEEE International Con-ference on Data Mining (ICDM). pp. 413–422 (2008). https://doi.org/10.1109/ ICDM.2008.17 
+
+14. Moletto-Lobos, I., Franch, B., Guillem-Valls, A., Cyran, K., Kalecinski, N., Van Tricht, K., Vermote, E., Becker-Reshef, I., Nair, S., Degerickx, J., et al.: Enhancing worldcereal crop calendars with land surface phenology and machine learning. Ecological Informatics p. 103742 (2026) 15. Northcutt, C.G., Athalye, A., Mueller, J.: Pervasive label errors in test sets desta-bilize machine learning benchmarks. In: NeurIPS Datasets and Benchmarks Track (2021) 16. Northcutt, C.G., Jiang, L., Chuang, I.L.: Confident learning: Estimating uncer-tainty in dataset labels. Journal of Artificial Intelligence Research 70 , 1373–1411 (2021). https://doi.org/10.1613/jair.1.12125 
+
+17. Pang, G., Shen, C., Cao, L., van den Hengel, A.: Deep learning for anomaly detec-tion: A review. ACM Computing Surveys 54 (2), 1–38 (2021). https://doi.org/ 10.1145/3439950 
+
+18. Pelletier, C., Valero, S., Inglada, J., Champion, N., Marais Sicre, C., Dedieu, G.: Effect of training class label noise on classification performances for land cover mapping with satellite image time series. Remote Sensing 9(2), 173 (2017). https: //doi.org/10.3390/rs9020173 
+
+19. Rousseeuw, P.J., Leroy, A.M.: Robust Regression and Outlier Detection. John Wi-ley & Sons (1987). https://doi.org/10.1002/0471725382 
+
+20. Rußwurm, M., Körner, M.: Self-attention for raw optical satellite time series clas-sification. ISPRS Journal of Photogrammetry and Remote Sensing 169 , 421–435 (2020). https://doi.org/10.1016/j.isprsjprs.2020.06.006 
+
+21. See, L., Gilliams, S., Conchedda, G., Degerickx, J., Van Tricht, K., Fritz, S., Lesiv, M., Laso Bayas, J.C., Rosero, J., Tubiello, F.N., Szantoi, Z.: Dynamic global-scale crop and irrigation monitoring. Nature Food 4, 736–737 (2023). https://doi.org/ 10.1038/s43016-023-00841-7 
+
+22. Song, H., Kim, M., Park, D., Shin, Y., Lee, J.G.: Learning from noisy labels with deep neural networks: A survey. IEEE Transactions on Neural Networks and Learn-ing Systems 34 (11), 8135–8153 (2022). https://doi.org/10.1109/TNNLS.2022. 3152527 
+
+23. Tseng, G., Cartuyvels, R., Zvonkov, I., Purohit, M., Rolnick, D., Kerner, H.: Lightweight, pre-trained transformers for remote sensing timeseries. arXiv preprint arXiv:2304.14065 (2023) 24. Uber Technologies: H3: A hexagonal hierarchical geospatial indexing system. 
+
+https://h3geo.org (2018) Embedding-based Outlier Detection for Crop Reference Data 17 25. Van Tricht, K., Degerickx, J., Gilliams, S., Zanaga, D., Battude, M., Grosu, A., Brombacher, J., Lesiv, M., Laso Bayas, J.C., Karanam, S., Fritz, S., Becker-Reshef, I., Franch, B., Mollà-Bononad, B., Boogaard, H., Pratihast, A.K., Szantoi, Z.: WorldCereal: a dynamic open-source system for global-scale, seasonal, and repro-ducible crop and irrigation mapping. Earth System Science Data 15 (12), 5491–5515 (2023). https://doi.org/10.5194/essd-15-5491-2023 18 Embedding-based Outlier Detection for Crop Reference Data 
+
+# Supplementary Material 
+
+Fig. S1: Examples of outliers surfaced by the EBA detector. The upper panels use the vanilla Presto encoder; the lowest panel use AlphaEarth embeddings (Southern Asia only). Some are clearly misplaced or wrongly labelled points, yet locating them among 
+
+7.3 million samples is far from straightforward; others are subtler and not obviously odd on a basemap alone. Embedding-based Outlier Detection for Crop Reference Data 19 
+
+Fig. S2: Per-class landcover F1 change (best model vs. baseline) per region, mirroring the crop-type panel in the main text. 
+
+Fig. S3: Per-class test-view lift (confidence-weighted minus full, same baseline model) per region: the classes whose held-out points the detector flags are those on which the model most improves once those points are down-weighted. 
+
+Fig. S4: Landcover counterpart of the class-wise test-view lift: per-class F1 change (same baseline model) when flagged points are removed or confidence-weighted, relative to the full test set, across regions.

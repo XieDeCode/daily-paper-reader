@@ -1,0 +1,311 @@
+Title: Farmland Extent and Visible Boundary Mapping from 1 m NAIP Imagery Using Residual U-Net and Text-Prompted SAM 3 Refinement
+
+URL Source: https://arxiv.org/pdf/2607.21881v1
+
+Published Time: Mon, 27 Jul 2026 00:16:50 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Farmland Extent and Visible Boundary Mapping from 1 m NAIP Imagery Using Residual U-Net and Text-Prompted SAM 3 Refinement 
+
+## Mohammadreza Narimani a,∗, Vikram Anand b and Parastoo Farajpoor a
+
+> a
+
+Department of Biological and Agricultural Engineering, University of California, Davis, Davis, CA, 95616, USA 
+
+> b
+
+Del Norte High School, San Diego, CA, USA 
+
+A R T I C L E I N F O 
+
+Keywords :agricultural field mapping NAIP ResUNet Segment Anything Model 3 farmland boundary 
+
+Abstract 
+
+Agricultural fields provide the spatial framework through which crop condition, production, manage-ment, and land conversion are interpreted, yet current field maps are often proprietary, incomplete, or outdated. This study develops a reproducible workflow for mapping farmland extent and its visible boundaries from 1 m National Agriculture Imagery Program (NAIP) RGB imagery. Thirty-seven scenes were selected to represent open cropland, peri-urban interfaces, semi-arid irrigation geometries, and fragmented agricultural mosaics. Farmland polygons were digitized in the Computer Vision Annotation Tool (CVAT), converted to binary masks, and paired with non-overlapping 256 × 256 pixel image patches. The resulting 5,698 samples were partitioned by source scene into 3,850 training, 770 validation, and 1,078 test patches, thereby preventing patches from the same scene from crossing data partitions. A deep residual U-Net (ResUNet) was trained with a Dice-dominant objective,  = 2 .5(1 − Dice) + BCE ,to reduce the influence of background-dominated urban–agricultural patches. On the held-out test set, the model achieved an accuracy of 0.8808, intersection over union of 0.8605, Dice coefficient of 0.9234, precision of 0.8766, and recall of 0.9794. The combination of high overlap and high recall indicates that most labeled farmland was retained, while remaining errors were concentrated along visually ambiguous roads, exposed soil, and developed edges. A frozen Segment Anything Model 3 (SAM 3) branch was then applied to each patch with the text prompt “agricultural farmland field.” SAM 3 concept masks were unioned and fused with the thresholded ResUNet output by logical OR. On selected difficult examples, the fused prediction improved Dice from 0.858 to 0.955 for orchard-row structure and from 0.804 to 0.903 for fragmented parcels. Sliding-window inference and stitching produced coherent regional masks in contrasting landscapes, with example tile-level Dice scores of 0.898 and 0.919. The results show that a compact domain-trained network can provide stable farmland segmentation while a frozen, text-prompted foundation model supplies complementary concept masks for difficult local structures. The approach is intended as a semantic farmland-extent product rather than a substitute for legal cadastral boundaries, and it provides a practical basis for crop-area accounting, agricultural monitoring, and analysis of farmland conversion where current parcel layers are unavailable. 
+
+## 1. Introduction 
+
+Remote sensing in agriculture is often described as a progression in spatial scale, but it is more accurately understood as a progression in the decisions that become possible. At the leaf scale, radiative-transfer models estab-lished that measured reflectance can be linked to biochemical and structural properties [ 1 ]. Recent grapevine studies have extended that relationship with data-driven multi-trait models that estimate nutrients and physiological attributes from hyperspectral observations [ 2], while attention-based forward models have shown that measured traits can also be used to reconstruct leaf reflectance spectra [ 3]. In plant-health monitoring, imaging spectroscopy and machine learning have moved disease and stress detection toward earlier, pre-visual diagnosis [ 4, 5 ]. For example, leaf-level spectra have been used to identify branched broomrape stress in tomato before the signal becomes readily visible at canopy scale [6]. The same logic extends upward. Unmanned aerial vehi-cles translate plant-level signals into spatial patterns across rows and management zones, offering a useful compromise 
+
+> ∗
+
+Corresponding author 
+
+mnarimani@ucdavis.edu (M. Narimani); vikramranand@gmail.com (V. Anand); pfarajpoor@ucdavis.edu (P. Farajpoor) 
+
+between detail, coverage, and revisit frequency [ 7]. Drone-based multispectral time series have consequently been used to detect parasitic-weed stress in tomato fields using deep sequence models [ 8]. Satellite observations broaden the domain again: they support crop monitoring, yield estimation, phenology, and regional assessment over large areas [9, 10]. Recent work has used Sentinel-2 time series for crop-stress detection [ 11 ], synthesized the rapidly expanding literature on Sentinel-2 yield estimation [ 12 ], and explored analysis-ready geospatial embeddings for field-scale tomato-system mapping [ 13 ]. Across these scales, the sensor changes, but a common analytical question remains: what is the spatial unit to which a trait, stress signal, crop label, or management decision should be assigned? For most operational agricultural applications, that unit is the field. Field geometry provides the support over which pixel observations are summarized, temporal profiles are compared, crop areas are calculated, and management or policy actions are targeted. Reliable field maps are therefore prerequisites for precision-agriculture services, crop statistics, land-use accounting, carbon and water assessment, insurance, and monitoring the conversion of farmland to residential or industrial uses [ 14 , 15 ]. Yet field boundaries are not univer-sally equivalent to cadastral parcels, and they are not always maintained as current, accessible digital data. Ownership 
+
+Narimani et al.: Preprint submitted to Taylor & Francis Page 1 of 12 arXiv:2607.21881v1 [cs.CV] 24 Jul 2026 boundaries may be invisible in imagery; conversely, visible management boundaries may change within a legal parcel. Manual digitization can resolve these distinctions locally but is expensive and difficult to update. Large benchmark and mapping efforts have underscored both the demand for field-level products and the cost of producing them at scale [16, 17]. High-resolution aerial photography offers a complemen-tary route to medium-resolution satellite mapping. The U.S. Department of Agriculture’s National Agriculture Imagery Program (NAIP) provides broad, repeatedly acquired aerial coverage of the United States [ 18 ]. The imagery used in this study has a 1 m ground sampling distance, fine enough to resolve narrow roads, field margins, orchard texture, buildings, and many within-scene transitions that are mixed within a 10 m satellite pixel. That detail is valuable, but it also makes segmentation harder. A model must separate farmland from visually similar bare ground, lawns, roadside vegetation, industrial lots, and construction areas; preserve long narrow gaps between adjacent parcels; and remain stable across crop color, soil exposure, irrigation geometry, and peri-urban development. These are not merely spectral classification problems. They require contextual and boundary reasoning under strong class imbalance. Convolutional encoder–decoder networks provide a prac-tical foundation for this task. U-Net introduced a compact architecture in which a contracting path learns context and skip connections restore spatial detail [ 19 ]. Residual learning improved optimization of deeper networks [ 20 ], and residual U-Net variants combined both ideas for dense prediction [ 21 ]. In agricultural boundary mapping, fully convolutional, resid-ual, recurrent, multi-task, and super-resolution approaches have progressively improved field-extent and edge detection [ 22 – 25 ]. Nevertheless, domain-trained convolutional net-works can under-segment low-contrast fields, merge adjacent parcels, or smooth small structures when labels are limited or landscapes shift. Promptable foundation models offer a different source of prior knowledge. The original Segment Anything Model (SAM) learned class-agnostic segmentation from a large mask corpus [ 26 ], SAM 2 extended promptable segmentation to images and video [ 27 ], and SAM 3 added concept prompts that can retrieve all instances matching a short noun phrase [28 ]. Remote-sensing studies have shown both the potential and the limitations of direct SAM transfer: generic visual priors can improve mask generation, but scale, spectral appearance, dense object packing, and ambiguous boundaries often require domain adaptation or task-specific guidance [ 29 , 30 ]. Recent smallholder experiments further show that zero-shot SAM performance depends strongly on image scale, temporal information, and field size [31]. This study investigates a deliberately simple hybrid: a domain-trained ResUNet supplies a stable farmland prob-ability map, and a frozen, text-prompted SAM 3 branch supplies additional concept masks. Their outputs are fused by logical union and stitched into regional binary maps. The target is farmland extent, with visible boundaries represented implicitly by transitions between farmland and background; the method does not claim to recover legal cadastral lines or to separate every adjacent field as an individual polygon instance. The study is organized around three research questions: 1. How accurately does a ResUNet segment farmland extent from 1 m NAIP RGB imagery when training, validation, and test partitions are separated at the scene level? 2. On selected difficult patches, can text-prompted SAM 3 recover farmland omitted by ResUNet without re-training the foundation model? 3. Can patch predictions be stitched into coherent regional masks across regular field grids and complex peri-urban scenes? The study contributes: (i) a scene-diverse NAIP an-notation and patch-construction protocol designed around landscape heterogeneity; (ii) a residual encoder–decoder trained with a Dice-dominant objective for background-heavy scenes; (iii) a transparent text-prompted SAM 3 refinement rule that can be interpreted directly at the mask level; and (iv) regional demonstrations that connect patch-scale evaluation to stitched mapping across regular and peri-urban agricul-tural landscapes. The contribution is methodological and empirical: it examines a simple, auditable hybrid rather than claiming universal superiority over alternative segmentation systems. 
+
+## 2. Related work 
+
+2.1. Agricultural remote sensing from leaves to regional products 
+
+Agricultural remote sensing has developed along two coupled axes: richer measurement of plant function and broader spatial coverage. At proximal scales, hyperspectral measurements can retrieve or predict pigments, water-related properties, nutrient status, and stress responses because bio-chemical absorption and scattering shape the spectral curve [1 , 2]. Disease-detection reviews have repeatedly emphasized, however, that laboratory separability does not automatically transfer to field conditions, where illumination, canopy geometry, background, phenology, and concurrent stressors alter the signal [ 4, 5]. The branched-broomrape studies cited above illustrate this scale transition: leaf spectroscopy can reveal early host response [ 6], UAV multispectral imagery can map canopy-level temporal patterns [ 8], and Sentinel-2 time series can extend detection to multiple fields [11]. The expansion from proximal sensing to Earth observa-tion also changes the role of spatial support. Leaf observations are tied to individual samples; drone observations are often summarized by row or plot; satellite data are commonly aggregated by field. Reviews of precision agriculture and deep learning show that the value of remote sensing depends not only on predictive accuracy but also on whether products align with management units and can be transferred across seasons and locations [ 9 , 14 , 32 ]. Sentinel-2’s spatial, tempo-ral, and spectral design has made it central to crop mapping   
+
+> Narimani et al.: Preprint submitted to Taylor & Francis Page 2 of 12
+
+and yield studies [ 10 , 12 ], while geospatial embeddings seek to package multi-source, multi-temporal context into reusable representations [ 13 ]. In all cases, a missing or outdated field layer limits downstream analysis: pixels cannot be reliably aggregated, neighboring crops may be mixed, and change cannot be attributed to a stable unit. 
+
+2.2. Field-extent and boundary extraction 
+
+Early automated delineation approaches used edge filters, watershed segmentation, region growing, or object-based image analysis. Multi-temporal imagery can improve these methods because crop development creates temporal contrast between adjacent fields even when a single date is ambiguous [ 33 ]. Conventional methods remain useful where edges are strong and landscape rules are stable, but they often require local thresholds and post-processing, and they can confuse roads, tree lines, irrigation features, and within-field texture with parcel boundaries. Deep learning reframed the task as dense prediction. Persello and colleagues combined fully convolutional field detection with combinatorial grouping in smallholder land-scapes [ 34 ], while Masoud, Persello, and Tolpekin used super-resolution contour refinement to improve boundaries from Sentinel-2 imagery [ 22 ]. Waldner and Diakogiannis predicted field extent, boundary probability, and distance-to-boundary jointly, demonstrating that correlated tasks and multi-date consensus can improve transfer across sensors, resolutions, locations, and years [ 23 ]. Their later DECODE framework consolidated seasonal predictions and converted them to field instances with hierarchical watershed segmentation [ 35 ]. Other work compared U-Net and ResU-Net variants over large agricultural areas [ 24 ], incorporated recurrent residual units [ 25 ], and used transfer learning and weak supervision to address smallholder landscapes where labels are scarce [36]. Two developments are especially relevant to the present study. First, open datasets are making experimental design more transparent. AI4Boundaries harmonized field labels with Sentinel-2 and aerial photography across several Eu-ropean countries [ 37 ], and Fields of the World broadened benchmark coverage and emphasized global variation in field size and morphology [ 16 ]. Second, the literature increasingly distinguishes extent, edge, and instance outputs. A binary field mask can achieve high area overlap while still merging adjacent parcels; an edge map can locate boundaries but fail to close polygons; an instance product requires grouping and topology. Reviews of farmland boundary extraction stress that metrics must match the output type and that results from different definitions are not directly comparable [ 38 ]. This distinction motivates the terminology used here: our model produces a binary farmland-extent mask, and “boundary segmentation” refers to the visible foreground–background transition, not a cadastral or instance-level product. 
+
+2.3. Residual encoder–decoders and promptable foundation models 
+
+U-Net’s skip-connected encoder–decoder remains widely used because it balances context and localization with mod-est computational demands [ 19 ]. Residual blocks improve gradient propagation and permit deeper feature extraction [ 20 ], while the deep residual U-Net used for road extraction provides a direct architectural precedent for preserving thin, spatially extended targets in overhead imagery [ 21 ]. DeepLabV3+ offers another strong segmentation family through atrous spatial pyramid pooling and decoder refine-ment [ 39 ]; it is therefore an important future baseline for this project. For imbalanced segmentation, overlap-based objectives such as generalized Dice reduce the dominance of background pixels [40]. Foundation models change the balance between domain specificity and broad visual priors. SAM generates masks from geometric prompts without semantic class labels [ 26 ]. Remote-sensing adaptations have used prompt engineering, parameter-efficient tuning, auxiliary classifiers, and feature fusion to compensate for domain shift [ 29 , 30 ]. SAM 3 is particularly relevant because concept prompting permits a short text phrase to retrieve candidate masks [ 28 ]. That capability removes the need to generate point or box prompts manually, but it does not guarantee agricultural correctness: “field” can refer to grass, recreational areas, or open land, and a concept mask can cross management boundaries that are weakly visible. Farmland-specific evidence helps define the gap. Fully convolutional field masks can be converted into more coher-ent field objects through grouping and post-processing [ 34 ], while zero-shot SAM experiments in very small fields show that performance depends strongly on image scale and tempo-ral fusion [ 31 ]. The present design keeps SAM 3 frozen and uses it as a second-stage candidate generator, while the task-trained ResUNet remains the primary predictor. This division of labor tests whether open-vocabulary concept masks can complement domain learning through a transparent fusion rule without introducing another farmland-specific training stage. 
+
+## 3. Materials and methods 
+
+3.1. Problem definition and workflow 
+
+Let 𝐼 ∈ [0 , 1] 𝐻 ×𝑊 ×3 denote a normalized NAIP RGB image and 𝑌 ∈ {0 , 1} 𝐻 ×𝑊 the reference mask, where 1 represents annotated farmland and 0 represents background. The model estimates a probability surface 𝑃 𝑟 = 𝑓 𝜃 (𝐼 ) and a binary mask 𝑀 𝑟 . The target is semantic farmland extent. Boundaries are implied by the spatial transition between 1 and 0; no instance identifier is assigned to individual parcels. Figure 1 summarizes five stages: NAIP acquisition and polygon annotation; patch construction; ResUNet training; dual inference with frozen SAM 3 and logical-OR fusion; and sliding-window stitching into regional masks.       
+
+> Narimani et al.: Preprint submitted to Taylor & Francis Page 3 of 12 Figure 1: Hybrid ResUNet and SAM 3 workflow for farmland-extent and visible-boundary segmentation from NAIP imagery. The learned branch predicts 𝑃 𝑟 and thresholds it to 𝑀 𝑟 ; the frozen SAM 3 branch returns concept masks for the prompt “agricultural farmland field.” Masks are unioned, fused by logical OR, and stitched at scene scale.
+
+3.2. NAIP imagery and landscape sampling 
+
+The imagery consists of NAIP aerial photographs at 1 m ground sampling distance. Although the source products include RGB and, where available, near-infrared information, only the three visible bands were used. Restricting the model to RGB simplifies deployment on standard imagery and aligns with the three-channel input expected by common pretrained vision pipelines, but it also removes vegetation information that could help distinguish crops from bare soil or non-crop vegetation. Thirty-seven source scenes were selected across four landscape contexts: (i) open farmland dominated by large parcels; (ii) peri-urban areas where crop fields meet roads, warehouses, schools, and housing; (iii) semi-arid scenes whose geometry is shaped by irrigation and exposed soil; and (iv) fragmented agricultural mosaics with smaller, irregular fields. The sampling was purposive rather than statistically representative. Its role was to expose the model to different boundary and background conditions, not to support claims about performance across all U.S. regions or acquisition years. 
+
+3.3. Reference-mask construction 
+
+Farmland was manually delineated in the Computer Vision Annotation Tool (CVAT) using polygon tools without a vertex cap. Annotators traced visible crop-area boundaries rather than legal property lines. Roads, buildings, water, residential land, industrial surfaces, and other non-crop areas were assigned to background. Polygon exports were rasterized as binary PNG masks at the image grid: white for farmland and black for background. Figure 2 illustrates three annotation contexts. The high-way/industrial example contains long transportation edges and developed surfaces; the residential example tests sepa-ration of fields from housing and a school complex; and the urban–farmland example combines fragmented fields with dense built-up texture. These scenes were included because easy, agriculture-dominant tiles alone would underrepresent the false-positive conditions expected in operational map-ping. 
+
+3.4. Patch generation and scene-level partitioning 
+
+Each image–mask pair was cropped into non-overlapping 256 × 256 pixel patches. At 1 m ground sampling distance, a patch represents approximately 256 × 256 m, providing local context for roads, field edges, and portions of large parcels while remaining small enough for batch training on a Colab NVIDIA T4 GPU. RGB values were normalized to [0 , 1] ,and masks were loaded as one-channel binary arrays. The 5,698 patches were partitioned by source scene rather than randomly by patch. All patches from a scene were assigned to only one split, reducing the risk that nearly adjacent image content would appear in both training and evaluation. The resulting split contained 3,850 training, 770 validation, and 1,078 test patches. During training, random horizontal and vertical flips and rotations in 90 ° increments were applied. Table 1 summarizes the experimental design. 
+
+3.5. Residual U-Net architecture 
+
+The ResUNet follows a symmetric residual encoder– decoder. A 16-channel stem applies convolution, batch normalization, rectified linear activation, and a projected shortcut. Four downsampling stages increase channel depth to 32, 64, 128, and 256. The bottleneck contains two residual blocks at 256 channels. In the decoder, nearest-neighbor up-sampling is followed by concatenation with the corresponding encoder feature map and residual processing at 128, 64, 32, and 16 channels. A 1 × 1 convolution with sigmoid activation produces 𝑃 𝑟 ∈ [0 , 1] 256×256 .                            
+
+> Narimani et al.: Preprint submitted to Taylor & Francis Page 4 of 12 Figure 2: Representative CVAT polygon annotations. (a) Highway and industrial edge. (b) Residential and school interface. (c) Urban– farmland mosaic. Green outlines indicate manually traced farmland polygons.
+> Table 1
+> Experimental design and reproducibility-critical settings.
+> Component Setting
+> Source imagery NAIP RGB, 1 m ground sampling distance; NIR not used Reference classes Farmland (1) and background (0) Source scenes 37 scenes across open, peri-urban, semi-arid/irrigated, and fragmented contexts Patch construction 256 ×256 pixels; non-overlapping Partitions Train 3,850; validation 770; test 1,078; scene-level separation Training augmentation Horizontal/vertical flips and 90 °rotations Framework and hardware TensorFlow/Keras; Google Colab NVIDIA T4 Optimization Adam; learning rate 10 −4 ; batch size 8; seed 2019; up to 100 epochs Model selection Validation-Dice checkpointing, learning-rate reduction, and early stopping ResUNet threshold 𝑃 𝑟 >0.5
+> SAM 3 prompt “agricultural farmland field” Fusion 𝑀 =𝑀 𝑟 ∨𝑀 𝑠 ; fallback to 𝑀 𝑟 when SAM 3 returns no mask
+
+Residual shortcuts address optimization degradation in deeper networks [ 20 ], whereas long U-Net skip connections return high-resolution structure to the decoder [ 19 ]. This combination is well suited to overhead imagery, where the network must use broad contextual cues to identify agricultural land while retaining narrow exclusions such as roads and field margins [21]. 
+
+3.6. Loss function and training 
+
+For a batch of reference values 𝑦 𝑖 and predicted probabil-ities ̂𝑦 𝑖 , the smoothed Dice coefficient was implemented as 
+
+Dice 
+
+(
+
+𝑌 ,̂ 𝑌 
+
+)
+
+= 2 ∑𝑖 𝑦 𝑖 ̂𝑦 𝑖 + 1 
+
+∑𝑖 𝑦 𝑖 + ∑𝑖 ̂𝑦 𝑖 + 1 (1) The training objective combined Dice loss with binary cross-entropy (BCE): 
+
+ = 2 .5
+
+(
+
+1 − Dice 
+
+(
+
+𝑌 ,̂ 𝑌 
+
+)) 
+
++ BCE 
+
+(
+
+𝑌 ,̂ 𝑌 
+
+)
+
+(2) The 2.5 multiplier makes overlap error the dominant term. This choice was motivated by patches in which background occupies most pixels; under such imbalance, a pixelwise loss can reward conservative predictions that omit large farmland regions. Dice-based losses are widely used to counter this behavior because they normalize overlap by foreground size [ 40 ]. BCE was retained to provide stable pixelwise gradients and probability calibration. Training used Adam with an initial learning rate of 10 −4 ,batch size 8, and random seed 2019 for up to 100 epochs. The best checkpoint was selected by validation Dice. ReduceL-ROnPlateau and EarlyStopping callbacks controlled learning-rate decay and termination. ModelCheckpoint retained the weights associated with the highest validation Dice, while ReduceLROnPlateau and EarlyStopping controlled learning-rate decay and termination when validation improvement slowed. 
+
+3.7. Text-prompted SAM 3 refinement 
+
+SAM 3 was loaded as a frozen model through the Sam3Processor interface on a CUDA backend. For each RGB patch, the ResUNet probability map was thresholded at 0.5: 
+
+𝑀 𝑟 = 𝟙 [𝑃 𝑟 > 0.5] (3) The same patch was passed to SAM 3 with the exact text prompt “agricultural farmland field.” If the processor returned 
+
+𝐾 masks, they were combined by pixelwise union: 
+
+𝑀 𝑠 =
+
+> 𝐾
+
+⋁
+
+> 𝑘 =1
+
+𝑀 (𝑘 ) 
+
+> 𝑠
+
+(4)   
+
+> Narimani et al.: Preprint submitted to Taylor & Francis Page 5 of 12
+
+The final fused mask was 
+
+𝑀 = 𝑀 𝑟 ∨ 𝑀 𝑠 (5) If SAM 3 returned no masks or raised an inference exception, 
+
+𝑀 𝑟 was returned unchanged. Logical OR was chosen as a recall-preserving prototype: it cannot delete a positive ResUNet pixel and can only add areas proposed by SAM 3. This property makes the operation easy to interpret, but it also means that SAM 3 false positives cannot be corrected by fusion. The rule should therefore be viewed as an initial design to be tested against confidence weighting, intersection gating, boundary-aware fusion, and selective invocation on uncertain patches. 
+
+3.8. Tile-scale inference and stitching 
+
+Full scenes were processed as grids of 256 × 256 windows. Each window was normalized, segmented by ResUNet, refined by SAM 3, and placed at its source coordinate in a scene-sized raster. Because the study uses binary semantic masks, stitching consisted of assembling window outputs on the original grid rather than resolving overlapping instance polygons. The selected examples indicate whether patchwise predictions remain spatially coherent across long field edges and mixed urban–agricultural regions. Runtime and memory were not systematically recorded and remain necessary for assessing operational feasibility. 
+
+3.9. Evaluation metrics 
+
+Performance was summarized with pixel accuracy, inter-section over union (IoU), Dice coefficient, precision, recall, and the combined training loss. For binary predictions with true positives 𝑇 𝑃 , false positives 𝐹 𝑃 , and false negatives 
+
+𝐹 𝑁 , the principal overlap metrics were 
+
+IoU = 𝑇 𝑃 𝑇 𝑃 + 𝐹 𝑃 + 𝐹 𝑁 (6) and 
+
+Dice = 2 𝑇 𝑃 
+
+2 𝑇 𝑃 + 𝐹 𝑃 + 𝐹 𝑁 (7) Accuracy was retained for completeness, but Dice and IoU were treated as the primary measures because they directly quantify foreground overlap and are less dominated by the background class. Precision and recall were interpreted together to distinguish commission errors from farmland omission. Aggregate metrics were calculated for the train-ing, validation, and test partitions, and batch-level Dice distributions were examined to characterize score variability. The stitched regional examples were evaluated against their corresponding binary reference masks using the same overlap definition. 
+
+## 4. Results 
+
+4.1. Patch-scale ResUNet performance 
+
+Table 2 summarizes aggregate ResUNet performance. Validation and test Dice were both 0.9234, while their IoU values differed by less than 0.001, indicating closely matched behavior across the two scene-level hold-outs. On the test partition, accuracy was 0.8808, IoU was 0.8605, and Dice was 0.9234. Recall reached 0.9794, compared with precision of 0.8766. The model therefore omitted relatively little annotated farmland but included some visually similar non-farmland pixels, especially around developed margins and linear infrastructure. This asymmetry is consistent with the Dice-dominant objective, which assigns a comparatively high cost to missed farmland. The train-to-test Dice difference was 0.0170. Together with the similar validation and test results, this pattern sug-gests that scene-level separation limited optimistic leakage while preserving stable performance within the sampled collection. The result should be interpreted at the level of the four represented landscape contexts rather than as a claim of uniform performance across all NAIP acquisitions. 
+
+4.2. Distribution of overlap scores 
+
+The per-batch Dice distributions in Figure 3 have means of approximately 0.940 for training and 0.923 for both validation and test. Most batches occupy the upper portion of the range, but all splits have a lower tail. The tail is important: it indicates that a high mean does not eliminate difficult batches, which likely contain fragmented fields, strong built-environment confusers, or small foreground fractions. A scene-stratified error analysis is needed to attribute those low scores to specific landscape types rather than infer causes from the histogram alone. 
+
+4.3. Training dynamics 
+
+Figure 4 shows the recorded training and validation loss and Dice trajectories. Training values fluctuate more strongly than validation values during the early epochs, which is expected when mini-batches differ in farmland fraction, landscape complexity, and augmentation. After the initial adjustment period, validation Dice remains within a relatively narrow range and validation loss varies gradually. The plateau in the validation curves is consistent with checkpoint selection and early stopping: later epochs changed the training trajectory without producing a sustained improvement on the validation scenes. 
+
+4.4. Selected SAM 3 refinements 
+
+The frozen SAM 3 branch was examined on selected patches that exposed typical weaknesses of the ResUNet output. In an orchard-row example, the Dice coefficient increased from 0.858 for ResUNet alone to 0.955 after logical-OR fusion. In a fragmented-parcel example, Dice increased from 0.804 to 0.903. These cases represent gains of 0.097 and 0.099, respectively; across the selected difficult examples retained in the project record, the improvement range was 0.041–0.099. The examples show the mechanism intended by the hybrid design: SAM 3 adds coherent agricultural regions where the domain model under-segments a field or breaks a repeated crop pattern. Because the examples were selected to examine difficult structures, they are interpreted as case-based   
+
+> Narimani et al.: Preprint submitted to Taylor & Francis Page 6 of 12
+
+Table 2 
+
+ResUNet performance by data partition. 
+
+Split Accuracy IoU Dice Precision Recall Loss 
+
+Train 0.9052 0.8895 0.9404 0.9154 0.9689 0.0596 Validation 0.8825 0.8613 0.9234 0.8800 0.9757 0.0766 Test 0.8808 0.8605 0.9234 0.8766 0.9794 0.0766 
+
+Figure 3: Batch-level Dice distributions for training, validation, and test partitions. Dashed vertical lines mark the displayed means. 
+
+evidence rather than a dataset-wide effect estimate. Logical-OR fusion is most favorable when omission dominates; its behavior under false-positive SAM 3 proposals is considered in the Discussion. 
+
+4.5. Stitched regional masks 
+
+Figures 5–7 show selected scene-scale predictions. The peri-urban mosaic in Figure 5 includes dense residential development along the upper edge and a mixture of large and small agricultural blocks. The fused mask preserves many rectilinear field extents while excluding much of the 
+
+Figure 4: Training history for model loss (left) and Dice coefficient (right) on the training and validation partitions. 
+
+Table 3 
+
+Selected difficult patches used to illustrate the behavior of SAM 3 refinement. 
+
+Landscape structure ResUNet Dice ResUNet + SAM 3 Dice Change 
+
+Orchard rows 0.858 0.955 +0.097 Fragmented parcels 0.804 0.903 +0.099 Narimani et al.: Preprint submitted to Taylor & Francis Page 7 of 12 Figure 5: Selected peri-urban mosaic. (a) NAIP RGB input. (b) Stitched fused mask, with farmland shown in white and background in black; Dice = 0.898.  
+
+> Figure 6: Selected highway and urban-fringe scene. (a) NAIP RGB input. (b) Stitched fused farmland mask.
+
+developed area; the selected tile Dice is 0.898. Errors remain visible as small inclusions, omissions, and merged transitions, which are expected from a binary extent output. Figure 6 presents a more difficult highway scene. The diagonal transportation corridor creates long, high-contrast edges and separates agricultural blocks from built-up land. The prediction largely excludes the main corridor and dense settlement while retaining fields on both sides. Some narrow linear features and developed parcels remain challenging, demonstrating why area-overlap metrics should be comple-mented by boundary and object-level assessment in future work. The regular field grid in Figure 7 produces the highest selected tile score, 0.919. Large rectangular fields are re-constructed coherently across window boundaries, and the mask captures the dominant parcel geometry. The upper-right built-up area is excluded, although some field separations remain thin or merged. The contrast between Figures 5 and 7 is consistent with the expectation that regular, high-contrast geometry is easier than heterogeneous peri-urban structure. 
+
+## 5. Discussion 
+
+5.1. A recall-oriented farmland mask 
+
+The central quantitative result is not simply the test Dice of 0.9234; it is the combination of high overlap, very high recall, and lower precision. The model is tuned to avoid missing farmland. That behavior can be useful when the output is a screening layer for crop-area inventory or land-conversion monitoring, because omissions may remove fields from subsequent analysis. Yet over-prediction has costs. False positives can assign roads, construction sites, vacant land, lawns, or industrial surfaces to farmland and inflate area estimates. The appropriate operating point therefore depends on downstream use. A conservation screening tool may tolerate extra candidates that are reviewed later,    
+
+> Narimani et al.: Preprint submitted to Taylor & Francis Page 8 of 12 Figure 7: Selected regular field-grid scene. (a) NAIP RGB input. (b) Stitched fused mask; Dice = 0.919.
+
+whereas payment, insurance, or regulatory decisions require substantially stronger precision, calibration, and uncertainty reporting. The loss formulation helps explain the trade-off. A 2.5-weighted Dice term responds strongly to large false-negative regions, whereas BCE retains local pixel supervision. This is a reasonable response to background-dominated patches, but it does not directly optimize boundary distance or object topology. Field-boundary literature has shown that multi-task predictions of extent, edges, and distance transforms can improve delineation and enable instance post-processing [23 , 35 ]. Adding an explicit boundary head, signed-distance target, or topology-aware loss would be a more principled next step than relying on an extent mask alone. 
+
+5.2. Contribution of text-prompted SAM 3 
+
+SAM 3 introduces a qualitatively different prior from the ResUNet. The ResUNet learns the appearance of farmland from the annotated NAIP patches, whereas SAM 3 con-tributes open-vocabulary concept localization learned from a much broader visual corpus [ 28 ]. The selected examples suggest that this prior is useful when repeated orchard texture, weak internal contrast, or fragmented geometry forms a co-herent agricultural concept that the local classifier only partly recovers. This complementary behavior is consistent with remote-sensing studies that use SAM as a mask generator, promptable assistant, or auxiliary branch rather than as a complete replacement for domain supervision [29, 30]. The logical-OR rule favors completeness. Every positive ResUNet pixel is retained, and SAM 3 can only add candidate farmland. This makes the fusion transparent and explains the improvement observed in omission-dominated examples. The same asymmetry can also preserve a false-positive concept mask, so future refinements should consider confidence-weighted fusion, boundary gating, or selective SAM 3 invocation on low-confidence windows. Such alternatives would preserve the interpretability of the cascade while allowing evidence from the domain model to reject weak concept matches. The additional foundation-model pass also has deploy-ment implications. ResUNet can be applied rapidly over every patch, whereas SAM 3 is a larger model and is better suited to targeted refinement than indiscriminate use over very large archives. A practical regional workflow could therefore run ResUNet scene-wide and invoke SAM 3 only for patches with high uncertainty, broken field interiors, or unusually complex boundaries. 
+
+5.3. Extent, visible boundaries, and parcel instances 
+
+The distinction between semantic farmland extent and parcel delineation is central to interpreting the maps. A binary mask answers whether each pixel belongs to annotated farmland. It does not assign unique identities to adjacent fields, and it may merge parcels when the separating line is narrow or spectrally weak. Legal cadastral boundaries can also pass through visually uniform land and may be impossible to infer from imagery alone. The current product is therefore suitable as a farmland-area layer and as an input to later boundary or instance extraction, but it should not be presented as a cadastral substitute. This distinction also affects evaluation. Dice and IoU measure area overlap and are insensitive to whether a pre-dicted region contains the correct number of parcels. Bound-ary displacement metrics, object IoU, over-segmentation, under-segmentation, and topology are needed when the intended product is a parcel map [ 38 ]. Public datasets such as AI4Boundaries and Fields of the World provide useful structures for future benchmarking [ 16 , 37 ], though their sensor resolution and geographic contexts differ from 1 m NAIP.   
+
+> Narimani et al.: Preprint submitted to Taylor & Francis Page 9 of 12
+
+5.4. Landscape diversity and generalization 
+
+The scene-selection strategy emphasized difficult back-grounds rather than maximizing the number of homogeneous crop patches. Highways, residential grids, industrial surfaces, school complexes, and irregular urban edges were intention-ally represented because these features produce consequential commission errors in farmland maps. Scene-level partitioning further reduced the chance that neighboring content would appear in both training and evaluation. The close validation and test metrics therefore provide encouraging evidence that the model learned features that transferred across the sampled scenes rather than memorizing adjacent patches. At the same time, NAIP appearance varies with acqui-sition year, season, local crop system, soil conditions, illu-mination, and state-level acquisition programs. The present scene collection was designed for landscape diversity, not for a formal continental probability sample. Broader transfer can be assessed by reserving entire regions or acquisition years for external evaluation and by reporting performance separately for open farmland, peri-urban scenes, semi-arid irrigation systems, and fragmented mosaics. This type of stratification is especially important because field-size and boundary visibility are known to influence segmentation difficulty across agricultural systems [17, 31, 36]. 
+
+5.5. Operational and policy relevance 
+
+A defensible open farmland-extent layer can support several workflows. It can define the spatial support for crop-type probabilities, vegetation-index trajectories, yield estimates, and disease-risk signals. It can help local agencies screen where agricultural land is being replaced by roads, housing, or industrial development. It can provide candidate field geometry where proprietary layers are unavailable and enable researchers to aggregate NAIP or satellite observations to management units. The multiscale sensing literature makes clear why this step matters: leaf and canopy signals become actionable at regional scale only when they can be associated with locations that correspond to management decisions [9, 15]. However, policy use raises a higher evidentiary bar than exploratory mapping. The model should not determine legal status, eligibility, or enforcement without human review and authoritative records. Temporal updating also requires change detection rather than independent segmentation alone. A field that is fallow, recently harvested, or temporarily disturbed may be visually ambiguous, and the binary label “farmland” embeds an annotation policy that must be documented. Re-leasing the labeling guide, ambiguous examples, and quality-control procedures is therefore as important as releasing model weights. 
+
+5.6. Study scope and next steps 
+
+Several aspects define the scope of the present results. First, the output is a binary semantic farmland mask. It represents visible farmland extent but does not assign unique parcel identities or reproduce legal cadastral boundaries. Boundary-aware heads, distance-transform targets, and poly-gon consolidation are natural extensions when an instance-level product is required. Second, the SAM 3 evidence is deliberately case based. The selected improvements clarify how text-prompted con-cept masks can recover omissions, while a comprehensive paired comparison of ResUNet-only, SAM 3-only, and fused outputs would quantify how often the same operation im-proves or degrades precision, overlap, and boundary ac-curacy across the full test collection. Standard U-Net and DeepLabV3+ implementations would also provide useful architectural context under a common split and training budget. Third, the model uses a single RGB acquisition. Near-infrared information and multi-date imagery may improve separation of cultivated land from bare ground, lawns, and non-crop vegetation, especially in dormant or recently har-vested fields. Regional and acquisition-year hold-outs would further establish transfer beyond the current scene collection. Finally, operational adoption requires measured through-put, memory use, and uncertainty. A selective cascade in which SAM 3 is triggered only on ambiguous patches may retain most of the observed benefit while controlling cost. Publishing the annotation policy, source-scene manifest, fixed data split, trained weights, and evaluation materials with a persistent identifier will make these extensions easier to compare and reproduce. 
+
+## 6. Conclusions 
+
+This study developed a hybrid workflow for mapping farmland extent and visible boundaries from 1 m NAIP RGB imagery. A residual U-Net trained on 5,698 scene-separated patches achieved a test Dice coefficient of 0.9234, IoU of 0.8605, accuracy of 0.8808, precision of 0.8766, and recall of 0.9794. The resulting mask is strongly recall oriented: it retains most annotated farmland while concentrating remain-ing errors at visually ambiguous infrastructure, exposed soil, and urban–agricultural transitions. A frozen SAM 3 branch extended the domain model with the text prompt “agricultural farmland field.” Logical-OR fusion improved selected orchard-row and fragmented-parcel examples and supported coherent stitched masks in contrasting regional scenes, including a peri-urban mosaic with Dice 0.898 and a regular field grid with Dice 0.919. The central value of the design lies in its clear division of labor: ResUNet supplies efficient task-specific prediction, while SAM 3 contributes a broad semantic prior without additional farmland-specific training. The workflow offers a practical foundation for crop-area estimation, agricultural monitoring, and screening of farm-land conversion where current field layers are unavailable. Future work should quantify fusion performance across the full test collection, compare standard segmentation baselines, test external regions and acquisition years, incorporate NIR or multi-date observations, and develop boundary-aware vectorization for applications that require separate field   
+
+> Narimani et al.: Preprint submitted to Taylor & Francis Page 10 of 12
+
+instances. These extensions can build on the present semantic product without overstating its relationship to legal cadastral boundaries. 
+
+## Acknowledgments 
+
+The authors thank Anav Apparaju for his invaluable assistance with manual annotation of farmland polygons. 
+
+## Funding 
+
+The authors received no specific financial support for the research, authorship, or publication of this article. 
+
+## Declaration of interest 
+
+The authors report no competing interests. 
+
+## Declaration of generative AI use 
+
+During the preparation of this work, the authors used ChatGPT to improve grammatical accuracy, refine sentence structure, and enhance visualizations. All AI-generated revi-sions were thoroughly reviewed and edited by the authors to ensure relevance and accuracy. 
+
+## Data availability statement 
+
+NAIP source imagery is publicly available through the U.S. Department of Agriculture and U.S. Geological Survey distribution services (https://doi.org/10.5066/F7QN 651G). The derived annotation masks, 256 × 256 image patches, scene-level split manifest, and evaluation materials supporting this article are openly available in Zenodo at https://doi.org/10.5281/zenodo.21519912. The source code for ResUNet training, SAM 3 refinement, and tile stitching is available on GitHub at https://github.com/MohammadrezaN arimaniUCDavis/NAIP_Farmland_ResSAM. 
+
+## Author contributions (CRediT) 
+
+Mohammadreza Narimani: Conceptualization, Methodol-ogy, Software, Formal analysis, Investigation, Data curation, Visualization, Writing–original draft, Writing–review and editing, Project administration. Vikram Anand: Data curation, Investigation, Validation, Visualization, Writing–review and editing. Parastoo Farajpoor: Conceptualization, Methodology, Supervision, Validation, Writing–review and editing. All authors reviewed and approved the final manuscript and accept accountability for the work. 
+
+## Ethics statement 
+
+Not applicable. The study used aerial imagery and did not involve human participants, animals, or personally identifiable data. 
+
+## References 
+
+[1] S. Jacquemoud and F. Baret, “PROSPECT: A model of leaf optical properties spectra,” Remote Sensing of Environment , vol. 34, no. 2, pp. 75–91, 1990. [2] P. Farajpoor, A. Pourreza, M. Narimani, A. El-Kereamy, and M. W. Fidelibus, “Multi-trait spectral modeling for estimating grapevine leaf traits and nutrients,” Plant Phenomics , vol. 7, no. 4, p. 100142, 2025. [3] P. Farajpoor, A. Pourreza, M. Narimani, A. El-Kereamy, and M. W. Fidelibus, “Leaf spectral reflectance prediction using multi-head attention neural networks,” arXiv preprint arXiv:2606.01432 , 2026. [4] S. Sankaran, A. Mishra, R. Ehsani, and C. Davis, “A review of advanced techniques for detecting plant diseases,” Computers and Electronics in Agriculture , vol. 72, no. 1, pp. 1–13, 2010. [5] A.-K. Mahlein, “Plant disease detection by imaging sensors—parallels and specific demands for precision agriculture and plant phenotyping,” 
+
+Plant Disease , vol. 100, no. 2, pp. 241–251, 2016. [6] M. Narimani, A. Pourreza, A. Moghimi, P. Farajpoor, H. Jafarbiglu, and M. B. Mesgaran, “Early detection of branched broomrape (Phelipanche ramosa) infestation in tomato crops by using leaf spectral analysis and machine learning,” IFAC-PapersOnLine , vol. 59, no. 23, pp. 114–119, 2025. [7] W. H. Maes and K. Steppe, “Perspectives for remote sensing with unmanned aerial vehicles in precision agriculture,” Trends in Plant Science , vol. 24, no. 2, pp. 152–164, 2019. [8] M. Narimani, A. Pourreza, A. Moghimi, M. Mesgaran, P. Farajpoor, and H. Jafarbiglu, “Drone-based multispectral imaging and deep learning for timely detection of branched broomrape in tomato farms,” in Autonomous Air and Ground Sensing Systems for Agricultural Optimization and Phenotyping IX , vol. 13053. SPIE, 2024, pp. 16–25. [9] M. Weiss, F. Jacob, and G. Duveiller, “Remote sensing for agricultural applications: A meta-review,” Remote Sensing of Environment , vol. 236, p. 111402, 2020. [10] J. Segarra, M. L. Buchaillot, J. L. Araus, and S. C. Kefauver, “Remote sensing for precision agriculture: Sentinel-2 improved features and applications,” Agronomy , vol. 10, no. 5, p. 641, 2020. [11] M. Narimani, A. Pourreza, A. Moghimi, P. Farajpoor, H. Jafarbiglu, and M. Mesgaran, “Branched broomrape detection in tomato farms using satellite imagery and time-series analysis,” arXiv preprint arXiv:2509.10804 , 2025. [12] M. Narimani, A. Pourreza, A. Moghimi, and P. Farajpoor, “Sentinel-2 for crop yield estimation: A systematic review,” Smart Agricultural Technology , p. 102405, 2026. [13] M. Narimani, A. Pourreza, and P. Farajpoor, “Mapping tomato crop-ping systems in California using AlphaEarth geospatial embeddings and deep learning analysis,” arXiv preprint arXiv:2605.21804 , 2026. [14] D. J. Mulla, “Twenty five years of remote sensing in precision agriculture: Key advances and remaining knowledge gaps,” Biosystems Engineering , vol. 114, no. 4, pp. 358–371, 2013. [15] R. P. Sishodia, R. L. Ray, and S. K. Singh, “Applications of remote sensing in precision agriculture: A review,” Remote Sensing , vol. 12, no. 19, p. 3136, 2020. [16] H. Kerner, S. Chaudhari, A. Ghosh, C. Robinson, A. Ahmad, E. Choi, N. Jacobs, C. Holmes, M. Mohr, R. Dodhia, J. M. Lavista Ferres, and J. Marcus, “Fields of the world: A machine learning benchmark dataset for global agricultural field boundary segmentation,” in Proceedings of the AAAI Conference on Artificial Intelligence , vol. 39, no. 27, 2025, pp. 28 151–28 159. [17] C. Robinson, G. Muhawenayo, S. Khanal, Z. Fang, I. Corley, A. M. Tárano, L. Estes, J. Marcus, N. Jacobs, H. Kerner, I. Becker-Reshef, and J. M. Lavista Ferres, “The first global agricultural field boundary map at 10 m resolution,” arXiv preprint arXiv:2605.11055 , 2026. [18] U.S. Geological Survey, “USGS EROS Archive—Aerial Photography—National Agriculture Imagery Program (NAIP),” https://doi.org/10.5066/F7QN651G, 2017. [19] O. Ronneberger, P. Fischer, and T. Brox, “U-Net: Convolutional networks for biomedical image segmentation,” in Medical Image Computing and Computer-Assisted Intervention—MICCAI 2015 , ser. Lecture Notes in Computer Science, vol. 9351. Springer, 2015, pp. 
+
+Narimani et al.: Preprint submitted to Taylor & Francis Page 11 of 12 234–241. [20] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image recognition,” in Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , 2016, pp. 770–778. [21] Z. Zhang, Q. Liu, and Y. Wang, “Road extraction by deep residual U-Net,” IEEE Geoscience and Remote Sensing Letters , vol. 15, no. 5, pp. 749–753, 2018. [22] K. M. Masoud, C. Persello, and V. A. Tolpekin, “Delineation of agri-cultural field boundaries from Sentinel-2 images using a novel super-resolution contour detector based on fully convolutional networks,” 
+
+Remote Sensing , vol. 12, no. 1, p. 59, 2019. [23] F. Waldner and F. I. Diakogiannis, “Deep learning on edge: Extracting field boundaries from satellite images with a convolutional neural network,” Remote Sensing of Environment , vol. 245, p. 111741, 2020. [24] A. Taravat, M. P. Wagner, R. Bonifacio, and D. Petit, “Advanced fully convolutional networks for agricultural field boundary detection,” 
+
+Remote Sensing , vol. 13, no. 4, p. 722, 2021. [25] H. Zhang, M. Liu, Y. Wang, J. Shang, X. Liu, B. Li, A. Song, and Q. Li, “Automated delineation of agricultural field boundaries from Sentinel-2 images using recurrent residual U-Net,” International Journal of Applied Earth Observation and Geoinformation , vol. 105, p. 102557, 2021. [26] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo, P. Dollár, and R. Girshick, “Segment anything,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 4015–4026. [27] N. Ravi, V. Gabeur, Y.-T. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr, R. Rädle, C. Rolland, L. Gustafson, E. Mintun, J. Pan, K. V. Alwala, N. Carion, C.-Y. Wu, R. Girshick, P. Dollár, and C. Feichtenhofer, “SAM 2: Segment anything in images and videos,” in International Conference on Learning Representations , 2025, pp. 28 085–28 128. [28] N. Carion, L. Gustafson, Y.-T. Hu, S. Debnath, R. Hu, D. Suris, C. Ryali, K. V. Alwala, H. Khedr, A. Huang, J. Lei, T. Ma, B. Guo, A. Kalla, M. Marks, J. Greer, M. Wang, P. Sun, R. Rädle, T. Afouras, E. Mavroudi, K. Xu, T.-H. Wu, Y. Zhou, L. Momeni, R. Hazra, S. Ding, S. Vaze, F. Porcher, F. Li, S. Li, A. Kamath, H. K. Cheng, P. Dollár, N. Ravi, K. Saenko, P. Zhang, and C. Feichtenhofer, “SAM 3: Segment anything with concepts,” arXiv preprint arXiv:2511.16719 , 2025. [29] L. P. Osco, Q. Wu, E. L. de Lemos, W. N. Gonçalves, A. P. M. Ramos, J. Li, and J. Marcato Junior, “The segment anything model (SAM) for remote sensing applications: From zero to one shot,” International Journal of Applied Earth Observation and Geoinformation , vol. 124, p. 103540, 2023. [30] W. Ao, S. Zheng, and Y. Meng, “SEMPNet: Enhancing few-shot remote sensing image semantic segmentation through the integration of the segment anything model,” GIScience & Remote Sensing , vol. 61, no. 1, p. 2426589, 2024. [31] P. Tripathy, K. Baylis, K. Wu, J. Watson, and R. Jiang, “Investigating the segment anything foundation model for mapping smallholder agriculture field boundaries without training labels,” arXiv preprint arXiv:2407.01846 , 2024. [32] A. Kamilaris and F. X. Prenafeta-Boldú, “Deep learning in agriculture: A survey,” Computers and Electronics in Agriculture , vol. 147, pp. 70–90, 2018. [33] B. Watkins and A. van Niekerk, “Automating field boundary de-lineation with multi-temporal Sentinel-2 imagery,” Computers and Electronics in Agriculture , vol. 167, p. 105078, 2019. [34] C. Persello, V. A. Tolpekin, J. R. Bergado, and R. A. de By, “Delin-eation of agricultural fields in smallholder farms from satellite images using fully convolutional networks and combinatorial grouping,” 
+
+Remote Sensing of Environment , vol. 231, p. 111253, 2019. [35] F. Waldner, F. I. Diakogiannis, K. Batchelor, M. Ciccotosto-Camp, E. Cooper-Williams, C. Herrmann, G. Mata, and A. Toovey, “Detect, consolidate, delineate: Scalable mapping of field boundaries using satellite images,” Remote Sensing , vol. 13, no. 11, p. 2197, 2021. [36] S. Wang, F. Waldner, and D. B. Lobell, “Unlocking large-scale crop field delineation in smallholder farming systems with transfer learning and weak supervision,” Remote Sensing , vol. 14, no. 22, p. 5738, 2022. [37] R. d’Andrimont, M. Claverie, P. Kempeneers, D. Muraro, M. Yordanov, D. Peressutti, M. Batič, and F. Waldner, “AI4Boundaries: An open AI-ready dataset to map field boundaries with Sentinel-2 and aerial photography,” Earth System Science Data , vol. 15, no. 1, pp. 317–329, 2023. [38] X. Wang, L. Shu, R. Han, F. Yang, T. Gordon, X. Wang, and H. Xu, “A survey of farmland boundary extraction technology based on remote sensing images,” Electronics , vol. 12, no. 5, p. 1156, 2023. [39] L.-C. Chen, Y. Zhu, G. Papandreou, F. Schroff, and H. Adam, “Encoder–decoder with atrous separable convolution for semantic image segmentation,” in Computer Vision—ECCV 2018 . Springer, 2018, pp. 801–818. [40] C. H. Sudre, W. Li, T. Vercauteren, S. Ourselin, and M. J. Cardoso, “Generalised dice overlap as a deep learning loss function for highly unbalanced segmentations,” in Deep Learning in Medical Image Analysis and Multimodal Learning for Clinical Decision Support .Springer, 2017, pp. 240–248. 
+
+Narimani et al.: Preprint submitted to Taylor & Francis Page 12 of 12

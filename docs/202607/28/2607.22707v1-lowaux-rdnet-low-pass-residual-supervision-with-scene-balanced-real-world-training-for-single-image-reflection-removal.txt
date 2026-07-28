@@ -1,0 +1,342 @@
+Title: LowAux-RDNet: Low-Pass Residual Supervision with Scene-Balanced Real-World Training for Single-Image Reflection Removal
+
+URL Source: https://arxiv.org/pdf/2607.22707v1
+
+Published Time: Tue, 28 Jul 2026 00:06:04 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# LowAux-RDNet: Low-Pass Residual Supervision with Scene-Balanced Real-World Training for Single-Image Reflection Removal 
+
+Jizhong Li Fudan University 
+
+## Abstract 
+
+Single-image reflection removal aims to recover a clean trans-mission layer from one image captured through glass. We study an explicit decomposition pipeline built on RDNet and introduce LowAux, a training-only low-pass reflection auxil-iary objective. The original residual target remains the main reflection supervision, while symmetrically filtered prediction and target provide a stable low-frequency constraint. We further incorporate scene-balanced real pairs from RRW to broaden real-scene coverage and improve cross-dataset gener-alization. To avoid evaluation discrepancies caused by model-specific resizing, padding, output quantization, and metric code, we build a unified public benchmark over CEILNet, Real20, Postcard, Objects, and Wild. Under the same eval-uator, the proposed system obtains a five-dataset macro av-erage of 27.546 dB PSNR, 0.9220 SSIM, 0.9751 NCC, and 0.004760 LMSE, achieving the highest macro-average PSNR, SSIM, and NCC and the lowest LMSE among the compared public checkpoints and internal variants. Per-dataset and qual-itative analyses show that the main benefit is a more balanced performance across diverse reflection distributions, while clear semantic reflections in Postcard remain challenging. 
+
+## 1 Introduction 
+
+Images captured through glass or other reflective mediums con-tain a mixture of a desired transmission layer and an unde-sired reflection layer. Undesired reflections can severely de-grade the imaging quality of the target scene, which will in turn affect downstream tasks such as object detection [1]. Single-image reflection removal (SIRR) commonly approximates the observed mixture as the superposition of a transmission layer and a reflection layer, i.e., M ≈ T + R. Separating these layers from a single observation is nevertheless severely ill-posed: both layers may contain natural edges, textures, and complete semantic objects, and real imaging additionally in-troduces attenuation, blur, saturation, misalignment, and other unmodeled residual effects. Reflection removal therefore de-pends not only on network capacity, but also on how layer de-composition is supervised and how closely training data repre-sent real capture conditions. Direct transmission-regression methods such as ERRNet [4] can be strong restoration baselines, but they do not expose the removed reflection-related component as an explicit branch. This makes it difficult to impose structured residual supervi-sion directly. We therefore adopt RDNet [18] as an explicit de-composition backbone, so that the model produces both a trans-mission estimate and a reflection-related residual estimate. Within the RDNet framework, we construct a reflection residual pseudo-label Rres = M − T . This residual may contain high-frequency contamination introduced by imperfect registration, exposure changes, and acquisition noise. On the other hand, directly replacing the full residual with a low-pass residual may discard information that is useful for detailed layer separation. Therefore, we retain RDNet’s original resid-ual supervision as the main objective and introduce an addi-tional low-pass reflection-residual auxiliary loss to constrain more stable low-frequency reflection structures. Furthermore, to address the performance trade-offs across different test dis-tributions, we incorporate RRW real paired data during train-ing and use scene-balanced sampling to reduce the training bias caused by redundant adjacent video frames. Our contributions are: • a low-pass reflection-residual auxiliary loss on RDNet’s ex-plicit residual branch, which improves residual supervision without changing the inference architecture; • a scene-balanced sampling strategy for RRW real paired data, designed to reduce adjacent-frame redundancy and improve aggregate cross-dataset performance; • a unified public evaluation protocol that applies consistent data pairing, floating-point metric computation, and equal-weight dataset macro averaging to all available comparison models. 
+
+## 2 Related Work 
+
+Simplified imaging model and supervision. Most SIRR methods start from the simplified formation model I ≈ T + R,where a mixed observation is approximated by a desired trans-mission image and an undesired reflection image. This model provides a convenient notation and enables synthetic paired data, but it is not a complete description of real glass imag-ing. Wen et al. [5] show that linear superposition is insufficient for realistic reflection synthesis and introduce nonlinear alpha blending to better mimic real captures. More recent work fur-ther studies the gap between synthetic reflection labels and real 1arXiv:2607.22707v1 [cs.CV] 20 Jul 2026 residual labels. GFRRN [17] explicitly points out that the syn-thetic reflection layer and the real I − T residual pseudo-label are not fully consistent, motivating unified label generation and frequency-aware supervision. These observations are directly related to our setting: the residual pseudo-label is useful, but its high-frequency content may include alignment, exposure, and acquisition artifacts rather than physically clean reflection. 
+
+Direct transmission regression. Single-image reflection re-moval is ill-posed because one observation must explain two vi-sually plausible layers. Early approaches relied on handcrafted priors such as gradient sparsity, layer smoothness, and ghost-ing cues. These assumptions are useful for restricted scenes but often fail when reflections contain sharp edges or semantic objects. Deep methods instead learn a mapping from mixed ob-servations to clean transmission using paired synthetic and real data. CEILNet [2] introduced a cascaded design that first pre-dicts an edge map and then reconstructs the transmission im-age, explicitly using structure to guide restoration. Perceptual-loss-based separation [3] showed that feature-space supervi-sion can preserve visually important content better than pixel losses alone. ERRNet [4] addresses two practical limitations of direct regression: insufficient contextual reasoning and imperfectly aligned real training pairs. It combines VGG hypercolumns, channel and spatial context, and an alignment-invariant high-level feature loss. This permits real unaligned pairs to sup-plement accurately registered synthetic data without impos-ing misleading pixel correspondence. ERRNet is therefore a strong representative of direct transmission regression. How-ever, because it predicts only the transmission layer, the re-moved reflection residual is not explicitly exposed as a branch that can receive structured supervision. 
+
+Explicit decomposition and structure-aware priors. 
+
+Rather than predicting only transmission, explicit decompo-sition methods model interactions between transmission and reflection. BDN [6] performs bidirectional estimation so that each layer helps explain the other. IBCLN [7] repeatedly refines both components through a cascade, progressively correcting separation errors. RAGNet [8] first estimates reflection-related information and then uses it to guide transmission recovery, while location-aware SIRR [9] predicts a reflection confidence map to focus processing on reflection-dominant regions. These methods show that reflection structure, location, and interaction cues are useful beyond plain transmission regression. Other works introduce stronger priors or model-driven opti-mization into the network. YTMT [11] exchanges information between two streams and treats features as useful or interfer-ing depending on their destination. DSRNet [12] promotes component synergy through specialized feature interactions, while DSIT [16] uses interactive dual-stream transformers to capture longer-range semantic dependencies. DURRNet [14] and DExNet [15] represent deep-unfolding directions that em-bed prior constraints, such as exclusion or joint priors, into learnable networks. RDNet [18] introduces reversible multi-column interactions, input-conditioned prompting, and hierar-chical decoding. Its decoder exposes multi-scale outputs for both branches, making the removed component directly ob-servable during training. This property is central to our work: instead of changing RDNet’s architecture, we use its resid-ual branch as an interface for complementary raw-residual and low-frequency supervision. 
+
+Real-world data and unified evaluation. Synthetic mix-tures provide exact layer targets but cannot fully reproduce real glass, illumination, camera motion, saturation, and spa-tially varying reflections. Real data are consequently impor-tant for both training and evaluation. SIR 2 [10] provides controlled real test subsets covering objects, postcards, and wild scenes. RRW [13] expands real-world coverage using many frames from diverse captured scenes. Its video structure also creates substantial adjacent-frame redundancy; our scene-balanced sampler treats scenes, rather than individual frames, as the training units. Reported results across reflection-removal papers are often not directly comparable. Studies may use different subset sizes, resize Real20 differently, quantize predictions before scoring, or implement PSNR and SSIM with different conven-tions. Large subsets can also dominate an image-level aver-age. We therefore re-evaluate all available checkpoints with one floating-point pipeline and report an equal-weight dataset macro average. This protocol removes test-time implementa-tion discrepancies, although differently trained public check-points remain a system-level rather than strictly controlled ar-chitectural comparison. 
+
+## 3 Method 
+
+3.1 RDNet-Based LowAux 
+
+Let M ∈ [0 , 1] H×W ×3 denote the mixed observation. We use the simplified formation model 
+
+M ≈ T + R, (1) where T and R denote the ideal transmission and physical re-flection layers. Real captures do not exactly satisfy Eq. (1); a more realistic abstraction can be written as 
+
+M = T + R + Φ( T, R ), (2) where Φ( T, R ) summarizes attenuation, nonlinear mixing, sat-uration, misalignment, sensor noise, and other unmodeled ac-quisition residuals. In this paper, Eq. (1) is used as a nota-tion convention, while the actual reflection-branch target is the residual pseudo-label 
+
+Rres = M − T (3) rather than the physically exact layer R.We adopt RDNet [18] as the explicit decomposition back-bone. This exposes a residual-branch prediction that can be compared with Rres , allowing separate constraints on full resid-ual detail and stable low-frequency structure. 2RDNet contains a pretrained hierarchy extractor (PHE), a transmission-rate-aware prompt generator (TAPG), a multi-column reversible encoder, and a hierarchy decoder. PHE supplies hierarchical visual features, TAPG produces an input-conditioned separation prompt, and the reversible encoder ex-changes fine detail and broad context across columns and scales. The encoder produces features rather than image-space layers. The hierarchy decoder aggregates them and predicts multi-scale transmission and reflection: 
+
+[ ˆTk, ˆRk] = [ Mk, M k] − Dk(Fk), (4) where Fk and Mk denote hierarchical features and the re-sized mixed input at scale k. In the following, ˆRk denotes the predicted residual-branch output supervised by the residual pseudo-label Rres ,k , rather than a physically exact reflection layer. Our method leaves every component of this inference graph unchanged. 
+
+3.2 RDNet Backbone and Low-Pass Reflection Auxiliary Supervision 
+
+Figure 1 summarizes the proposed training framework. Dur-ing training, the mixed image passes through RDNet once to produce multi-scale ˆTk and ˆRk. The clean transmission and residual pseudo-label are resized independently for each out-put scale. For scale k, the detached residual pseudo-label is 
+
+Rres ,k = Resize k(sg (M − T )) , (5) where sg denotes stop-gradient. RDNet’s original supervision contains transmission pixel, perceptual, and gradient terms, to-gether with a residual-branch pixel loss: 
+
+LT,k = LT 
+
+> pix ,k
+
++ LT 
+
+> per ,k
+
++ LT
+
+> grad ,k
+
+, (6) 
+
+LR 
+
+> pix ,k
+
+= ℓpix ( ˆRk, R res ,k ), (7) where ℓpix is mean squared error. The transmission terms serve complementary roles: pixel loss anchors color and inten-sity, perceptual loss encourages feature-level similarity, and gradient loss protects edges. The residual-branch pixel loss makes decomposition explicit and discourages the transmis-sion branch from explaining all mixed content by itself. In real pairs, M −T can contain high-frequency components caused by small registration errors, exposure changes, sensor noise, and the unmodeled term Φ( T, R ) in Eq. (2). Directly replacing the raw target by a blurred target removes useful de-tails, as verified by our ablation. Instead, LowAux keeps the raw residual as the main supervision and constrains only the low-frequency projection of Rres by applying the same differ-entiable Gaussian operator Gσ to prediction and target: 
+
+LR 
+
+> low ,k
+
+= ℓpix 
+
+(
+
+Gσ ( ˆRk), G σ (Rres ,k )
+
+)
+
+. (8) We use a normalized depth-wise 31 × 31 kernel with σ = 5 .0
+
+and reflection padding. The prediction path remains differen-tiable; the target path is detached. Consequently, the auxiliary loss constrains stable low-frequency reflection structure with-out forcing ˆRk itself to be blurred.       
+
+> Table 1. Training mixture of the proposed method. The epoch size remains fixed at 7,932 samples. Training branch Sampling ratio Real89 paired data 15% Nature200 paired data 15% VOC generic synthetic data 55% Scene-balanced RRW pairs 15%
+
+The symmetric filtering is important. Filtering only the target would ask an unfiltered prediction to match a delib-erately blurred image and would directly suppress its high-frequency content. Filtering both sides instead compares their low-frequency projections. Gradients still flow from Gσ ( ˆRk)
+
+into the RDNet prediction, while high-frequency details re-main governed by the raw residual loss. The complementary comparison between R3 and R4 tests precisely this distinction. The complete objective is 
+
+Ltotal = ∑
+
+> k
+
+wk
+
+(LT,k + LR
+
+> pix ,k
+
++λlow LR
+
+> low ,k
+
+) , λlow = 0 .2, (9) where wk are RDNet’s multi-scale weights. Thus, LowAux modifies only optimization-time supervision while preserving RDNet’s original inference graph. It introduces no test-time parameters, memory, or computation. 
+
+3.3 Scene-Balanced RRW Extension 
+
+Low-pass auxiliary supervision improves the aggregate bench-mark result but does not fully address distribution shifts in Ob-jects, Postcard, and Wild. We therefore use real pairs from the published RRW dataset [13] while keeping the network and objective unchanged. Our contribution here is the scene-balanced sampling strategy used to incorporate RRW, not the dataset’s collection or ground-truth acquisition procedure. RRW contains many adjacent frames for each captured scene. Uniform frame sampling would over-represent long videos and allow nearly identical frames to dominate an epoch. We first match each scene with its scene-level ground truth, discard scenes without a target, and split the 167 valid scenes into 147 training, 15 validation, and 5 holdout scenes using a fixed seed. Each epoch samples exactly eight frames from ev-ery training scene, yielding 1,176 scene-balanced RRW pairs. Input and target receive identical crop, flip, and rotation trans-forms, and the residual pseudo-label is constructed as Rres =
+
+M −T . Splitting by scene, rather than by frame, prevents adja-cent views of the same capture from crossing between training and held-out partitions. Resampling eight frames per scene at every epoch exposes the model to temporal variation without allowing long sequences to dominate the gradient. This design treats the scene as the statistical unit and makes RRW comple-mentary to the existing independent image sources. Table 1 shows the final mixture. RRW contributes real diver-sity without replacing the existing paired and synthetic sources. It was introduced after the low-pass-only model showed un-even behavior on Objects, Postcard, and Wild, all of which contain real capture characteristics that are poorly represented 3M − T         
+
+> stop-gradient target
+> Simplified RDNet Forward Path unchanged
+> multi-scale predictions
+> Training Only all targets resized at scale k
+> Transmission Loss
+> T,k: Pixel + Perceptual + Gradient
+> Raw Residual Loss
+> R
+> pix, k
+> Low-Pass Auxiliary Loss 31 × 31, σ= 5.0
+> gradient preserved
+> stop-gradient auxiliary constraint
+> Auxiliary Weight
+> λlow = 0.2
+
+total       
+
+> forward / inference training-only target / loss
+> Mixed input
+> M
+> GT transmission
+> T
+> sg(⋅) Resize kRres, k
+> Resize kTk
+> PHE
+> TAPG
+> Stem Features
+> Prompt
+> Multi-Column
+> Reversible Encoder
+> Hierarchy
+> Decoder ̂
+> Tk̂
+> Rk
+> σ
+> σ
+> R
+> low, k
+> −
+
+Figure 1. Proposed training supervision framework. The RDNet forward path is unchanged. At each output scale, the residual pseudo-label provides the main residual-branch loss, while symmetrically filtered prediction and pseudo-label provide an auxiliary low-pass constraint. Dashed components are used only during training. 
+
+by generic synthetic mixtures. Public test sets are never used as training sources, and validation and holdout RRW scenes never enter the training sampler. 
+
+## 4 Experiments and Analysis 
+
+4.1 Unified Public Benchmark 
+
+Protocol. The benchmark contains CEILNet Table2 (100 im-ages), Real20 (20), Postcard (179), Objects (200), and Wild (101), for 600 paired samples in total. Inputs and ground truths are paired by identical sorted filenames and loaded as RGB float32 tensors in [0 , 1] . For Real20 only, both input and tar-get are bicubically resized when the long edge exceeds 512 pixels. Model adapters handle only mandatory inference dif-ferences: RDNet, DSRNet, and DSIT use replicate padding to multiples of 32, while IBCLN uses padding to multiples of four and its official three-round cascade. Every prediction must exactly match the target size. Predictions are clipped to [0 , 1] and evaluated before PNG quantization using one implementation of PSNR, SSIM, NCC, and LMSE. We first average images within each dataset and then compute an equal-weight five-dataset macro average, pre-venting larger subsets from dominating the main result. Fig-ure 2 summarizes the protocol. 
+
+Metrics. PSNR measures absolute reconstruction fidelity and strongly penalizes pixel-level error. SSIM evaluates local luminance, contrast, and structural agreement, making it more sensitive to visible texture preservation. NCC measures corre-lation between prediction and target and is useful when over-all intensity differs slightly, whereas LMSE emphasizes local squared error and exposes spatially concentrated artifacts. Re-porting all four avoids treating a high PSNR alone as sufficient evidence of visually correct layer separation. 
+
+Training details. The proposed system is optimized with AdamW using BF16 mixed precision on four GPUs. The ef-fective batch size is eight. Learning rates are 5 × 10 −6 for the pretrained feature backbone and 10 −5 for the remaining parameters. Training uses the fixed mixture in Table 1 and the objective in Eq. (9). The final model is initialized from the low-pass-auxiliary RDNet checkpoint and trained with RRW while retaining the same loss configuration. 
+
+4.2 Comparison with Public Models 
+
+Table 3 reports the common macro average. Under the unified evaluation protocol, Ours achieves the strongest five-dataset macro-average performance among the compared mod-els across all four reported metrics. Relative to ERRNet, it im-proves PSNR by 3.122 dB and SSIM by 0.0376, while reducing LMSE by 0.003081. It also exceeds DSIT by 1.582 dB and the official RDNet checkpoint by 0.900 dB in macro PSNR. Figure 3 reveals substantial distribution-specific behavior that is hidden by a single average. Ours reaches 29.565, 27.314, 27.227, and 27.709 dB on CEILNet, Real20, Objects, and Wild, respectively, ranking first among the public-model comparison on these four datasets. DSIT is strongest on Post-card at 26.555 dB, exceeding Ours by 0.641 dB. This subset frequently contains two sharp, semantically coherent layers, so successful removal requires deciding which complete struc-tures belong to the transmission rather than merely suppressing reflection-like frequencies. 
+
+Dataset-specific behavior. Figure 3 makes the cross-dataset trade-offs explicit. On CEILNet, Ours exceeds ERRNet and 4Unified Public Benchmark Pipeline                   
+
+> PAIRED DATASETS PARALLEL MODEL INFERENCE
+> SAME PUBLIC INPUT MODEL OUTPUTS
+> RESULT ARTIFACTS
+> Resize
+> ERRNet A0
+> IBCLN A4
+> DSRNet A32
+> DSIT A32
+> RDNet A32
+> Ours A32
+> Per-image
+> Metrics CSV
+> Dataset Mean
+> Equal-weight Five-Dataset
+> Macro Average
+> Visualizations
+> Run Manifest
+> A0A4A32 Resize
+> Adapter: pad / infer / crop only; no metrics
+> Shared Data
+> Preparation
+> PROTOCOL LEGEND
+> Direct inference + output alignment Replicate pad to ×4 + infer + crop Replicate pad to ×32 + infer + crop Real20 only: Input & GT bicubic resize; max long edge = 512
+> PUBLIC BENCHMARK ONLY · NO TRAINING DATA PUBLIC BENCHMARK ONLY / NO TRAINING DATA
+> Each folder: paired Input + GT transmission
+> Filename-sorted pairing
+> RGB float32 [0,1]
+> CEILNet Table2 (100)
+> Real20 (20)
+> Postcard (179)
+> Objects (200)
+> Wild (101)
+> SHARED EVALUATOR
+> Clip [0,1] / exact size
+> Float / no PNG quant.
+> PSNR / SSIM
+> NCC / LMSE
+
+Figure 2. Unified public benchmark. All models receive the same paired floating-point input and use the same evaluator. Adapters per-form only required padding, inference, and cropping. CEILNet Real20 Postcard Objects Wild      
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> PSNR (dB)
+> 27.7
+> 23.4
+> 21.1
+> 24.5
+> 25.4
+> 16.9
+> 22.1
+> 23.5
+> 24.8
+> 24.3
+> 25.1
+> 24.1
+> 24.7
+> 26.6
+> 26.6
+> 24.5
+> 25.1
+> 26.6
+> 26.7
+> 27.0
+> 27.4
+> 26.3
+> 26.1
+> 26.6
+> 26.9
+> 29.6
+> 27.3
+> 25.9
+> 27.2
+> 27.7
+> ERRNet IBCLN DSRNet DSIT RDNet R5
+
+Figure 3. Per-dataset PSNR under the unified benchmark. Ours is strongest among the compared models on four datasets, while DSIT performs best on Postcard. 
+
+official RDNet by 1.86 and 2.19 dB, respectively. This sub-set contains many regular synthetic or controlled mixtures, for which explicit decomposition and the retained raw residual constraint are particularly effective. On Real20, the 1.05 dB gain over official RDNet indicates that the added supervision remains useful on real paired images rather than only fitting synthetic residuals. Objects and Wild emphasize more varied content, camera motion, reflection strength, and spatially nonuniform artifacts. The results on these sets support the use of scene-balanced RRW pairs: the model encounters a wider range of real reflec-tion appearances while preserving the original paired and syn-thetic branches. Together with the Real20 gain, these results indicate improved cross-dataset generalization on complex real scenes. Postcard is the sole exception. Its sharp overlapping se-mantic structures reward models that resolve layer ownership correctly; frequency-aware supervision can stabilize residual learning but cannot itself determine which complete object be-longs to which layer. Figure 4 provides an explicit visual comparison. In Real20/22, most competing outputs retain the reflected silver car across the lower-right fence. Ours removes almost all of the car while preserving the vertical wooden slats and foreground ivy. In Objects/7-Focus-27-m, it removes the large green re-flected digits near the upper edge and the bright green reflec-tion at the right, yet preserves the plush toy’s face and the fine ribs of the camera lens. In Wild/97-m, it suppresses the trian-gular bright glare on the yellow wall without blurring the edges of the photo collage above it. The final Postcard example shows the opposite behavior. DSIT produces a comparatively uniform blue region beneath the bridge and removes most of the pale reflected facade. 
+
+Ours retains the vertical translucent columns and a reddish haze in the center. DSIT reaches 25.36 dB on this sample ver-sus 18.47 dB for Ours , confirming that two sharp semantic layers remain a central limitation. The sample-level measurements in Table 4 agree with the visible differences. On Objects/7-Focus-27-m, Ours gains 5.61 dB over official RDNet; the recovered object bound-aries remain sharp while the high-contrast reflected structure is strongly attenuated. On Wild/97-m, the 7.34 dB advantage over DSIT accompanies cleaner flat regions without removing the desired contours. Real20/22 shows a smaller but consistent improvement in both reconstruction fidelity and structure. In contrast, the Postcard failure reduces both PSNR and SSIM, in-dicating that the error is not merely a global color shift: desired semantic structure is actually assigned to the wrong layer. The comparison is deliberately system-level. Public check-points were trained with different data and optimization sched-ules, and Ours additionally uses RRW. The unified evaluator removes test-time implementation discrepancies but does not make the training conditions identical. Controlled evidence for our design choices is therefore provided by the following RDNet method evolution and complementary ablations. 
+
+4.3 RDNet Method Evolution and Complemen-tary Ablations 
+
+Table 5 summarizes the RDNet ablations. RDNet reproduced establishes the explicit-decomposition baseline. R3 replaces the full residual pseudo-label with a low-pass main target; it improves only slightly over the reproduced baseline and re-mains below R4. This indicates that low-frequency residual structure is more useful as an auxiliary constraint than as a re-placement for the raw residual target. R4 retains the raw resid-ual supervision and adds LowAux, reaching 27.014 PSNR, 0.91637 SSIM, 0.96951 NCC, and 0.005205 LMSE. R5 then adds scene-balanced RRW real pairs without changing the loss, improving macro PSNR by a further 0.532 dB. The archived Sharp-Synth+RRW variant degrades Postcard in short-run test-ing, so the final pipeline retains RRW but removes the sharp-synthetic branch. 
+
+4.4 Discussion 
+
+Why the two improvements are complementary. The method evolution and complementary ablations indicate that supervision design and data distribution address different fail-ure modes. The complete R4 LowAux-based training vari-ant improves the aggregate result without changing the train-ing sources or deployed inference graph. The comparison supports the usefulness of low-frequency auxiliary structure, while not isolating it as the sole cause of the R4 gain. R5 then improves Real20, Postcard, Objects, and Wild while re-5Table 3. Five-dataset macro average under the unified public benchmark. Method PSNR ↑ SSIM ↑ NCC ↑ LMSE ↓
+
+ERRNet [4] 24.425 0.8844 0.9433 0.007842 IBCLN [7] 22.313 0.8512 0.9231 0.010352 DSRNet [12] 25.429 0.9000 0.9569 0.006847 DSIT [16] 25.964 0.9085 0.9660 0.006002 RDNet [18] 26.647 0.9133 0.9677 0.005253 
+
+Ours 27.546 0.9220 0.9751 0.004760 
+
+Figure 4. Qualitative comparison on representative public-benchmark samples. Ours removes the reflected car in Real20, the green reflected digits in Objects, and the triangular wall glare in Wild. The Postcard row exposes a failure to remove the pale reflected facade. 
+
+Table 4. PSNR/SSIM on the four samples shown in Fig. 4. Bold marks the best result for each sample.                     
+
+> Sample ERRNet DSIT RDNet official Ours
+> Real20/22 19.72 / 0.753 20.54 / 0.765 22.53 / 0.819 25.48 / 0.883
+> Objects/7-Focus-27-m 21.13 / 0.837 23.42 / 0.882 25.50 / 0.905 31.11 / 0.933
+> Wild/97-m 22.31 / 0.953 23.16 / 0.957 21.16 / 0.941 29.50 / 0.969
+> Postcard/hb-5-m-32 20.26 / 0.822 25.36 / 0.886 21.80 / 0.846 18.47 / 0.796
+
+taining the same LowAux objective. Because the objective is unchanged in this stage, the results support the conclusion that scene-balanced RRW broadens real-scene coverage and im-proves cross-dataset generalization, with clear gains on Real20 and Wild. 
+
+Macro balance versus image-weighted performance. Our primary score gives each dataset equal weight. This choice prevents the 200-image Objects subset and 179-image Post-card subset from dominating the 20-image Real20 subset, and it matches our objective of robust performance across distri-butions. We also computed the image-weighted average over all 600 samples directly from the same dataset summaries. 
+
+Ours remains first, with 27.309 PSNR, 0.9282 SSIM, 0.9804 NCC, and 0.003110 LMSE. Thus, the conclusion is not an artifact of macro aggregation, although the numerical margin changes with the weighting rule. 
+
+Fairness boundary. The public comparison guarantees identical test inputs, adapter constraints, floating-point metrics, and aggregation, but it cannot equalize training data or opti-mization. In particular, Ours uses additional RRW pairs, while the public checkpoints follow their authors’ original training recipes. The main comparison therefore demonstrates the prac-tical competitiveness of the final system. Claims about indi-vidual design choices rely on the internal RDNet method evo-lution and complementary ablations, where the backbone and evaluator are held fixed whenever a quantitative comparison is made. 
+
+Practical cost. Both proposed changes are confined to train-ing. Scene-balanced RRW sampling changes which pairs enter an epoch, and Gaussian filtering is used only when computing the reflection loss. The deployed model has the same param-eters, forward graph, padding rule, and output format as its 6Table 5. RDNet ablations under the unified benchmark. Macro PSNR uses the unified public benchmark unless marked otherwise. Method Modification Macro PSNR ↑ Conclusion RDNet reproduced Reproduced RDNet training 26.764 Explicit-decomposition baseline R3 Replace raw residual supervision with a low-pass residual target 26.821 Low-frequency information alone is insufficient R4 LowAux Add low-pass residual supervision as an auxiliary term 27.014 More stable than replacing the raw residual target R5 RRW R4 objective with scene-balanced RRW real pairs 
+
+27.546 Best aggregate result Sharp-Synth+RRW (archived) Add sharp local synthetic reflections together with RRW 26.252 ∗ Degrades Postcard; not adopted 
+
+> ∗Sharp-Synth+RRW (archived) reports its epoch-4 short-run five-set macro PSNR, not a final unified public-benchmark result.
+
+RDNet backbone. This is important for a practical restoration system: the gain does not require an extra refinement network, an ensemble, or iterative inference. 
+
+Failure taxonomy. The qualitative examples reveal three re-curring errors. Under-removal leaves visible reflected edges in otherwise correct transmission; this often lowers PSNR while retaining reasonable SSIM. Over-removal erases real transmis-sion texture and reduces both fidelity and local structure. The hardest case is semantic layer confusion, where a sharp, coher-ent object is assigned to the wrong layer. Such failures can look locally plausible yet disagree strongly with the target, as in the selected Postcard example. Low-pass supervision mainly addresses unstable residual structure and RRW broadens real-scene coverage, but neither explicitly resolves semantic owner-ship. 
+
+Model selection and remaining limitation. The final check-point was chosen during exploratory development using the same five-set macro protocol. This can introduce optimistic selection bias even though no test images enter training. Astricter study should reserve an independent validation set, se-lect one checkpoint once, and evaluate it on an untouched benchmark. Moreover, the persistent DSIT advantage on Post-card shows that real-data diversity and frequency-aware super-vision do not fully solve semantic layer assignment. Explicit semantic consistency or region-adaptive separation is a promis-ing next step. 
+
+## 5 Conclusion 
+
+This work adopts RDNet as an explicit decomposition back-bone and improves its training through low-pass reflection aux-iliary supervision and scene-balanced RRW real pairs. Un-der the unified floating-point benchmark, the resulting system achieves the highest five-dataset macro-average PSNR, SSIM, and NCC and the lowest LMSE among the compared models. The RDNet ablations show that low-pass information is more effective as an auxiliary constraint than as a replacement tar-get, while the scene-balanced RRW extension improves cross-dataset balance. The archived Sharp-Synth+RRW experiment is not adopted. Remaining Postcard failures motivate stronger semantic layer-assignment cues. 
+
+## Code Availability 
+
+The source code, training scripts, evaluation pipeline, and ex-periment materials are available at: 
+
+https://github.com/flyingc2004/lowaux-rdnet 
+
+7References 
+
+[1] Renjie Wan, Boxin Shi, Haoliang Li, Ling-Yu Duan, and Alex C Kot Reflection scene separation from a single image. In 
+
+CVPR , 2020. [2] Q. Fan, J. Yang, G. Hua, B. Chen, and D. Wipf. A generic deep architecture for single image reflection removal and image smoothing. In ICCV , 2017. [3] X. Zhang, R. Ng, and Q. Chen. Single image reflection separa-tion with perceptual losses. In CVPR , 2018. [4] K. Wei, J. Yang, Y. Fu, D. Wipf, and H. Huang. Single im-age reflection removal exploiting misaligned training data and network enhancements. In CVPR , 2019. [5] Q. Wen, Y. Tan, J. Qin, W. Liu, G. Han, and S. He. Single image reflection removal beyond linearity. In CVPR , 2019. [6] J. Yang, D. Gong, L. Liu, and Q. Shi. Seeing deeply and bidirec-tionally: A deep learning approach for single image reflection removal. In ECCV , 2018. [7] C. Li, Y. Yang, K. He, S. Lin, and J. E. Hopcroft. Single im-age reflection removal through cascaded refinement. In CVPR ,2020. [8] Y. Li, M. Liu, Y. Yi, Q. Li, D. Ren, and W. Zuo. Two-stage single image reflection removal with reflection-aware guidance. 
+
+Applied Intelligence , 2023. [9] Z. Dong, K. Xu, Y. Yang, H. Bao, W. Xu, and R. W. H. Lau. Location-aware single image reflection removal. In ICCV ,2021. [10] R. Wan, B. Shi, L.-Y. Duan, A.-H. Tan, and A. C. Kot. Bench-marking single-image reflection removal algorithms. In ICCV ,2017. [11] Q. Hu and X. Guo. Trash or treasure? An interactive dual-stream strategy for single image reflection separation. In 
+
+NeurIPS , 2021. [12] Q. Hu and X. Guo. Single image reflection separation via com-ponent synergy. In ICCV , 2023. [13] Y. Zhu, X. Fu, P.-T. Jiang, H. Zhang, Q. Sun, J. Chen, Z.-J. Zha, and B. Li. Revisiting single image reflection removal in the wild. In CVPR , 2024. [14] J.-J. Huang, T. Liu, J. Xia, M. Wang, and P. L. Dragotti. DUR-RNet: Deep unfolded single image reflection removal network with joint prior. In ICASSP , 2024. [15] J.-J. Huang, T. Liu, Z. Chen, X. Liu, M. Wang, and P. L. Dragotti. A lightweight deep exclusion unfolding network for single image reflection removal. IEEE Transactions on Pattern Analysis and Machine Intelligence , 2025. [16] Q. Hu, H. Wang, and X. Guo. DSIT: Single image reflection separation via interactive dual-stream transformers. In NeurIPS ,2024. [17] Y. Chen, Z. He, X. Liu, Z. Chen, and Z. Lu. GFRRN: Explore the gaps in single image reflection removal. In CVPR , 2026. [18] H. Zhao, M. Li, Q. Hu, and X. Guo. Reversible decoupling network for single image reflection removal. In CVPR , 2025. 
+
+## A Supplementary Real-Scene Case Study 
+
+In addition to the standard five-dataset benchmark, we in-clude a small supplementary evaluation on individually se-lected paired examples. The set contains three self-captured pairs and two public real-world holdout samples from RRW. The two RRW scenes, reflection_hf2/outdoor_wild5 
+
+and reflection_vivo3/indoor_office , were kept outside the R5 training and validation splits. This appendix set is used only as a case study and is not included in the public five-dataset macro average reported in the main paper. Table 6 reports the five-image average under the same floating-point evaluator used by the public benchmark. R5 ob-tains the best overall score on this small set, improving over the ERRNet baseline by +5 .56 dB PSNR, +0 .065 SSIM, and 
+
++0 .080 NCC, while reducing LMSE by 0.0132 . The compar-ison in Fig. 5 and Table 7 further shows that the largest gains come from the two held-out real scenes. For the weak win-dow reflection case, R5 preserves the transmission structure more stably. For the complex-texture case, R5 improves PSNR and NCC but slightly increases LMSE, indicating that local regional errors remain. The strong-highlight example is the hardest case: R5 only brings a small numerical improvement, suggesting that saturated specular reflections still exceed what the current residual supervision can reliably separate. 8Table 6. Five-image supplementary average. The set contains three self-captured pairs and two RRW holdout real-world samples. Method PSNR ↑ SSIM ↑ NCC ↑ LMSE ↓
+
+ERRNet E0 18.38 0.691 0.803 0.0291 IBCLN 21.49 0.730 0.872 0.0231 DSRNet 20.44 0.722 0.800 0.0239 DSIT 21.22 0.733 0.857 0.0211 RDNet official 21.82 0.743 0.873 0.0203 
+
+Ours R5 23.94 0.756 0.882 0.0159 Table 7. ERRNet baseline and R5 comparison on each supplementary example. 
+
+Sample Scene type ERRNet E0 Ours R5 ∆PSNR PSNR SSIM NCC LMSE PSNR SSIM NCC LMSE Self-1 Weak window reflection 25.48 0.941 0.988 0.0028 28.75 0.952 0.993 0.0016 +3.27 Self-2 Complex texture 12.83 0.248 0.638 0.0434 16.32 0.257 0.745 0.0486 +3.49 Self-3 Strong highlight 13.80 0.680 0.695 0.0229 14.16 0.691 0.702 0.0195 +0.37 Public-1 RRW holdout, night outdoor 17.61 0.680 0.734 0.0703 30.09 0.917 0.979 0.0087 +12.48 Public-2 RRW holdout, bright indoor 22.16 0.907 0.958 0.0062 30.38 0.966 0.994 0.0012 +8.22 
+
+9Figure 5. Supplementary five-image visual comparison. The first three rows are self-captured paired examples; the last two rows are RRW holdout real-world samples that were not used during R5 training or validation. Columns show the mixed input, ERRNet baseline output, R5 output, and reflection-free ground truth. 
+
+10
