@@ -1,0 +1,5285 @@
+Title: Chaos Is a LADDER: Domain Generalization Beyond Invariance via Reweighting
+
+URL Source: https://arxiv.org/pdf/2607.26458v1
+
+Published Time: Thu, 30 Jul 2026 00:29:25 GMT
+
+Number of Pages: 52
+
+Markdown Content:
+Chaos Is a LADDER: Domain Generalization Beyond Invariance via Reweighting 
+
+Yuhang Jiang 1,2 , Fengchuan Zhang 1,2 , Sanguo Zhang 1,2 , Guojun Zhu 1,2 ∗
+
+> 1
+
+School of Mathematical Sciences, University of Chinese Academy of Sciences, Beijing, China 
+
+> 2
+
+Key Laboratory of Big Data Mining and Knowledge Management, Chinese Academy of Sciences, Beijing, China 
+
+Abstract 
+
+Domain generalization (DG) aims to learn from multiple source domains and generalize to unseen target domains. Most DG methods pursue invariance: they seek a causal represen-tation whose prediction rule is invariant across domains. This principle is effective when the causal mechanism is stable, but becomes restrictive when the domain itself modulates how causal content maps to the response. In this case, directly feeding domain style into the predictor can create misleading shortcuts, since style does not by itself cause the response. Yet the apparent chaos of multiple styles can become a lad-der: style can locate the unseen target domain among source domains and guide which domain-dependent prediction rules should be trusted. We propose Latent Adaptive Domain Dis-entanglement and Environment Reweighting (LADDER), a fixed-model DG pipeline that learns causal/style representa-tions, freezes the encoders, fits source-specific classifiers, and uses an unlabeled target-domain covariate set only at infer-ence to compute weights over these fixed classifiers, with no target labels or model-state updates. We establish theoretical guarantees for source reweighting and validate LADDER on simulations, FMoW, and a location-grouped iWildCam pro-tocol, with gains in overall and group-averaged accuracy. 
+
+1 Introduction 
+
+Domain generalization (DG) studies the problem of learn-ing predictive models from multiple source domains that can generalize to an unseen target domain [Blanchard, Lee, and Scott 2011, Zhou et al. 2022]. This problem is central to many real-world problems, where the deployment envi-ronment may differ from the training environments in back-ground, acquisition condition, geographic region, time, sen-sor, or population composition [Rothenhäusler et al. 2021]. For example, in the iWildCam dataset, camera-trap images from different locations share animal categories but vary in habitat and species prevalence [Beery et al. 2020]. In this set-ting, empirical risk minimization (ERM) over pooled source data learns a single predictor across domains, which can be suboptimal when the target domain follows a different prediction rule. The main challenge is therefore not only to suppress spurious domain-specific correlations, but also to decide when domain information should be used to guide prediction for an unseen domain [Zhu et al. 2025]. 
+
+> ∗
+
+Corresponding author. 
+
+A dominant line of DG research addresses this challenge through invariance. The basic idea is to learn a causal repre-sentation whose relationship with the label is invariant across source domains, so that the same relationship can be trans-ferred to unseen domains. In causal language, this line often aims to extract a domain-invariant causal representation, de-noted by Zc, while removing the domain-specific style repre-sentation, denoted by Z(e) 
+
+> s
+
+for domain e [Peters, Bühlmann, and Meinshausen 2016, Rothenhäusler et al. 2021]. Repre-sentative approaches include invariant risk minimization and closely related invariance regularizers [Arjovsky et al. 2019, Krueger et al. 2021, Ahuja et al. 2021, Rame, Dancette, and Cord 2022]. Although these methods differ in implementa-tion, they share the same target: style representation is treated mainly as a nuisance factor, and the purpose of modeling it is to learn a better invariant causal representation. This view has been highly influential and is appropriate when the pre-diction rule is indeed invariant across domains. However, the invariance assumption can be too restric-tive for broader DG tasks. Recent studies have questioned whether invariant methods consistently outperform strong ERM baselines, especially on realistic benchmarks where the source and target domains differ in complex ways [Gul-rajani and Lopez-Paz 2021, Zhu et al. 2025]. One reason is that the usual invariant formulation does not distinguish per-sample style features from domain-level style distribu-tions. Figure 1 illustrates this distinction. The per-sample style representation Z(e) 
+
+> s
+
+may not directly cause the label 
+
+Y (e), and therefore feeding style into a pooled classifier can create shortcuts rather than generalization. At the same time, the conditional prediction rule ηe, i.e. Y (e) ∼ ηe(· | Zc),may vary across domains, so a single predictor may be in-sufficient. The covariate X(e) is generated from both the causal representation Zc and the style representation Z(e) 
+
+> s
+
+,while the response Y (e) depends on Zc through a domain-dependent rule. The invariant-rule setting is recovered as a special case when this e → Y (e) path collapses to a common prediction rule across all domains. In this general case, the goal is not to make per-sample style predictive, but to use domain-level style distributions to navigate among domain-dependent prediction rules. For example, in the iWildCam dataset, the prediction rule for a cloudy-forest target domain may be closer to that of the forest-like source domain, without arXiv:2607.26458v1 [stat.ML] 29 Jul 2026 using style as a direct shortcut for label prediction. 
+
+Figure 1: General structural causal model. The edge e →
+
+Y (e) means that the conditional rule ηe(Y | Zc) may vary across domains, not that e is a per-sample causal feature. Style is used by LADDER at the domain-summary level to choose source weights, not as a per-sample classifier input. This perspective connects to work retaining useful domain-specific information. Environment-adaptive covari-ate selection studies when apparently spurious correlations may help, while structured DG exploits known domain groups and low-rank parameter structure [Zuo and Wang 2026, Li and Zhang 2023]. Domain adaptation and test-time adaptation also address changing rules, but use target data during training or update target model state, outside our fixed-model protocol [Zhang 2021, Xiao and Snoek 2024], which are different from DG. Closer to our mechanism, Best Sources Forward uses per-sample source-membership probabilities to fuse source-specific classifiers; DAEL col-laboratively trains source heads; Gated Domain Units form observation-dependent ensembles; and DSNR maps an un-labeled target distribution to a domain-specific nonparamet-ric predictor [Mancini et al. 2018, Zhou et al. 2021, Foll et al. 2023, Zheng et al. 2026]. None combines target style-distribution geometry, nonparametric routing, and its source-coverage and empirical-measure analysis. We propose La-tent Adaptive Domain Disentanglement and Environment Reweighting (LADDER), which learns causal/style encoders, fits source classifiers, caches source style distributions, and computes one Sinkhorn-KNN weight vector from an unla-beled target set. Unlike standard MoE [Shazeer et al. 2017], LADDER uses no learned routing gate. Thus, our contribu-tion is not source-specific fusion alone, but distribution-level nonparametric routing with source-coverage and empirical-measure error analysis. Our contributions are three-fold. First, we formulate a DG setting beyond the invariance of the prediction rule, where the domain information may modulate how Zc maps to Y (e).This view exposes the limitations of both invariant predic-tors and pooled ERM with style inputs, and motivates LAD-DER as a fixed-model DG pipeline for style-guided source reweighting at inference. Second, we provide theoretical guarantees for source reweighting, showing how prediction error depends on source estimation, empirical distribution estimation, and source coverage. Third, we validate LAD-DER on simulations and two real-world DG benchmarks, showing strong overall and group-averaged accuracy under shared-stack routing controls. 
+
+2 Methodology 
+
+2.1 Problem Set-up 
+
+We consider a DG problem in which source domains are indexed by e ∈ { 1, . . . , E } and an unseen target domain is indexed by 0. Each domain induces a joint distribution Pe
+
+over observations and labels (X, Y ) ∈ X × Y . At training time we observe labeled samples D(e) = {(x(e) 
+
+> i
+
+, y (e) 
+
+> i
+
+)}ne
+
+> i=1
+
+from the source domains. At inference time, the new target domain is represented by an unlabeled covariate set D(0) =
+
+{x(0)  
+
+> i
+
+}n0
+
+> i=1
+
+, used only to estimate a style summary and source weights; encoders, classifiers, and normalization statistics remain fixed. Following the meta-distribution view of DG [Blanchard, Lee, and Scott 2011, Zhou et al. 2022], we treat domains as points in a style-distribution space M and write 
+
+e ∼ ΠM for the distribution over domains. The key structural assumption is that each observation ad-mits two learned roles, denoted Zc and Z(e) 
+
+> s
+
+. The causal representation is optimized for label prediction, while the style representation is optimized for source reweighting; this operational division does not require statistical independence between representations or between style and labels. For a domain e, let νe ∈ P (Z(e) 
+
+> s
+
+) be its domain-level style dis-tribution on the style space Zs; its empirical estimate bνe is the style fingerprint used below. We write observations and labels abstractly as 
+
+X(e) = Ge(Zc, Z(e) 
+
+> s
+
+, εx), Y (e) ∼ ηe(· | Zc),
+
+where εx denotes noise, Ge is a domain-dependent observa-tion mechanism, and ηe is the domain-dependent conditional prediction rule. The smoothness principle underlying LADDER is that domains close in style distribution should have similar pre-diction rules:        
+
+> dF(ηe, η e′)≤LηW1(νe, ν e′),(1)
+
+where dF is a task-level distance between conditional rules, 
+
+W1 is the 1-Wasserstein distance, and Lη is a smoothness constant. For example, in the parametric model, dF is in-stantiated by parameter Frobenius distance. This differs fundamentally from pooled training. A pooled classifier learns one predictor on (Zc, Z(e) 
+
+> s
+
+) over all source domains, which permits the style representation to become an additive shortcut inside a single decision rule. In contrast, 
+
+LADDER trains source-specific classifiers on Zc and uses target-domain summaries of Z(e) 
+
+> s
+
+only to reweight them at in-ference. In short, style determines which domain-level rules should be trusted but is not used as a per-sample classifier in-put. That is, unlike a shortcut predictor by = h(fθ (x), g ϕ(x)) ,LADDER forms bν0 = n−10
+
+P 
+
+> i
+
+δgϕ(x(0)  
+
+> i)
+
+, where δs denotes a Dirac point mass, and computes {we}Ee=1 from its distances to cached source fingerprints. It then averages the selected source logits as in Eq. (5) and applies Softmax. Thus the style representation is a domain-level signal for reweighting, not a nuisance input appended to a pooled classifier or a standard model-averaging ensemble [Arpit et al. 2022]. Figure 2: Overview of LADDER . Source domains are encoded into causal representations for source-specific classifiers and style representations for source-domain fingerprints. At prediction, the fixed style encoder maps unlabeled target covariates to a style summary, compares it with stored source fingerprints, and changes only weights over fixed source classifiers. 
+
+2.2 Model Training: Encoders and Classifiers 
+
+Model training learns representations and then fits source classifiers. During representation learning, the causal en-coder fθ should retain label-predictive information, while the style encoder gϕ should retain domain information for subsequent source reweighting. This is operational disentan-glement: the branches receive distinct prediction and routing roles but are not guaranteed to contain mutually exclusive information. This follows disentanglement-based DG and information-bottleneck representation learning [Alemi et al. 2017, Zhang et al. 2022], but we use style for source reweight-ing rather than dropping out. For a sample, write zc = fθ (x)
+
+and zs = gϕ(x). We optimize: 
+
+min  
+
+> Θ
+
+J = Lcls + λsLsd + λaLGRL  
+
+> cd
+
++ λoLorth + λr Lreg . (2) Here Θ collects the representation-stage parameters and 
+
+λs, λ a, λ o, λ r are fixed loss weights. Equation (2) combines aux-iliary label classification, style-domain classification, adversarial suppression of domain information in Zc, cross-covariance or-thogonality, and representation regularization. Let ρy denote the shared auxiliary label classifier, and let ρs and ρc denote the auxiliary domain classifiers on Z(e) 
+
+> s
+
+and Zc, respectively. Writ-ing bEe for the empirical average over source domain e and 
+
+CE( u, y ) = − log(Softmax( u)y ) for cross-entropy, Lcls =
+
+P 
+
+> e
+
+bEeCE( ρy (fθ (x)) , y ), Lsd = P 
+
+> e
+
+bEeCE( ρs(gϕ(x)) , e ), and 
+
+LGRL cd = P 
+
+> e
+
+bEeCE( ρc(Rλa (fθ (x))) , e ), where Rλa is a gradient-reversal layer. With the outer λa in Eq. (2), the encoder-side reversed gradient has scale λ2
+
+> a
+
+. We use Lorth = ∥ dCov( fθ (x), g ϕ(x)) ∥2 
+
+> F
+
+to discourage redundant encoding. The generic regularizer Lreg may, for example, be a variational-bottleneck Kullback–Leibler (KL) term P 
+
+> r∈{ c,s }
+
+DKL (qr (zr | x)∥pr ), but LADDER does not de-pend on this choice. We then freeze both encoders and fit each final source classifier on fixed causal representations by 
+
+bψe ∈ arg min 
+
+> ψe
+
+bEeCE( hψe (fbθ (x)) , y ).
+
+At inference, all modules are fixed and no target-domain parameters are updated. 
+
+2.3 Model Inference: Reweighted Ensemble 
+
+At inference, the encoders, fitted source classifiers, and cached source fingerprints are fixed. For each source domain 
+
+e = 1 , . . . , E , cache the low-dimensional style fingerprint 
+
+bνe = 1
+
+neneX
+
+> i=1
+
+δs(e)
+
+> i
+
+, s(e) 
+
+> i
+
+= g bϕ(x(e) 
+
+> i
+
+). (3) After these low-dimensional fingerprints are cached, source covariates need not be stored. For a new target domain, con-struct only the target style summary bν0 from target covari-ates, then compute de for each source domain. In theory 
+
+de = W1(bνe, bν0); real-data runs use a balanced debiased Sinkhorn approximation with Euclidean ground cost (sup-plement), whose entropic and solver errors are not included in the rates. Let bNK (0) be the K source domains with the smallest distances. The target-adaptive weights are 
+
+we = exp( −de/τ )
+
+P   
+
+> j∈bNK(0)
+
+exp( −dj /τ ) , for every e ∈ bNK (0) ,
+
+(4) where K is the neighbor count and τ > 0 is the temper-ature parameter. With few target covariates or a noisy tar-get fingerprint, larger τ and source neighborhoods make the rule approach a global source-weighted average. Each source classifier outputs pre-softmax logits, and the final target logit averages these logits: 
+
+bℓ(x) = X  
+
+> e∈bNK(0)
+
+we h bψe
+
+ fbθ (x). (5) Labels are predicted from Softmax( bℓ(x)) ; for generalized linear model (GLM) classifiers, Eq. (5) equals the parameter average analyzed below. The weights we are computed once from bν0 and shared within the target domain. Algorithm 1 summarizes the inference stage. The source-linear extra cost is storing E classifiers and E low-dimensional fingerprints, computing E style distances, and evaluating the selected K
+
+classifiers; runtime/storage are reported in the supplement. 
+
+Algorithm 1 LADDER Inference Stage 
+
+Require: Fixed fbθ , g bϕ; cached source fingerprints {bνe}Ee=1 ;source classifiers {h bψe }Ee=1 ; target covariates D(0) ; neighbor count K; temperature τ .1: Encode target styles and form bν0 = n−10
+
+Pn0 
+
+> i=1
+
+δg bϕ(x(0)  
+
+> i)
+
+.2: Compute style-summary distances de for e = 1 , . . . , E .3: Select bNK (0) as the K nearest source domains. 4: Compute weights {we}e∈ cNK (0) by Eq. (4). 5: Predict with fixed source classifiers by Eq. (5). 6: return Target predictions {by(x) : x ∈ D (0) }.
+
+3 Theoretical Guarantees 
+
+Given fixed causal/style encoders and fixed source classi-fiers, the theory asks how well an unlabeled target style sum-mary can select nearby source rules. The oracle analysis uses oracle representations; the generic analysis uses learned ones. Dimensions dc, d s, d M denote causal, style, and style-manifold dimensions, classes C = |Y| , dβ = ( C − 1) dc, and 
+
+nmin := min 1≤e≤E ne.
+
+3.1 Oracle Representation Guided Theory 
+
+For domain e, use the style distribution νe defined in Section 2.1, and let β(e) 
+
+> ∗
+
+be the oracle source parame-ter. For the oracle analysis, labels obey P(Y | Zc, e ) = Softmax( β(e) 
+
+> ∗
+
+Zc) with β(e) 
+
+> ∗
+
+∈ RC×dc . We state compact assumptions here and give their full formal versions in the Supplementary Material. 
+
+Assumption 1 (Oracle latent structure) . Observations admit a centered linear oracle decomposition, X(e) = AcZ(e) 
+
+> c
+
++
+
+AsZ(e) 
+
+> s
+
++ ϵ. The causal/noise covariances are domain-invariant, while Λe = Cov( Z(e) 
+
+> s
+
+) is diagonal with jointly separating normalized cross-domain variance profiles. 
+
+Assumption 2 (Smooth geometry) . There is an Lβ -Lipschitz map Ψ∗ from domain-level style distributions to GLM pa-rameters, so that β(e) 
+
+> ∗
+
+= Ψ ∗(νe) and nearby style distribu-tions have nearby prediction rules under W1. Style laws are compactly supported; sources are i.i.d. from a regular dM-dimensional space, with the target sampled independently. 
+
+Assumption 3 (GLM regularity) . Causal features satisfy 
+
+∥Zc∥2 ≤ Rc almost surely, and GLM parameters use the centered gauge B ⊂ {β : 1⊤β = 0} with ∥β∥F ≤
+
+Rβ and relative-interior oracle optima. For Re(β) =
+
+E[CE( βZ c, Y ) | e], these population cross-entropy risks are uniformly μ-strongly convex, for some μ > 0, on B.Single-sample Hessians are uniformly bounded and LH -Lipschitz in β over B; and centered-logit risks are locally 
+
+μℓ-strongly convex on bounded comparison logits and glob-ally Lℓ-smooth. 
+
+These compact assumptions summarize style-covariance profile separability, smooth rule variation over style distribu-tions, finite-sample source estimation, and empirical Wasser-stein concentration. 
+
+Theorem 1 (Domain-Varying Style Covariance Identifiabil-ity) . Under Assumption 1, let Ws be a population style-extraction matrix, bZ(e) 
+
+> s
+
+= WsX(e), and M := WsAs be invertible. Suppose the extractor diagonalizes the domain-varying style covariance, i.e., M ΛeM ⊤ is diagonal for ev-ery source domain e = 1 , . . . , E . Then M = P D for a permutation matrix P and nonsingular diagonal matrix D,and bZ(e) 
+
+> s
+
+= BZ (e) 
+
+> c
+
++ P DZ (e) 
+
+> s
+
++ eϵ(e), where B = WsAc
+
+and eϵ(e) = Wsϵ(e). Thus WsAs is identified up to permu-tation/scaling, while the extracted representation may con-tain causal leakage. Moreover, under supplemental mean-separation/completeness conditions, B = 0 .
+
+This is conditional population identifiability, not a finite-sample recovery guarantee; proofs and the noise-free T := 
+
+P D note are in the Supplementary Material. 
+
+Theorem 2 (Target Parameter Error) . Under Assumptions 2– 3, and nmin ≳ μ−2{dβ log(1+ Rβ LH /μ )+log( dβ E)} with 
+
+dβ = ( C − 1) dc, define the source estimation error ηsrc , em-pirical distribution error ηemp , and manifold interpolation error ηknn by: 
+
+ηsrc = Rc
+
+μ
+
+q
+
+(dβ + log E)/n min ,ηemp = γ(n0, d s) + Γ( nmin , E, d s),ηknn = ( K/E )1/d M , Eorc = ηsrc + ηemp + ηknn .
+
+Here γ(n, d ) = n−1/(d∨2) ℓd(n) and Γ( n, E, d ) = ((1 + log E)/n )1/(d∨2) eℓd(n), where ℓ2(n) = eℓ2(n) = log(1 + n)
+
+and ℓd(n) = eℓd(n) = 1 for d̸ = 2 [Fournier and Guillin 2015]. Then the reweighted estimator bβ(0) =
+
+P   
+
+> e∈bNK(0)
+
+we bβ(e) satisfies: 
+
+E∥ bβ(0) − β(0)  
+
+> ∗
+
+∥F ≤ O (Eorc ).
+
+Remark 1 (Source coverage trade-off) . Theorem 2’s three terms have direct roles: source estimation error ηsrc comes from fitting fixed source classifiers, empirical distribution er-ror ηemp comes from estimating target/source fingerprints, and manifold interpolation error ηknn is the distance from the target style law to the selected source neighborhood. More sources can shrink ηknn , but only if nmin is large enough to keep the worst source fingerprint reliable; oth-erwise ηemp dominates. For fixed dimensions, this bound vanishes when n0 → ∞, E → ∞, K/E → 0, and 
+
+(1 + log E)eℓds (nmin )ds∨2 = o(nmin ).
+
+Theorem 3 (Target Excess Risk) . Under the assumptions of Theorem 2, 
+
+E{R 0( bβ(0) ) − R 0(β(0)  
+
+> ∗
+
+)} ≤ O (R2 
+
+> c
+
+E2orc ).
+
+Theorem 3 turns the parameter bound into excess risk: bounded causal features scale logit error by Rc, and local smoothness gives the quadratic O(R2 
+
+> c
+
+E2orc ) rate. To compare LADDER with PooledJoint and IRM,we con-sider a special case that denote the latent domain position of meta-distribution by a scalar value c ∼ πc, which details in supplementary. Define 
+
+f ∗(Zc, c ) = ( βbase + cβshift )Zc,
+
+ΠC = IC − C−111 ⊤,
+
+and for any predictor f ,Rc(f ) = E[ℓCE (f (Zc, Zs), Y c)] ,where Yc ∼ Softmax( f ∗(Zc, c )) .The bounded additive pooled class is 
+
+Hpool (RW ) = { f = WcZc + WsZs :
+
+∥Wc∥F , ∥Ws∥F ≤ RW }.
+
+For target coordinate c0, write finv = f ∗(·, c inv ) for fixed invariant prediction, where cinv does not depend on the target domain and satisfies cinv ̸ = c0. Write fL = f ∗(·, bcL) for oracle LADDER , where bcL = P 
+
+> e
+
+wece.
+
+Assumption 4 (Comparison shift model) . Let c be a bounded scalar domain coordinate with Var πc (c) > 0. The causal representation is centered with EZcZ⊤ 
+
+> c
+
+= Σc ≻ 0 and is independent of (c, Zs). For the target coordinate, cinv ̸ = c0.
+
+The comparison model is intentionally narrower: it is a diagnostic setting used to separate source reweighting from pooled or invariant prediction. 
+
+Corollary 1 (Pooled-joint misspecification) . Under As-sumptions 3 and 4, 
+
+inf    
+
+> f∈H pool (RW)
+
+Ec∼πc {R c(f ) − R c(f ∗)}≥ μℓ
+
+2 Var c∼πc (c)∥ΠC βshift Σ1/2 
+
+> c
+
+∥2 
+
+> F
+
+.
+
+Thus, under nontrivial rule variation, every additive pooled predictor incurs positive excess risk: it can add a style-dependent offset but cannot modulate the causal deci-sion matrix. 
+
+Corollary 2 (Comparison with fixed invariant prediction) .
+
+Under Assumptions 3 and 4, if ∥ΠC βshift Σ1/2 
+
+> c
+
+∥F > 0, then for target coordinate c0,
+
+Rc0 (fL) − R c0 (f ∗)
+
+Rc0 (finv ) − R c0 (f ∗) ≤ Lℓ
+
+μℓ
+
+(c0 − bcL)2
+
+(c0 − cinv )2 .
+
+Consequently, within this comparison model, LADDER has lower target excess risk than the fixed invariant predictor whenever |c0 − bcL| < pμℓ/L ℓ|c0 − cinv |.
+
+This comparison reflects known limits of invariant pre-diction rules [Peters, Bühlmann, and Meinshausen 2016, Ar-jovsky et al. 2019, Rosenfeld, Ravikumar, and Risteski 2021]: a fixed invariant predictor uses one target-independent coor-dinate, whereas LADDER uses target style distributions to weight domain-dependent source rules. 
+
+3.2 Generic Representation Guided Theory 
+
+We next quantify how representation error affects the param-eter and excess risk bounds. For any representation learner and every domain e =0, . . . , E , we define learned representations as ez(e) 
+
+> c,i
+
+= z(e) 
+
+> c,i
+
++
+
+ξ(e) 
+
+> c,i
+
+and ez(e) 
+
+> s,i
+
+= z(e) 
+
+> s,i
+
++ ξ(e) 
+
+> s,i
+
+.
+
+Assumption 5 (Sub-Gaussian representation error) . Condi-tional on z(e) 
+
+> c,i
+
+and z(e) 
+
+> s,i
+
+, the perturbations are mean-zero, con-ditionally independent of Y , and uniformly sub-Gaussian, with ∥⟨ u, ξ (e) 
+
+> c,i
+
+⟩∥ ψ2 ∨ ∥⟨ v, ξ (e) 
+
+> s,i
+
+⟩∥ ψ2 ≤ ϵrep /√dc ∨ ds for all 
+
+e, i and unit u, v , where ϵrep ≥ 0 is the representation-error scale. For each source domain, the perturbed empirical risk is μrep -strongly convex and its single-sample gradient is uni-formly L∇z -Lipschitz in zc over β ∈ B .
+
+This assumption is a modular robustness interface rather than a theorem that a particular training objective recovers the oracle representation: any representation learner satisfying this perturbation model can be plugged into the inference-stage analysis. 
+
+Corollary 3 (Generic Representation Bound) . Under the assumptions of Theorem 2 and Assumption 5, for fixed 
+
+E, let eβ(e) be the perturbed source estimator and 
+
+eνe = 1
+
+> ne
+
+Pne 
+
+> i=1
+
+δez(e)
+
+> s,i
+
+, compute eNK (0) and weights ewe by Eq. (4) , and set eβ(0) = P   
+
+> e∈eNK(0)
+
+ewe eβ(e). With Erep =(L∇z /μ rep + Lβ )ϵrep ,
+
+E∥ eβ(0) − β(0)  
+
+> ∗
+
+∥F ≤ O (Eorc + Erep ),
+
+and the target excess risk satisfies 
+
+E{R 0( eβ(0) )−R 0(β(0)  
+
+> ∗
+
+)} ≤ O (R2 
+
+> c
+
+E2orc +R2 
+
+> c
+
+E2rep +R2 
+
+> β
+
+ϵ2rep ).
+
+For fixed E, the bound separates Eorc from representa-tion error, the latter enters linearly in parameter error and quadratically in risk, and vanishes as ϵrep → 0.
+
+4 Experiments 
+
+We evaluate LADDER in three experimental settings: sim-ulations, FMoW-WILDS, and iWildCam-WILDS. The sim-ulation results and ablations are reported in the Supplemen-tary Material, while the main text focuses on real-data ev-idence. We compare with target-agnostic baselines ERM, IRM [Arjovsky et al. 2019], EQRM [Eastwood et al. 2022], and RDM [Nguyen et al. 2024]; the fixed-model DSNR baseline [Zheng et al. 2026], which estimates a domain in-dex from unlabeled target covariates; source-routing controls ERM 
+
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Accuracy (%)
+> ID Val.
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Accuracy (%)
+> OOD Val.
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Accuracy (%)
+> OOD Test
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Worst-group Accuracy (%)
+> ID Val.
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Worst-group Accuracy (%)
+> OOD Val.
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> Worst-group Accuracy (%)
+> OOD Test
+
+Figure 3: FMoW-WILDS accuracy and worst-region accuracy on the ID validation, OOD validation, and OOD test splits. Error bars denote standard deviations over five random seeds. 45 46 47 48 49 50     
+
+> Test accuracy (%)
+> 43
+> 44
+> 45
+> 46
+> 47
+> 48
+> 49
+> Test average-region accuracy (%)
+> ERM
+> IRM EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> ID Val. to OOD Test accuracy drop (pp, lower is better) 210 985
+> Selected source domain
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> LADDER ensemble weight
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> 18
+> Style distance
+
+(a) Test/avg (b) Drop (c) Weights 
+
+Figure 4: FMoW-WILDS accuracy/average-region trade-off, OOD degradation, and representative LADDER source-classifier weights. (a) Zs colored by environment 
+
+> S10
+> S9 S8
+> S7
+> S4
+> S6
+> T14
+
+(b) Zs target-time source navigation 
+
+> source domain
+> target domain
+> LADDER weight
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> environment coordinate
+
+5 10 15 20 25 
+
+LADDER source-style distance 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> Source-classi fi er transfer loss
+
+Source-classi fi er transfer loss 
+
+Spearman ρ=0.70, n=55 
+
+(a,b) Representation and weighting (c) Source geometry 
+
+Figure 5: FMoW-WILDS representation mechanism and source-geometry diagnostic. Panels (a,b) visualize with t-SNE [van der Maaten and Hinton 2008] the source-domain structure in Zs and inference-stage weights. Panel (c), for seed 0, compares source-style distance with bidirectional classifier transfer loss. Their positive Spearman correlation ( ρ = 0 .70 over 55 source pairs) indicates that style-near domains tend to have more transferable classifiers. 
+
+UniformExperts, NearestExpert, and SampleGate; and, in the simulations, PooledJoint and an oracle target classifier. Full baseline and metric details are in the Supplementary Mate-rial. 
+
+4.1 Real Data 1: FMoW-WILDS 
+
+FMoW-WILDS [Koh et al. 2021, Christie et al. 2018] is a 62 -way satellite land-use classification benchmark built from Functional Map of the World images, where distribu-tion shifts arise across time and geographic regions. We use year metadata to index source domains and evaluate whether style-representation-based reweighting improves both over-all OOD accuracy and regional robustness. Metrics are test accuracy, Worst/Avg., and ID-to-test drop. All methods use ImageNet-pretrained ResNet-50 [He et al. 2016, Deng et al. 2009] and five seeds. ERM, IRM, EQRM, Table 1: FMoW-WILDS results over five random seeds. Ac-curacy, worst-region accuracy, average-region accuracy, and ID-to-test accuracy drop are reported in percentage points. 
+
+Method Test ↑ Worst ↑ Avg. ↑ Drop ↓
+
+ERM 46 .68 ± 0.86 30 .68 ± 1.72 45 .49 ± 1.16 9.14 ± 0.69 
+
+IRM 46 .68 ± 0.49 29 .06 ± 1.60 45 .39 ± 0.66 8.88 ± 0.65 
+
+EQRM 46 .85 ± 0.49 28 .89 ± 1.44 45 .15 ± 0.49 9.09 ± 0.63 
+
+DSNR 45 .52 ± 0.78 27 .03 ± 1.69 43 .93 ± 0.78 9.78 ± 0.55 
+
+RDM 47 .15 ± 1.07 29 .56 ± 1.50 45 .22 ± 1.22 9.27 ± 0.62 
+
+UniformExperts 49 .65 ± 0.29 30 .46 ± 1.11 48 .55 ± 0.40 8.69 ± 0.20 
+
+NearestExpert 49 .12 ± 0.48 30 .71 ± 0.86 48 .08 ± 0.58 8.70 ± 0.64 
+
+SampleGate 49 .98 ± 0.27 30 .67 ± 1.06 48 .67 ± 0.52 9.01 ± 0.22 
+
+LADDER 50.19 ± 0.30 31.46 ± 0.66 49.05 ± 0.48 8.87 ± 0.47 
+
+and RDM are target-agnostic; DSNR estimates a split-level domain index from unlabeled target covariates with fixed pa-rameters. UniformExperts, NearestExpert, SampleGate, and 
+
+LADDER use the same frozen-encoder/source-classifier pro-tocol. UniformExperts uses equal weights, NearestExpert uses hard K = 1 Sinkhorn routing, and SampleGate uses the frozen style-domain head for per-sample source-membership weighting. Region metrics omit the tiny Other region; results are not leaderboard entries. Together, Figures 3–5 and Table 1 show the frozen rep-resentation and source-classifier stack improve FMoW over DG baselines. UniformExperts, SampleGate, and LADDER 
+
+are numerically close; LADDER is slightly ahead on test and worst-region accuracy, while FMoW weakly separates rout-ing rules. NearestExpert is weaker, suggesting hard single-source routing is less robust than multi-source aggregation. 
+
+4.2 Real Data 2: iWildCam-WILDS 
+
+iWildCam-WILDS [Koh et al. 2021, Beery et al. 2020] stresses a different failure mode: the target split is not a single homogeneous domain, but a collection of camera-trap loca-tions. It is a 182 -way wildlife species classification bench-mark collected from camera traps, with severe long-tailed class and location frequencies. This dataset is particularly aligned with our source-reweighting view because each lo-cation may have a distinct background, illumination pattern, species composition, and sensor style. ERM 
+
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> SampleGate-group
+> LADDER-split
+> LADDER-group
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Accuracy (%)
+> Test Accuracy
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> SampleGate-group
+> LADDER-split
+> LADDER-group
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Accuracy (%)
+> Filtered Avg-group Accuracy
+> iWildCam-WILDS: Accuracy and Location-level Robustness
+
+Figure 6: iWildCam-WILDS test accuracy and filtered average-group accuracy. Error bars denote standard deviations over five random seeds. 25 30 35 40 45 50 55 60 65 
+
+> Test Accuracy (%)
+> 15
+> 20
+> 25
+> 30
+> 35
+> 40
+> 45
+> 50
+> Filtered Avg-group Accuracy (%)
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> Uniform
+> Experts
+> Nearest
+> Expert
+> SampleGate
+> SampleGate
+> -group
+> LADDER
+> -split
+> LADDER
+> -group Test Accuracy
+> Macro F1
+> Filtered Avg-group Accuracy
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Score (%)
+> LADDER Target-summary Granularity Ablation
+> LADDER-split
+> LADDER-group
+
+(a) Accuracy/robustness trade-off (b) Split vs. location summaries 
+
+Figure 7: iWildCam-WILDS trade-off and LADDER target-summary ablation. LADDER -group lies in the high-accuracy, high-robustness region, and the split-to-group ablation shows that camera-location-level summaries matter for this benchmark. 
+
+All methods use ImageNet-pretrained ResNet-50 [He et al. 2016, Deng et al. 2009], 64 source locations, class-balanced cross-entropy with parameter 0.999 [Cui et al. 2019], and five seeds. We report test accuracy, macro F1, and filtered average-group accuracy over the 35 locations with at least 
+
+50 samples; raw and filtered worst-location metrics remain nearly degenerate. ERM, IRM, EQRM, and RDM are target-agnostic references; DSNR estimates a split-level domain index from unlabeled target covariates with fixed parame-ters. NearestExpert and LADDER -group use location-level Sinkhorn summaries; SampleGate-group uses the same lo-cation groups but averages per-sample source-membership weights within each group. UniformExperts uses no target covariates, and SampleGate uses per-sample weights with-out grouping. LADDER -split forms one summary for the full split, whereas LADDER -group forms one per camera loca-tion; location IDs only partition unlabeled covariates and are never classifier inputs or optimization signals. Table 2: iWildCam-WILDS results over five random seeds. Test accuracy, macro F1, and filtered average-group accuracy are reported in percentage points. 
+
+Method Test ↑ Macro F1 ↑ Filt. Avg. ↑
+
+ERM 42 .26 ± 5.48 11 .23 ± 1.35 33 .29 ± 7.61 
+
+IRM 34 .59 ± 10 .11 6.20 ± 1.08 23 .42 ± 9.71 
+
+EQRM 40 .75 ± 6.62 10 .45 ± 1.37 32 .22 ± 8.07 
+
+DSNR 47 .36 ± 7.96 12 .34 ± 1.12 39 .44 ± 2.07 
+
+RDM 39 .36 ± 7.67 8.97 ± 1.78 31 .09 ± 5.37 
+
+UniformExperts 44 .42 ± 1.03 4.53 ± 0.25 34 .13 ± 0.78 
+
+NearestExpert 57 .96 ± 2.73 11 .62 ± 0.90 48 .41 ± 0.44 
+
+SampleGate 58 .00 ± 3.05 14.40 ± 0.70 48 .16 ± 1.23 
+
+SampleGate-group 59 .22 ± 3.10 12 .00 ± 0.86 48 .29 ± 1.98 
+
+LADDER -split 41 .19 ± 3.76 2.42 ± 0.55 36 .22 ± 1.80 
+
+LADDER -group 61.71 ± 1.76 11 .61 ± 0.65 50.01 ± 0.84 
+
+Table 2 and Figures 6–7 show that LADDER -group ob-tains the highest test and filtered average-group accuracy, numerically exceeding the protocol-matched SampleGate-group by about 2.5 and 1.7 points, respectively, while per-sample SampleGate gives the highest macro F1. The split-to-group gap shows that domain-level routing requires a coherent target-summary unit. Together, the results indi-cate that location sharing alone does not explain the full gain: distribution-level style routing improves aggregate and location-averaged accuracy over averaged per-sample source-membership weights, although macro F1 remains a SampleGate advantage. 
+
+5 Discussion 
+
+LADDER is most useful when the deployment domain is not well represented by an invariant prediction rule, but remains related to source domains through style information. Source coverage is therefore important: if the target lies far outside the source style range, reweighting can reduce but may not eliminate approximation error. Our empirical decomposition is therefore operational rather than statistically independent: 
+
+Zc is used for prediction and Z(e)
+
+s for domain-level routing. Source-geometry diagnostics nevertheless show that style distance is informative about source-classifier transferabil-ity. Future work could combine LADDER with uncertainty-aware source weighting, extrapolative mechanisms beyond convex source combinations, and foundation-model repre-sentations for richer visual and multimodal DG settings. References 
+
+Ahuja, K.; Caballero, E.; Zhang, D.; Gagnon-Audet, J.-C.; Bengio, Y.; Mitliagkas, I.; and Rish, I. 2021. Invariance Prin-ciple Meets Information Bottleneck for Out-of-Distribution Generalization. arXiv:2106.06607. Alemi, A. A.; Fischer, I.; Dillon, J. V.; and Murphy, K. 2017. Deep Variational Information Bottleneck. In International Conference on Learning Representations .Arjovsky, M.; Bottou, L.; Gulrajani, I.; and Lopez-Paz, D. 2019. Invariant Risk Minimization. arXiv:1907.02893. Arpit, D.; Wang, H.; Zhou, Y.; and Xiong, C. 2022. Ensemble of Averages: Improving Model Selection and Boosting Per-formance in Domain Generalization. In Advances in Neural Information Processing Systems .Beery, S.; Cole, E.; Parker, J.; Perona, P.; and Winner, K. 2020. The iWildCam 2020 Competition Dataset. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops .Blanchard, G.; Lee, G.; and Scott, C. 2011. Generalizing from Several Related Classification Tasks to a New Unla-beled Sample. In Advances in Neural Information Processing Systems .Christie, G.; Fendley, N.; Wilson, J.; and Mukherjee, R. 2018. Functional Map of the World. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition .Cui, Y.; Jia, M.; Lin, T.-Y.; Song, Y.; and Belongie, S. 2019. Class-Balanced Loss Based on Effective Number of Samples. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .Deng, J.; Dong, W.; Socher, R.; Li, L.-J.; Li, K.; and Fei-Fei, L. 2009. ImageNet: A Large-Scale Hierarchical Image Database. In Proceedings of the IEEE Conference on Com-puter Vision and Pattern Recognition .Eastwood, C.; Robey, A.; von Kügelgen, J.; Hassani, H.; Singh, S.; Pappas, G. J.; and Schölkopf, B. 2022. Probable Domain Generalization via Quantile Risk Minimization. In 
+
+Advances in Neural Information Processing Systems .Foll, S.; Dubatovka, A.; Ernst, E.; Chau, S. L.; Maritsch, M.; Okanovic, P.; Thaeter, G.; Buhmann, J. M.; Wortmann, F.; and Muandet, K. 2023. Gated Domain Units for Multi-source Domain Generalization. Transactions on Machine Learning Research .Fournier, N.; and Guillin, A. 2015. On the Rate of Con-vergence in Wasserstein Distance of the Empirical Measure. 
+
+Probability Theory and Related Fields , 162(3–4): 707–738. Gulrajani, I.; and Lopez-Paz, D. 2021. In Search of Lost Do-main Generalization. In International Conference on Learn-ing Representations .He, K.; Zhang, X.; Ren, S.; and Sun, J. 2016. Deep Residual Learning for Image Recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition .Koh, P. W.; Sagawa, S.; Marklund, H.; Xie, S. M.; Zhang, M.; Balsubramani, A.; Hu, W.; Yasunaga, M.; Phillips, R. L.; Gao, I.; Lee, T.; David, E.; Stavness, I.; Guo, W.; Earnshaw, B.; Haque, I. S.; Beery, S.; Leskovec, J.; Kundaje, A.; Pier-son, E.; Levine, S.; Finn, C.; and Liang, P. 2021. WILDS: A Benchmark of in-the-Wild Distribution Shifts. In Interna-tional Conference on Machine Learning .Krueger, D.; Caballero, E.; Jacobsen, J.-H.; Zhang, A.; Binas, J.; Priol, R. L.; and Courville, A. 2021. Out-of-Distribution Generalization via Risk Extrapolation (REx). In Proceedings of the 38th International Conference on Machine Learning ,5815–5826. Li, S.; and Zhang, L. 2023. Multi-dimensional Domain Gen-eralization with Low-rank Structures. arXiv:2309.09555. Mancini, M.; Rota Bulo, S.; Caputo, B.; and Ricci, E. 2018. Best Sources Forward: Domain Generalization Through Source-Specific Nets. In 2018 25th IEEE International Con-ference on Image Processing (ICIP) , 1353–1357. IEEE. Nguyen, T.; Do, K.; Duong, B.; and Nguyen, T. 2024. Do-main Generalisation via Risk Distribution Matching. In Pro-ceedings of the IEEE/CVF Winter Conference on Applica-tions of Computer Vision .Peters, J.; Bühlmann, P.; and Meinshausen, N. 2016. Causal Inference by Using Invariant Prediction: Identification and Confidence Intervals. Journal of the Royal Statistical Society: Series B , 78(5): 947–1012. Rame, A.; Dancette, C.; and Cord, M. 2022. Fishr: Invariant Gradient Variances for Out-of-Distribution Generalization. In Proceedings of the 39th International Conference on Ma-chine Learning .Rosenfeld, E.; Ravikumar, P.; and Risteski, A. 2021. The Risks of Invariant Risk Minimization. In International Con-ference on Learning Representations .Rothenhäusler, D.; Bühlmann, P.; Meinshausen, N.; and Pe-ters, J. 2021. Anchor Regression: Heterogeneous Data Meet Causality. Journal of the Royal Statistical Society: Series B ,83(2): 215–246. Shazeer, N.; Mirhoseini, A.; Maziarz, K.; Davis, A.; Le, Q.; Hinton, G.; and Dean, J. 2017. Outrageously Large Neu-ral Networks: The Sparsely-Gated Mixture-of-Experts Layer. 
+
+arXiv preprint arXiv:1701.06538 .van der Maaten, L.; and Hinton, G. 2008. Visualizing Data using t-SNE. Journal of Machine Learning Research , 9: 2579–2605. Xiao, Z.; and Snoek, C. G. M. 2024. Beyond Model Adap-tation at Test Time: A Survey. arXiv:2411.03687. Zhang, H.; Zhang, Y.-F.; Liu, W.; Weller, A.; Schölkopf, B.; and Xing, E. P. 2022. Towards Principled Disentanglement for Domain Generalization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .Zhang, Y. 2021. A Survey of Unsupervised Domain Adap-tation for Visual Recognition. arXiv:2112.06745. Zheng, S.; Lin, Y.; Zhou, Y.; and Huang, J. 2026. Domain-Specific Nonparametric Regression for Domain Generaliza-tion. Journal of the American Statistical Association .Zhou, K.; Liu, Z.; Qiao, Y.; Xiang, T.; and Loy, C. C. 2022. Generalizing to Unseen Domains: A Survey on Domain Gen-eralization. IEEE Transactions on Pattern Analysis and Ma-chine Intelligence .Zhou, K.; Yang, Y.; Qiao, Y.; and Xiang, T. 2021. Domain Adaptive Ensemble Learning. IEEE Transactions on Image Processing , 30: 8008–8018. Zhu, Y.; Deng, N.; Shi, N.; Gangrade, A.; and Scott, C. 2025. Domain Generalization: A Tale of Two ERMs. arXiv:2510.04441. Zuo, S.; and Wang, Y. 2026. Environment-Adaptive Covari-ate Selection: Learning When to Use Spurious Correlations for Out-of-Distribution Prediction. arXiv:2601.02322. Supplementary Material for “Chaos Is a LADDER: Domain Generalization Beyond Invariance via Reweighting” 
+
+Yuhang Jiang 1,2 , Fengchuan Zhang 1,2 , Sanguo Zhang 1,2 , and Guojun Zhu 1,2,* 
+
+> 1
+
+School of Mathematical Sciences, University of Chinese Academy of Sciences, Beijing, China 
+
+> 2
+
+Key Laboratory of Big Data Mining and Knowledge Management, Chinese Academy of Sciences, Beijing, China 
+
+> *Corresponding author.
+
+This supplementary document contains the experimental details, additional diagnostics, auxiliary theoretical statements, and full proofs omitted from the main paper. It is organized to support selective reading. Section A collects dataset details, complete numerical results, visual diagnostics, runtime and storage analyses, and the iWildCam worst-location discus-sion. Section B states the full formal assumptions and auxiliary propositions and lemmas for the theoretical analysis. Section C gives the detailed proofs, following the order in which the statements are used in the main paper. 
+
+## A Additional Experimental Details and Results 
+
+This section expands the empirical part of the paper. It first clarifies how the two WILDS benchmarks instantiate domain shift, then presents the simulation, FMoW-WILDS, and iWildCam-WILDS results as dataset-specific blocks, and finally reports implementation de-tails, computational cost, and storage cost. 
+
+A.1 Dataset Details 
+
+This subsection defines the datasets, metrics, information-use boundary, and target sum-maries used below. FMoW-WILDS is a 62-class satellite land-use classification benchmark. The images come from the Functional Map of the World collection, and the WILDS split induces distribution shifts across acquisition years and geographic regions. In our experiments, years define source domains for source reweighting, and regions define the group metric used for robustness evaluation. The FMoW region metadata also contains a small “Other” region, which is a catch-all bucket for geographically rare or miscellaneous examples. We exclude this bucket only from region-aware robustness metrics, so that worst-region and average-region scores are not dominated by a tiny heterogeneous group whose semantics do not correspond to a coherent geographic target domain. For an evaluation split S, test accuracy is the fraction of correctly classified examples. Let 
+
+R be the retained FMoW regions after excluding the heterogeneous “Other’ region, and let Acc r be the accuracy within region r. The region-aware metrics and distribution-shift drop S1 are Worst = min  
+
+> r∈R
+
+Acc r, Avg . = 1
+
+|R| 
+
+X
+
+> r∈R
+
+Acc r, Drop = Acc ID val − Acc OOD test .
+
+Thus, Worst and Avg. are respectively the minimum and unweighted mean of the retained region accuracies, while ID-to-test drop measures the decrease from ID validation accuracy to OOD test accuracy. iWildCam-WILDS is a 182-class wildlife species classification benchmark collected by cam-era traps. Domains are camera locations, and both class frequencies and location frequen-cies are highly long-tailed. This makes raw worst-location accuracy extremely brittle: afew target locations contain only a handful of examples, so a single error can dominate the raw worst-domain metric. Moreover, naturally tiny target locations are entangled with other effects, including unseen camera locations, severe class imbalance, and incomplete class support within a location. We therefore use filtered average-group accuracy for the main real-data robustness evaluation and reserve target-sample-size sensitivity for synthetic sim-ulations where the target-summary sample size can be varied without changing the label support or the environment mechanism. For iWildCam-WILDS, test accuracy is computed over the full evaluation split, macro F1 is the unweighted mean of the per-class F1 scores, and filtered average-group accuracy is FiltAvg = 1
+
+|G 50 |
+
+X
+
+> g∈G 50
+
+Acc g, G50 = {g : ng ≥ 50 },
+
+where g indexes target camera locations, ng is the number of evaluation examples at location 
+
+g, and Acc g is its accuracy. 
+
+Information-use boundary. At inference, unlabeled target covariates {x(0)  
+
+> i
+
+}n0 
+
+> i=1
+
+are encoded by the fixed style encoder to form a domain-level style fingerprint bν0. Distances from bν0 to cached source fingerprints determine the source-neighbor set and source-classifier weights. For benchmark-defined domain variants, target metadata may be used only to partition unlabeled covariates before estimating separate style fingerprints. The protocol does not use target labels, target losses, gradients on target data, target-domain optimization, pa-rameter or encoder/classifier updates, normalization-statistics updates, target-data training, or target-label-based hyperparameter selection. Target metadata used for grouping in the iWildCam location-level variant is not input to the classifier and is not treated as label information. 
+
+Real-data domain construction and target summaries. On FMoW-WILDS, year metadata defines 11 retained source domains after source-domain filtering, and one unlabeled style summary is formed for each evaluation split without using target-domain metadata. Overall accuracy is split-level; region metadata is used only for the region-aware metrics, which exclude the heterogeneous “Other’ region. S2 On iWildCam-WILDS, camera-location metadata defines 64 retained source domains. 
+
+LADDER -split forms one unlabeled style summary for the whole validation or test split without using target-location metadata; location metadata is used only for evaluation. LAD-DER -group instead forms one unlabeled style summary per target camera location. The location id only partitions unlabeled covariates before summary estimation and is not input to the classifier. Both variants use no target labels and make no parameter, normalization-statistics, or model-state updates. Filtered average-group accuracy averages the target loca-tions with at least 50 examples. 
+
+A.2 Baselines and Dataset-Specific Results 
+
+This subsection first defines the source-classifier routing controls and then presents each experiment as a self-contained block: its complete numerical results are followed by the corresponding visual diagnostics and ablations. 
+
+Reference baselines. ERM, IRM, EQRM, and RDM are evaluated without target covari-ates. DSNR estimates a domain index from the unlabeled covariates in each evaluation split while keeping its trained model and normalization statistics fixed; it uses neither target labels nor target-data optimization. 
+
+Source-classifier routing controls. We use four source-classifier routing controls in the real-data tables. UniformExperts reuses the same frozen representation and source-classifier stack as LADDER but assigns equal weights, 
+
+bℓuni (x) = 1
+
+E
+
+> E
+
+X
+
+> e=1
+
+h bψe
+
+ fbθ(x) .
+
+NearestExpert uses the same target summary and distance geometry as LADDER but performs hard K = 1 routing, 
+
+e∗ = arg min  
+
+> e
+
+de, bℓnear (x) = h bψe∗
+
+ fbθ(x) .
+
+SampleGate is a BSF-style per-sample control that uses the frozen auxiliary style-domain classifier ρs to form source-membership weights, 
+
+bℓsg (x) = 
+
+> E
+
+X
+
+> e=1
+
+πe(x)h bψe
+
+ fbθ(x) , π(x) = softmax 
+
+
+
+ρs(g bϕ(x)) /T sg 
+
+
+
+.
+
+We fix Tsg = 1 for all datasets and seeds. On iWildCam, SampleGate-group uses the same target grouping metadata as LADDER -group but averages SampleGate weights within each target group, ¯πg,e = 1
+
+|D g|
+
+X
+
+> x∈D g
+
+πe(x), bℓsg-group (x) = 
+
+> E
+
+X
+
+> e=1
+
+¯πg,e h bψe
+
+ fbθ(x) , x ∈ D g.
+
+S3 On iWildCam, NearestExpert and LADDER -group use location-level Sinkhorn summaries, while SampleGate-group uses location-shared source-membership weights. On FMoW, Near-estExpert uses the same split-level summary as LADDER . UniformExperts uses no tar-get covariates, and SampleGate uses per-sample covariates without target grouping meta-data. A separately learned domain-level gate is not included because it requires an extra pseudo-target meta-training objective and additional architecture, capacity, and optimiza-tion choices; learned target-summary-conditioned alternatives are examined in the controlled SCM. 
+
+Synthetic Simulation 
+
+Table 1: Simulation results over 100 repetitions (mean ± standard deviation; accuracy in percentage points). 
+
+Target A: interpolation, c = 2 Target B: extrapolation, c = 6 Method Acc. ↑ Brier ↓ Param. ↓ Acc. ↑ Brier ↓ Param. ↓
+
+ERM 55 .55 ±5.51 .555 ±.042 5.08 ±.69 42 .34 ±5.40 .664 ±.040 13 .44 ±1.81 IRM 45 .86 ±3.53 .626 ±.021 5.34 ±.71 38 .81 ±2.38 .667 ±.010 13 .54 ±1.83 EQRM 53 .52 ±6.10 .574 ±.043 5.19 ±.73 41 .46 ±5.38 .658 ±.036 13 .48 ±1.83 DSNR 55 .24 ±5.50 .557 ±.042 5.07 ±.70 42 .08 ±5.59 .667 ±.043 13 .43 ±1.81 RDM 55 .17 ±4.80 .560 ±.037 5.12 ±.71 42 .03 ±3.77 .660 ±.023 13 .45 ±1.81 Pooled 55 .55 ±5.51 .555 ±.042 5.09 ±.69 42 .35 ±5.40 .664 ±.040 13 .44 ±1.80 
+
+LADDER 72 .25 ±12 .89 .390 ±.151 4.27 ±.83 85 .76 ±3.54 .239 ±.034 11 .70 ±1.73 
+
+Oracle 81 .57 ±2.86 .259 ±.037 0.00 ±0.00 92 .02 ±1.68 .115 ±.023 0.00 ±0.00 ERM           
+
+> IRM
+> EQRM
+> DSNR
+> RDM
+> Pool
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Target A: Interpolation (c = 2)
+> Accuracy ( ↑)
+> Oracle Limit
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> Pool
+> LADDER
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Brier Score ( ↓)
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> Pool
+> LADDER
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> Param Error || ̂β(0)
+> −β(0) *|| F(↓)
+> Oracle (Error = 0)
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> Pool
+> LADDER
+> 0
+> 20
+> 40
+> 60
+> 80
+> Target B: Extrapolation (c = 6)
+> Oracle Limit
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> Pool
+> LADDER
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> Pool
+> LADDER
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> Oracle (Error = 0)
+
+Figure 1: Simulation results over 100 independent repetitions. Figure 1 reports the controlled simulation results. The top and bottom rows separate the interpolation and extrapolation targets. This controlled SCM isolates the source-reweighting mechanism rather than the sufficient identifiability conditions in Section B. The style rep-resentation is 8-dimensional, there are 9 source domains, and each domain contains 1000 samples; the main LADDER setting uses K = 4 source neighbors. Two coordinates en-code the environment coordinate through opposite covariance shifts, while the remaining S4 coordinates are high-variance nuisance variation. Under this more conservative protocol, 
+
+LADDER still gains substantially when the target decision rule cannot be represented by a single pooled or invariant classifier. K=1 K=2 K=3 K=4 K=5 K=6 K=7 K=8 All                                                   
+
+> 50
+> 55
+> 60
+> 65
+> 70
+> 75
+> 80
+> 85
+> Target A: Interpolation (c = 2)
+> Accuracy ( ↑)
+> K=1 K=2 K=3 K=4 K=5 K=6 K=7 K=8 All
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> Brier Score ( ↓)
+> K=1 K=2 K=3 K=4 K=5 K=6 K=7 K=8 All
+> 3.5
+> 4.0
+> 4.5
+> 5.0
+> 5.5
+> Param Error || ̂β(0)
+> −β(0) *|| F(↓)
+> K=1 K=2 K=3 K=4 K=5 K=6 K=7 K=8 All
+> 80
+> 82
+> 84
+> 86
+> 88
+> 90
+> 92
+> Target B: Extrapolation (c = 6)
+> K=1 K=2 K=3 K=4 K=5 K=6 K=7 K=8 All
+> 0.18
+> 0.20
+> 0.22
+> 0.24
+> 0.26
+> 0.28
+> 0.30
+> K=1 K=2 K=3 K=4 K=5 K=6 K=7 K=8 All
+> 9.5
+> 10.0
+> 10.5
+> 11.0
+> 11.5
+> 12.0
+> 12.5
+> 13.0
+> 13.5
+
+Figure 2: Synthetic simulation KNN source-selection ablation over K ∈ { 1, . . . , 8} and “All”. The main setting uses K = 4, while “All” removes the KNN truncation and reweights all available source classifiers. Figure 2 studies the local source-selection radius under the same covariance-shift style protocol. For the interpolation target, performance is stable across moderate neighborhoods and the “All” variant, while for the extrapolation target local source selection is more impor-tant because small neighborhoods focus on the boundary source domains closest to the target mechanism. We use K = 4 as the pre-specified main setting: it lies in the stable interpolation region and preserves a local extrapolation bias without using every source domain. S5 1 10 50 500 1000                                          
+
+> Target summary size n0
+> 56
+> 58
+> 60
+> 62
+> 64
+> 66
+> 68
+> 70
+> Target A (c = 2)
+> Accuracy ( ↑)
+> τ= 0.05
+> τ= 0.1
+> τ= 0.5
+> τ= 1
+> τ= 5
+> LADDER(w/o navigation)
+> 110 50 500 1000
+> Target summary size n0
+> 0.44
+> 0.46
+> 0.48
+> 0.50
+> 0.52
+> 0.54
+> Brier Score ( ↓)
+> 110 50 500 1000
+> Target summary size n0
+> 4.65
+> 4.70
+> 4.75
+> 4.80
+> 4.85
+> 4.90
+> 4.95
+> 5.00
+> Param Error || ̂β(0)
+> −β(0) *|| F(↓)
+> 110 50 500 1000
+> Target summary size n0
+> 40
+> 50
+> 60
+> 70
+> 80
+> Target B (c = 6)
+> 110 50 500 1000
+> Target summary size n0
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 110 50 500 1000
+> Target summary size n0
+> 11.75
+> 12.00
+> 12.25
+> 12.50
+> 12.75
+> 13.00
+> 13.25
+
+Figure 3: Synthetic simulation ablation for target-summary sample size and the temperature parameter τ ∈ { 0.05 , 0.1, 0.5, 1, 5}. The rows correspond to interpolation and extrapolation targets. The columns report accuracy, Brier score, and parameter error as the number of target-summary samples n0 varies. LADDER (w/o reweighting) removes the target-adaptive distance computation and uniformly averages all source classifiers. Figure 3 studies target-summary size in an idealized latent setting rather than claiming that a single real image is sufficient to estimate a target-domain distribution. We do not use naturally tiny real-data domains for this ablation because their sample size is confounded with benchmark-specific effects. In FMoW-WILDS, the small “Other” region is a heteroge-neous metadata bucket rather than a coherent target environment. In iWildCam-WILDS, single-digit camera locations are also entangled with unseen locations, long-tailed species frequencies, and incomplete class support. Accuracy on those groups would therefore mix target-summary uncertainty with label-support and domain-coverage failures. The controlled SCM keeps the source and target mechanisms fixed while varying only 
+
+n0 and τ . Unlike an overly clean latent setup, the style representation here contains only two weak environment-carrying coordinates inside an 8-dimensional style vector, with the remaining dimensions acting as high-variance nuisance variation. Consequently, low-shot target summaries are intentionally noisy: at n0 = 1, temperature-based navigation has high variance and does not provide a reliable gain over uniform source averaging, indicating that a single target point should not be over-interpreted as a reliable style-distribution estimate. As n0 increases, the target style summary becomes reliable enough for navigation. The curves then move away from the uniform limit, and smaller temperatures recover the rel-evant source classifiers, especially for the extrapolation target. Thus τ should be inter-preted as a temperature parameter controlling how strongly LADDER trusts empirical style-distribution distances: a large temperature such as τ = 5 is a conservative fallback when target summaries are tiny, whereas smaller temperatures become useful once the tar-get distribution is estimated with enough samples. 
+
+Additional style-conditioned pooled baselines. The main simulation includes PooledJoint as an additive linear classifier on ( Zc, Z(e)
+
+s ). This is the direct pooled baseline for Corollary 1, S6 but it is not the strongest possible style-conditioned pooled predictor. To test whether the main simulation gap is caused only by this additive restriction, Table 2 and Figure 4 add three stronger pooled variants. Pooled-Interaction appends a domain-level style summary and explicit products between the style summary and Zc; Pooled-MLP uses a nonlinear pooled network on Zc, Z(e)
+
+s , and the style summary; and StyleHyperNet maps the style summary to classifier parameters. All three baselines use the same source data and the same unlabeled target style summary used by LADDER .Table 2: Supplementary style-conditioned pooled ablation in the controlled SCM over 100 repetitions. Accuracy is in percentage points. Pooled-MLP has no single linear target classifier, so parameter error is not reported. 
+
+Target Method Acc. ↑ Brier ↓ Param. ↓
+
+Interpolation, c = 2 PooledJoint 54 .84 ± 4.49 0.561 ± 0.037 4.941 ± 0.699 Pooled-Interaction 61 .74 ± 19 .60 0.534 ± 0.288 4.461 ± 1.281 Pooled-MLP 58 .21 ± 18 .52 0.646 ± 0.331 —StyleHyperNet 64 .46 ± 19 .60 0.505 ± 0.300 4.340 ± 1.346 LADDER 72 .57 ± 11 .01 0.383 ± 0.119 4.086 ± 0.826 Oracle 80 .86 ± 3.10 0.267 ± 0.041 0.000 ± 0.000 Extrapolation, c = 6 PooledJoint 41 .94 ± 4.36 0.669 ± 0.034 13 .149 ± 1.929 Pooled-Interaction 85 .01 ± 10 .43 0.214 ± 0.138 9.836 ± 2.222 Pooled-MLP 78 .57 ± 11 .01 0.322 ± 0.179 —StyleHyperNet 84 .05 ± 11 .60 0.230 ± 0.175 9.128 ± 2.084 LADDER 85 .74 ± 3.75 0.239 ± 0.036 11 .387 ± 1.850 Oracle 91 .88 ± 1.66 0.117 ± 0.023 0.000 ± 0.000 Additive   
+
+> pooled
+> Interaction
+> pooled
+> MLP
+> pooled
+> Style
+> hypernet
+> LADDER
+> 0
+> 20
+> 40
+> 60
+> 80
+> Interpolation target (c=2)
+> Accuracy (%)
+> Oracle
+> Additive
+> pooled
+> Interaction
+> pooled
+> MLP
+> pooled
+> Style
+> hypernet
+> LADDER
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Brier score
+> Additive
+> pooled
+> Interaction
+> pooled
+> MLP
+> pooled
+> Style
+> hypernet
+> LADDER
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> N/A
+> Parameter error ‖̂ β(0)
+> −β(0) *‖F
+> Additive
+> pooled
+> Interaction
+> pooled
+> MLP
+> pooled
+> Style
+> hypernet
+> LADDER
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Extrapolation target (c=6)
+> Additive
+> pooled
+> Interaction
+> pooled
+> MLP
+> pooled
+> Style
+> hypernet
+> LADDER
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Additive
+> pooled
+> Interaction
+> pooled
+> MLP
+> pooled
+> Style
+> hypernet
+> LADDER
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> N/A
+> Style-conditioned pooled baselines in the controlled SCM
+
+Figure 4: Supplementary style-conditioned pooled ablation in the controlled SCM. Stronger pooled predictors close much of the additive PooledJoint gap, especially in extrapolation, but they also have substantially larger variance across repetitions. LADDER remains com-petitive in extrapolation and gives the strongest interpolation performance among non-oracle methods. S7 Table 2 and Figure 4 clarify the scope of the pooled-model comparison. The additive pooled baseline is indeed limited: adding explicit interactions or a style-conditioned hyper-network greatly improves extrapolation accuracy. However, these more expressive pooled baselines are also much less stable across repetitions. For example, on the extrapolation tar-get, Pooled-Interaction and StyleHyperNet reach accuracy comparable to LADDER , but their accuracy standard deviations are 10 .43 and 11 .60, respectively, compared with 3 .75 for LADDER . Their Brier-score variability is also substantially larger. In interpolation, 
+
+LADDER gives the best non-oracle accuracy, Brier score, and parameter recovery. Thus the appropriate conclusion is not that source reweighting universally dominates every non-linear style-conditioned predictor, but that additive pooled use of style is insufficient and that LADDER provides a stable, interpretable inference-stage reweighting mechanism that remains competitive against stronger style-conditioned pooled alternatives. 
+
+FMoW-WILDS 
+
+Table 3: FMoW-WILDS results over five random seeds. Accuracy, worst-region accuracy, average-region accuracy, and ID-to-test accuracy drop are reported in percentage points. 
+
+Method Test ↑ Worst ↑ Avg. ↑ Drop ↓
+
+ERM 46 .68 ± 0.86 30 .68 ± 1.72 45 .49 ± 1.16 9.14 ± 0.69 IRM 46 .68 ± 0.49 29 .06 ± 1.60 45 .39 ± 0.66 8.88 ± 0.65 EQRM 46 .85 ± 0.49 28 .89 ± 1.44 45 .15 ± 0.49 9.09 ± 0.63 DSNR 45 .52 ± 0.78 27 .03 ± 1.69 43 .93 ± 0.78 9.78 ± 0.55 RDM 47 .15 ± 1.07 29 .56 ± 1.50 45 .22 ± 1.22 9.27 ± 0.62 UniformExperts 49 .65 ± 0.29 30 .46 ± 1.11 48 .55 ± 0.40 8.69 ± 0.20 
+
+NearestExpert 49 .12 ± 0.48 30 .71 ± 0.86 48 .08 ± 0.58 8.70 ± 0.64 SampleGate 49 .98 ± 0.27 30 .67 ± 1.06 48 .67 ± 0.52 9.01 ± 0.22 
+
+LADDER 50.19 ± 0.30 31.46 ± 0.66 49.05 ± 0.48 8.87 ± 0.47 ERM 
+
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Accuracy (%)
+> ID Val.
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Accuracy (%)
+> OOD Val.
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Accuracy (%)
+> OOD Test
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Worst-group Accuracy (%)
+> ID Val.
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Worst-group Accuracy (%)
+> OOD Val.
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> Worst-group Accuracy (%)
+> OOD Test
+
+Figure 5: FMoW-WILDS accuracy and worst-region accuracy on the ID validation, OOD validation, and OOD test splits. Figures 5 and 6 provide the FMoW-WILDS diagnostic view. They report both aggregate accuracy and region-aware robustness, together with the source-classifier weights used by S8 LADDER for the representative target split. Figure 7 further isolates the effect of the KNN source-selection radius. 45 46 47 48 49 50     
+
+> Test accuracy (%)
+> 43
+> 44
+> 45
+> 46
+> 47
+> 48
+> 49
+> Test average-region accuracy (%)
+> ERM
+> IRM EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> LADDER
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> ID Val. to OOD Test accuracy drop (pp, lower is better) 210 985
+> Selected source domain
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> LADDER ensemble weight
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> 16
+> 18
+> Style distance
+
+Figure 6: FMoW-WILDS accuracy/average-region trade-off, OOD degradation, and repre-sentative LADDER source-classifier weights. K=1 K=2 K=3 K=5 All         
+
+> 48.8
+> 49.0
+> 49.2
+> 49.4
+> 49.6
+> 49.8
+> 50.0
+> 50.2
+> 50.4
+> Test Accuracy (%)
+> K=1 K=2 K=3 K=5 All
+> 47.25
+> 47.50
+> 47.75
+> 48.00
+> 48.25
+> 48.50
+> 48.75
+> 49.00
+> Average-group Accuracy (%)
+> K=1 K=2 K=3 K=5 All
+> 29.0
+> 29.5
+> 30.0
+> 30.5
+> 31.0
+> 31.5
+> 32.0
+> Worst-group Accuracy (%)
+
+Figure 7: FMoW-WILDS KNN source-selection ablation over five random seeds. The main setting uses K = 5, while “All” removes the KNN truncation and reweights all retained source domains. The sweep includes K ∈ { 1, 2, 3, 5} and shows that local source selection is stable across nearby neighborhood sizes. Figure 7 supports the inference-stage reweighting mechanism used by LADDER ; its K =1 endpoint corresponds to hard nearest-source classifier routing, while the navigation ablation in simulation includes the uniform source-classifier average. Moving from the very local 
+
+K = 1 setting to moderate neighborhoods improves both test accuracy and average-region accuracy, and the pre-specified main setting K = 5 gives the strongest mean performance. Removing the neighborhood restriction remains competitive but slightly dilutes the nearest source classifiers, especially on the region-aware metrics. S9 (a) Zc colored by class       
+
+> 42
+> 36
+> 29
+> 35
+> 11
+> 30
+> 47
+> 14
+> Other
+> (b) Zccolored by environment
+> (c) Zscolored by environment
+> S10
+> S9 S8
+> S7
+> S4
+> S6
+> T14
+> (d) Zstarget-time source navigation
+> source domain
+> target domain
+> LADDER weight
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> environment coordinate
+> 0
+> 2
+> 4
+> 6
+> 8
+> 10
+> 12
+> 14
+> environment coordinate
+> LADDER Disentanglement and Source Navigation
+
+Figure 8: Full FMoW-WILDS t-SNE visualization. Panels (a,b) show the causal representa-tion Zc colored by class and domain, respectively; panels (c,d) show the style representation 
+
+Z(e) 
+
+> s
+
+colored by domain and used for source reweighting. Figure 8 visualizes why the style representation is useful for reweighting rather than di-rect prediction. The style representation Z(e) 
+
+> s
+
+preserves domain geometry, while the causal representation Zc remains the input used by the source-specific classifiers. Figure 9 tests whether the learned style distribution is only a domain identifier or also a quantitative signal for classifier reweighting. The first panel, also shown as Figure 6(c) in the main text, relates source-style distance to the symmetric transfer loss dtr  
+
+> e,e ′
+
+= 12 (Le→e′ +Le′→e), where Le→e′ is the cross-entropy of the classifier trained on source e when evaluated on source-domain e′ examples. The representative visualization uses seed 0, selected independently of the observed correlation value. Across all 55 unordered retained source-domain pairs, 
+
+LADDER ’s style-summary distance correlates with bidirectional source-classifier transfer loss (Spearman ρ = 0 .70) and class-conditional Zc prototype distance ( ρ = 0 .93). The pairwise correlations in Figure 9 are descriptive because domain pairs share source domains and should not be read as independent-pair significance tests. Thus, source domains that are closer in the learned style distribution tend to have lower cross-domain classifier transfer loss, supporting style-summary distance as a proxy for classifier transferability during inference-stage reweighting, without target labels, parameter updates, or model-state updates. A source-only probe diagnostic gives a complementary view. Probe features are seed-controlled subsamples with at most 4096 examples per source year, standardized from the probe training split, and split into an 80 /20 source-only train/held-out split. Each probe S10 5 10 15 20 25                      
+
+> LADDER source-style distance
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Source-classi fi er transfer loss
+> Source-classi fi er transfer loss
+> Spearman ρ=0.70, n=55
+> 510 15 20 25
+> LADDER source-style distance
+> 10
+> 12
+> 14
+> 16
+> 18
+> 20
+> 22
+> Class-conditional Zc prototype distance  Class-conditional Zc prototype distance
+> Spearman ρ=0.93, n=55
+> 510 15 20 25
+> LADDER source-style distance
+> 5
+> 10
+> 15
+> 20
+> 25
+> Source Zc summary distance
+> Source Zc summary distance
+> Spearman ρ=0.92, n=55
+> 510 15 20 25
+> LADDER source-style distance
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> Source Zc diag-W2 distance
+> Source Zc diag-W2 distance
+> Spearman ρ=0.91, n=55
+> 510 15 20 25
+> LADDER source-style distance
+> 0.22
+> 0.24
+> 0.26
+> 0.28
+> 0.30
+> 0.32
+> 0.34
+> Label-distribution JS distance
+> Label-distribution JS distance
+> Spearman ρ=0.61, n=55
+
+Figure 9: FMoW-WILDS source-geometry diagnostic over all 55 source-domain pairs. The horizontal axis is the LADDER source style distance computed from learned source style distributions. The vertical axes report bidirectional source-classifier transfer loss, class-conditional Zc prototype distance, two Zc summary distances, and label-distribution dis-tance. is a linear Softmax head trained for 50 epochs with AdamW (learning rate 10 −2, weight decay 10 −4, batch size 1024). On held-out FMoW source examples, a linear probe predicts the year domain more accurately from Z(e)
+
+s than from Zc (63 .6 ± 0.4% vs. 56 .2 ± 0.7%), while label probes remain high for both branches ( Zc: 96 .5 ± 0.3%; Z(e)
+
+s : 95 .9 ± 0.3%). We therefore do not interpret Z(e)
+
+s as a label-free nuisance. To control for class composition, we also train class-conditional domain probes on classes represented in at least 3 source years with at least 20 sampled examples per class-year pair (46 .8 ± 0.8 eligible classes; majority baseline 18 .8 ± 0.5%). Conditioned on class, Z(e)
+
+s still predicts the source year better than Zc (56 .8 ± 0.6% vs. 41 .3 ± 1.0%), a 15 .5 ± 1.4 point gap. These diagnostics support the operational claim that Z(e)
+
+s is useful for domain-level routing, but they do not imply statistical independence from labels. S11 iWildCam-WILDS 
+
+Table 4: iWildCam-WILDS results over five random seeds. Test accuracy, macro F1, and filtered average-group accuracy are reported in percentage points. 
+
+Method Test ↑ Macro F1 ↑ Filt. Avg. ↑
+
+ERM 42 .26 ± 5.48 11 .23 ± 1.35 33 .29 ± 7.61 IRM 34 .59 ± 10 .11 6.20 ± 1.08 23 .42 ± 9.71 EQRM 40 .75 ± 6.62 10 .45 ± 1.37 32 .22 ± 8.07 DSNR 47 .36 ± 7.96 12 .34 ± 1.12 39 .44 ± 2.07 RDM 39 .36 ± 7.67 8.97 ± 1.78 31 .09 ± 5.37 UniformExperts 44 .42 ± 1.03 4.53 ± 0.25 34 .13 ± 0.78 NearestExpert 57 .96 ± 2.73 11 .62 ± 0.90 48 .41 ± 0.44 SampleGate 58 .00 ± 3.05 14.40 ± 0.70 48 .16 ± 1.23 SampleGate-group 59 .22 ± 3.10 12 .00 ± 0.86 48 .29 ± 1.98 
+
+LADDER -split 41 .19 ± 3.76 2.42 ± 0.55 36 .22 ± 1.80 
+
+LADDER-group 61.71 ± 1.76 11 .61 ± 0.65 50.01 ± 0.84 ERM 
+
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> SampleGate-group
+> LADDER-split
+> LADDER-group
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Accuracy (%)
+
+Test Accuracy 
+
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> UniformExperts
+> NearestExpert
+> SampleGate
+> SampleGate-group
+> LADDER-split
+> LADDER-group
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Accuracy (%)
+
+Filtered Avg-group Accuracy 
+
+iWildCam-WILDS: Accuracy and Location-level Robustness 
+
+Figure 10: iWildCam-WILDS test accuracy and filtered average-group accuracy. Figures 10–12 study split-level versus location-level target summaries and KNN sensitivity. Because the test split contains many camera locations, a single split-level target summary can blur distinct locations; the group-level version instead computes target summaries at the location level. 25 30 35 40 45 50 55 60 65 
+
+> Test Accuracy (%)
+> 15
+> 20
+> 25
+> 30
+> 35
+> 40
+> 45
+> 50
+> Filtered Avg-group Accuracy (%)
+> ERM
+> IRM
+> EQRM
+> DSNR
+> RDM
+> Uniform
+> Experts
+> Nearest
+> Expert
+> SampleGate
+> SampleGate
+> -group
+> LADDER
+> -split
+> LADDER
+> -group Test Accuracy
+> Macro F1
+> Filtered Avg-group Accuracy
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> Score (%)
+> LADDER Target-summary Granularity Ablation
+> LADDER-split
+> LADDER-group
+
+Figure 11: iWildCam-WILDS accuracy/robustness trade-off and LADDER target-summary ablation. S12 K=1 K=2 K=3 K=4 K=5 K=6 All             
+
+> 54
+> 56
+> 58
+> 60
+> 62
+> 64
+> Test Accuracy (%)
+> K=1 K=2 K=3 K=4 K=5 K=6 All
+> 11.0
+> 11.5
+> 12.0
+> 12.5
+> 13.0
+> Macro F1 (%)
+> K=1 K=2 K=3 K=4 K=5 K=6 All
+> 45
+> 46
+> 47
+> 48
+> 49
+> 50
+> 51
+> Filtered Avg-group Accuracy (%)
+
+Figure 12: iWildCam-WILDS KNN source-selection ablation over three random seeds. The main setting fixes K = 6, while “All” removes the KNN truncation and reweights all retained source domains. Across K ∈ { 1, 2, 3, 4, 5, 6}, K = 5 gives the highest test accuracy and macro F1, whereas K = 6 gives the strongest filtered average-group accuracy, matching the robustness-oriented protocol used in the main experiments. Figure 12 should be interpreted as a sensitivity analysis rather than a test-set search for the globally best neighborhood size. We fix K = 6 as the main protocol before reporting final test results, and the ablation shows that local source selection remains competitive across nearby choices while avoiding the robustness degradation caused by using all source classifiers. 
+
+iWildCam worst-location diagnostics. This subsection explains why the main text does not emphasize raw worst-location accuracy on iWildCam-WILDS. The target locations are extremely long-tailed, so the minimum over locations is often determined by locations with very few examples. We therefore report the five-seed diagnostic table below to make this choice explicit. Table 5: iWildCam-WILDS worst-location diagnostics over five random seeds. Raw worst-location accuracy takes the minimum over all target locations; filtered worst-location accu-racy and zero-location counts use locations with at least 50 samples. 
+
+Method Raw worst ↑ Filtered worst ↑ Zero filt. locs. ↓
+
+ERM 0.00 ± 0.00 0.20 ± 0.44 1.4 ± 1.5IRM 0.00 ± 0.00 0.00 ± 0.00 4.0 ± 5.0EQRM 0.00 ± 0.00 0.98 ± 1.39 0.6 ± 0.5DSNR 0.00 ± 0.00 1.96 ± 1.55 0.4 ± 0.9RDM 0.00 ± 0.00 0.24 ± 0.54 1.4 ± 0.9UniformExperts 0.00 ± 0.00 0.00 ± 0.00 2.8 ± 0.8NearestExpert 0.00 ± 0.00 0.00 ± 0.00 1.0 ± 0.0SampleGate 0.00 ± 0.00 1.96 ± 1.83 0.2 ± 0.4SampleGate-group 0.00 ± 0.00 0.00 ± 0.00 1.8 ± 1.3
+
+LADDER -split 0.00 ± 0.00 0.00 ± 0.00 5.2 ± 0.4
+
+LADDER -group 0.00 ± 0.00 0.95 ± 1.70 0.6 ± 0.5
+
+Table 5 explains why the main paper emphasizes filtered average-group accuracy rather than worst-location accuracy. Even after filtering locations with fewer than 50 examples, S13 the worst-location metric remains close to zero for almost all methods, while the average over filtered locations provides a more stable view of target-location robustness. At the 50-sample threshold, the test split retains 35 locations and 42 ,477 examples. As a threshold sensitivity check for LADDER -group, using thresholds mg ∈ { 25 , 50 , 100 , 200 } gives filtered average-group accuracies of 51 .49%, 50 .01%, 47 .82%, and 51 .57%, respectively, so the main conclusion is not tied to the exact cutoff. 
+
+Paired Routing Comparisons 
+
+Table 6: Paired-seed differences for protocol-matched routing controls. Each entry is the first method minus the second in percentage points; intervals are descriptive bootstrap percentile 95% CIs over the five matched seeds. Positive values favor the first method except for ID-to-test drop, where negative values are better.                                    
+
+> Dataset Comparison Metric Mean ∆ [95% CI] FMoW LADDER – SampleGate Test +0 .21 [ −0.21 ,0.55] FMoW LADDER – SampleGate Worst region +0 .79 [ −0.07 ,1.85] FMoW LADDER – SampleGate Average region +0 .39 [ −0.29 ,0.91] FMoW LADDER – SampleGate ID-to-test drop −0.14 [ −0.69 ,0.41] iWildCam LADDER -group – SampleGate-group Test +2 .50 [0 .50 ,4.49] iWildCam LADDER -group – SampleGate-group Macro F1 −0.38 [ −1.69 ,0.54] iWildCam LADDER -group – SampleGate-group Filtered average +1 .72 [ −0.16 ,4.03]
+
+A.3 Implementation Details and Hyperparameters 
+
+The theoretical analysis uses W1 on style distributions as a clean population metric. In the real-data experiments, we approximate the empirical W1 geometry using the balanced debiased Sinkhorn divergence with Euclidean ground cost c(z, z′) = ∥z − z′∥2. For each source domain and each target summary unit, we encode at most m = 1024 covariates with the fixed style encoder using seed-controlled uniform random subsampling. Style samples are normalized by source-training statistics, 
+
+ezs = ( zs − bμsrc )/(bσsrc + 10 −6),
+
+where bμsrc and bσsrc are computed only from cached source-training style samples and then applied unchanged to target covariates. The implementation uses GeomLoss 
+
+extttSamplesLoss (loss = ” sinkhorn ”, p = 1 , blur = 0 .05 , scaling = 0 .8,extttdebias = T rue, backend = ” tensorized ”) We use balanced OT because each fingerprint is a probability measure, debiasing to remove entropic self-bias, and p = 1 so the ground cost matches the W1 geometry. The tensorized backend is used for the reported runs with m ≤ 1024; the online KeOps backend is supported on compatible systems for lower memory use. The displayed theory is for exact empirical 
+
+W1 and does not include entropic regularization or numerical solver error. The simulation instead uses a separable empirical quantile proxy, summing coordinate-wise one-dimensional S14 W 22 estimates on a grid of at most 256 quantiles, followed by the normalization used in the released script. In all cases, the distance estimator is fixed before target evaluation and is computed only from unlabeled target covariates. Table 7: Main implementation settings used for the reported runs. KNN ablations in the supplement vary only K while keeping the remaining training protocol fixed.                                                                      
+
+> Setting Simulation FMoW-WILDS iWildCam-WILDS Backbone Linear latent SCM ImageNet ResNet-50 ImageNet ResNet-50 Optimizer / scheduler Adam / none AdamW / none AdamW / none Learning rates 10 −2encoder 10 −4, heads 10 −3encoder 10 −4, heads 10 −3
+> Weight decay 10 −210 −410 −4
+> Epochs / steps 150 epochs 25 rep. epochs, 8 head epochs, 800 steps/epoch 20 rep. epochs, 6 head epochs, 700 steps/epoch Batching 1000 samples/domain batch 32, eval batch 64, 4 do-mains/step batch 32, eval batch 64, 4 do-mains/step Dimensions dc= 10 , d s= 8 dc= 512 , d s= 128 dc= 512 , d s= 128 Loss weights –(λs, λ a, λ o, λ r) = (0 .15 ,0.03 ,5×
+> 10 −4,10 −5)same as FMoW Source classifiers source GLMs frozen-encoder linear classifiers, CE frozen-encoder linear classifiers, class-balanced CE Source filtering E= 9 fixed year domains, min size 512 largest 64 locations, min size 512 Main ( K, τ )(4 ,0.1) (5 ,0.5) (6 ,1.0) Target summary target latent samples split-level style summary location-level style summary Style distance coord. quantile W22proxy debiased Sinkhorn, p= 1, m≤
+> 1024 debiased Sinkhorn, p= 1, m≤
+> 1024
+
+The reported implementation uses λa both as the outer adversarial-loss weight and inside the gradient-reversal layer, so the encoder-side reversed gradient is scaled by λ2 
+
+> a
+
+= 9 ×10 −4 for 
+
+λa = 0 .03; this fixed protocol is used across all reported seeds and datasets. For iWildCam, class-balanced CE uses effective-number class weight ay = (1 − βcb )/(1 − βny 
+
+> cb
+
+) with βcb =0.999, multiplying the ordinary CE for class y [Cui et al. 2019]. The main values of K, τ , and the Sinkhorn blur are run-level protocol hyperparameters recorded in the run configurations and frozen before final OOD test evaluation. We use (K, τ ) = (4 , 0.1) in simulation, (5 , 0.5) on FMoW, and (6 , 1.0) on iWildCam. These val-ues are not selected from the reported OOD test curves. Simulation uses the pre-specified source-neighborhood setting K = 4 and reports τ ∈ { 0.05 , 0.1, 0.5, 1, 5} only as a controlled sensitivity analysis over target-summary reliability. For real data, the reported KNN sensi-tivity runs vary K with the remaining routing protocol fixed: FMoW uses K ∈ { 1, 2, 3, 5, All }
+
+with τ = 0 .5, and iWildCam uses K ∈ { 1, 2, 3, 4, 5, 6, All } with τ = 1 .0. The real-data val-ues were fixed before inspecting either OOD validation or test labels, based on the stated neighborhood-size and target-summary reliability considerations. The FMoW setting uses a moderately local split-level summary, whereas iWildCam uses a larger location-level neigh-borhood and a softer temperature because target locations vary substantially in sample size and class support. The real-data Sinkhorn blur is fixed globally to 0 .05 after source-only style normalization. No OOD validation or test labels are used for model or hyperparameter selection. S15 A.4 Runtime and Storage 
+
+This subsection reports the computational overhead of LADDER relative to the shared-backbone baselines. We separate training-stage precomputation from inference-stage routing. The training stage includes representation learning, frozen-encoder source-classifier fitting, and source style-fingerprint construction/cache. The inference stage encodes the unlabeled target covariates into a target style summary, computes source-summary distances, applies KNN and softmax weighting, and evaluates the selected fixed source classifiers. The storage table quantifies the persistent memory needed for inference-stage reweighting. Table 8: Wall-clock runtime in minutes per seed from available runtime logs. Ordinary baseline rows use the retained original runtime logs; source-classifier routing rows use the Sinkhorn reruns over five seeds.                                                                   
+
+> Method FMoW-WILDS iWildCam-WILDS ERM 59 .0±1.454 .7±1.2IRM 60 .7±1.257 .0±1.1EQRM 58 .3±1.054 .1±0.7DSNR 60 .6±1.356 .9±1.1RDM 60 .6±1.157 .8±3.8UniformExperts 85 .2±1.4102 .4±5.4NearestExpert 85 .2±1.0104 .2±3.3SampleGate 85 .0±1.0101 .3±3.1SampleGate-group –101 .2±3.1
+> LADDER 85 .2±1.0–
+> LADDER -split –115 .5±5.1
+> LADDER -group –104 .1±3.2
+
+Table 8 reports the total wall-clock times. The additional training-stage cost of LADDER 
+
+mainly comes from fitting source-specific classifiers after freezing the encoders, followed by source style-fingerprint construction/cache. The true inference-stage routing cost consists of target-summary encoding, Sinkhorn source-summary distance computation, KNN/softmax weighting, and selected fixed-classifier evaluation; these components are included in the target-evaluation time. For FMoW-WILDS, the Sinkhorn rerun decomposes the LADDER 
+
+runtime into 57 .3 minutes for representation learning, 24 .2 minutes for frozen-encoder source-classifier fitting, 0 .6 minutes for source style summaries, and 3 .1 minutes for evaluating the fixed routed model on the evaluation splits. For iWildCam-WILDS group-level reweighting, the corresponding values are 49 .8, 36 .7, 4 .6, and 13 .1 minutes; SampleGate-group uses the same training-stage cache and takes 10 .2 minutes for target evaluation. Table 9: Approximate additional persistent storage of LADDER beyond a shared ResNet-50 backbone, assuming float32 storage, linear source classifiers, dc = 512, ds = 128, and cached style samples with m = 1024 per source domain.              
+
+> Dataset Source classifiers Style fingerprints Total extra storage FMoW-WILDS ( E= 11 , C = 62) 1.33 MB 5.50 MB 6.83 MB iWildCam-WILDS ( E= 64 , C = 182) 22 .75 MB 32 .00 MB 54 .75 MB
+
+In general, if source classifiers are linear heads and each source domain caches m style samples, the extra persistent storage is 4 ECd c + 4 Emd s bytes. The target-domain style S16 summary is a temporary prediction buffer and is not part of persistent model storage. Source covariates are not stored after the cached style samples are constructed. 
+
+## B Theoretical Assumptions and Auxiliary Statements 
+
+This section records the formal assumptions, auxiliary statements, and diagnostic corollaries used in the theoretical analysis. The first subsection expands the compact assumptions from the main paper; the next subsection collects the proposition and lemmas used in the proofs; the final subsection states the comparison corollaries. 
+
+B.1 Full Formal Assumptions and Conditions 
+
+The main paper states compact versions of the assumptions to keep the theoretical presen-tation readable. We restate the full formal assumptions and conditions used by the proofs below. Throughout this section, nmin := min 1≤e≤E ne.
+
+Assumption 1 (Full oracle latent structure) . For each domain e, the centered observation follows 
+
+X(e) = AcZ(e) 
+
+> c
+
++ AsZ(e) 
+
+> s
+
++ ϵ(e),
+
+where A = [ Ac, As] has full column rank. The causal and style components satisfy 
+
+Cov( Z(e) 
+
+> c
+
+, Z(e) 
+
+> s
+
+) = 0, Cov( Z(e) 
+
+> c
+
+) = Σc, Cov( Z(e) 
+
+> s
+
+) = Λe.
+
+Here Σc is domain-invariant and Λe = diag( λe1, . . . , λ ed s ) is diagonal and domain-dependent. The noise satisfies Eϵ(e) = 0, is independent of the latents and labels, and has domain-invariant covariance Cov( ϵ(e)) = Σϵ. Assume Λ1 ≻ 0. For each style coordinate m, define its normalized cross-domain variance profile 
+
+ρm = ( λ2m/λ 1m, . . . , λ Em /λ 1m).
+
+The profiles are jointly separating: ρm̸ = ρm′ for all m̸ = m′.
+
+Remark 1 (Repeated variance profiles) . If several style coordinates share the same normalized variance profile, they are not separately identifiable from second-order domain variation. The corresponding joint eigenspace is identifiable, but coordinates within that eigenspace are recoverable only up to an orthogonal transformation after whitening. Pairwise profile separation is the special case in which every block is one-dimensional. 
+
+Condition 1 (Sufficient condition for leakage removal) . For leakage removal, the candi-date extractor Ws additionally satisfies label-invariant conditional means for the extracted style representation, while the true style representation has label-invariant conditional means within each source domain: E[Z(e) 
+
+> s
+
+| Y (e) = y] = m(e) 
+
+> s
+
+and E[ bZ(e) 
+
+> s
+
+| Y (e) = y] = cm(e)
+
+> s
+
+for all y ∈ supp( Y (e)). Let μe,y = E[Z(e) 
+
+> c
+
+| Y (e) = y] and choose one reference label 
+
+y0 
+
+> e
+
+∈ supp( Y (e)) per source domain. The causal conditional means span the causal space: 
+
+span {μe,y − μe,y 0 
+
+> e
+
+: e = 1 , . . . , E, y ∈ supp( Y (e))} = Rdc .
+
+S17 Assumption 2 (Full smooth domain geometry) . There is a map Ψ∗ with β(e) 
+
+> ∗
+
+= Ψ ∗(νe) and 
+
+∥Ψ∗(ν) − Ψ∗(ν′)∥F ≤ Lβ W1(ν, ν ′). All style distributions are supported on a compact Zs ⊂
+
+Rds of diameter at most Ds. Moreover, ΠM is dM-dimensional Ahlfors-regular on M, with 
+
+dM ∈ N. The source style laws ν1, . . . , ν E are independently sampled from ΠM; ν0 is either an independent draw or fixed independently of the source sample, with the Ahlfors-regular bounds holding uniformly around ν0. For the fixed target law ν0, the distance distribution function 
+
+Fν0 (r) = Π M
+
+ BW1 (ν0, r )
+
+is continuous in r on [0 , diam( M)] .
+
+Assumption 3 (Full GLM regularity) . Let 
+
+Sβ = {β ∈ RC×dc : 1⊤β = 0},
+
+and let B ⊂ S β be a compact convex parameter set with ∥β∥F ≤ Rβ . For all samples, 
+
+∥Zc∥2 ≤ Rc. For ℓCE (u, y ) = − log(Softmax( u)y), define 
+
+Re(β) = E[ℓCE (βZ c, Y ) | e], bRe(β) = 1
+
+neneX
+
+> i=1
+
+ℓCE (βz (e) 
+
+> c,i
+
+, y (e) 
+
+> i
+
+).
+
+For every domain considered in the oracle analysis, β(e) 
+
+> ∗
+
+∈ relint( B), ∇Sβ Re(β(e) 
+
+> ∗
+
+) = 0, and 
+
+Re is uniformly μ-strongly convex on B with respect to the Frobenius norm restricted to Sβ .For every source domain and sample, the single-sample Hessian is uniformly bounded and 
+
+LH -Lipschitz in β over B as an operator on Sβ . With ΠC = IC − C−111 ⊤, let 
+
+SC = {u ∈ RC : 1⊤u = 0 }, UR = {u ∈ S C : ∥u∥2 ≤ Rlogit }.
+
+The oracle and comparison centered logits used in the lower-bound results lie in UR almost surely. On UR, the conditional cross-entropy risk is μℓ-strongly convex; on SC , it is glob-ally Lℓ-smooth. Bounded centered logits imply that the Softmax probabilities are uniformly bounded away from zero, yielding a uniform positive-curvature lower bound on UR along the centered-logit subspace SC .
+
+Comparison notation. We compare LADDER , PooledJoint, and IRM using a scalar co-ordinate c for latent domain position and define 
+
+f ∗(Zc, c ) = ( βbase + cβshift )Zc.
+
+For any predictor f , write 
+
+Rc(f ) = E[ℓCE (f (Zc, Zs), Y c)] , Yc ∼ Softmax( f ∗(Zc, c )) ,
+
+and define the bounded additive pooled class 
+
+Hpool (RW ) = {f = WcZc + WsZs : ∥Wc∥F , ∥Ws∥F ≤ RW }.
+
+S18 For target coordinate c0, define 
+
+fL = f ∗(·, bcL), bcL = X
+
+> e
+
+wece, finv = f ∗(·, c inv ),
+
+where ce is source e’s coordinate and cinv does not depend on the target domain. 
+
+Assumption 4 (Full comparison shift model) . The coordinate satisfies c ∼ πc, is bounded, and has Var πc (c) > 0. Moreover, EZc = 0, EZcZ⊤ 
+
+> c
+
+= Σc ≻ 0, and Zc ⊥ (c, Zs). For the target coordinate, cinv ̸ = c0. The radius RW is large enough to contain one optimizer of the unrestricted additive projection used in Lemma 8. For the comparison lower bounds, 
+
+ΠC f ∗(Zc, c ) and the centered logits of the fixed invariant predictor lie in UR almost surely; moreover, ΠC f (Zc, Zs) ∈ U R almost surely for every f ∈ H pool (RW ).
+
+Assumption 5 (Full generic sub-Gaussian representation error) . For any upstream repre-sentation learner and every domain e = 0 , . . . , E , after a fixed representation alignment, 
+
+ez(e) 
+
+> c,i
+
+= z(e) 
+
+> c,i
+
++ ξ(e) 
+
+> c,i
+
+and ez(e) 
+
+> s,i
+
+= z(e) 
+
+> s,i
+
++ ξ(e) 
+
+> s,i
+
+. Conditional on the oracle representations, the perturbations are mean-zero, conditionally independent of Y , and uniformly sub-Gaussian, with ∥⟨ u, ξ (e) 
+
+> c,i
+
+⟩∥ ψ2 ∨ ∥⟨ v, ξ (e) 
+
+> s,i
+
+⟩∥ ψ2 ≤ ϵrep /√dc ∨ ds for all e, i and unit u, v , where ϵrep ≥ 0 is the representation-error scale. For each source domain, the perturbed empirical risk is μrep -strongly convex and its single-sample gradient is uniformly L∇z -Lipschitz in zc over β ∈ B .
+
+B.2 Auxiliary Propositions and Lemmas 
+
+The proposition and lemmas below are the technical tools invoked by the proof section. 
+
+Proposition 1 (Unique Structure of the Global Linear Transform) . Let Ws ∈ Rds×p be a candidate population style-extraction matrix, and suppose the induced style transform M =
+
+WsAs ∈ Rds×ds is invertible. Under Assumption 1, if M ΛeM ⊤ is diagonal for every source domain e = 1 , . . . , E , then M = P D , where P is a permutation matrix and D is a non-singular diagonal scaling matrix. 
+
+Lemma 1 (Uniform Concentration of Empirical Hessian) . Let dβ = ( C − 1) dc. Under As-sumption 3, the empirical Hessian converges uniformly to the population Hessian over B
+
+as an operator on Sβ . In particular, there exists a constant C > 0, depending only on the uniform single-sample Hessian bound and hence on Rc, such that for any δ > 0, if 
+
+ne ≥ Cμ2
+
+
+
+dβ log 
+
+
+
+1 + Rβ LH
+
+μ
+
+
+
++ log dβ
+
+δ
+
+
+
+,
+
+then 
+
+sup 
+
+> β∈B
+
+∥∇ 2 bRe(β) − ∇ 2Re(β)∥2 ≤ μ/ 2
+
+with probability at least 1 − δ.
+
+S19 Lemma 2 (Finite-Sample Source Estimation) . Under Assumption 3, for any source domain 
+
+e and sufficiently large ne,
+
+E∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F ≤ O 
+
+ Rc
+
+μ√ne
+
+
+
+.
+
+Lemma 3 (Uniform Source-Parameter Bound) . Let dβ = ( C − 1) dc. Under Assumption 3, for every δ ∈ (0 , 1) , if 
+
+nmin ≥ Cμ2
+
+
+
+dβ log 
+
+
+
+1 + Rβ LH
+
+μ
+
+
+
++ log dβ Eδ
+
+
+
+,
+
+then, with probability at least 1 − δ,
+
+max  
+
+> 1≤e≤E
+
+∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F ≤ C Rc
+
+μ
+
+s
+
+dβ + log( E/δ )
+
+nmin 
+
+.
+
+Consequently, in the fixed-complexity regime and for sufficiently large nmin ,
+
+E max  
+
+> 1≤e≤E
+
+∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F ≤ O Rc
+
+μ
+
+rdβ + log Enmin 
+
+!
+
+,
+
+and the corresponding squared maximum is bounded by O(R2 
+
+> c
+
+(dβ + log E)/(μ2nmin )) .
+
+For Wasserstein rates, write 
+
+γ(n, d ) = n−1/(d∨2) ℓd(n), Γ( n, E, d ) = ((1 + log E)/n )1/(d∨2) eℓd(n),
+
+where ℓ2(n) = eℓ2(n) = log(1 + n) and ℓd(n) = eℓd(n) = 1 for d̸ = 2. 
+
+Lemma 4 (Empirical Wasserstein Concentration) . Under Assumption 2, for any domain style distribution ν supported on Zs and empirical measure bν from n samples, 
+
+EW1(ν, bν) ≤ Cγ (n, d s).
+
+Moreover, with ∆W = γ(nmin , d s) + Γ( nmin , E, d s),
+
+E max  
+
+> 1≤e≤E
+
+W1(νe, bνe) ≤ O (∆ W ), E max  
+
+> 1≤e≤E
+
+W21 (νe, bνe) ≤ O (∆ 2 
+
+> W
+
+).
+
+Lemma 5 (Weighted Wasserstein Approximation) . With these empirical Wasserstein rates, under Assumption 2 and Lemma 4, 
+
+E
+
+Lβ
+
+X  
+
+> e∈bNK(0)
+
+we{W 1(νe, bνe) + W1(bν0, ν 0)}
+
+ ≤ O{ γ(n0, d s) + Γ( nmin , E, d s)}.
+
+S20 Lemma 6 (Manifold Interpolation via Empirical KNN) . Under Assumption 2, 
+
+E
+
+Lβ
+
+X  
+
+> e∈bNK(0)
+
+weW1(bνe, bν0)
+
+ ≤ O  (K/E )1/d M
+
+ + O{ γ(n0, d s) + Γ( nmin , E, d s)}.
+
+Lemma 7 (Centered Logit Risk Bounds) . Under Assumption 3, write Z = ( Zc, Zs) and define 
+
+Dℓ(f, f ∗) = E ∥ΠC {f (Z) − f ∗(Zc, c )}∥ 22 .
+
+Let ∆ℓ(f, f ∗) denote the corresponding expected cross-entropy excess risk. If the centered logits of f and f ∗ lie in UR almost surely, then 
+
+∆ℓ(f, f ∗) ≥ μℓ
+
+2 Dℓ(f, f ∗).
+
+For arbitrary finite centered logits, 
+
+∆ℓ(f, f ∗) ≤ Lℓ
+
+2 Dℓ(f, f ∗).
+
+Lemma 8 (Best Additive Approximation to a Multiplicative Shift) . Under Assumptions 4 and 3, let Epool be the infimum, over fpool ∈ H pool (RW ), of the expected centered-logit squared error relative to f ∗(Zc, c ). Then 
+
+Epool = Var( c) ∥ΠC βshift Σ1/2 
+
+> c
+
+∥2 
+
+> F
+
+.
+
+## C Proofs of Theoretical Statements 
+
+This section proves the statements from the main paper and the auxiliary statements stated above. We first establish representation identifiability, then source-parameter and Wasser-stein navigation bounds, target parameter and risk bounds, baseline comparisons, and fi-nally the generic-representation perturbation bound. The arguments use standard tools from GLMs, M-estimation, concentration, optimal transport, and nearest-neighbor theory [McCullagh and Nelder 1989, van der Vaart 1998, Wainwright 2019, Tropp 2012, Boucheron, Lugosi, and Massart 2013, Vershynin 2018, Fournier and Guillin 2015, Devroye, Gy¨ orfi, and Lugosi 1996, Biau and Devroye 2015]. 
+
+C.1 Proof of Proposition 1 
+
+Proof. Let De = M ΛeM ⊤. By assumption, each De is diagonal. Since Λ1 ≻ 0 and M is invertible, D1 ≻ 0. Define 
+
+Q = D−1/21 M Λ1/21 .
+
+Then QQ ⊤ = I, so Q is orthogonal. For e = 2 , . . . , E , let 
+
+Re = Λ−1/21 ΛeΛ−1/21 .
+
+S21 Each Re is diagonal, and 
+
+QR eQ⊤ = D−1/21 DeD−1/21
+
+is diagonal. Equivalently, the rows of Q form a common orthonormal eigenbasis of the family 
+
+{Re}Ee=2 .The joint eigenvalue profile of coordinate m is ρm = ( λ2m/λ 1m, . . . , λ Em /λ 1m). By As-sumption 1, these profiles are pairwise distinct, so every joint eigenspace of {Re}Ee=2 is one-dimensional and coincides with a coordinate axis. Hence each row of Q has exactly one nonzero entry, and Q = P S for a permutation matrix P and a diagonal sign matrix S.Consequently, 
+
+M = D1/21 P S Λ−1/21 = P eD,
+
+where eD = ( P ⊤D1/21 P )SΛ−1/21 is nonsingular and diagonal. Renaming eD as D gives the result. 
+
+C.2 Proof of Theorem 1 
+
+Proof. From Assumption 1, the covariance of X(e) decomposes as 
+
+Σ(e) 
+
+> X
+
+= AcΣcA⊤ 
+
+> c
+
++ AsΛeA⊤ 
+
+> s
+
++ Σϵ.
+
+The causal covariance and noise covariance are domain-invariant, while the domain-varying style covariance is AsΛeA⊤ 
+
+> s
+
+. By the oracle diagonalization condition in Theorem 1, M ΛeM ⊤
+
+is diagonal for every source domain, where M = WsAs. Proposition 1 gives M = P D for a permutation P and nonsingular diagonal D.Expanding the extracted representation gives 
+
+bZ(e) 
+
+> s
+
+= WsX(e) = WsAcZ(e) 
+
+> c
+
++ WsAsZ(e) 
+
+> s
+
++ Wsϵ(e) = BZ (e) 
+
+> c
+
++ P DZ (e) 
+
+> s
+
++ eϵ(e),
+
+where B = WsAc and eϵ(e) = Wsϵ(e). This identifies the style mixing component up to permutation and scaling while allowing the extracted representation to contain a causal leakage term BZ (e) 
+
+> c
+
+.For the leakage-removal statement, assume Condition 1. Taking conditional expectations and using the zero-mean independent noise gives, for any y ∈ supp( Y (e)), 
+
+cm(e) 
+
+> s
+
+= Bμ e,y + P Dm (e) 
+
+> s
+
+.
+
+Subtracting the same equation at the reference label y0 
+
+> e
+
+yields B(μe,y − μe,y 0 
+
+> e
+
+) = 0 for every source domain and supported label. The spanning condition in Condition 1 therefore gives 
+
+B = 0. When B = 0, the extracted style representation itself is recovered up to permutation, coordinate-wise scaling, and projected noise. 
+
+Remark 2 (Effect of permutation and scaling on style geometry) . Let T = P D . In the leakage-free and noise-free case, or when considering only the deterministic coordinate trans-form of the oracle style laws, for any two style distributions ν and ν′,
+
+σmin (D)W1(ν, ν ′) ≤ W 1(T#ν, T #ν′) ≤ ∥ D∥op W1(ν, ν ′).
+
+S22 Hence the oracle and transformed-oracle style geometries are bi-Lipschitz equivalent. For transformed laws ¯ν = T#ν, the map ¯Ψ∗(¯ ν) = Ψ ∗(T −1# ¯ν) remains Lipschitz with constant 
+
+Lβ /σ min (D). This statement concerns the deterministic transform T alone. In the presence of projected representation noise, exact bi-Lipschitz equivalence need not hold; such residual error is instead handled by the perturbation interface in Assumption 5. 
+
+C.3 Proof of Lemma 1 
+
+Proof. We aim to bound the maximum spectral norm of the empirical Hessian ∇2 bRe(β)deviating from the population Hessian ∇2Re(β) over the entire compact parameter space B.The argument combines a finite covering of B, pointwise matrix concentration on the cover, and Lipschitz extension to the full parameter space [Tropp 2012, Vershynin 2018]. 
+
+Covering argument. The parameter space B ⊂ RC×dc is a bounded compact convex set, and for any β ∈ B , ∥β∥F ≤ Rβ . The effective dimension of this centered-gauge space is 
+
+dβ = ( C − 1) dc. Standard covering number bounds in high-dimensional geometry [Vershynin 2018] imply that, for any precision ϵ > 0, there exists a finite subset Bϵ ⊂ B (an ϵ-net) such that for any β ∈ B , there exists at least one β′ ∈ B ϵ satisfying ∥β − β′∥F ≤ ϵ. The cardinality of this ϵ-net satisfies: 
+
+|B ϵ| ≤ 
+
+
+
+1 + 2Rβ
+
+ϵ
+
+dβ
+
+Pointwise concentration and union bound. Fix an arbitrary point β′ ∈ B ϵ. The empirical Hessian is the average of ne independent random matrices. For the multi-class cross-entropy loss, its single-sample Hessian has the Kronecker-product form: ∇2ℓ = (diag( p) − pp ⊤) ⊗
+
+(ZcZ⊤ 
+
+> c
+
+), where p is the predicted probability vector. By the spectral norm property of the Kronecker product, ∥∇ 2ℓ∥2 = ∥diag( p) − pp ⊤∥2 ·∥ZcZ⊤ 
+
+> c
+
+∥2. The simplex covariance has maximum eigenvalue at most 12 (achieved in binary classification with uniform probabilities), and ∥Zc∥2 ≤ Rc; hence the single-sample Hessian has spectral norm at most M = 12 R2 
+
+> c
+
+, independent of the number of classes C.However, the effective matrix dimension dβ = ( C − 1) dc still reflects the identifiable com-plexity of the multi-class task. The matrix Hoeffding inequality [Tropp 2012] gives, for a single point β′, a deviation bound that depends on dβ :
+
+P
+
+
+
+∇2 bRe(β′) − ∇ 2Re(β′) 2
+
+≥ τ
+
+
+
+≤ 2dβ exp 
+
+
+
+− neτ 2
+
+2M 2
+
+
+
+Applying the union bound scales this probability across the entire ϵ-net Bϵ:
+
+P
+
+
+
+sup 
+
+> β′∈B ϵ
+
+∇2 bRe(β′) − ∇ 2Re(β′) 2
+
+≥ τ
+
+
+
+≤ 2dβ
+
+
+
+1 + 2Rβ
+
+ϵ
+
+dβ
+
+exp 
+
+
+
+− neτ 2
+
+2M 2
+
+
+
+Extension to the full parameter space. For any point β ∈ B in the full space, since Bϵ is an ϵ-net, there must exist a β′ ∈ B ϵ such that ∥β − β′∥F ≤ ϵ. Using the triangle inequality S23 to decompose the deviation: 
+
+∇2 bRe(β) − ∇ 2Re(β) 2
+
+≤ ∇2 bRe(β) − ∇ 2 bRe(β′) 2
+
++ ∇2 bRe(β′) − ∇ 2Re(β′) 2
+
++ ∇2Re(β′) − ∇ 2Re(β) 2 .
+
+By Assumption 3, the Hessian matrix of the multi-class cross-entropy is LH -Lipschitz con-tinuous. Thus, both the empirical and population deviations are controlled: 
+
+∇2 bRe(β) − ∇ 2 bRe(β′) 2
+
+≤ LH ∥β − β′∥F ≤ LH ϵ
+
+∇2Re(β) − ∇ 2Re(β′) 2 ≤ LH ∥β − β′∥F ≤ LH ϵ
+
+Substituting these into the triangle inequality and taking the supremum yields: sup 
+
+> β∈B
+
+∇2 bRe(β) − ∇ 2Re(β) 2
+
+≤ sup 
+
+> β′∈B ϵ
+
+∇2 bRe(β′) − ∇ 2Re(β′) 2
+
++ 2 LH ϵ
+
+Choice of parameters. To bound the error over the entire space by μ 
+
+> 2
+
+, we set 2 LH ϵ = μ 
+
+> 4
+
+,yielding the grid precision ϵ = μ 
+
+> 8LH
+
+. Accordingly, the deviation threshold at the grid points is required to be τ = μ 
+
+> 4
+
+. Substituting this into the pointwise concentration bound and requiring the failure probability to be at most δ gives: 2dβ
+
+
+
+1 + 16 Rβ LH
+
+μ
+
+dβ
+
+exp 
+
+
+
+−ne(μ/ 4) 2
+
+2M 2
+
+
+
+≤ δ
+
+Taking the natural logarithm on both sides and rearranging to solve for the lower bound of the sample size ne:
+
+ne ≥ 32 M 2
+
+μ2
+
+
+
+dβ log 
+
+
+
+1 + 16 Rβ LH
+
+μ
+
+
+
++ log(2 dβ ) + log 
+
+1
+
+δ
+
+ 
+
+Equivalently, up to a universal constant depending only on the uniform Hessian bound, 
+
+ne ≥ Cμ2
+
+
+
+dβ log 
+
+
+
+1 + Rβ LH
+
+μ
+
+
+
++ log dβ
+
+δ
+
+
+
+.
+
+Under this sample size condition, the event E holds with a probability of at least 1 − δ.
+
+C.4 Proof of Lemma 2 
+
+Proof. Constrained quadratic control. Set ∆e = bβ(e) − β(e) 
+
+> ∗
+
+.
+
+S24 We set the probability decay level to δ = n−ke for some k ≥ 2. Under the stated coverage-complexity condition, Lemma 1 holds for sufficiently large ne. On the event E, the empirical risk is μ/ 2-strongly convex on B. Therefore, 
+
+bRe( bβ(e)) ≥ bRe(β(e) 
+
+> ∗
+
+) + 
+
+D
+
+∇ bRe(β(e) 
+
+> ∗
+
+), ∆e
+
+E
+
++ μ
+
+4 ∥∆e∥2 
+
+> F
+
+.
+
+Because bβ(e) minimizes bRe over the convex set B and β(e) 
+
+> ∗
+
+∈ B ,
+
+bRe( bβ(e)) ≤ bRe(β(e) 
+
+> ∗
+
+).
+
+Thus, on E, μ
+
+4 ∥∆e∥2 
+
+> F
+
+≤ − 
+
+D
+
+∇ bRe(β(e) 
+
+> ∗
+
+), ∆e
+
+E
+
+≤ ∥∇ bRe(β(e) 
+
+> ∗
+
+)∥F ∥∆e∥F ,
+
+and hence 
+
+∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F ≤ 4
+
+μ∥∇ bRe(β(e) 
+
+> ∗
+
+)∥F .
+
+This argument uses only constrained optimality and does not require the empirical minimizer to be an interior point. 
+
+Expected empirical gradient size. Let 
+
+Gi = ∇βℓ(β(e) 
+
+> ∗
+
+; Z(e) 
+
+> c,i
+
+, Y (e) 
+
+> i
+
+), ¯Ge = 1
+
+neneX
+
+> i=1
+
+Gi = ∇ bRe(β(e) 
+
+> ∗
+
+).
+
+Assumption 3 gives EGi = ∇R e(β(e) 
+
+> ∗
+
+) = 0. Independence across samples removes all cross terms: 
+
+E∥ ¯Ge∥2 
+
+> F
+
+= 1
+
+ne
+
+E
+
+h
+
+∇βℓ(β(e) 
+
+> ∗
+
+; Zc, Y ) 2
+
+> F
+
+i
+
+.
+
+For multi-class cross-entropy, 
+
+∇βℓ(β; Zc, Y ) = ( pβ(Zc) − eY )Z⊤ 
+
+> c
+
+,
+
+so ∥∇ βℓ(β; Zc, Y )∥F ≤ √2Rc. Therefore, 
+
+E∥∇ bRe(β(e) 
+
+> ∗
+
+)∥F ≤√2Rc
+
+√ne
+
+.
+
+Expectation over the high-probability event. Let Xe = ∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F . On E,
+
+E[Xe1E ] ≤ 4
+
+μE∥∇ bRe(β(e) 
+
+> ∗
+
+)∥F ≤ 4√2Rc
+
+μ√ne
+
+.
+
+On Ec, compactness gives Xe ≤ 2Rβ and P(Ec) ≤ n−ke , so 
+
+E[Xe1Ec ] ≤ 2Rβ n−ke .
+
+The polynomial tail is lower order for k ≥ 2, which gives 
+
+E∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F ≤ O 
+
+ Rc
+
+μ√ne
+
+
+
+.
+
+S25 C.5 Proof of Lemma 3 
+
+Proof. On the event Ee from Lemma 1, the empirical risk in source domain e is μ/ 2-strongly convex on B. The constrained-optimality argument in Lemma 2 gives 
+
+∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F ≤ 4
+
+μ∥∇ bRe(β(e) 
+
+> ∗
+
+)∥F .
+
+Choose the Hessian failure level δ/ (2 E) in Lemma 1 and union bound over e = 1 , . . . , E ; the stated lower bound on nmin ensures P(∩eEe) ≥ 1 − δ/ 2. It remains to control the empirical gradients. Let 
+
+g(e) 
+
+> i
+
+= vec 
+
+
+
+∇βℓ(β(e) 
+
+> ∗
+
+; Z(e) 
+
+> c,i
+
+, Y (e) 
+
+> i
+
+)
+
+
+
+∈ Rdβ .
+
+Assumption 3 gives Eg(e) 
+
+> i
+
+= 0, and the bounded-feature assumption gives ∥g(e) 
+
+> i
+
+∥2 ≤ √2Rc
+
+for multi-class cross-entropy. A vector-valued Hoeffding bound therefore implies, for each source domain, 
+
+P
+
+ 1
+
+neneX
+
+> i=1
+
+g(e)
+
+> i
+> 2
+
+> CR c
+
+s
+
+dβ + log(2 E/δ )
+
+ne
+
+ ≤ δ
+
+2E .
+
+A second union bound shows that, with probability at least 1 − δ, both the Hessian event and the gradient event hold for all sources. Since ne ≥ nmin , on this event 
+
+Y := max  
+
+> 1≤e≤E
+
+∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F ≤ C Rc
+
+μ
+
+s
+
+dβ + log( E/δ )
+
+nmin 
+
+,
+
+which proves the high-probability statement after absorbing constants. For the expectation bounds, set δ = e−t. The high-probability sample-size condition then has the form 
+
+nmin ≥ Cμ2
+
+
+
+dβ log 
+
+
+
+1 + Rβ LH
+
+μ
+
+
+
++ log( dβ E) + t
+
+
+
+.
+
+Equivalently, after adjusting constants, this condition is satisfied whenever 0 ≤ t ≤ tmax , tmax = c0μ2nmin − dβ log 
+
+
+
+1 + Rβ LH
+
+μ
+
+
+
+− log( c1dβ E).
+
+Therefore, 
+
+P Y > C Rc
+
+μ
+
+rdβ + log E + tnmin 
+
+!
+
+≤ e−t, 0 ≤ t ≤ tmax .
+
+Since compactness gives Y ≤ 2Rβ , tail integration yields 
+
+EY ≤ C Rc
+
+μ
+
+rdβ + log Enmin 
+
++ 2 Rβ e−tmax ,
+
+S26 and 
+
+EY 2 ≤ C R2 
+
+> c
+
+(dβ + log E)
+
+μ2nmin 
+
++ 4 R2 
+
+> β
+
+e−tmax .
+
+Moreover, 
+
+e−tmax ≤ c1dβ E
+
+
+
+1 + Rβ LH
+
+μ
+
+dβ
+
+e−c0μ2nmin ,
+
+In the fixed-complexity regime, this exponential remainder is absorbed into the displayed rates for sufficiently large nmin .
+
+C.6 Proof of Lemma 4 
+
+Proof. Let 
+
+Xe = W1(νe, bνe).
+
+For compactly supported measures in Rds , empirical optimal-transport theory gives constants 
+
+C, c > 0, independent of ne, such that 
+
+EXe ≤ Cγ (ne, d s), (1) where γ(·, ·) is the rate shorthand defined above [Fournier and Guillin 2015, Villani 2009]. The same result gives the following centered tails: 
+
+P(Xe > Cγ (ne, d s) + t) ≤
+
+
+
+C exp( −cn et2), ds < 2,C exp( −cn et2/(log(1 + ne)) 2) , ds = 2 ,C exp( −cn etds ), ds > 2.
+
+(2) Because ne ≥ nmin and γ(n, d s) decreases in n, for any t > 0, 
+
+P
+
+
+
+max  
+
+> 1≤e≤E
+
+Xe > Cγ (nmin , d s) + t
+
+
+
+≤
+
+> E
+
+X
+
+> e=1
+
+P (Xe > Cγ (ne, d s) + t) . (3) Substituting (2) into (3), the threshold at which the union-bound tail becomes order one is 
+
+TE (nmin , d s) = 
+
+
+
+C
+
+q1+log Enmin , ds < 2,C log(1 + nmin )
+
+q1+log Enmin , ds = 2 ,C
+
+1+log Enmin 
+
+1/d s
+
+, ds > 2.
+
+(4) This threshold is exactly the source-side extreme penalty Γ( nmin , E, d s) up to constants. S27 We now integrate the tail explicitly. Set 
+
+ME = max  
+
+> 1≤e≤E
+
+Xe, aE = Cγ (nmin , d s) + TE (nmin , d s).
+
+By the layer-cake identity, 
+
+EME =
+
+Z ∞
+
+> 0
+
+P(ME > s ) ds 
+
+≤ aE +
+
+Z ∞
+
+> aE
+
+P(ME > s ) ds. 
+
+For example, in the case ds > 2, write s = Cγ (nmin , d s) + r and use (3): 
+
+Z ∞
+
+> aE
+
+P(ME > s ) ds ≤ CE 
+
+Z ∞
+
+> TE
+
+exp( −cn min rds ) dr 
+
+= CE 
+
+Z ∞ 
+
+> 1+log E
+
+exp( −cu ) 1
+
+ds
+
+n−1/d s 
+
+> min
+
+u1/d s−1 du 
+
+≤ C
+
+1 + log Enmin 
+
+1/d s
+
+.
+
+The cases ds < 2 and ds = 2 are identical with the changes of variables u = nmin r2 and 
+
+u = nmin r2/(log(1 + nmin )) 2, respectively. Hence 
+
+EME ≤ O (γ(nmin , d s) + Γ( nmin , E, d s)) . (5) The second moment follows from the same calculation. Indeed, 
+
+EM 2 
+
+> E
+
+=
+
+Z ∞
+
+> 0
+
+P(M 2 
+
+> E
+
+> s ) ds =
+
+Z ∞
+
+> 0
+
+2r P(ME > r ) dr 
+
+≤ Ca 2 
+
+> E
+
++ C [Γ( nmin , E, d s)] 2 ,
+
+which gives 
+
+EM 2 
+
+> E
+
+≤ O  γ(nmin , d s)2 + Γ( nmin , E, d s)2 . (6) Equations (1), (5), and (6) prove the lemma. 
+
+C.7 Proof of Lemma 5 
+
+Proof. We decouple the quantity in the lemma into target-domain empirical error and source-domain empirical errors: 
+
+Lβ
+
+X  
+
+> e∈bNK(0)
+
+we{W 1(νe, bνe) + W1(bν0, ν 0)}
+
+= Lβ
+
+X  
+
+> e∈bNK(0)
+
+we W1(bν0, ν 0) + Lβ
+
+X  
+
+> e∈bNK(0)
+
+we W1(νe, bνe).
+
+S28 Since the target domain’s true measure ν0 and empirical measure bν0 are the same for every source index e, we extract W1(bν0, ν 0) from the summation. Due to the normalization property of the reweighted estimator ( P we = 1), taking the mathematical expectation yields: X  
+
+> e∈bNK(0)
+
+weW1(bν0, ν 0) = W1(bν0, ν 0) X  
+
+> e∈bNK(0)
+
+we
+
+E
+
+ X  
+
+> e∈bNK(0)
+
+weW1(bν0, ν 0)
+
+ = E [W1(bν0, ν 0)] ≤ O (γ(n0, d s)) ,
+
+where the last inequality follows from Lemma 4. For the source part, non-negativity and normalization of the weights imply the pointwise bound X  
+
+> e∈bNK(0)
+
+weW1(νe, bνe) ≤ max   
+
+> e∈bNK(0)
+
+W1(νe, bνe) ≤ max  
+
+> 1≤e≤E
+
+W1(νe, bνe)and Lemma 4 gives 
+
+E
+
+ X  
+
+> e∈bNK(0)
+
+weW1(νe, bνe)
+
+ ≤ O (γ(nmin , d s) + Γ( nmin , E, d s)) .
+
+Because nmin ≤ ne for all source domains, γ(nmin , d s) is dominated by the source-side extreme term in the asymptotic notation used in the theorem. Adding the target and source parts and absorbing the fixed constant Lβ yields 
+
+E
+
+Lβ
+
+X  
+
+> e∈bNK(0)
+
+we{W 1(νe, bνe) + W1(bν0, ν 0)}
+
+ ≤ O 
+
+
+
+γ(n0, d s) + Γ( nmin , E, d s)
+
+
+
+.
+
+C.8 Proof of Lemma 6 
+
+Proof. Weighted radius reduction. Since we ≥ 0 and P we = 1, the weighted convex combination is bounded by the maximum distance within the selected set. Let bRK be the distance of the K-th nearest neighbor found by the algorithm in the empirical space (i.e., the empirical KNN radius): 
+
+Lβ
+
+X  
+
+> e∈bNK(0)
+
+weW1(bνe, bν0) ≤ Lβ max   
+
+> e∈bNK(0)
+
+W1(bνe, bν0) := Lβ bRK .
+
+From empirical neighbors to true neighbors. We define the set N ∗ 
+
+> K
+
+(0) as the K true nearest neighbors of the target domain ν0 on the true measure manifold M. By construction, S29 bNK (0) consists of the K domains with the smallest empirical distances among all E source domains. Thus, the maximum empirical distance among these K domains, bRK , is the K-th order statistic of empirical distances across the global set. Conversely, under the empirical metric, the true nearest-neighbor set N ∗ 
+
+> K
+
+(0) is another subset of size K among the E domains. The maximum over any subset of size K is at least the maximum over the K empirically closest domains. Hence, the following inequality holds deterministically: 
+
+bRK = max   
+
+> e∈bNK(0)
+
+W1(bνe, bν0) ≤ max    
+
+> j∈N ∗
+> K(0)
+
+W1(bνj , bν0)Applying the Wasserstein distance triangle inequality to the true neighbor j ∈ N ∗ 
+
+> K
+
+(0) and leveraging the sub-additivity of the maximum operator: 
+
+W1(bνj , bν0) ≤ W 1(bνj , ν j ) + W1(νj , ν 0) + W1(ν0, bν0)
+
+bRK ≤ R∗ 
+
+> K
+
++ max    
+
+> j∈N ∗
+> K(0)
+
+W1(bνj , ν j ) + W1(ν0, bν0),
+
+where R∗ 
+
+> K
+
+:= max j∈N ∗  
+
+> K(0)
+
+W1(νj , ν 0). Taking the mathematical expectation on both sides, the latter two terms are bounded by O (γ(n0, d s) + Γ( nmin , E, d s)) as established in Lemma 5. The remaining task is to evaluate E[R∗ 
+
+> K
+
+]. 
+
+Order statistic of the true KNN radius. For the e-th source domain νe ∼ ΠM sampled independently from the manifold, let its scalar distance to the target domain be the random variable Re = W1(νe, ν 0). Its cumulative distribution function (CDF) is: 
+
+FR(r) = P(Re ≤ r) = π(BW1 (ν0, r )) where BW1 (ν0, r ) denotes the ball of radius r centered at ν0 under the Wasserstein metric. By the Ahlfors regularity assumption on the manifold M, for sufficiently small r, FR(r) ≍
+
+rdM . Let R∗ 
+
+> K
+
+denote the distance to the K-th nearest neighbor among E i.i.d. samples. Then FR(R∗ 
+
+> K
+
+) follows the K-th order statistic of E i.i.d. Uniform(0 , 1) random variables. Therefore, 
+
+E[FR(R∗ 
+
+> K
+
+)] = KE + 1 = O
+
+KE
+
+
+
+which implies 
+
+E[R∗ 
+
+> K
+
+] = O
+
+KE
+
+ 1
+
+> dM
+
+!
+
+.
+
+Combining the expected true radius with the empirical measure approximation error: 
+
+E
+
+Lβ
+
+X  
+
+> e∈bNK(0)
+
+weW1(bνe, bν0)
+
+ ≤ Lβ O
+
+KE
+
+ 1
+
+> dM
+
+!
+
++ Lβ O (γ(n0, d s) + Γ( nmin , E, d s)) .
+
+External Lipschitz constants are absorbed, completing the proof. S30 C.9 Proof of Theorem 2 
+
+Proof. To quantify the parameter estimation error ∥ bβ(0) − β(0)  
+
+> ∗
+
+∥F , we use the truncated reweighted estimator actually computed by the algorithm, 
+
+bβ(0) = X  
+
+> e∈bNK(0)
+
+we bβ(e), we ≥ 0, X  
+
+> e∈bNK(0)
+
+we = 1 .
+
+The normalization of the weights allows us to write 
+
+β(0)  
+
+> ∗
+
+= X  
+
+> e∈bNK(0)
+
+weβ(0)  
+
+> ∗
+
+.
+
+Adding and subtracting β(e) 
+
+> ∗
+
+inside each summand gives the exact identity 
+
+bβ(0) − β(0)  
+
+> ∗
+
+= X  
+
+> e∈bNK(0)
+
+we
+
+ bβ(e) − β(0) 
+
+> ∗
+
+
+
+= X  
+
+> e∈bNK(0)
+
+we
+
+h bβ(e) − β(e)
+
+> ∗
+
+
+
++  β(e) 
+
+> ∗
+
+− β(0) 
+
+> ∗
+
+i
+
+.
+
+Taking Frobenius norms, applying the triangle inequality, and using we ≥ 0 yields 
+
+∥ bβ(0) − β(0)  
+
+> ∗
+
+∥F ≤ X  
+
+> e∈bNK(0)
+
+we∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F + X  
+
+> e∈bNK(0)
+
+we∥β(e) 
+
+> ∗
+
+− β(0)  
+
+> ∗
+
+∥F .
+
+Assumption 2 gives β(e) 
+
+> ∗
+
+= Ψ ∗(νe) and β(0)  
+
+> ∗
+
+= Ψ ∗(ν0), so 
+
+∥β(e) 
+
+> ∗
+
+− β(0)  
+
+> ∗
+
+∥F = ∥Ψ∗(νe) − Ψ∗(ν0)∥F ≤ Lβ W1(νe, ν 0).
+
+For each selected source domain, the Wasserstein triangle inequality gives 
+
+W1(νe, ν 0) ≤ W 1(νe, bνe) + W1(bνe, bν0) + W1(bν0, ν 0).
+
+Substituting the preceding two displays into the norm bound yields the tri-fold decomposi-tion: 
+
+∥ bβ(0) − β(0)  
+
+> ∗
+
+∥F ≤ X  
+
+> e∈bNK(0)
+
+we∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F
+
+| {z }
+
+> Term A
+
++ Lβ
+
+X  
+
+> e∈bNK(0)
+
+we
+
+
+
+W1(νe, bνe) + W1(bν0, ν 0)
+
+| {z }
+
+> Term B
+
++ Lβ
+
+X  
+
+> e∈bNK(0)
+
+weW1(bνe, bν0)
+
+| {z }
+
+> Term C
+
+.
+
+S31 Taking the unconditional mathematical expectation E[·] on both sides, we bound the three terms separately. For Term A , the possible dependence between the empirically computed neighbor set 
+
+bNK (0) and the parameter estimators is handled by the deterministic maximum bound 
+
+X  
+
+> e∈bNK(0)
+
+we∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F ≤ max   
+
+> e∈bNK(0)
+
+∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F ≤ max  
+
+> 1≤e≤E
+
+∥ bβ(e) − β(e) 
+
+> ∗
+
+∥F
+
+Lemma 3 then directly implies 
+
+E[Term A] ≤ O Rc
+
+μ
+
+rdβ + log Enmin 
+
+!
+
+.
+
+For Term B , Lemma 5 gives the explicit empirical-measure calculation 
+
+E[Term B] = Lβ E
+
+ X  
+
+> e∈bNK(0)
+
+we {W 1(νe, bνe) + W1(bν0, ν 0)}
+
+
+
+≤ Lβ
+
+
+
+E max  
+
+> 1≤e≤E
+
+W1(νe, bνe) + EW1(bν0, ν 0)
+
+
+
+≤ O (Γ( nmin , E, d s) + γ(n0, d s)) .
+
+The first inequality uses we ≥ 0 and P 
+
+> e
+
+we = 1; the second uses Lemma 4. For Term C , Lemma 6 gives 
+
+E[Term C] = Lβ E
+
+ X  
+
+> e∈bNK(0)
+
+weW1(bνe, bν0)
+
+
+
+≤ Lβ E bRK
+
+≤ Lβ ER∗ 
+
+> K
+
++ Lβ E max  
+
+> 1≤e≤E
+
+W1(bνe, ν e) + Lβ EW1(bν0, ν 0)
+
+≤ O 
+
+KE
+
+1/d M
+
++ Γ( nmin , E, d s) + γ(n0, d s)
+
+!
+
+.
+
+Here bRK is the empirical top-K radius and R∗ 
+
+> K
+
+is the oracle top-K radius on the population space of style distributions; the last line uses the order-statistic calculation in Lemma 6. Summing the three expected bounds gives 
+
+E
+
+h bβ(0) − β(0)  
+
+> ∗F
+
+i
+
+≤ O Rc
+
+μ
+
+rdβ + log Enmin 
+
+!
+
++ O (γ(n0, d s) + Γ( nmin , E, d s)) + O
+
+KE
+
+1/d M
+
+!
+
+,
+
+which is the claimed parameter-estimation bound. S32 C.10 Proof of Theorem 3 
+
+Proof. The population risk R0 is conditioned on the unlabeled target summary used to choose source weights; in the benchmark, this summary is formed once from the evaluation split. 
+
+Smoothness reduction. By Assumption 3, β(0)  
+
+> ∗
+
+is a relative-interior population optimum and 
+
+∇Sβ R0(β(0)  
+
+> ∗
+
+) = 0. Set ∆0 := bβ(0) − β(0)  
+
+> ∗
+
+.
+
+Since both bβ(0) and β(0)  
+
+> ∗
+
+belong to B ⊂ S β , we have ∆ 0 ∈ S β . Hence the first-order term vanishes in the centered-gauge tangent space: 
+
+∇R 0(β(0)  
+
+> ∗
+
+), ∆0 = ∇Sβ R0(β(0)  
+
+> ∗
+
+), ∆0 = 0 .
+
+A second-order Taylor expansion of the target-domain expected risk at β(0)  
+
+> ∗
+
+gives 
+
+R0( bβ(0) ) − R 0(β(0)  
+
+> ∗
+
+) = 12 vec(∆ 0)⊤∇2R0( ˜β) vec(∆ 0)where ˜β lies between bβ(0) and β(0)  
+
+> ∗
+
+. Based on standard properties of matrix operator quadratic forms, the second-order expansion term is bounded by the product of the popula-tion Hessian matrix’s spectral norm and the squared L2 norm of the vector: 12vec( bβ(0) − β(0)  
+
+> ∗
+
+)⊤∇2R0( ˜β)vec( bβ(0) − β(0)  
+
+> ∗
+
+) ≤ 12∥∇ 2R0( ˜β)∥2 · ∥ vec( bβ(0) − β(0)  
+
+> ∗
+
+)∥22
+
+We note that the single-sample Hessian matrix structure for the multi-class cross-entropy loss is: 
+
+∇2
+
+> β
+
+ℓ(β; Zc, Y ) = (diag( p) − pp ⊤) ⊗ (ZcZ⊤ 
+
+> c
+
+)where ⊗ denotes the Kronecker product. Because the maximum eigenvalue of the covariance matrix on the simplex diag( p) − pp ⊤ is bounded by 12 , and ∥Zc∥2 ≤ Rc, the spectral norm satisfies: 
+
+∥∇ 2
+
+> β
+
+ℓ(β; Zc, Y )∥2 = ∥diag( p) − pp ⊤∥2 · ∥ ZcZ⊤ 
+
+> c
+
+∥2 ≤ 12∥Zc∥22 ≤ 12R2
+
+> c
+
+By the sub-additivity and monotonicity of the expectation operator, the spectral norm of the population Hessian matrix is bounded over the compact convex set: 
+
+∥∇ 2R0( ˜β)∥2 ≤ E(Zc,Y )∼D (0) 
+
+h
+
+∥∇ 2
+
+> β
+
+ℓ( ˜β; Zc, Y )∥2
+
+i
+
+≤ 12R2
+
+> c
+
+Also, the L2 norm of the vectorized matrix exactly equals the Frobenius norm of the original matrix: 
+
+∥vec( bβ(0) − β(0)  
+
+> ∗
+
+)∥22 = bβ(0) − β(0) 
+
+> ∗
+> 2
+> F
+
+Substituting this back establishes that the expected risk function is Ls-smooth (where Ls = 
+
+> 12
+
+R2 
+
+> c
+
+) over the compact domain, which gives the smoothness bound: 
+
+R0( bβ(0) ) − R 0(β(0)  
+
+> ∗
+
+) ≤ R2
+
+> c
+
+4 bβ(0) − β(0) 
+
+> ∗
+> 2
+> F
+
+S33 Taking the external expectation gives the dominant inequality: 
+
+E
+
+h
+
+R0( bβ(0) ) − R 0(β(0)  
+
+> ∗
+
+)
+
+i
+
+≤ R2
+
+> c
+
+4 E
+
+bβ(0) − β(0) 
+
+> ∗
+> 2
+> F
+
+
+
+Second moment of the decomposed parameter error. We recall the triangle inequality of the error decoupling from Theorem 2: 
+
+bβ(0) − β(0)  
+
+> ∗F
+
+≤ Term A + Term B + Term C Using the algebraic inequality ( a + b + c)2 ≤ 3( a2 + b2 + c2), we scale the square: 
+
+bβ(0) − β(0) 
+
+> ∗
+> 2
+> F
+
+≤ 3  (Term A) 2 + (Term B) 2 + (Term C) 2
+
+For ( Term A )2, Lemma 3 gives the squared maximal estimator error: 
+
+E (Term A) 2 ≤ E
+
+
+
+max  
+
+> 1≤e≤E
+
+∥ bβ(e) − β(e) 
+
+> ∗
+
+∥2
+
+> F
+
+
+
+≤ O 
+
+R2 
+
+> c
+
+(dβ + log E)
+
+μ2nmin 
+
+
+
+For ( Term B )2, use the same deterministic decomposition as in Lemma 5: Term B ≤ Lβ
+
+
+
+W1(bν0, ν 0) + max  
+
+> 1≤e≤E
+
+W1(νe, bνe)
+
+
+
+.
+
+Therefore, by ( a + b)2 ≤ 2( a2 + b2) and Lemma 4, 
+
+E (Term B) 2 ≤ O  γ(n0, d s)2 + Γ( nmin , E, d s)2 .
+
+For ( Term C )2, the proof of Lemma 6 gives Term C ≤ Lβ
+
+
+
+R∗ 
+
+> K
+
++ max  
+
+> 1≤e≤E
+
+W1(bνe, ν e) + W1(bν0, ν 0)
+
+
+
+.
+
+The empirical terms are bounded by the same squared empirical-measure rate used for Term B. It remains to bound E[( R∗ 
+
+> K
+
+)2]. For dM = 1, the second raw moment of the Beta order statistic gives 
+
+E[U 2(K)] = K(K + 1) (E + 1)( E + 2) = O
+
+KE
+
+2!
+
+and therefore E[( R∗ 
+
+> K
+
+)2] ≤ O (( K/E )2). For dM ≥ 2, the function x2/d M is concave, so Jensen’s inequality yields 
+
+E[( R∗ 
+
+> K
+
+)2] ≤ CE[U 2/d M 
+
+> (K)
+
+] ≤ C  E[U(K)]2/d M = O
+
+KE
+
+ 2
+
+> dM
+
+!
+
+.
+
+S34 Combining this with the empirical terms and absorbing the repeated empirical contribution into the Term B rate, 
+
+E (Term C) 2 ≤ O 
+
+KE
+
+ 2
+
+> dM
+
+!
+
++ O  γ(n0, d s)2 + Γ( nmin , E, d s)2 .
+
+Summing these three expected squared bounds and substituting them back into the Taylor expansion framework establishes the final expected excess risk: 
+
+E
+
+h
+
+R0( bβ(0) ) − R 0(β(0)  
+
+> ∗
+
+)
+
+i
+
+≤ O R4 
+
+> c
+
+(dβ + log E)
+
+μ2nmin 
+
++ R2
+
+> c
+
+ γ(n0, d s)2 + Γ( nmin , E, d s)2
+
++ R2
+
+> c
+
+KE
+
+ 2
+
+> dM
+
+!
+
+.
+
+C.11 Proof of Lemma 7 
+
+Proof. For a fixed pair ( Zc, c ), define the conditional cross-entropy risk as a function of the logit vector u ∈ RC :
+
+ρZc,c (u) = E[ℓCE (u, Y ) | Zc, c ] .
+
+Because the softmax probabilities are invariant under common logit translations, Softmax( u + a1) = Softmax( u) for every a ∈ R,
+
+the conditional risk depends only on the centered component of the logits. Hence 
+
+ρZc,c (u) = ρZc,c (ΠC u).
+
+Let u = ΠC f (Z) and u∗ = ΠC f ∗(Zc, c ). For the lower bound, assume u, u∗ ∈ U R almost surely. By Assumption 3, ρZc,c is μℓ-strongly convex on UR. Therefore, 
+
+ρZc,c (u) ≥ ρZc,c (u∗) + ⟨∇ SC ρZc,c (u∗), u − u∗⟩ + μℓ
+
+2 ∥u − u∗∥22,
+
+where ∇SC denotes the gradient restricted to SC . At the Bayes-optimal centered logit u∗,the restricted first-order term vanishes: 
+
+⟨∇ SC ρZc,c (u∗), u − u∗⟩ = 0 .
+
+Substituting u = ΠC f (Z) and u∗ = ΠC f ∗(Zc, c ) gives the pointwise inequality 
+
+ρZc,c (f (Z)) − ρZc,c (f ∗(Zc, c )) ≥ μℓ
+
+2 ∥ΠC (f (Z) − f ∗(Zc, c )) ∥22 .
+
+S35 This proves the lower bound after taking expectation over ( Zc, Zs, c ). For the upper bound, no bounded-logit condition is needed. Assumption 3 gives global Lℓ-smoothness on SC , so for arbitrary finite centered logits the standard smoothness inequality at u∗ yields 
+
+ρZc,c (u) ≤ ρZc,c (u∗) + ⟨∇ SC ρZc,c (u∗), u − u∗⟩ + Lℓ
+
+2 ∥u − u∗∥22.
+
+The first-order term again vanishes because u∗ is the conditional Bayes optimum on SC .Hence 
+
+ρZc,c (f (Z)) − ρZc,c (f ∗(Zc, c )) ≤ Lℓ
+
+2 ∥ΠC (f (Z) − f ∗(Zc, c )) ∥22 .
+
+Taking expectation over ( Zc, Zs, c ) completes the proof. 
+
+C.12 Proof of Lemma 8 
+
+Proof. For Wc and Ws, define the centered approximation objective 
+
+J(Wc, Ws) = E ∥ΠC (WcZc + WsZs − (βbase + cβshift )Zc)∥22
+
+ .
+
+Set 
+
+U = ΠC (Wc − βbase ), V = ΠC Ws, B = ΠC βshift .
+
+Using the linearity of ΠC , the objective becomes 
+
+J(Wc, Ws) = E ∥(U − cB)Zc + V Z s∥22
+
+ .
+
+Expanding the squared norm gives 
+
+J(Wc, Ws) = E ∥(U − cB)Zc∥22
+
+ + E ∥V Z s∥22
+
+
+
++ 2 E
+
+h
+
+(( U − cB)Zc)⊤ V Z s
+
+i
+
+.
+
+The cross term is zero. Indeed, conditioning on ( c, Zs) and using Assumption 4, 
+
+E
+
+h
+
+(( U − cB)Zc)⊤ V Z s | c, Zs
+
+i
+
+= E Z⊤ 
+
+> c
+
+(U − cB)⊤V Z s | c, Zs
+
+
+
+= E[Zc]⊤(U − cB)⊤V Z s = 0 .
+
+Thus the objective decomposes as 
+
+J(Wc, Ws) = J1(U ) + J2(V ),
+
+where 
+
+J1(U ) = Ec, Zc
+
+∥(U − cB)Zc∥22
+
+ , J2(V ) = EZs
+
+∥V Z s∥22
+
+ .
+
+S36 Since J2(V ) ≥ 0 and J2(0) = 0, the style-additive part cannot reduce the multiplicative approximation error. Hence it remains to minimize J1(U ). For any fixed matrix M ∈ RC×dc , the second moment identity for Zc gives 
+
+EZc
+
+∥M Z c∥22
+
+ = EZc
+
+Tr  M Z cZ⊤ 
+
+> c
+
+M ⊤ 
+
+= Tr  M E[ZcZ⊤ 
+
+> c
+
+] M ⊤
+
+= Tr  M ΣcM ⊤ = ∥M Σ1/2 
+
+> c
+
+∥2 
+
+> F
+
+.
+
+Applying this identity with M = U − cB yields 
+
+J1(U ) = Ec
+
+h
+
+(U − cB)Σ1/2
+
+> c
+> 2
+> F
+
+i
+
+.
+
+Let eU = U Σ1/2 
+
+> c
+
+and eB = BΣ1/2 
+
+> c
+
+. Then 
+
+J1(U ) = Ec
+
+h
+
+∥ eU − c eB∥2
+
+> F
+
+i
+
+.
+
+Writing ¯ c = E[c] and adding/subtracting ¯ c eB gives the bias-variance decomposition 
+
+Ec
+
+h
+
+∥ eU − c eB∥2
+
+> F
+
+i
+
+= Ec
+
+h
+
+∥( eU − ¯c eB) − (c − ¯c) eB∥2
+
+> F
+
+i
+
+= ∥ eU − ¯c eB∥2 
+
+> F
+
++ E(c − ¯c)2 ∥ eB∥2
+
+> F
+
+− 2 E[c − ¯c]
+
+D eU − ¯c eB, eB
+
+E
+
+> F
+
+= ∥ eU − ¯c eB∥2 
+
+> F
+
++ Var( c)∥ eB∥2 
+
+> F
+
+.
+
+The first term is minimized at eU = ¯ c eB. Because Σc ≻ 0, this choice is attainable by 
+
+U = ¯ c B, equivalently by any Wc satisfying 
+
+ΠC Wc = ΠC βbase + ¯ c ΠC βshift .
+
+Combining the minimized value of J1 with the minimized value of J2 gives min 
+
+> Wc,Ws
+
+J(Wc, Ws) = Var( c) ΠC βshift Σ1/2 
+
+> c
+> 2
+> F
+
+.
+
+By Assumption 4, RW is chosen large enough that one minimizer described above belongs to Hpool (RW ). Therefore, restricting the infimum to Hpool (RW ) does not change the optimal value. 
+
+C.13 Proof of Corollary 1 
+
+Proof. For any fpool ∈ H pool (RW ), the lower-bound half of Lemma 7 implies 
+
+Ec∼πc [Rc(fpool ) − R c(f ∗)] ≥ μℓ
+
+2 E ∥ΠC (fpool (Zc, Zs) − f ∗(Zc, c )) ∥22
+
+ .
+
+S37 Taking the infimum over fpool ∈ H pool (RW ) on both sides and substituting the exact additive approximation error from Lemma 8 yields inf   
+
+> fpool ∈H pool (RW)
+
+Ec∼πc [Rc(fpool ) − R c(f ∗)] ≥ μℓ
+
+2 Var( c) ΠC βshift Σ1/2 
+
+> c
+> 2
+> F
+
+.
+
+The right-hand side is positive whenever Var( c) > 0 and ∥ΠC βshift Σ1/2 
+
+> c
+
+∥F > 0. The first condition states that the domain population contains distinct domains, and the second states that the domain shift changes the identifiable centered logits. Under these non-degeneracy conditions, the pooled-joint additive class has a positive structural misspecification error. 
+
+C.14 Proof of Corollary 2 
+
+Proof. Fix the target domain coordinate c0. Under Assumption 4, the target-domain Bayes-optimal parameter is 
+
+β(c0) 
+
+> ∗
+
+= βbase + c0βshift .
+
+By Assumption 4, the oracle/asymptotic LADDER parameter and the fixed invariant pa-rameter have identifiable centered differences 
+
+ΠC (βL − β(c0) 
+
+> ∗
+
+) = ( bcL − c0)ΠC βshift ,
+
+ΠC (βinv − β(c0) 
+
+> ∗
+
+) = ( cinv − c0)ΠC βshift .
+
+Let 
+
+B = ΠC βshift Σ1/2 
+
+> c
+
+.
+
+Using the second-moment identity from the proof of Lemma 8, for any scalar a,
+
+EZc
+
+∥a ΠC βshift Zc∥22
+
+ = a2∥B∥2 
+
+> F
+
+.
+
+Applying the global upper-smoothness half of Lemma 7 to fL on the fixed target domain c0
+
+gives 
+
+Rc0 (fL) − R c0 (f ∗) ≤ Lℓ
+
+2 (c0 − bcL)2∥B∥2 
+
+> F
+
+.
+
+Applying the lower half of the same lemma to finv gives 
+
+Rc0 (finv ) − R c0 (f ∗) ≥ μℓ
+
+2 (c0 − cinv )2∥B∥2 
+
+> F
+
+.
+
+By the non-degeneracy assumption in the corollary, ∥B∥2 
+
+> F
+
+> 0. Since cinv ̸ = c0 by Assump-tion 4, the denominator is strictly positive. Dividing the two inequalities yields 
+
+Rc0 (fL) − R c0 (f ∗)
+
+Rc0 (finv ) − R c0 (f ∗) ≤ Lℓ
+
+μℓ
+
+(c0 − bcL)2
+
+(c0 − cinv )2 .
+
+The strict improvement condition follows immediately: if 
+
+|c0 − bcL| <
+
+r μℓ
+
+Lℓ
+
+|c0 − cinv |,
+
+S38 then the right-hand side is strictly smaller than 1, and hence 
+
+Rc0 (fL) − R c0 (f ∗) < Rc0 (finv ) − R c0 (f ∗).
+
+C.15 Proof of Corollary 3 
+
+Proof. For a fixed number of source domains E, this corollary is conditional on Assumption 5: it analyzes any learned representation satisfying the perturbation model, not a consequence of Proposition 1. For each source domain, define the perturbed source estimator by 
+
+eβ(e) ∈ arg min 
+
+> β∈B
+
+eRemp  
+
+> e
+
+(β),
+
+where eRemp  
+
+> e
+
+(β) = n−1
+
+> e
+
+Pne 
+
+> i=1
+
+ℓCE (β ez(e) 
+
+> c,i
+
+, y (e) 
+
+> i
+
+) is the empirical cross-entropy risk built from perturbed causal features. For this representation-bound corollary, use the same target-risk notation for the cross-entropy risk conditional on the target summary: 
+
+R0(β) = EℓCE 
+
+ β(Z(0)  
+
+> c
+
++ ξ(0)  
+
+> c
+
+), Y (0)  | bν0
+
+ .
+
+Let bνe = 1
+
+> ne
+
+Pne 
+
+> i=1
+
+δz(e)
+
+> s,i
+
+denote the oracle empirical style measure used in Theorem 2, and let bβ(e) denote the source estimator trained with the oracle causal representation. We first record two deterministic perturbation inequalities. 
+
+Empirical-measure perturbation. For each domain e, couple the i-th oracle style point 
+
+z(e) 
+
+> s,i
+
+with its generic representation counterpart ez(e) 
+
+> s,i
+
+. This admissible coupling gives 
+
+W1(eνe, bνe) ≤
+
+Z
+
+∥u − v∥2 dπ e(u, v)= 1
+
+neneX
+
+> i=1
+
+ez(e) 
+
+> s,i
+
+− z(e) 
+
+> s,i 2
+
+= 1
+
+neneX
+
+> i=1
+
+∥ξ(e) 
+
+> s,i
+
+∥2.
+
+Here πe is the deterministic empirical coupling that assigns mass 1 /n e to each pair ( ez(e) 
+
+> s,i
+
+, z(e) 
+
+> s,i
+
+). Assumption 5 controls the displacement moments: 
+
+E∥ξ(e) 
+
+> s,i
+
+∥2 ≤ Cϵ rep , E∥ξ(e) 
+
+> s,i
+
+∥22 ≤ Cϵ 2rep .
+
+Consequently, 
+
+EW1(eνe, bνe) ≤ 1
+
+neneX
+
+> i=1
+
+E∥ξ(e) 
+
+> s,i
+
+∥2 ≤ Cϵ rep ,
+
+EW1(eνe, bνe)2 ≤ E
+
+ 1
+
+neneX
+
+> i=1
+
+∥ξ(e) 
+
+> s,i
+
+∥2
+
+!2
+
+≤ 1
+
+neneX
+
+> i=1
+
+E∥ξ(e) 
+
+> s,i
+
+∥22 ≤ Cϵ 2rep ,
+
+S39 where the penultimate inequality is Jensen’s inequality applied to the empirical average. 
+
+Source-estimator perturbation. Let bRe be the empirical cross-entropy risk formed with the oracle causal representation, and let eRe(β) = n−1
+
+> e
+
+P 
+
+> i
+
+ℓCE (β ez(e) 
+
+> c,i
+
+, y (e) 
+
+> i
+
+) be the empirical risk formed with the generic causal representation. Both minimizers are taken over the same convex set B, so we avoid unconstrained first-order equalities. Let ∆e = eβ(e) − bβ(e).
+
+By the μrep -strong convexity of eRe and constrained optimality of eβ(e),
+
+μrep 
+
+2 ∥∆e∥2 
+
+> F
+
+≤ eRe( bβ(e)) − eRe( eβ(e)).
+
+Since bβ(e) minimizes bRe over B,
+
+bRe( bβ(e)) − bRe( eβ(e)) ≤ 0.
+
+Thus μrep 
+
+2 ∥∆e∥2 
+
+> F
+
+≤
+
+Z 10
+
+D
+
+∇( eRe − bRe)( bβ(e) + t∆e), bβ(e) − eβ(e)
+
+E
+
+> F
+
+dt. 
+
+Taking absolute values, the representation-Lipschitz gradient condition gives, uniformly over 
+
+β ∈ B ,
+
+∇ eRe(β) − ∇ bRe(β) F
+
+≤ 1
+
+neneX
+
+> i=1
+
+L∇z ∥ξ(e) 
+
+> c,i
+
+∥2.
+
+Consequently, after absorbing constants, 
+
+eβ(e) − bβ(e)
+
+> F
+
+≤ C L∇z
+
+μrep 
+
+1
+
+neneX
+
+> i=1
+
+∥ξ(e) 
+
+> c,i
+
+∥2.
+
+Hence 
+
+E eβ(e) − bβ(e)
+
+> F
+
+≤ O 
+
+L∇z
+
+μrep 
+
+ϵrep 
+
+
+
+, E eβ(e) − bβ(e) 2
+
+> F
+
+≤ O 
+
+L2
+
+> ∇z
+
+μ2rep 
+
+ϵ2rep 
+
+
+
+.
+
+Repeat the deterministic decomposition of Theorem 2 with generic measures; the generic weights are non-negative and sum to one: 
+
+eβ(0) − β(0)  
+
+> ∗F
+
+≤ X  
+
+> e∈eNK(0)
+
+ewe eβ(e) − β(e) 
+
+> ∗F
+
++ Lβ
+
+X  
+
+> e∈eNK(0)
+
+eweW1(νe, ν 0).
+
+The first term is bounded by 
+
+X  
+
+> e∈eNK(0)
+
+ewe eβ(e) − β(e) 
+
+> ∗F
+
+≤ X  
+
+> e∈eNK(0)
+
+ewe bβ(e) − β(e) 
+
+> ∗F
+
++ X  
+
+> e∈eNK(0)
+
+ewe eβ(e) − bβ(e)
+
+> F
+
+≤ max 
+
+> 1≤e≤E
+
+bβ(e) − β(e) 
+
+> ∗F
+
++ max 
+
+> 1≤e≤E
+
+eβ(e) − bβ(e)
+
+> F
+
+.
+
+S40 Taking expectations, the first maximum is controlled by Lemma 3. The second maximum is controlled by the uniform perturbation bound above. In the fixed-source formulation stated in the main text, the maximum over e = 1 , . . . , E is absorbed into the constant; equivalently, 
+
+E max 
+
+> 1≤e≤E
+
+eβ(e) − bβ(e)
+
+> F
+
+≤ O 
+
+L∇z
+
+μrep 
+
+ϵrep 
+
+
+
+.
+
+If the number of source domains is itself taken asymptotic, the same argument may retain the corresponding logarithmic maximal factor explicitly. For the second term, apply the Wasserstein triangle inequality through the generic empir-ical measures: 
+
+W1(νe, ν 0) ≤ W 1(νe, eνe) + W1(eνe, eν0) + W1(eν0, ν 0).
+
+The outer two terms satisfy 
+
+W1(νe, eνe) ≤ W 1(νe, bνe) + W1(bνe, eνe), W1(eν0, ν 0) ≤ W 1(bν0, ν 0) + W1(eν0, bν0).
+
+Averaging these inequalities under the generic weights gives 
+
+E
+
+ X  
+
+> e∈eNK(0)
+
+eweW1(νe, eνe)
+
+
+
+≤ E max  
+
+> 1≤e≤E
+
+W1(νe, bνe) + E max  
+
+> 1≤e≤E
+
+W1(bνe, eνe)
+
+≤ O (Γ( nmin , E, d s) + ϵrep ) ,
+
+and similarly 
+
+EW1(eν0, ν 0) ≤ EW1(bν0, ν 0) + EW1(eν0, bν0)
+
+≤ O (γ(n0, d s) + ϵrep ) .
+
+It remains to control the generic KNN interpolation term. Let N ∗ 
+
+> K
+
+(0) be the true K
+
+nearest neighbors of ν0 on the oracle space of style distributions, as in the proof of Lemma 6. By the greedy definition of eNK (0), max   
+
+> e∈eNK(0)
+
+W1(eνe, eν0) ≤ max    
+
+> j∈N ∗
+> K(0)
+
+W1(eνj , eν0)
+
+≤ R∗ 
+
+> K
+
++ max  
+
+> 1≤j≤E
+
+W1(νj , bνj ) + max  
+
+> 1≤j≤E
+
+W1(bνj , eνj )+ W1(ν0, bν0) + W1(bν0, eν0).
+
+Taking expectations term by term gives 
+
+E max   
+
+> e∈eNK(0)
+
+W1(eνe, eν0)
+
+≤ ER∗ 
+
+> K
+
++ E max  
+
+> 1≤j≤E
+
+W1(νj , bνj ) + E max  
+
+> 1≤j≤E
+
+W1(bνj , eνj )+ EW1(ν0, bν0) + EW1(bν0, eν0)
+
+≤ O 
+
+KE
+
+1/d M
+
++ Γ( nmin , E, d s) + γ(n0, d s) + ϵrep 
+
+!
+
+.
+
+S41 This argument does not require the top-K set to be stable under perturbation; it only uses the order-statistic comparison with the true K nearest oracle neighbors. Combining the preceding bounds gives 
+
+E
+
+h eβ(0) − β(0)  
+
+> ∗F
+
+i
+
+≤ O Rc
+
+μ
+
+rdβ + log Enmin 
+
++ γ(n0, d s) + Γ( nmin , E, d s) + 
+
+KE
+
+1/d M
+
+!
+
++ O
+
+ L∇z
+
+μrep 
+
++ Lβ
+
+
+
+ϵrep 
+
+
+
+,
+
+which proves the parameter bound. For the excess-risk statement we first record the squared parameter bound. Let 
+
+Eorc = Rc
+
+μ
+
+rdβ + log Enmin 
+
++γ(n0, d s)+Γ( nmin , E, d s)+ 
+
+KE
+
+1/d M
+
+, Erep =
+
+L∇z
+
+μrep 
+
++ Lβ
+
+
+
+ϵrep .
+
+The deterministic decomposition above has the form 
+
+eβ(0) − β(0)  
+
+> ∗F
+
+≤ Aglm + Ameas + Aknn + Arep ,
+
+where the first three terms are the oracle GLM, empirical-measure, and KNN-radius terms, while Arep collects the causal-representation estimator perturbation and the style-measure perturbation. Using ( a1 + a2 + a3 + a4)2 ≤ 4 P4 
+
+> j=1
+
+a2 
+
+> j
+
+and the second-moment versions of Lemmas 3, 4, and 6, 
+
+E
+
+eβ(0) − β(0) 
+
+> ∗
+> 2
+> F
+
+
+
+≤ CE A2glm + A2meas + A2knn + A2rep 
+
+
+
+≤ O  E2orc + E2rep 
+
+ .
+
+Equivalently, writing out the rates, 
+
+E
+
+eβ(0) − β(0) 
+
+> ∗
+> 2
+> F
+
+
+
+≤ O R2 
+
+> c
+
+(dβ + log E)
+
+μ2nmin 
+
++ γ(n0, d s)2 + Γ( nmin , E, d s)2 +
+
+KE
+
+2/d M
+
+!
+
++ O
+
+"L∇z
+
+μrep 
+
++ Lβ
+
+2
+
+ϵ2rep 
+
+#
+
+.
+
+For a target example, the centered-logit discrepancy between the generic-representation pre-dictor and the oracle predictor is bounded by 
+
+ΠC
+
+h eβ(0) (Zc + ξc) − β(0)  
+
+> ∗
+
+Zc
+
+i
+
+> 2
+
+≤
+
+ eβ(0) − β(0) 
+
+> ∗
+
+
+
+Zc 2
+
++ eβ(0) ξc 2
+
+≤ Rc eβ(0) − β(0)  
+
+> ∗F
+
++ Rβ ∥ξc∥2.
+
+S42 Squaring the preceding display and using ( a + b)2 ≤ 2a2 + 2 b2 gives 
+
+ΠC
+
+h eβ(0) (Zc + ξc) − β(0)  
+
+> ∗
+
+Zc
+
+i 22
+
+≤ 2R2 
+
+> c
+
+eβ(0) − β(0) 
+
+> ∗
+> 2
+> F
+
++ 2 R2 
+
+> β
+
+∥ξc∥22.
+
+Applying the global upper-smoothness half of Lemma 7 and then taking expectation, 
+
+E
+
+h
+
+R0( eβ(0) ) − R 0(β(0)  
+
+> ∗
+
+)
+
+i
+
+≤ CE
+
+
+
+ΠC
+
+h eβ(0) (Zc + ξc) − β(0)  
+
+> ∗
+
+Zc
+
+i 22
+
+
+
+≤ CR 2 
+
+> c
+
+E
+
+eβ(0) − β(0) 
+
+> ∗
+> 2
+> F
+
+
+
++ CR 2 
+
+> β
+
+E∥ξc∥22
+
+≤ O  R2 
+
+> c
+
+E2orc + R2 
+
+> c
+
+E2rep + R2 
+
+> β
+
+ϵ2rep 
+
+ .
+
+The last term is the direct logit perturbation caused by evaluating the final classifier on 
+
+Zc + ξc rather than on Zc.
+
+## References 
+
+Biau, G.; and Devroye, L. 2015. Lectures on the Nearest Neighbor Method . Springer. Boucheron, S.; Lugosi, G.; and Massart, P. 2013. Concentration Inequalities: A Nonasymp-totic Theory of Independence . Oxford University Press. Cui, Y.; Jia, M.; Lin, T.-Y.; Song, Y.; and Belongie, S. 2019. Class-Balanced Loss Based on Effective Number of Samples. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .Devroye, L.; Gy¨ orfi, L.; and Lugosi, G. 1996. A Probabilistic Theory of Pattern Recognition .Springer. Fournier, N.; and Guillin, A. 2015. On the Rate of Convergence in Wasserstein Distance of the Empirical Measure. Probability Theory and Related Fields , 162(3–4): 707–738. McCullagh, P.; and Nelder, J. A. 1989. Generalized Linear Models . Chapman and Hall, 2 edition. Tropp, J. A. 2012. User-Friendly Tail Bounds for Sums of Random Matrices. Foundations of Computational Mathematics , 12(4): 389–434. van der Vaart, A. W. 1998. Asymptotic Statistics . Cambridge University Press. Vershynin, R. 2018. High-Dimensional Probability: An Introduction with Applications in Data Science . Cambridge University Press. Villani, C. 2009. Optimal Transport: Old and New . Springer. Wainwright, M. J. 2019. High-Dimensional Statistics: A Non-Asymptotic Viewpoint . Cam-bridge University Press. S43

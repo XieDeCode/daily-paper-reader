@@ -6,52 +6,55 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-28
-- 运行时间：2026-07-28 21:51:01 UTC
+- 最新运行日期：2026-07-30
+- 运行时间：2026-07-30 21:29:19 UTC
 - 运行状态：成功
-- 本次总论文数：10
-- 精读区：4
-- 速读区：6
+- 本次总论文数：11
+- 精读区：7
+- 速读区：4
 
 ### 今日简报（AI）
-今日推荐10篇论文，精读聚焦高分高光谱图像分类基准与作物类型数据集清洗方法。  
-最值得看的方向：大规模高分辨率高光谱图像分类基准（9.0分）与嵌入异常检测清洗技术（9.0分）。  
-下一步建议：可关注高光谱遥感与农业作物监测的交叉应用，提升数据集质量的方法值得参考。
-- 详情：[/202607/28/README](/202607/28/README)
+今日共收录11篇论文，精读7篇，重点聚焦于遥感多模态大模型的后训练能力差距驱动方法。
+最值得关注的是《Filling Before Advancing》提出的面向遥感场景的多模态大模型能力差距后训练策略（9.0分），以及红外多帧超分基准IR275K（7.0分）。
+建议优先阅读精读列表中的遥感MLLM后训练论文，其方法对专业场景模型优化具参考价值，速读中可关注红外超分与植物表型分割的新基准。
+- 详情：[/202607/30/README](/202607/30/README)
 
 ### 精读区论文标签
-1. [HyperImageNet: A Large-Scale High-Spatial Resolution Hyperspectral Imagery Classification Benchmark](/202607/28/2607.21050v2-hyperimagenet-a-large-scale-high-spatial-resolution-hyperspectral-imagery-classification-benchmark)  
+1. [Filling Before Advancing: Capability-Gap-Driven Post-Training for Scenario-Specialized Remote Sensing MLLMs](/202607/30/2607.22205v1-filling-before-advancing-capability-gap-driven-post-training-for-scenario-specialized-remote-sensing-mllms)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：提出HyperImageNet基准，包含HyperFree基础模型评估
-2. [Embeddings based Anomaly Detection for Cleaning Global Crop Type Reference Datasets](/202607/28/2607.23908v1-embeddings-based-anomaly-detection-for-cleaning-global-crop-type-reference-datasets)  
+   evidence：遥感多模态大语言模型的后训练框架以实现场景专业化
+2. [Filling Before Advancing: Capability-Gap-Driven Post-Training for Scenario-Specialized Remote Sensing MLLMs](/202607/30/2607.22205v2-filling-before-advancing-capability-gap-driven-post-training-for-scenario-specialized-remote-sensing-mllms)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：利用地理空间基础模型嵌入进行异常检测
-3. [Test-Time Adaptation via Dual Distillation for Videos Under Severe Distribution Shifts](/202607/28/2607.24611v1-test-time-adaptation-via-dual-distillation-for-videos-under-severe-distribution-shifts)  
+   evidence：遥感多模态大模型的能力差距后训练
+3. [Few-Shot Open-Vocabulary Remote Sensing Segmentation via Textual Inversion](/202607/30/2607.25563v1-few-shot-open-vocabulary-remote-sensing-segmentation-via-textual-inversion)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：基于冻结基础模型的文本反转实现少样本开放词汇遥感分割
+4. [Beyond Zooming: Learning Multi-Tool Visual Reasoning for Ultra-High-Resolution Remote Sensing](/202607/30/2607.25993v1-beyond-zooming-learning-multi-tool-visual-reasoning-for-ultra-high-resolution-remote-sensing)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：面向超高分遥感的多工具视觉推理，突破缩放局限
+5. [Chaos Is a LADDER: Domain Generalization Beyond Invariance via Reweighting](/202607/30/2607.26458v1-chaos-is-a-ladder-domain-generalization-beyond-invariance-via-reweighting)  
    标签：评分：9.0/10、query:cross-domain
-   evidence：针对严重分布偏移的视频测试时适应
-4. [Filling Before Advancing: Capability-Gap-Driven Post-Training for Scenario-Specialized Remote Sensing MLLMs](/202607/28/2607.22205v1-filling-before-advancing-capability-gap-driven-post-training-for-scenario-specialized-remote-sensing-mllms)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：遥感多模态大语言模型场景专业化后训练
+   evidence：通过风格重加权实现超越不变性的域泛化
+6. [Unified Video Dense Prediction from Disjoint Data](/202607/30/2607.21592v1-unified-video-dense-prediction-from-disjoint-data)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：通过蒸馏从不相交的领域特定数据集学习统一视频模型
+7. [Searching for Robust Augmentations to Improve Out-of-Domain Generalization in Dermoscopic Skin Cancer Classification](/202607/30/2607.26765v1-searching-for-robust-augmentations-to-improve-out-of-domain-generalization-in-dermoscopic-skin-cancer-classification)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：通过数据增强提升皮肤癌分类的域外泛化
 
 ### 速读区论文标签
-1. [PRiSM: Prototype Regularization for Few-Shot VLMs](/202607/28/2607.17820v1-prism-prototype-regularization-for-few-shot-vlms)  
-   标签：评分：7.0/10、query:world-models
-   evidence：针对视觉语言模型的少样本适应问题，属于多模态基础模型研究
-2. [Optimal Transport Image Representation and Deep Covariance Alignment (CORAL) for Control Valve Stiction Detection](/202607/28/2607.22486v2-optimal-transport-image-representation-and-deep-covariance-alignment-coral-for-control-valve-stiction-detection)  
+1. [IR275K: A Benchmark for Infrared Multi-Frame Super-Resolution Toward Efficient Remote Sensing](/202607/30/2607.22380v1-ir275k-a-benchmark-for-infrared-multi-frame-super-resolution-toward-efficient-remote-sensing)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：遥感超分辨率基准数据集
+2. [Perturbation-Aware Diffusion-Guided Hybrid Segmentation for Robust and Annotation-Efficient Plant Stress Phenotyping](/202607/30/2607.23680v1-perturbation-aware-diffusion-guided-hybrid-segmentation-for-robust-and-annotation-efficient-plant-stress-phenotyping)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：深度相关对齐（CORAL）处理域偏移
-3. [Farmland Extent and Visible Boundary Mapping from 1 m NAIP Imagery Using Residual U-Net and Text-Prompted SAM 3 Refinement](/202607/28/2607.21881v1-farmland-extent-and-visible-boundary-mapping-from-1-m-naip-imagery-using-residual-u-net-and-text-prompted-sam-3-refinement)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：应用基础模型SAM进行遥感农田边界映射
-4. [LowAux-RDNet: Low-Pass Residual Supervision with Scene-Balanced Real-World Training for Single-Image Reflection Removal](/202607/28/2607.22707v1-lowaux-rdnet-low-pass-residual-supervision-with-scene-balanced-real-world-training-for-single-image-reflection-removal)  
+   evidence：扩散引导的语义分割域适应
+3. [SeasonStereo: Robust Dense Stereo Matching for Multi-Date Satellite Imagery via Generative AI](/202607/30/2607.27139v1-seasonstereo-robust-dense-stereo-matching-for-multi-date-satellite-imagery-via-generative-ai)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：利用基础模型先验进行卫星影像稠密立体匹配
+4. [Toward Seasonal Guidelines for Robust Deep-Learning Sentinel-2 Building Detection in Different Area Types](/202607/30/2607.19994v2-toward-seasonal-guidelines-for-robust-deep-learning-sentinel-2-building-detection-in-different-area-types)  
    标签：评分：6.0/10、query:cross-domain
-   evidence：跨数据集泛化反射去除
-5. [Perturbation-Aware Diffusion-Guided Hybrid Segmentation for Robust and Annotation-Efficient Plant Stress Phenotyping](/202607/28/2607.23680v1-perturbation-aware-diffusion-guided-hybrid-segmentation-for-robust-and-annotation-efficient-plant-stress-phenotyping)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：跨域迁移鲁棒性语义分割
-6. [GOTS: Greedy Orthogonal Token Selection for High-Resolution Vision-Language Models](/202607/28/2607.23913v1-gots-greedy-orthogonal-token-selection-for-high-resolution-vision-language-models)  
-   标签：评分：6.0/10、query:world-models
-   evidence：视觉语言模型令牌压缩方法，对多模态基础模型有借鉴意义
+   evidence：跨季节和区域类型的稳健建筑检测，涉及域偏移问题
 
 
 <div class="dpr-home-promo-card">
