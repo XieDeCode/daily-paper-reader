@@ -6,55 +6,77 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-30
-- 运行时间：2026-07-30 21:29:19 UTC
+- 最新运行日期：2026-08-02
+- 运行时间：2026-08-02 20:18:44 UTC
 - 运行状态：成功
-- 本次总论文数：11
+- 本次总论文数：19
 - 精读区：7
-- 速读区：4
+- 速读区：12
 
 ### 今日简报（AI）
-今日共收录11篇论文，精读7篇，重点聚焦于遥感多模态大模型的后训练能力差距驱动方法。
-最值得关注的是《Filling Before Advancing》提出的面向遥感场景的多模态大模型能力差距后训练策略（9.0分），以及红外多帧超分基准IR275K（7.0分）。
-建议优先阅读精读列表中的遥感MLLM后训练论文，其方法对专业场景模型优化具参考价值，速读中可关注红外超分与植物表型分割的新基准。
-- 详情：[/202607/30/README](/202607/30/README)
+今日共读19篇论文，其中精读7篇、速读12篇，重点覆盖多模态视觉理解与生成两大方向。最值得关注的是RGBT跟踪中的时空条件去噪Transformer（9.0分）和紧凑统一图像理解生成模型Argus-Unified（9.0分），两者均代表模态缺失与效率优化的前沿进展。建议普通读者优先浏览这两篇精读论文，并结合三篇8.0分速读工作，了解视觉编码与自回归生成的新思路。
+- 详情：[/202608/02/README](/202608/02/README)
 
 ### 精读区论文标签
-1. [Filling Before Advancing: Capability-Gap-Driven Post-Training for Scenario-Specialized Remote Sensing MLLMs](/202607/30/2607.22205v1-filling-before-advancing-capability-gap-driven-post-training-for-scenario-specialized-remote-sensing-mllms)  
+1. [Spatio-Temporal Conditional Denoising Transformer for Modality-Missing RGBT Tracking](/202608/02/2607.24701v1-spatio-temporal-conditional-denoising-transformer-for-modality-missing-rgbt-tracking)  
+   标签：评分：9.0/10、query:stm
+   evidence：面向模态缺失RGBT跟踪的时空Transformer模型
+2. [Argus-Unified: Towards A Compact and Economical Unified Model for Image Understanding and Generation](/202608/02/2607.25527v1-argus-unified-towards-a-compact-and-economical-unified-model-for-image-understanding-and-generation)  
+   标签：评分：9.0/10、query:world-models
+   evidence：利用预训练视觉语言模型和混合视觉标记构建紧凑、低成本的统一多模态模型
+3. [Few-Shot Open-Vocabulary Remote Sensing Segmentation via Textual Inversion](/202608/02/2607.25563v1-few-shot-open-vocabulary-remote-sensing-segmentation-via-textual-inversion)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：遥感多模态大语言模型的后训练框架以实现场景专业化
-2. [Filling Before Advancing: Capability-Gap-Driven Post-Training for Scenario-Specialized Remote Sensing MLLMs](/202607/30/2607.22205v2-filling-before-advancing-capability-gap-driven-post-training-for-scenario-specialized-remote-sensing-mllms)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：遥感多模态大模型的能力差距后训练
-3. [Few-Shot Open-Vocabulary Remote Sensing Segmentation via Textual Inversion](/202607/30/2607.25563v1-few-shot-open-vocabulary-remote-sensing-segmentation-via-textual-inversion)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：基于冻结基础模型的文本反转实现少样本开放词汇遥感分割
-4. [Beyond Zooming: Learning Multi-Tool Visual Reasoning for Ultra-High-Resolution Remote Sensing](/202607/30/2607.25993v1-beyond-zooming-learning-multi-tool-visual-reasoning-for-ultra-high-resolution-remote-sensing)  
-   标签：评分：9.0/10、query:rs-fm
-   evidence：面向超高分遥感的多工具视觉推理，突破缩放局限
-5. [Chaos Is a LADDER: Domain Generalization Beyond Invariance via Reweighting](/202607/30/2607.26458v1-chaos-is-a-ladder-domain-generalization-beyond-invariance-via-reweighting)  
+   evidence：利用文本反演将预训练的视觉-语言模型适配到遥感分割任务
+4. [Do Unified Multimodal Models Think in One Space? A Lens Through Cross-Branch Steering](/202608/02/2607.26411v1-do-unified-multimodal-models-think-in-one-space-a-lens-through-cross-branch-steering)  
+   标签：评分：9.0/10、query:world-models
+   evidence：通过跨分支语义引导探究统一多模态模型的统一语义空间问题
+5. [Representation Trajectories Matters: Complementary Evidence for OOD Detection and Image Classification](/202608/02/2607.26565v1-representation-trajectories-matters-complementary-evidence-for-ood-detection-and-image-classification)  
    标签：评分：9.0/10、query:cross-domain
-   evidence：通过风格重加权实现超越不变性的域泛化
-6. [Unified Video Dense Prediction from Disjoint Data](/202607/30/2607.21592v1-unified-video-dense-prediction-from-disjoint-data)  
+   evidence：研究分布外检测与图像分类在干净和迁移数据上的表现，直接对应分布外泛化需求
+6. [Representation Trajectories Matters: Complementary Evidence for OOD Detection and Image Classification](/202608/02/2607.26565v2-representation-trajectories-matters-complementary-evidence-for-ood-detection-and-image-classification)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：利用表示轨迹进行分布外检测与偏移数据图像分类
+7. [CD-RMOT-Bench: Benchmarking the Cross-Domain Referring Multi-Object Tracking](/202608/02/2607.25239v1-cd-rmot-bench-benchmarking-the-cross-domain-referring-multi-object-tracking)  
    标签：评分：8.0/10、query:cross-domain
-   evidence：通过蒸馏从不相交的领域特定数据集学习统一视频模型
-7. [Searching for Robust Augmentations to Improve Out-of-Domain Generalization in Dermoscopic Skin Cancer Classification](/202607/30/2607.26765v1-searching-for-robust-augmentations-to-improve-out-of-domain-generalization-in-dermoscopic-skin-cancer-classification)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：通过数据增强提升皮肤癌分类的域外泛化
+   evidence：直接研究指称多目标跟踪在视觉域偏移下的鲁棒性，并构建跨域基准
 
 ### 速读区论文标签
-1. [IR275K: A Benchmark for Infrared Multi-Frame Super-Resolution Toward Efficient Remote Sensing](/202607/30/2607.22380v1-ir275k-a-benchmark-for-infrared-multi-frame-super-resolution-toward-efficient-remote-sensing)  
-   标签：评分：7.0/10、query:rs-fm
-   evidence：遥感超分辨率基准数据集
-2. [Perturbation-Aware Diffusion-Guided Hybrid Segmentation for Robust and Annotation-Efficient Plant Stress Phenotyping](/202607/30/2607.23680v1-perturbation-aware-diffusion-guided-hybrid-segmentation-for-robust-and-annotation-efficient-plant-stress-phenotyping)  
+1. [Controlling Embedding Spaces with Text-Conditioned Transformations](/202608/02/2607.22919v1-controlling-embedding-spaces-with-text-conditioned-transformations)  
+   标签：评分：8.0/10、query:world-models
+   evidence：文本条件变换控制CLIP嵌入空间中的属性
+2. [UniGen-AR: Unifying Visual Generation with Auto-Regressive Modeling](/202608/02/2607.24157v1-unigen-ar-unifying-visual-generation-with-auto-regressive-modeling)  
+   标签：评分：8.0/10、query:world-models
+   evidence：多模态语言模型与自回归解码器实现统一视觉生成
+3. [MAViE: A Multi-scale Adaptive Vision Encoder for Fine-grained Visual Perception and Efficient Multimodal Reasoning](/202608/02/2607.24424v1-mavie-a-multi-scale-adaptive-vision-encoder-for-fine-grained-visual-perception-and-efficient-multimodal-reasoning)  
+   标签：评分：8.0/10、query:world-models
+   evidence：用于高效多模态推理的多尺度自适应视觉编码器
+4. [From Machine Learning to Large-Scale EO Products: Best Practices for Making Maps](/202608/02/2607.24532v3-from-machine-learning-to-large-scale-eo-products-best-practices-for-making-maps)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：面向大规模地球观测制图的机器学习最佳实践，与地球观测基础模型高度相关。
+5. [GeoMFD: Continual Drone-View Geo-Localization with Geometry-Aware Adapter and Margin-Field Distillation](/202608/02/2607.25788v1-geomfd-continual-drone-view-geo-localization-with-geometry-aware-adapter-and-margin-field-distillation)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：扩散引导的语义分割域适应
-3. [SeasonStereo: Robust Dense Stereo Matching for Multi-Date Satellite Imagery via Generative AI](/202607/30/2607.27139v1-seasonstereo-robust-dense-stereo-matching-for-multi-date-satellite-imagery-via-generative-ai)  
-   标签：评分：7.0/10、query:rs-fm
-   evidence：利用基础模型先验进行卫星影像稠密立体匹配
-4. [Toward Seasonal Guidelines for Robust Deep-Learning Sentinel-2 Building Detection in Different Area Types](/202607/30/2607.19994v2-toward-seasonal-guidelines-for-robust-deep-learning-sentinel-2-building-detection-in-different-area-types)  
+   evidence：持续无人机视角地理定位通过几何感知适配与蒸馏适应多样新环境，同时缓解域偏移和遗忘
+6. [FiRE: Enhancing MLLMs with Fine-Grained Context Learning for Complex Image Retrieval](/202608/02/2607.27959v1-fire-enhancing-mllms-with-fine-grained-context-learning-for-complex-image-retrieval)  
+   标签：评分：7.0/10、query:world-models
+   evidence：面向基于多模态大语言模型的图像检索提出细粒度上下文学习，提升多模态基础模型的理解能力。
+7. [FootprintNet: State-Transition-Guided Dynamic Footprint Learning for Multi-temporal Remote Sensing Change Detection](/202608/02/2607.27969v1-footprintnet-state-transition-guided-dynamic-footprint-learning-for-multi-temporal-remote-sensing-change-detection)  
+   标签：评分：7.0/10、query:stm
+   evidence：多时序遥感变化检测中的状态转换足迹学习
+8. [MonoVoc: Decoupling Geometry and Semantics for Lightweight Monocular Open-Vocabulary 3D Gaussians](/202608/02/2607.28300v1-monovoc-decoupling-geometry-and-semantics-for-lightweight-monocular-open-vocabulary-3d-gaussians)  
+   标签：评分：7.0/10、query:world-models
+   evidence：无训练解耦几何与语义的开放词汇三维场景理解
+9. [Random Indexing for Image Change Detection: A Distance-Threshold Vocabulary Approach](/202608/02/2607.23609v1-random-indexing-for-image-change-detection-a-distance-threshold-vocabulary-approach)  
+   标签：评分：6.0/10、query:stm
+   evidence：利用距离阈值词汇进行多时相图像变化检测，属于时空图像分析方法。
+10. [DecoupleMix: Decoupled Ratio Search and Convex Allocation for Scalable VLM Data Recipes](/202608/02/2607.24516v1-decouplemix-decoupled-ratio-search-and-convex-allocation-for-scalable-vlm-data-recipes)  
+   标签：评分：6.0/10、query:world-models
+   evidence：为视觉语言模型预训练提供数据配比优化方法，支持多模态基础模型学习。
+11. [SepPrune:A Separator-based Pruning Framework for Efficient Multimodal Large Language Models](/202608/02/2607.25818v1-sepprunea-separator-based-pruning-framework-for-efficient-multimodal-large-language-models)  
+   标签：评分：6.0/10、query:world-models
+   evidence：利用分隔符令牌对多模态大模型进行剪枝
+12. [Device Invariance using Domain Adaptation on Acoustic Scene Classification](/202608/02/2607.25887v1-device-invariance-using-domain-adaptation-on-acoustic-scene-classification)  
    标签：评分：6.0/10、query:cross-domain
-   evidence：跨季节和区域类型的稳健建筑检测，涉及域偏移问题
+   evidence：在声学场景中评估DANN和CDAN领域自适应方法，方法可迁移到视觉任务
 
 
 <div class="dpr-home-promo-card">

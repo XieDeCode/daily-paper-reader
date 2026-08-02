@@ -1,0 +1,363 @@
+Title: From Machine Learning to Large-Scale EO Products: Best Practices for Making Maps
+
+URL Source: https://arxiv.org/pdf/2607.24532v3
+
+Published Time: Fri, 31 Jul 2026 01:28:23 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+# From Machine Learning to Large-Scale EO Products: Best Practices for Making Maps 
+
+Ghjulia Sialelli 1,2⋆, Robin Young 3, Yuchang Jiang 4, Cesar Aybar 5, Linus Scheibenreif 1, Damien Robert 6, Clemens Mosig 7, Adam J. Stewart 8, Jan D. Wegner 6, Aleksis Pirinen 9, Olof Mogren 9, and Konrad Schindler 1 
+
+> 1
+
+Photogrammetry and Remote Sensing, ETH Zurich, Switzerland,  
+
+> 2
+
+ETH AI Center, Zurich, Switzerland  
+
+> 3
+
+Dept. of Computer Science and Technology, University of Cambridge, UK  
+
+> 4
+
+Land Change Science, Swiss Federal Research Institute WSL, Switzerland  
+
+> 5
+
+Asterisk Labs, UK  
+
+> 6
+
+EcoVision Lab, University of Zurich, Switzerland  
+
+> 7
+
+Inst. for Earth System Science and Remote Sensing, Leipzig University, Germany  
+
+> 8
+
+Chair of Data Science in Earth Observation, TU Munich, Germany  
+
+> 9
+
+RISE Research Institutes of Sweden · Climes, Swedish Centre for Impacts of Climate Extremes · Climate AI Nordics 
+
+Abstract. Recent years have seen a rapid expansion in the production of large-scale geospatial maps derived from Earth observation (EO) data, driven largely by advances in machine learning (ML) and large comput-ing infrastructure. Although the barrier to generating such maps has dropped substantially, established best practices have yet to emerge, and design decisions made early in the pipeline can quietly propagate errors into the final product. Producing a technically sound and scientifically credible product remains challenging. Choices made at every stage are tightly coupled: preprocessing decisions shape the training signal, dataset design governs what the model can learn and how reliably its perfor-mance can be assessed, and global-scale inference introduces engineering challenges in compute and data access at scale, as well as artifact mit-igation. Furthermore, uncertainty quantification and independent map validation each require dedicated methodological attention that is often underestimated. This paper presents a concise, end-to-end account of the recommended practices spanning the pipeline from satellite data to an operational map product. We organize the discussion around six inter-connected themes: the EO data infrastructure landscape, data selection and preprocessing, ML dataset construction and model training, uncer-tainty quantification, map production and distribution, and validation. This paper is a condensed version of a longer guide that provides greater depth across all stages, accessible online at ghjuliasialelli.github.io/ML-EO-Maps/. 
+
+Keywords: Earth observation · Machine learning · Remote sensing ·
+
+Best practices · Geospatial mapping  
+
+> ⋆
+
+Corresponding author: gsialelli@ethz.ch . This research was supported by the ETH AI Center through an ETH AI Center doctoral fellowship to Ghjulia Sialelli. arXiv:2607.24532v3 [cs.LG] 30 Jul 2026 2 G. Sialelli et al. 
+
+## 1 Introduction 
+
+A growing range of global products is now routinely generated at resolutions that would have been infeasible a few years ago, enabled by advances in model capacity and the availability of large-scale compute. These products span diverse thematic areas, from human settlement [9] to vegetation structure [17, 36] and natural hazards [20]. ML has shifted the paradigm from locally calibrated mod-els toward single, globally generalizing models trained on heterogeneous data, attracting a growing number of practitioners from both the EO and ML com-munities. Yet, the resulting workflow introduces challenges that are largely new to the ML community. When considering the full workflow for a global map, every stage presents domain-specific challenges that are tightly coupled: preprocessing decisions shape the training signal, dataset design governs what the model can learn and how reliably its performance can be assessed, and global-scale inference introduces engineering challenges in compute, data movement, and artifact mitigation. Fur-thermore, uncertainty quantification and independent map validation each re-quire dedicated methodological attention that is often underestimated. Much of this practical knowledge remains dispersed, siloed within specific application domains, making it difficult for practitioners to learn from one another across fields. This paper is the result of a broad effort to engage with practitioners across the EO and ML communities. We distill common practices, recurring pitfalls, and recommended approaches into a concise account organized around six in-terconnected themes: the EO data infrastructure landscape, data selection and preprocessing, ML dataset construction and model training, uncertainty quantifi-cation, map production and distribution, and validation. We hope this document serves as both a practical reference and an invitation for continued exchange, and refer readers to the online version for additional depth. 
+
+## 2 EO Data Infrastructure Landscape 
+
+Researchers must navigate a complex ecosystem of satellite data sources, de-rived data products, and access platforms. The choices made at the data access level have downstream consequences that are easy to underestimate: different providers and platforms expose different processing levels and retrieval capabil-ities, which can quietly constrain the rest of the pipeline. Curated ML-ready EO datasets [8, 35] offer an accessible entry point, but adopting one means inheriting its creators’ design choices (spatiotemporal cov-erage, sampling strategy, processing pipeline) which may not match the require-ments of the downstream task. Hence, most practitioners create their own EO dataset. When starting from satellite observations, a unifying constraint is data gravity : modern EO archives have grown to a scale where even freely available data is often impractical to move, and the position of compute relative to data has become a primary design factor. This is why many large-scale workflows rely Best Practices for EO Maps 3
+
+on cloud platforms that co-locate data and compute on the cloud (more on that in §6). The access landscape ranges from canonical providers (ESA CDSE, USGS EarthExplorer, NASA Earthdata) to re-distribution platforms (Google Earth Engine, Microsoft Planetary Computer, AWS S3), each with distinct trade-offs in server-side operations, suitability for large-scale downloads, and collocated compute availability (see Tab. 1 in the appendix). A practical pattern is to treat access as a two-stage process: model development typically involves mod-est data volumes downloadable from almost any provider, while inference at scale is dominated by data movement. However, processing pipelines may differ be-tween platforms. For example, in their COPERNICUS/S2_HARMONIZED collection, Google Earth Engine automatically corrects for the radiometric offset that was introduced for Sentinel-2 data post Processing Baseline 04.00; they also apply a full preprocessing chain (thermal noise removal, data calibration, multi-looking and range-doppler terrain correction) to Sentinel-1 GRD data, rather than re-distributing the GRD product as given by ESA. This can lead to distribution shifts when a model trained on data from one provider is deployed on data from another. 
+
+## 3 Data Selection and Preprocessing 
+
+Data selection and preprocessing choices are not neutral; they encode assump-tions that propagate into the training pipeline and ultimately shape the final map product. While data selection is primarily guided by the target domain and task, it is also shaped by practical considerations such as cloud contami-nation, misalignment, and sensor artifacts. These issues can either be handled explicitly before the data reaches the model, or left for the model to learn to handle through exposure to natural variation and targeted data augmentation (see §4), saving preprocessing cost but consuming model capacity on problems that are not the target task. Beyond individual observations, how training sam-ples are distributed geographically and temporally determines what the model can learn and how well it generalizes. Furthermore, whatever pipeline is adopted for training must also be reproduced at inference time over the full mapped do-main, so every additional processing step and temporal input compounds the operational cost of deployment. While aggressive filtering is acceptable when cu-rating a training dataset, inference must still produce predictions over the entire deployment area, even in persistently difficult conditions. 
+
+Data selection. Individual observations vary in usability. For optical imagery, a common filter consists in discarding products above a certain threshold of cloud cover. However, for persistently cloudy regions, this risks discarding valu-able non-cloudy pixels. Sentinel-2 products, specifically, exhibit artifacts from incomplete orbits and split partial products (see Appendix B). Landsat 7 scenes acquired after the 2003 scan-line corrector failure exhibit systematic data gaps. If not handled explicitly, these can cause pixel duplication, bias dataset statis-tics, and produce visible seams or gaps in the final map; issues that are often 4 G. Sialelli et al. 
+
+only discovered at deployment time, forcing costly reprocessing. SAR imagery is not affected by clouds but its side-looking geometry introduces geometric dis-tortions (foreshortening, layover, shadow) [7]. Ascending and descending passes image the same terrain from opposite look angles, so combining both can fill dis-tortion gaps in mountainous regions. Furthermore, track selection can be guided by sub-swath incidence angles and DEM-derived slope alignment. 
+
+Spatio-temporal strategy. How training data is sampled geographically has a di-rect effect on what the model learns and how well it generalizes. Reference data coverage is typically uneven worldwide, e.g., OpenStreetMap offers more cover-age in the Global North than the Global South [11], reflecting not only disparities in accessibility, but also the priorities of the communities that create and cu-rate tehese datasets. Models trained without accounting for this imbalance risk learning a skewed representation of the Earth’s surface. On the temporal side, when producing a map over a given period, a few broad strategies emerge: single time-steps (most cost-efficient but sacrifice temporal information), time-series (richest, capturing seasonal variation, but memory-intensive [28]), composites (pragmatic middle ground, distilling a period into a single time-step [27]), and time series of composites [9,12,23]. The choice directly affects the volume of data that must be downloaded or streamed at inference time, which at global scale can be the binding constraint. 
+
+Preprocessing. Each correction applied during training must be replicated iden-tically at inference time, so the complexity of the preprocessing chain directly translates into operational cost at scale. Typical steps vary by sensor and, cru-cially, between providers. Sentinel-1 GRD products, for instance, may require thermal noise removal, radiometric calibration, speckle reduction, and geomet-ric/radiometric terrain correction; while Sentinel-2 L2A products require radio-metric offset handling (see Appendix C) and optional BRDF normalization [21]. 
+
+## 4 Machine Learning Dataset Construction and Model Training 
+
+With preprocessed data in hand, the focus shifts to the ML stages of the pipeline. Constructing a training dataset from EO imagery introduces challenges that have no direct analogue in standard computer vision, from spatial autocorrelation that inflates evaluation metrics, to gridding choices that silently bias sampling. On the modeling side, architecture and training decisions must be made with global-scale inference in mind, since a model that cannot run efficiently over the full mapped domain is of limited operational value. 
+
+Data formats. The data format used to store the dataset is a creation-time 
+
+decision that propagates through the entire pipeline, defining how array pay-loads are physically laid out, how metadata are encoded, and how chunks are addressed. Two broad storage patterns exist: container formats with an internal Best Practices for EO Maps 5
+
+index (HDF5, NetCDF4, GeoTIFF, COG) and key-value chunk stores (Zarr). We provide a detailed comparison in Table 2 (Appendix D). 
+
+Dataset splits. Spatial autocorrelation in labels inflates apparent performance if not handled at the splitting stage [29, 30]. We illustrate some approaches in Fig. 2 (Appendix E). Spatial K-fold block cross-validation divides the area into non-overlapping spatial blocks and assigns each to a fold. To avoid cross-fold contamination, spatial buffers between blocks can be enforced, as in [32], if the blocks cannot be large enough. A pragmatic approach consists in enforcing a distance between folds that exceeds the spatial autocorrelation range of the target variable, as in [19, 26]. 
+
+Spatial gridding. A grid defines the spatial index over which data is sampled and split. Candidate grids, ranging from Web Mercator and UTM/MGRS to Discrete Global Grid Systems such as HEALPix, differ in whether they are equal-area (ev-ery cell represents the same ground area), conformal (preserves local angles and shapes such that a square pixel corresponds to a square patch on the ground), and globally continuous (every point on the sphere belongs to exactly one cell). These properties matter for unbiased sampling, accurate area estimation, and dataset splitting. We provide an overview in Table 3 (Appendix G). We advocate decoupling the indexing strategy (how to select samples) from the patch projec-tion (the coordinate system each sample lives in). Indexing should use a global grid that minimizes over-/under-sampling and overlap; the patch projection only needs to minimize distortion at the scale of a single patch. 
+
+Model design and training. Deploying a model over the full mapped domain means that every forward pass performed during training will be repeated bil-lions of times at inference. This makes architecture choice an operational deci-sion as much as a modelling one: Vision Transformers and foundation models are increasingly explored for EO tasks [6,14], but convolutional encoder-decoders re-main the workhorse of operational pipelines [9,18] precisely because their higher throughput makes wall-to-wall inference tractable. Furthermore, the training procedure interacts with the preprocessing choices discussed in §3 via data aug-mentation. Rather than explicitly correcting for sensor artifacts in preprocessing, or missing modalities, one can instead simulate these corruptions during train-ing so the model learns to be invariant to them. To enhance spectral robustness, noise can be added to Sentinel-2 surface reflectance values [2,22]. Temporal aug-mentations, such as dropping timesteps, can simulate cloud-induced data gaps or missing modalities. Simulating narrow no-data seams in Sentinel-1 GRD mo-saics [3], as well as modeling swath boundaries, misregistration, and detector failures [25] can build resilience to specific sensor artifacts. 
+
+Model validation. Held-out test metrics (computed on the spatial splits described above) measure how well the model generalizes to new locations drawn from the same data collection process . This is essential for architecture selection, hyper-parameter tuning, and diagnosing failure modes, but it does not answer whether 6 G. Sialelli et al. 
+
+the resulting map is accurate across its full extent, especially with opportunistic data collection. We therefore distinguish model validation (estimating predic-tive performance on data drawn from the same collection as the training set) from map validation (assessing the final product against independently collected reference data with a known sampling design, see §7). 
+
+## 5 Uncertainty Quantification 
+
+International frameworks for climate reporting require quantified uncertainty [5], and carbon credit markets depend on it [10]. Uncertainty is what transforms a map from a static product into a scientifically credible tool that guides action. 
+
+Sources. Total uncertainty arises from upstream (input) uncertainty (sensor noise, atmospheric correction errors, cloud mask failures), label uncertainty (mea-surement error in reference data), and model (epistemic) uncertainty. Many un-certainty quantification (UQ) methods address only model uncertainty; the gap should be made explicit. 
+
+Methods. No method is simultaneously cheap, scalable, and well-calibrated. Gaussian Processes are calibrated (if the kernel is correct) but do not scale. Deep ensembles [16] scale but are expensive and can be miscalibrated for spatial data: members trained on the same spatially autocorrelated data agree where they are collectively wrong. Heteroskedastic regression is cheap but blind to epis-temic uncertainty. Conformal prediction [38] provides distribution-free coverage guarantees as a cheap post-hoc wrapper around any predictor, but the guarantee is marginal. For classification tasks, conformalized quantile regression [31] im-proves on this by calibrating model-produced prediction intervals, but coverage holds on average over the test distribution, not for any specific subset of it. Users should articulate the intended use of uncertainty before choosing a method. 
+
+Calibration. Reporting uncertainty without verifying calibration is akin to re-porting accuracy without a test set. We recommend coverage and reliability plots, standardized residuals ( z-scores with ideal mean 0 and std 1), and proper scoring rules (interval score, CRPS). 
+
+Spatial structure. Map errors are spatially correlated. If pixel errors were inde-pendent, aggregate uncertainty would shrink as 1/√n with the number of pixels. But when errors are positively correlated, they do not cancel upon averaging. Wadoux et al . [39] demonstrated that several high-profile studies reported ag-gregate uncertainty without accounting for spatial autocorrelation, leading to substantially underestimated confidence intervals. Johnson et al . [15] found that residual variance from spatial correlation dominated all other sources of un-certainty for biomass aggregated to ownership parcels. This remains one of the largest gaps between current practice and what is needed for rigorous area-based reporting. As a practical minimum, we recommend characterizing residual spa-tial correlation in a small number of ecologically distinct validation regions. Best Practices for EO Maps 7
+
+## 6 Map Production and Distribution 
+
+Producing a map from a trained model is often treated as an engineering detail, but the choices made at this stage (how to orchestrate inference, how to handle tiling artifacts, how to compress and distribute the result) directly affect the quality and usability of the final product. 
+
+Compute environments. The computational strategy for global-scale inference is shaped by the data gravity constraint introduced in §A: at petabyte scale, where the data is stored relative to compute determines the feasibility of the pipeline. We identify two regimes. In the data-to-compute regime, data is downloaded to (or streamed on) institutional clusters. This regime is attractive when compute is subsidized, but bounded by network bandwidth, provider-side rate limits, and egress costs. In the compute-to-data regime, compute is provisioned in the same cloud region where the data resides, eliminating transfer penalties. The cost of cloud compute can however escalate quickly. Spot instances (while substantially cheaper) increase complexity as they require checkpoint-and-resume pipelines to handle preemption. 
+
+Artifact mitigation. Due to memory constraints, EO scenes are partitioned into patches for inference that require merging in postprocessing. Further, models that work with spatial context may exhibit spatial bias: predictions degrade toward patch borders due to zero-padding, non-unary strides, and windowed attention [41]. Two main strategies [13] address this: (a) overlapping patches with weighted blending , where redundant outputs are merged using distance-based weights [23, 26]; and (b) padding and cropping , where each patch is expanded with context and only center predictions are retained [3, 27]. We illustrate these approaches in Fig. 3 (Appendix F). 
+
+Sharing. To maximize impact, map products should adhere to the FAIR princi-ples [40] with rich metadata and persistent identifiers, and should support both large-scale batch downloads and interactive visualization. Cloud Optimized Geo-TIFFs and Zarr are both cloud-native formats seeing wide adoption, though each has limitations (Table 2). Indexing with SpatioTemporal Asset Catalog (STAC, a standardized specification for describing geospatial assets with consistent spa-tial and temporal metadata) makes products discoverable and searchable across archives. 
+
+## 7 Map Validation 
+
+Map validation assesses the final product against systematically and indepen-dently collected reference data covering the full mapped domain, whereas model validation (§4) is limited to estimating predictive performance on data drawn from the same collection as the training set. Such a systematic evaluation is what stands between map production and map credibility, yet accuracy assess-ment methodology is frequently under-reported [34]. 8 G. Sialelli et al. 
+
+Common sources of confusion. A held-out test set drawn from the same data collection process as the training set shares its biases and coverage gaps; it mea-sures generalization within that distribution, not quality of the map as a whole. Furthermore, uncertainty quantification methods have limitations (see §5), and comparison against another map only measures inter-product consistency. None of these approaches are substitutes for independent validation, which requires reference data that is independent of the training pipeline, collected through a separate process, ideally with a sampling design that covers the full mapped domain. 
+
+Probability sampling and design-based assessment. The gold standard for map accuracy assessment is a probability-based sampling design where every loca-tion in the mapped domain has a known, non-zero chance of being selected for verification [33]. This allows unbiased estimation of accuracy over the full map, not just at convenient or available locations. In practice, this means drawing a sample (e.g., stratified random), collecting reference labels for those locations, and constructing area-weighted confusion matrices that account for differences in how densely each stratum was sampled [24]. Per-class accuracy should be re-ported from both the user’s perspective (how often a predicted class is correct, or precision) and the producer’s perspective (how often an actual class is detected, or recall) and accompanied by confidence intervals (see §5). 
+
+Beyond probability sampling. For some products, e.g., continuous-values maps like biomass, strict probability sampling may not be practical. Alternative vali-dation using opportunistically sampled observations can provide valuable verifi-cation, but practitioners should identify which ecoregions, land cover types, and target variable ranges are most underrepresented in the reference data, and pri-oritize additional data collection accordingly [4]. The limitations should also be stated explicitly: such methods measure agreement at sampled locations rather than accuracy over the full map extent [37]. 
+
+## 8 Conclusion 
+
+This paper has traced the entire pipeline for producing large-scale maps from EO data, exposing the interdependencies between stages that are easy to overlook when each is treated in isolation. The practical knowledge needed to navigate these stages is often dispersed across communities; our aim has been to bring it together in one place. We have highlighted that the choice of data provider is not neutral, that data selection and preprocessing decisions encode assumptions the model will inherit, and that whatever chain is adopted must be sustainable at inference scale. On the ML side, spatial autocorrelation demands blocked splits to avoid inflated metrics, gridding choices affect both sampling and evaluation validity, and data augmentation can absorb some of the burden that would oth-erwise fall on preprocessing. Uncertainty quantification is not optional, but no existing method is simultaneously cheap, scalable, and well-calibrated; and the Best Practices for EO Maps 9
+
+spatial correlation of map errors means that naive aggregation dramatically un-derstates uncertainty at regional scales. Finally, model evaluation is not map validation: accuracy assessment (through probability sampling for classification tasks, or carefully characterized alternative approaches for continuous-valued products) remains essential, and its limitations should be stated rather than ig-nored. For a complete treatment of each stage, we refer the reader to the online guide at ghjuliasialelli.github.io/ML-EO-Maps/. 
+
+## Acknowledgements 
+
+This research was supported by the ETH AI Center through an ETH AI Center doctoral fellowship to Ghjulia Sialelli. We thank Isabelle Tingzon, Chiara Ceccobello, and Sebastian Hafner (RISE Research Institutes of Sweden), Johannes Reiche, Robert N. Masolele, and Nandika Tsendbazar (Wageningen University), Nico Lang (University of Copenhagen), Jan Pauls (University of Münster), Zhengpeng Feng (University of Cambridge), Daniel Lusk (University of Freiburg), Martin Schwartz (LSCE), Christelle Van-cutsem (EU Joint Research Centre), Peter Potapov (World Resources Institute), Kristof Van Tricht (VITO), Maurizio Santoro (Gamma Remote Sensing), Marcin Kluczek (CloudFerro), Louis de Vitry (Kanop), Mikołaj Czerkawski (Asterisk Labs), Valerie J. Pasquarella (Google), Henry Herzog (Allen Institute for AI), Caleb Robinson (Microsoft AI for Good Research Lab), Gabriel Belouze, Isaac Corley, and Harald Kristen for generously sharing their experience and insights during the preparation of this work. Their input helped shape several of the practical recommendations presented here, though responsibility for any errors or omissions remains with the authors. 
+
+## References                
+
+> 1. Bauer-Marschallinger, B., Falkner, K.: Wasting petabytes: A survey of the Sentinel-2 UTM tiling grid and its spatial overhead. ISPRS Journal of Photogrammetry and Remote Sensing 202 , 682–690 (Aug 2023). https://doi.org/10.1016/j. isprsjprs.2023.07.015 ,http://dx.doi.org/10.1016/j.isprsjprs.2023.07. 015
+> 2. Brown, C.F., Brumby, S.P., Guzder-Williams, B., Birch, T., Hyde, S.B., Maz-zariello, J., Czerwinski, W., Pasquarella, V.J., Haertel, R., Ilyushchenko, S., Schwehr, K., Weisse, M., Stolle, F., Hanson, C., Guinan, O., Moore, R., Tait, A.M.: Dynamic World, Near real-time global 10m land use land cover mapping. Scientific Data 9(1) (Jun 2022). https://doi.org/10.1038/s41597-022-01307-4 ,
+> http://dx.doi.org/10.1038/s41597-022-01307-4
+> 3. Brown, C.F., Kazmierski, M.R., Pasquarella, V.J., Rucklidge, W.J., Samsikova, M., Zhang, C., Shelhamer, E., Lahera, E., Wiles, O., Ilyushchenko, S., Gorelick, N., Zhang, L.L., Alj, S., Schechter, E., Askay, S., Guinan, O., Moore, R., Boukouvalas, A., Kohli, P.: AlphaEarth Foundations: An embedding field model for accurate and efficient global mapping from sparse label data. arXiv preprint arXiv:2507.22291 (2025), https://arxiv.org/abs/2507.22291
+
+10 G. Sialelli et al. 4. Duncanson, L., Armston, J., Disney, M., Avitabile, V., Barbier, N., Calders, K., Carter, S., Chave, J., Herold, M., MacBean, N., McRoberts, R., Minor, D., Paul, K., Réjou-Méchain, M., Roxburgh, S., Williams, M., Albinet, C., Baker, T., Bartholomeus, H., Bastin, J.F., Coomes, D., Crowther, T., Davies, S., de Bruin, S., De Kauwe, M., Domke, G., Falkowski, M., Fatoyinbo, L., Goetz, S., Jantz, P., Jonckheere, I., Jucker, T., Kay, H., Kellner, J., Labriere, N., Lucas, R., Morsdorf, F., Phillips, O.L., Quegan, S., Saatchi, S., Schaaf, C., Schepaschenko, D., Sci-pal, K., Stovall, A., Thiel, C., Wulder, M.A., Camacho, F., Nickeson, J., Roman, M., Margolis, H.: Global Aboveground Biomass Product Validation Best Prac-tices Protocol. In: Duncanson, L., Disney, M., Armston, J., Minor, D., Camacho, F., Nickeson, J. (eds.) Best Practice Protocol for Satellite Derived Land Product Validation, p. 222. Land Product Validation Subgroup (WGCV/CEOS) (2020). 
+
+https://doi.org/10.5067/doc/ceoswgcv/lpv/agb.001 , version 1.0 5. Eggleston, H.S., Buendia, L., Miwa, K., Ngara, T., Tanabe, K. (eds.): 2006 IPCC Guidelines for National Greenhouse Gas Inventories. Institute for Global En-vironmental Strategies (IGES) for the IPCC, Hayama, Japan (2006), https: //www.ipcc-nggip.iges.or.jp/public/2006gl/ 
+
+6. Feng, Z., Atzberger, C., Jaffer, S., Knezevic, J., Sormunen, S., Young, R., Lisaius, M.C., Immitzer, M., Jackson, T., Ball, J., Coomes, D.A., Madhavapeddy, A., Blake, A., Keshav, S.: TESSERA: Temporal Embeddings of Surface Spectra for Earth Representation and Analysis. arXiv preprint arXiv:2506.20380 (2025), https:// arxiv.org/abs/2506.20380 
+
+7. Flores-Anderson, A., Herndon, K., Thapa, R., Cherrington, E.: The SAR Hand-book: Comprehensive Methodologies for Forest Monitoring and Biomass Estima-tion (04 2019). https://doi.org/10.25966/nr2c-s697 
+
+8. Francis, A., Czerkawski, M.: Major TOM: Expandable Datasets for Earth Obser-vation. In: IGARSS 2024 - 2024 IEEE International Geoscience and Remote Sens-ing Symposium. pp. 2935–2940 (2024). https://doi.org/10.1109/IGARSS53475. 2024.10640760 
+
+9. Glazer, T., Hacheme, G.Q., Zaytar, A., Marotti, L., Michaels, A., Tadesse, G.A., White, K., Dodhia, R., Zolli, A., Becker-Reshef, I., Lavista Ferres, J.M., Robin-son, C.: TEMPO: Global Temporal Building Density and Height Estimation from Satellite Imagery. arXiv preprint arXiv:2511.12104 (2025), https://arxiv.org/ abs/2511.12104 
+
+10. Haya, B., Cullenward, D., Strong, A.L., Grubert, E., Heilmayr, R., Sivas, D.A., Wara, M.: Managing uncertainty in carbon offsets: insights from California’s stan-dardized approach. Climate Policy 20 (9), 1112–1126 (2020). https://doi.org/ 10.1080/14693062.2020.1781035 
+
+11. Herfort, B., Lautenbach, S., Porto de Albuquerque, J., Anderson, J., Zipf, A.: A spatio-temporal analysis investigating completeness and inequalities of global urban building data in openstreetmap. Nature Communications 14 (1) (Jul 2023). 
+
+https://doi.org/10.1038/s41467-023-39698-6 , http://dx.doi.org/10.1038/ s41467-023-39698-6 
+
+12. Herzog, H., Bastani, F., Zhang, Y., Tseng, G., Redmon, J., Sablon, H., Park, R., Morrison, J., Buraczynski, A., Farley, K., Hansen, J., Howe, A., Johnson, P.A., Otterlee, M., Schmitt, T., Pitelka, H., Daspit, S., Ratner, R., Wilhelm, C., Wood, S., Jacobi, M., Kerner, H., Shelhamer, E., Farhadi, A., Krishna, R., Beukema, P.: OlmoEarth: Stable Latent Image Modeling for Multimodal Earth Observation. arXiv preprint arXiv:2511.13655 (2025), https://arxiv.org/abs/2511.13655 Best Practices for EO Maps 11 13. Huang, B., Reichman, D., Collins, L.M., Bradbury, K., Malof, J.M.: Tiling and Stitching Segmentation Output for Remote Sensing: Basic Challenges and Recom-mendations. arXiv preprint arXiv:1805.12219 (2018), https://arxiv.org/abs/ 1805.12219 
+
+14. Jakubik, J., Roy, S., Phillips, C.E., Fraccaro, P., Godwin, D., Zadrozny, B., Szwar-cman, D., Gomes, C., Nyirjesy, G., Edwards, B., Kimura, D., Simumba, N., Chu, L., Mukkavilli, S.K., Lambhate, D., Das, K., Bangalore, R., Oliveira, D., Muszyn-ski, M., Ankur, K., Ramasubramanian, M., Gurung, I., Khallaghi, S., Li, H., Cecil, M., Ahmadi, M., Kordi, F., Alemohammad, H., Maskey, M., Ganti, R., Weldemariam, K., Ramachandran, R.: Foundation Models for Generalist Geospa-tial Artificial Intelligence (2023). https://doi.org/10.48550/ARXIV.2310.18660 ,
+
+https://arxiv.org/abs/2310.18660 
+
+15. Johnson, L.K., Domke, G.M., Stehman, S.V., Mahoney, M.J., Beier, C.M.: From pixels to parcels: Flexible, practical small-area uncertainty estimation for spa-tial averages obtained from aboveground biomass maps. Remote Sensing of En-vironment 330 , 114951 (2025). https://doi.org/10.1016/j.rse.2025.114951 ,
+
+https://doi.org/10.1016/j.rse.2025.114951 
+
+16. Lakshminarayanan, B., Pritzel, A., Blundell, C.: Simple and Scalable Predictive Uncertainty Estimation using Deep Ensembles. In: Advances in Neural Information Processing Systems. pp. 6405–6416 (2017), https://proceedings.neurips.cc/ paper _ files / paper / 2017 / file / 9ef2ed4b7fd2c810847ffa5fa85bce38 - Paper . pdf 
+
+17. Lang, N., Jetz, W., Schindler, K., Wegner, J.D.: A High-Resolution Canopy Height Model of the Earth. Nature Ecology & Evolution 7, 1778–1789 (2023). https: //doi.org/10.1038/s41559-023-02206-6 , https://doi.org/10.1038/s41559-023-02206-6 
+
+18. Liu, S., Brandt, M., Nord-Larsen, T., Chave, J., Reiner, F., Lang, N., Tong, X., Ciais, P., Igel, C., Pascual, A., Guerra-Hernandez, J., Li, S., Mugabowindekwe, M., Saatchi, S., Yue, Y., Chen, Z., Fensholt, R.: The overlooked contribution of trees outside forests to tree cover and woody biomass across Europe. Science Advances 
+
+9(37) (Sep 2023). https://doi.org/10.1126/sciadv.adh4097 , http://dx.doi. org/10.1126/sciadv.adh4097 
+
+19. Lusk, D., Wolf, S., Svidzinska, D., Dormann, C.F., Kattge, J., Bruelheide, H., Saba-tini, F.M., Damasceno, G., Moreno Martínez, Á., Violle, C., Hending, D., Hähn, G.J.A., Tabeni, S., Phartyal, S., Gonçalves, F., Kreft, H., Schmidt, M., Chen, H., Güler, B., Dolezal, J., Pielech, R., Guido, A., Dwyer, C., Napoleone, F., Willie, J., Gasper, A.L., Macía, M.J., Chytry, M., Lenoir, J., Thakur, D., Dengler, J., Świer-szcz, S., Altman, J., Mucina, L., Nerlekar, A.N., Kakinuma, K., Rawat, P., Stančić, Z., Testolin, R., Hatim, M.Z., Rodrigues, F., Homeier, J., Marques, M.C.M., Mc-Carthy, J.K., El-Sheikh, M.A., Korznikov, K., Gerberding, K., Kattenborn, T.: Crowdsourced biodiversity monitoring fills gaps in global plant trait mapping. Na-ture Communications 17 (1) (Jan 2026). https://doi.org/10.1038/s41467-026-68996-y , http://dx.doi.org/10.1038/s41467-026-68996-y 
+
+20. Misra, A., White, K., Nsutezo, S.F., Straka, W., Lavista, J.: Mapping global floods with 10 years of satellite radar data. Nature Communications 16 (1) (Jul 2025). 
+
+https://doi.org/10.1038/s41467-025-60973-1 , http://dx.doi.org/10.1038/ s41467-025-60973-1 
+
+21. Montero, D., Mahecha, M.D., Aybar, C., Mosig, C., Wieneke, S.: Facilitating ad-vanced Sentinel-2 analysis through a simplified computation of Nadir BRDF Ad-justed Reflectance. The International Archives of the Photogrammetry, Remote 12 G. Sialelli et al. Sensing and Spatial Information Sciences XLVIII-4/W12-2024 , 105–112 (Jun 2024). https://doi.org/10.5194/isprs-archives-xlviii-4-w12-2024-105-2024 , http://dx.doi.org/10.5194/isprs-archives-XLVIII-4-W12-2024-105-2024 
+
+22. Mosig, C., Kattenborn, T., Montero Loaiza, D., Vanja-Jehle, J., Brandt, J., Jacobs, N., Khanal, S., Xing, E., Schwartz, M., Muller-Landau, H.C., Beloiu, M., Bozzini, A., Cheng, Y., Ganz, K., Grüning, B., Hartmann, H., Hempel, J., Horion, S., Junttila, S., Korznikov, K., Kraemer, G., Mönks, M., Nardi, D., Neumeier, P., Schmid, J., Soltani, S., Therese-Schmehl, M., Veitch-Michaelis, J., Mahecha, M.: Sub-pixel mapping of disturbance and tree mortality dynamics from Sentinel-2 time series around the globe (Feb 2026). https://doi.org/10.31223/x5b18w ,
+
+http://dx.doi.org/10.31223/X5B18W 
+
+23. Neumann, M., Raichuk, A., Jiang, Y., Rey, M., Stanimirova, R., Sims, M.J., Carter, S., Goldman, E., Anderson, K., Poklukar, P., Tarrio, K., Lesiv, M., Fritz, S., Clinton, N., Stanton, C., Morris, D., Purves, D.: Natural forests of the world – a 2020 baseline for deforestation and degradation monitoring. Sci-entific Data 12 (1) (Nov 2025). https://doi.org/10.1038/s41597-025-06097-z ,
+
+http://dx.doi.org/10.1038/s41597-025-06097-z 
+
+24. Olofsson, P., Foody, G.M., Herold, M., Stehman, S.V., Woodcock, C.E., Wulder, M.A.: Good practices for estimating area and assessing accuracy of land change. Remote Sensing of Environment 148 , 42–57 (May 2014). https://doi.org/10. 1016/j.rse.2014.02.015 , http://dx.doi.org/10.1016/j.rse.2014.02.015 
+
+25. Pasquarella, V.J., Brown, C.F., Czerwinski, W., Rucklidge, W.J.: Comprehensive quality assessment of optical satellite imagery using weakly supervised video learn-ing. In: 2023 IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW). p. 2125–2135. IEEE (Jun 2023). https://doi.org/10. 1109/cvprw59228.2023.00206 , http://dx.doi.org/10.1109/CVPRW59228.2023. 00206 
+
+26. Pauls, J., Schrödter, K., Ligensa, S., Schwartz, M., Turan, B., Zimmer, M., Saatchi, S., Pokutta, S., Ciais, P., Gieseke, F.: ECHOSAT: Estimating Canopy Height Over Space and Time. arXiv preprint arXiv:2602.21421 (2026), https://arxiv.org/ abs/2602.21421 
+
+27. Pauls, J., Zimmer, M., Kelly, U.M., Schwartz, M., Saatchi, S., Ciais, P., Pokutta, S., Brandt, M., Gieseke, F.: Estimating Canopy Height at Scale. arXiv preprint arXiv:2406.01076 (2024), https://arxiv.org/abs/2406.01076 
+
+28. Pauls, J., Zimmer, M., Turan, B., Saatchi, S., Ciais, P., Pokutta, S., Gieseke, F.: Capturing Temporal Dynamics in Large-Scale Canopy Tree Height Estimation. arXiv preprint arXiv:2501.19328 (2025), https://arxiv.org/abs/2501.19328 
+
+29. Ploton, P., Mortier, F., Réjou-Méchain, M., Barbier, N., Picard, N., Rossi, V., Dormann, C., Cornu, G., Viennois, G., Bayol, N., Lyapustin, A., Gourlet-Fleury, S., Pélissier, R.: Spatial validation reveals poor predictive performance of large-scale ecological mapping models. Nat. Commun. 11 (1), 4540 (Sep 2020) 30. Roberts, D.R., Bahn, V., Ciuti, S., Boyce, M.S., Elith, J., Guillera-Arroita, G., Hauenstein, S., Lahoz-Monfort, J.J., Schröder, B., Thuiller, W., Warton, D.I., Win-tle, B.A., Hartig, F., Dormann, C.F.: Cross-validation strategies for data with tem-poral, spatial, hierarchical, or phylogenetic structure. Ecography 40 (8), 913–929 (Mar 2017). https://doi.org/10.1111/ecog.02881 , http://dx.doi.org/10. 1111/ecog.02881 Best Practices for EO Maps 13 31. Romano, Y., Patterson, E., Candès, E.J.: Conformalized Quantile Regression. In: Advances in Neural Information Processing Systems. pp. 3543–3553 (2019), https: //papers.neurips.cc/paper/8613-conformalized-quantile-regression.pdf 
+
+32. Sainte Fare Garnot, V., Landrieu, L.: Panoptic segmentation of satellite image time series with convolutional temporal attention networks. ICCV (2021) 33. Stehman, S.V., Czaplewski, R.L.: Design and analysis for thematic map accuracy assessment: fundamental principles. Remote sensing of environment 64 (3), 331–344 (1998) 34. Stehman, S.V., Foody, G.M.: Key issues in rigorous accuracy assessment of land cover products. Remote Sensing of Environment 231 , 111199 (Sep 2019). https: //doi.org/10.1016/j.rse.2019.05.018 , http://dx.doi.org/10.1016/j.rse. 2019.05.018 
+
+35. Stewart, A.J., Robinson, C., Corley, I.A., Ortiz, A., Lavista Ferres, J.M., Banerjee, A.: TorchGeo: Deep Learning With Geospatial Data. ACM Transactions on Spatial Algorithms and Systems 11 (4), 1–28 (Aug 2025) 36. Tolan, J., Yang, H.I., Nosarzewski, B., Couairon, G., Vo, H.V., Brandt, J., Spore, J., Majumdar, S., Haziza, D., Vamaraju, J., Moutakanni, T., Bojanowski, P., Johns, T., White, B., Tiecke, T., Couprie, C.: Very high resolution canopy height maps from rgb imagery using self-supervised vision transformer and convolutional de-coder trained on aerial lidar. Remote Sensing of Environment 300 , 113888 (Jan 2024). https://doi.org/10.1016/j.rse.2023.113888 , http://dx.doi.org/10. 1016/j.rse.2023.113888 
+
+37. Tyukavina, A., Stehman, S.V., Pickens, A.H., Potapov, P., Hansen, M.C.: Practical global sampling methods for estimating area and map accuracy of land cover and change. Remote Sensing of Environment 324 , 114714 (2025) 38. Vovk, V., Gammerman, A., Shafer, G.: Algorithmic Learning in a Random World. Springer New York, NY, 1 edn. (2005). https://doi.org/10.1007/b106715 
+
+39. Wadoux, A.C., Heuvelink, G.B.M.: Uncertainty of Spatial Averages and Totals of Natural Resource Maps. Methods in Ecology and Evolution 14 , 1320–1332 (2023). 
+
+https://doi.org/10.1111/2041-210X.14106 , https://doi.org/10.1111/2041-210X.14106 
+
+40. Wilkinson, M.D., Dumontier, M., Aalbersberg, I.J., Appleton, G., Axton, M., Baak, A., Blomberg, N., Boiten, J.W., da Silva Santos, L.B., Bourne, P.E., Bouw-man, J., Brookes, A.J., Clark, T., Crosas, M., Dillo, I., Dumon, O., Edmunds, S., Evelo, C.T., Finkers, R., Gonzalez-Beltran, A., Gray, A.J., Groth, P., Goble, C., Grethe, J.S., Heringa, J., ’t Hoen, P.A., Hooft, R., Kuhn, T., Kok, R., Kok, J., Lusher, S.J., Martone, M.E., Mons, A., Packer, A.L., Persson, B., Rocca-Serra, P., Roos, M., van Schaik, R., Sansone, S.A., Schultes, E., Sengstag, T., Slater, T., Strawn, G., Swertz, M.A., Thompson, M., van der Lei, J., van Mulligen, E., Velterop, J., Waagmeester, A., Wittenburg, P., Wolstencroft, K., Zhao, J., Mons, B.: The fair guiding principles for scientific data management and stewardship. Scientific Data 3(1) (Mar 2016). https://doi.org/10.1038/sdata.2016.18 ,
+
+http://dx.doi.org/10.1038/sdata.2016.18 
+
+41. Zhang, R.: Making Convolutional Networks Shift-Invariant Again (2019). https: //doi.org/10.48550/ARXIV.1904.11486 , https://arxiv.org/abs/1904.11486 14 G. Sialelli et al. 
+
+## A EO Data Providers 
+
+Table 1: Overview of major Earth observation data providers. Online ops : whether server-side processing is exposed through an API. Bulk egress : feasibility of large-scale archive download ( ✓ = supported, ≈ = requires special arrangements, × = not suited). Collocated compute : whether large GPU/TPU pools are available in the same cloud region ( ✓ = hyperscaler-class, ≈ = limited). *GEE data is not directly user-accessible at the storage layer.                                      
+
+> Provider Host Online ops Bulk egress Collocated compute
+> Microsoft Planetary Computer Azure (Netherlands) ×✓✓
+> CDSE CloudFerro (PL/DE)
+> ✓✓≈
+> NASA Earthdata AWS us-west-2 ×✓✓
+> Source Cooperative AWS us-west-2 ×✓✓
+> AWS Open Data AWS (varies) ×✓✓
+> Google Earth Engine/GCS* ✓×≈
+> SentinelHub AWS eu-central-1 ✓×≈
+> USGS AWS us-west-2 ×✓✓
+
+## B Sentinel-2 Artifacts 
+
+Because the Sentinel-2 distribution unit (granule) is not geometrically aligned with the sampling unit (orbit), each tile is covered by multiple orbits, some of which encompass it entirely. In such cases, the appropriate orbit can be identified from the NODATA_PIXEL_PERCENTAGE in product metadata: it should be 0.0 for the orbit that fully covers the tile. Most tiles, however, are not fully covered by any single orbit and require mosaicking data from multiple orbits acquired at different times. A more unusual case occurs when a tile that should be fully covered by a single orbit yields two products sharing the same date, orbit, and footprint. When processing baselines are identical, this indicates a data strip split: a single continuous observation broken into segments during ground processing. These must be mosaicked to reconstruct the full area. Addressing these issues is im-portant to avoid pixel duplication, which biases any statistics computed over the data—whether during compositing or when calculating dataset statistics [1]. Fig. 1 illustrates these three cases. 
+
+## C Sentinel-2 Radiometric Processing 
+
+Since the deployment of Sentinel-2 Processing Baseline (PB) 04.00 in January 2022, a radiometric offset is added to the digital number values of all bands. For Sentinel-2 L1C data, the conversion to reflectance is given by Equation 1, Best Practices for EO Maps 15 
+
+Fig. 1: Sentinel-2 artifacts. Top : L2A products for tile 31TGN from two orbits on the same date—orbit 008 (left) partially covers the tile while orbit 108 (right) covers it fully. Middle : Products for tile 30SUH from two sensors on consecutive days, each covering a complementary portion. Bottom : Two L2A products for tile 30STH from the same orbit and date, resulting from a data strip split. Images acquired using the Copernicus Browser. 
+
+where ρT OA is the top-of-atmosphere (TOA) reflectance, DN is the digital num-ber, RADIO _ADD _OF F SET is the radiometric offset ( −1000 for all bands for PB ≥ 04 .00 , 0 otherwise), and QU AN T IF ICAT ION _V ALU E = 10 ,000 .16 G. Sialelli et al. 
+
+For Sentinel-2 L2A data, the conversion is given by Equation 2, where ρBOA 
+
+is the bottom-of-atmosphere (BOA) reflectance, BOA _ADD _OF F SET is the corresponding offset ( −1000 for all bands for PB ≥ 04 .00 , 0 otherwise), and 
+
+BOA _QU AN T IF ICAT ION _V ALU E = 10 ,000 . All values can be retrieved from the product metadata files. The offset applies to any product with Process-ing Baseline ≥ 04.00, which should be determined from the PROCESSING_BASELINE 
+
+field in the metadata rather than the acquisition date: as part of the Collection-1 reprocessing campaign completed in 2024, ESA reprocessed the entire histori-cal archive, so even early acquisitions now carry the offset convention. This procedure applies to products distributed by ESA (e.g., through CDSE). Some third-party platforms (such as GEE’s harmonized collections) apply the offset upstream, in which case it must not be applied a second time. 
+
+ρT OA = DN + RADIO_ADD_OFFSET QUANTIFICATION_VALUE  (1) 
+
+ρBOA = DN + BOA_ADD_OFFSET BOA_QUANTIFICATION_VALUE  (2) 
+
+## D Data Formats for AI4EO Datasets 
+
+Table 2 compares the storage formats most commonly used for AI4EO datasets, highlighting trade-offs in random access, cloud readiness, and geospatial meta-data support. 
+
+Table 2: Storage layout and practical properties of data formats relevant for AI4EO datasets.          
+
+> Format Storage model Typical payload Random access Geo metadata
+> HDF5 Single binary con-tainer with groups, datasets, and inter-nal chunk indices Heterogeneous N-dim scientific arrays Contiguous offsets or chunk index Optional; domain-specific conven-tions required NetCDF4 NetCDF data model on HDF5 backend N-dim variables with named di-mensions and at-tributes HDF5 chunking through the netCDF API Usually via CF conventions GeoTIFF TIFF extended with geospatial keys Regular gridded raster imagery Strips or tiles; efficient spatial access requires tiling Built in through GeoTIFF tags COG GeoTIFF organised for partial reads and overviews Cloud-distributed geospatial rasters Tile offsets and range requests; overviews reduce full-scene reads Built in through GeoTIFF keys Zarr Key-value hierarchy of metadata and encoded chunks Chunked N-dim arrays for cloud/distributed processing Direct key lookup; v3 sharding groups chunks into larger objects Via emerging GeoZarr conven-tions
+
+Best Practices for EO Maps 17 
+
+## E Spatial K-fold block cross-validation 
+
+Figure 2 illustrates three splitting strategies and their effect on train–test leakage due to spatial autocorrelation. 
+
+(a) Random split 
+
+Train/test neighbours share autocorrelated signal 
+
+→ Optimistic evaluation 
+
+(b) Spatial blocks 
+
+Folds separated, but cross-fold pairs near boundaries still correlated if blocks are too small 
+
+→ Better, but potential edge leakage 
+
+(c) Blocks + buffer zone 
+
+Buffer excludes near-boundary samples from all folds 
+
+→ Realistic evaluation 
+
+Train Test Fold 1 Fold 2 Fold 3 Fold 4 Buffer Excluded 
+
+Fig. 2: Random splits leave train and test points autocorrelated (a). Spatial blocks separate folds geographically but near-boundary points may remain correlated (b). Adding a buffer zone removes this leakage (c). 
+
+## F Mitigating patch artifacts 
+
+Figure 3 compares the two main strategies for handling border effects when merging patch-level predictions into a seamless map. 
+
+(a) Overlapping patches + blending       
+
+> 1. Overlapping grid
+> Patch iPatch i+1
+> overlap
+> 2. Weighted merge
+> weight profiles (e.g. cosine) •Smooth transitions
+> •Blurs predictions in overlap zone
+> •Complicates uncertainty propagation
+
+(b) Padding + crop to center        
+
+> 1. Expand with context
+> patch
+> padding
+> 2. Predict →crop
+> kept
+> discarded
+> •No blending — preserves model output
+> •Uncertainty maps remain faithful
+> •Residual artifacts if receptive field <padding
+
+Fig. 3: Two strategies for mitigating patch artifacts: (a) overlapping patches with weighted blending and (b) padding with center cropping. 
+
+## G Candidate grids 
+
+Table 3 summarizes the geometric properties of candidate grids for global dataset construction; no single grid satisfies all three desiderata simultaneously. 18 G. Sialelli et al. 
+
+Table 3: Comparison of candidate grids for global EO dataset construction. Globally continuous indicates that the grid tiles the entire sphere with each point assigned to a uniquely defined cell and well-defined adjacency across all cell boundaries. ≈ indi-cates that the property holds approximately but not exactly. , The property holds lo-cally within a single UTM zone, not globally. a Clips at ±85 ◦ latitude. b Continental boundaries have 50 km overlap. c Via implicit Voronoi tessellation of sample points.  
+
+> d
+
+Point-based grid; projection not prescribed. e Grid cells do not align cleanly across the antimeridian. 
+
+Family Grid Equal-area Conformal Globally continuous 
+
+Geographic Plate carrée × × ✓
+
+Projection-based Web Mercator × ✓ ✓a
+
+UTM / MGRS ×, ✓, ×, ✓, ×
+
+Equi7 Grid ≈ × ×b
+
+DGGS S2 Geometry ≈ × ✓
+
+H3 ≈ × ✓
+
+HEALPix ✓ × ✓
+
+Purpose-built Major TOM ≈c n/a d ✓
+
+Equal Earth grid ✓ × ×e
