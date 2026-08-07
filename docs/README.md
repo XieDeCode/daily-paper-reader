@@ -6,79 +6,97 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-03
-- 运行时间：2026-08-03 21:57:35 UTC
+- 最新运行日期：2026-08-07
+- 运行时间：2026-08-07 20:33:07 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：7
+- 本次总论文数：25
+- 精读区：13
 - 速读区：12
 
 ### 今日简报（AI）
-1) 今日共扫19篇论文，精读7篇、速读12篇，聚焦图像分类与遥感场景智能解译。  
-2) 最值得关注：域自适应深度联合源信道编码（9.0）与少样本遥感场景分类（9.0），前者面向边缘图像传输，后者攻克标注稀缺难题。  
-3) 建议普通读者优先精读这两篇高分工作，后续可拓展至多模态跟踪及遥感变化检测等应用方向。
-- 详情：[/202608/03/README](/202608/03/README)
+今日共读25篇，精读13篇、速读12篇，聚焦遥感基础模型与图像分割领域。
+最值得看：10分《GeoCore-9B》打造地球观测生成基础模型，9分《Training-Free Entity-Level Few-Shot Segmentation》实现无需训练的遥感小样本分割。
+建议优先精读这两篇高分论文，并顺带跟进速读中的图像编辑与跨域迁移方向。
+- 详情：[/202608/07/README](/202608/07/README)
 
 ### 精读区论文标签
-1. [Domain-Adaptive Deep Joint Source-Channel Coding for Image Classification](/202608/03/2607.28907v1-domain-adaptive-deep-joint-source-channel-coding-for-image-classification)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：面向图像分类的域自适应与分布偏移问题
-2. [Locally Consistent Transductive Information Maximization for Few-Shot Remote Sensing Scene Classification](/202608/03/2607.29192v1-locally-consistent-transductive-information-maximization-for-few-shot-remote-sensing-scene-classification)  
+1. [GeoCore-9B: Towards Geo-Aware Generative Foundation Models in Earth Observation](/202608/07/2608.01896v1-geocore-9b-towards-geo-aware-generative-foundation-models-in-earth-observation)  
+   标签：评分：10.0/10、query:rs-fm
+   evidence：面向地球观测的地理感知生成式基础模型
+2. [Training-Free Entity-Level Few-Shot Segmentation of Remote Sensing Images with Advection Refinement](/202608/07/2607.29278v1-training-free-entity-level-few-shot-segmentation-of-remote-sensing-images-with-advection-refinement)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：基于地球观测预训练基础模型的少样本遥感场景分类
-3. [Domain-Division based Progressive Learning for Source-Free Domain Adaptation](/202608/03/2607.29202v1-domain-division-based-progressive-learning-for-source-free-domain-adaptation)  
-   标签：评分：9.0/10、query:cross-domain
-   evidence：计算机视觉中的无源域自适应
-4. [TerraNova: A Foundation Model for the Anthropocene](/202608/03/2607.29527v1-terranova-a-foundation-model-for-the-anthropocene)  
+   evidence：利用SAM基础模型对遥感图像进行免训练的小样本分割
+3. [PhenoStitch: Training-Free Panoptic Crop Mapping from Satellite Image Time Series](/202608/07/2608.00870v1-phenostitch-training-free-panoptic-crop-mapping-from-satellite-image-time-series)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：融合地球系统场与社会指标的地理空间基础模型，构建共享时空表示
-5. [A Unified Benchmark and Modality-Adaptive Network for Day-and-Night Drone-View Geo-Localization](/202608/03/2607.25778v1-a-unified-benchmark-and-modality-adaptive-network-for-day-and-night-drone-view-geo-localization)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：昼夜域偏移的无人机视角地理定位统一基准与网络
-6. [Beyond Zooming: Learning Multi-Tool Visual Reasoning for Ultra-High-Resolution Remote Sensing](/202608/03/2607.25993v1-beyond-zooming-learning-multi-tool-visual-reasoning-for-ultra-high-resolution-remote-sensing)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：多模态基础模型应用于超高分辨率遥感
-7. [Visual Distribution Anchoring for Efficient Prompt Tuning](/202608/03/2607.28967v1-visual-distribution-anchoring-for-efficient-prompt-tuning)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：利用类级视觉原型对视觉语言模型进行免训练的目标域适配以应对数据集偏移
+   evidence：使用冻结的Segment Anything模型结合物候特征进行免训练全景作物制图
+4. [Multimodal domain adaptation under label shift and blockwise missing modalities](/202608/07/2608.01282v1-multimodal-domain-adaptation-under-label-shift-and-blockwise-missing-modalities)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：直接研究域适应中的分布偏移、标签偏移与缺失模态问题
+5. [Prompt-Driven Simulation with Feature Perturbation for Cross-Domain Few-Shot Object Detection](/202608/07/2608.01348v1-prompt-driven-simulation-with-feature-perturbation-for-cross-domain-few-shot-object-detection)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：跨域少样本目标检测中的域偏移问题
+6. [Prompt-Driven Simulation with Feature Perturbation for Cross-Domain Few-Shot Object Detection](/202608/07/2608.01348v2-prompt-driven-simulation-with-feature-perturbation-for-cross-domain-few-shot-object-detection)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：提示驱动域模拟与特征扰动的跨域小样本目标检测
+7. [SPECTRA: Band-Routed Embedding and Stage-Wise LoRA for Cross-Sensor Fine-Tuning of Geospatial Foundation Models](/202608/07/2608.01751v1-spectra-band-routed-embedding-and-stage-wise-lora-for-cross-sensor-fine-tuning-of-geospatial-foundation-models)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：直接涉及地理空间基础模型及其跨传感器微调
+8. [Standalone DINOv3 for Training-Free Open-Vocabulary Semantic Segmentation in Remote Sensing](/202608/07/2608.03023v1-standalone-dinov3-for-training-free-open-vocabulary-semantic-segmentation-in-remote-sensing)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：利用DINOv3基础模型实现遥感免训练语义分割
+9. [Earth Embeddings](/202608/07/2608.03410v1-earth-embeddings)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：回顾基于基础模型的地球观测嵌入产品
+10. [LoRetta: A Foundation Model and Extensive Dataset for Global-Scale Remote Sensing Dense Image Matching](/202608/07/2608.04106v1-loretta-a-foundation-model-and-extensive-dataset-for-global-scale-remote-sensing-dense-image-matching)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：提出了用于遥感密集图像匹配的基础模型与数据集
+11. [Above-ground Biomass Estimation with Geospatial Foundation Models](/202608/07/2608.04792v1-above-ground-biomass-estimation-with-geospatial-foundation-models)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：系统评测地理空间基础模型在遥感回归任务上的表现
+12. [Overcoming Attention Drift: Homogeneity-Heterogeneity Guided Feature Aggregation for Low-Light Remote Sensing Image Enhancement](/202608/07/2608.05843v1-overcoming-attention-drift-homogeneity-heterogeneity-guided-feature-aggregation-for-low-light-remote-sensing-image-enhancement)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：面向遥感图像增强，利用基础模型先验，契合遥感基础模型图像分析主题
+13. [Topology-Aware Neighborhood Learning for Source-Free Cross-Scene Hyperspectral Image Classification](/202608/07/2608.05964v1-topology-aware-neighborhood-learning-for-source-free-cross-scene-hyperspectral-image-classification)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：无源领域自适应用于跨场景高光谱图像分类。
 
 ### 速读区论文标签
-1. [Spatio-Temporal Conditional Denoising Transformer for Modality-Missing RGBT Tracking](/202608/03/2607.24701v1-spatio-temporal-conditional-denoising-transformer-for-modality-missing-rgbt-tracking)  
+1. [SatEdit: Mask-Conditioned Image Editing via VLM-Guided Segment Annotation](/202608/07/2607.29367v1-satedit-mask-conditioned-image-editing-via-vlm-guided-segment-annotation)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：利用分割基础模型和视觉语言模型进行卫星图像编辑，属于大模型遥感应用。
+2. [Multi-Source Multi-View Graph Domain Adaptation with Hyperbolic Residual Encoding for Cross-Site MDD Identification from rs-fMRI](/202608/07/2607.29531v1-multi-source-multi-view-graph-domain-adaptation-with-hyperbolic-residual-encoding-for-cross-site-mdd-identification-from-rs-fmri)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：多源无监督域自适应在多视图图数据上的应用
+3. [Local Margin Restoration for Test-Time Adaptation of Vision-Language Models](/202608/07/2608.02216v1-local-margin-restoration-for-test-time-adaptation-of-vision-language-models)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：视觉语言模型在分布偏移下的测试时自适应
+4. [Global-Scale Self-Supervised Spatiotemporal Learning for NDVI Time-Series Reconstruction](/202608/07/2608.02322v1-global-scale-self-supervised-spatiotemporal-learning-for-ndvi-time-series-reconstruction)  
    标签：评分：8.0/10、query:stm
-   evidence：用于RGBT跟踪的时空Transformer
-2. [Argus-Unified: Towards A Compact and Economical Unified Model for Image Understanding and Generation](/202608/03/2607.25527v1-argus-unified-towards-a-compact-and-economical-unified-model-for-image-understanding-and-generation)  
-   标签：评分：8.0/10、query:world-models
-   evidence：统一图像理解与生成的多模态基础模型，利用预训练视觉语言模型先验
-3. [Freq-RemoteVAR: Next-Frequency Autoregressive Modeling for Remote Sensing Change Detection](/202608/03/2607.25815v1-freq-remotevar-next-frequency-autoregressive-modeling-for-remote-sensing-change-detection)  
-   标签：评分：8.0/10、query:stm
-   evidence：遥感变化检测作为时空分析方法，采用频率自回归建模
-4. [Do Unified Multimodal Models Think in One Space? A Lens Through Cross-Branch Steering](/202608/03/2607.26411v1-do-unified-multimodal-models-think-in-one-space-a-lens-through-cross-branch-steering)  
-   标签：评分：8.0/10、query:world-models
-   evidence：统一多模态模型的跨分支语义操纵，研究理解与生成是否共享语义空间
-5. [UniGen-AR: Unifying Visual Generation with Auto-Regressive Modeling](/202608/03/2607.24157v1-unigen-ar-unifying-visual-generation-with-auto-regressive-modeling)  
-   标签：评分：7.0/10、query:world-models
-   evidence：通过多模态语言模型与自回归解码器实现统一视觉生成
-6. [MAViE: A Multi-scale Adaptive Vision Encoder for Fine-grained Visual Perception and Efficient Multimodal Reasoning](/202608/03/2607.24424v1-mavie-a-multi-scale-adaptive-vision-encoder-for-fine-grained-visual-perception-and-efficient-multimodal-reasoning)  
-   标签：评分：7.0/10、query:world-models
-   evidence：面向多模态基础模型的多尺度自适应视觉编码器
-7. [DecoupleMix: Decoupled Ratio Search and Convex Allocation for Scalable VLM Data Recipes](/202608/03/2607.24516v1-decouplemix-decoupled-ratio-search-and-convex-allocation-for-scalable-vlm-data-recipes)  
-   标签：评分：7.0/10、query:world-models
-   evidence：视觉语言模型预训练的数据配方优化
-8. [SULAND v2: A Refined RGB Dataset and Deep Learning Object Detection Benchmark for UAV/UGV-Based SUrface LANDmine Detection Under Domain Shift](/202608/03/2607.28996v1-suland-v2-a-refined-rgb-dataset-and-deep-learning-object-detection-benchmark-for-uavugv-based-surface-landmine-detection-under-domain-shift)  
+   evidence：全球尺度自监督时空学习用于NDVI重建，直接匹配时空建模主题
+5. [FootprintNet: State-Transition-Guided Dynamic Footprint Learning for Multi-temporal Remote Sensing Change Detection](/202608/07/2607.27969v1-footprintnet-state-transition-guided-dynamic-footprint-learning-for-multi-temporal-remote-sensing-change-detection)  
+   标签：评分：7.0/10、query:stm
+   evidence：多时相遥感变化检测中的动态足迹时空建模
+6. [Think with Extra-Image: A Farmland Segmentation Agent Driven by Spatio-Temporal Information Gain](/202608/07/2607.28186v1-think-with-extra-image-a-farmland-segmentation-agent-driven-by-spatio-temporal-information-gain)  
+   标签：评分：7.0/10、query:stm
+   evidence：利用外部时空信息增益进行农田遥感图像分割
+7. [Learning the Pareto Frontier of Predictive Models under Distribution Shift](/202608/07/2608.00632v1-learning-the-pareto-frontier-of-predictive-models-under-distribution-shift)  
    标签：评分：7.0/10、query:cross-domain
-   evidence：面向领域偏移的UAV/UGV地表地雷检测基准数据集
-9. [Contrastive Parameter Disentanglement for Multi-modal Remote Sensing Image Generation](/202608/03/2607.23673v1-contrastive-parameter-disentanglement-for-multi-modal-remote-sensing-image-generation)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：从文本提示生成多模态遥感图像，属于遥感生成型基础模型相关研究
-10. [FiRE: Enhancing MLLMs with Fine-Grained Context Learning for Complex Image Retrieval](/202608/03/2607.27959v1-fire-enhancing-mllms-with-fine-grained-context-learning-for-complex-image-retrieval)  
+   evidence：分布漂移下的预训练/基础模型复用，提出Frontier Learning跨域自适应组合模型
+8. [Training-Free Out-of-Distribution Detection for Pathology Whole-Slide Images](/202608/07/2608.01407v1-training-free-out-of-distribution-detection-for-pathology-whole-slide-images)  
+   标签：评分：7.0/10、query:cross-domain
+   evidence：利用视觉语言基础模型处理视觉任务中的分布外检测与领域偏移
+9. [Cross-Resolution Semantic Learning for Graph Domain Adaptation](/202608/07/2607.29365v1-cross-resolution-semantic-learning-for-graph-domain-adaptation)  
+   标签：评分：6.0/10、query:cross-domain
+   evidence：分布偏移下图域自适应；跨域语义分辨率偏移
+10. [Beyond Static Anchors: Bounded Prototype Conditioning for Language-Free Medical Anomaly Detection](/202608/07/2608.00442v1-beyond-static-anchors-bounded-prototype-conditioning-for-language-free-medical-anomaly-detection)  
+   标签：评分：6.0/10、query:cross-domain
+   evidence：面向跨域医学异常检测的输入条件原型
+11. [Test-Time Curriculum for Open-Set AIGC Detection](/202608/07/2608.00559v1-test-time-curriculum-for-open-set-aigc-detection)  
+   标签：评分：6.0/10、query:cross-domain
+   evidence：分布漂移下开放集AIGC检测的测试时适应，模型无关的课程自训练
+12. [Through the LENS: Local Geometric Decomposition of Vision-Language Model Representations](/202608/07/2608.00561v1-through-the-lens-local-geometric-decomposition-of-vision-language-model-representations)  
    标签：评分：6.0/10、query:world-models
-   evidence：增强多模态大语言模型的复杂图像检索能力，属于多模态基础模型应用
-11. [FootprintNet: State-Transition-Guided Dynamic Footprint Learning for Multi-temporal Remote Sensing Change Detection](/202608/03/2607.27969v1-footprintnet-state-transition-guided-dynamic-footprint-learning-for-multi-temporal-remote-sensing-change-detection)  
-   标签：评分：6.0/10、query:stm
-   evidence：在多时相遥感变化检测中建模时间动态过程
-12. [Think with Extra-Image: A Farmland Segmentation Agent Driven by Spatio-Temporal Information Gain](/202608/03/2607.28186v1-think-with-extra-image-a-farmland-segmentation-agent-driven-by-spatio-temporal-information-gain)  
-   标签：评分：6.0/10、query:stm
-   evidence：利用时空信息增益进行农田分割
+   evidence：将视觉-语言模型激活分解为局部低秩高斯邻域的可解释性方法
 
 
 <div class="dpr-home-promo-card">

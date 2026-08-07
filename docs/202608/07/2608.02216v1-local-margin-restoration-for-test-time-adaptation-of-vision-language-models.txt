@@ -1,0 +1,1018 @@
+Title: Local Margin Restoration for Test-Time Adaptation of Vision-Language Models
+
+URL Source: https://arxiv.org/pdf/2608.02216v1
+
+Published Time: Tue, 04 Aug 2026 02:26:03 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Local Margin Restoration for Test-Time Adaptation of Vision-Language Models 
+
+# Yan Huang ∗
+
+Guangzhou University Guangzhou, China dennishuangyan@gmail.com 
+
+# Guowei Wang ∗
+
+The Second Affiliated Hospital of Guangzhou University of Chinese Medicine Guangzhou, China gw.wang@gzucm.edu.cn 
+
+# Xu Wang 
+
+Jinan University Zhuhai, China xuwang@jnu.edu.cn 
+
+# Kangjun Liu 
+
+Pengcheng Laboratory Shenzhen, China liukj@pcl.ac.cn 
+
+# Xin Lin ✉†
+
+Guangzhou University Guangzhou, China linxin94@gzhu.edu.cn 
+
+## Abstract 
+
+Vision-language models (VLMs) such as CLIP exhibit remarkable zero-shot capabilities, yet their performance frequently degrades sharply under unexpected test-time distribution shifts. While Test-Time Adaptation (TTA) offers a promising solution, continuously adapting VLMs over an unlabeled test stream presents fundamen-tal challenges. Conventional top-1-centric updates often reinforce errors by corrupting the local semantic geometry among related classes, while iterative adaptation exacerbates progressive bias ac-cumulation, ultimately driving the model toward mode collapse. To overcome these coupled vulnerabilities, we propose Local Mar-gin Restoration (LMR), a lightweight, one-step TTA framework. At the sample level, our Protected Margin Restoration (PMR) ob-jective recovers local semantic geometry by shielding plausible near-top candidates from external hard negatives. Concurrently, to combat stream-level degradation, we introduce a dual-stage sta-bilization mechanism, featuring an Adaptive Margin (AM) con-troller and Bias Correction (BC), to dynamically disrupt progressive bias accumulation and prevent mode collapse. Extensive experi-ments on CIFAR-C, ImageNet-C, and ImageNet variants demon-strate that LMR consistently outperforms state-of-the-art TTA base-lines, proving exceptionally robust and efficient even in challeng-ing low-batch test-time regimes. Our code is available at https: //github.com/DennisHuangYan/LMR. 
+
+## CCS Concepts 
+
+• Computing methodologies → Transfer learning .
+
+## Keywords 
+
+Vision-Language Models, Test-Time Adaptation  
+
+> ∗Equal contribution.
+> †Corresponding author.
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> MM ’26, Rio de Janeiro, Brazil.
+> ©2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2213-4/2026/11 https://doi.org/10.1145/3767308.3835113
+
+ACM Reference Format: 
+
+Yan Huang, Guowei Wang, Xu Wang, Kangjun Liu, and Xin Lin. 2026. Local Margin Restoration for Test-Time Adaptation of Vision-Language Models. In Proceedings of the 34th ACM International Conference on Multimedia (MM ’26), November 10–14, 2026, Rio de Janeiro, Brazil. ACM, New York, NY, USA, 13 pages. https://doi.org/10.1145/3767308.3835113 
+
+## 1 Introduction 
+
+Vision-Language Models (VLMs), most notably CLIP [ 19 ], have demonstrated remarkable success in zero-shot image classification and cross-modal understanding by learning well-aligned represen-tations from massive image-text pairs. Despite these impressive capabilities, deploying pre-trained VLMs in dynamic, real-world environments presents a significant challenge: their performance could degrade sharply under unexpected test-time distribution shifts [ 1, 14 ], where corrupted or out-of-distribution inputs distort the visual evidence necessary for accurate image-text matching. To mitigate this vulnerability without requiring access to the original training data or expensive offline re-training, Test-Time Adapta-tion (TTA) has emerged as a practical and promising paradigm [ 8, 16 , 23 , 24 , 26 , 31 ]. TTA aims to continuously adapt the model on the fly using only a stream of unlabeled test data. Recent studies have extended TTA to VLMs using generic en-tropy objectives, pseudo-label self-training, and specialized vision-language updates. Despite encouraging progress, the current TTA methods [ 1, 2, 14 , 18 , 25 ] for VLMs remain fundamentally challeng-ing. Many existing approaches seek to improve model confidence by sharpening the predictive distribution either implicitly or explicitly. While effective when the current prediction is reliable, such up-dates become highly detrimental under severe domain shifts where the pseudo labels are often incorrect [ 14 ]. Unlike standard classi-fiers, VLM predictions rely on relative similarities to a fixed set of text prototypes, blindly sharpening these predictions destroys the fine-grained ranking structure among semantically related classes. Consequently, performing adaptation can reinforce mistakes rather than correct them, leading to an accumulation of errors over an extended unlabeled stream. To understand the fundamental bottlenecks of TTA in VLMs, we conduct an in-depth empirical investigation into the failure modes arXiv:2608.02216v1 [cs.CV] 3 Aug 2026 MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Yan Huang, Guowei Wang, Xu Wang, Kangjun Liu, and Xin Lin 
+
+of zero-shot predictions under severe domain shift, revealing degra-dation across two coupled dimensions. First, at the sample-level geometry, we observe that many shifted errors remain locally recov-erable: the ground-truth class frequently resides within a plausible near-top candidate set, separated from the incorrect top-1 predic-tion by a remarkably narrow similarity gap. Standard entropy min-imization aggressively penalizes this neighborhood, compressing the local margin against external hard negatives and prematurely discarding recoverable knowledge. Second, at the stream level, this vulnerability is compounded over time. Pre-trained VLMs exhibit inherent output biases that favor specific classes. Successive con-fident updates on these biased pseudo-labels create a destructive feedback loop, amplifying progressive bias accumulation and ulti-mately driving the model toward total class collapse. Motivated by these findings, we argue that effective TTA in VLMs must adhere to two core design principles: it must preserve plausible near-top candidates rather than forcing overconfident commitment to the top-1 prediction, and it must establish dynami-cally calibrated margins to disrupt long-term bias accumulation. To realize these principles, we propose a novel one-step TTA frame-work: Local Margin Restoration (LMR) . Rather than globally sharpening a single pseudo-label, LMR strategically targets the re-coverable local-neighborhood geometry. Specifically, we introduce a Protected Margin Restoration (PMR) objective. For each sample, PMR dynamically constructs a protected candidate set encompass-ing plausible near-top classes. Instead of treating all nearby alterna-tives as negatives, PMR explicitly restores the semantic separation only against hard external competitors outside this set, effectively shielding the potential ground truth from premature suppression. Furthermore, to satisfy our second design principle and combat progressive bias accumulation across the continuous data stream, we complement PMR with a dual-stage stabilization strategy. This includes an update-side Adaptive Margin (AM) controller that dy-namically weakens the target optimization margin for historically over-represented classes before gradients enter the model, and an output-side Bias Correction (BC) module that calibrates resid-ual concentration from the emitted predictions. This combined mechanism guarantees that the model resists long-term prediction collapse during test-time adaptation. In summary, the main contributions are summarized as follows: 
+
+• We provide a rigorous failure analysis of TTA in VLMs under severe corruptions, exposing the geometric vulnerability of near-top candidate classes and the progressive stream-level bias accu-mulation that leads to mode collapse. 
+
+• We propose LMR , featuring the PMR objective, which safely protects near-top candidate classes while strictly pushing away hard external distractors to recover local semantic margins. 
+
+• We introduce a lightweight dual-stage stabilization mechanism, comprising an AM controller and a BC module, to dynamically regulate class reinforcement and calibrate output bias, ensuring robust long-term adaptation. 
+
+• Extensive experiments on corruption benchmarks (CIFAR-10-C, CIFAR-100-C, and ImageNet-C) and ImageNet-Variants bench-marks demonstrate that our proposed method significantly out-performs state-of-the-art TTA approaches for VLMs, especially in challenging low-batch regimes. 
+
+## 2 Related Works 
+
+Test-time adaptation. Test-time adaptation adapts a pretrained model during inference using only unlabeled target data. While con-ventional TTA methods rely on entropy minimization [ 26 ], recent approaches have substantially improved performance through con-fidence based filtering [ 16 ], sharpness aware updates [ 17 ], memory replay [ 31 ], and augmentation-based objectives [ 34 ]. Despite their success in mitigating distribution shifts, these unimodal-centric approaches are sub-optimal for vision-language models, as their underlying design paradigms cannot accommodate the crucial bi-modal representation structure, text prototypes, and image-text alignment mechanisms. 
+
+Test-time adaptation in vision-language models. To overcome the limitations of unimodal approaches, recent works have tailored TTA to CLIP-style vision-language models along several direc-tions. Pioneer approaches adapt the learnable prompt at the textual branch, as in TPT [ 15 ] and its variants [ 21 , 22 , 28 –30 ]. However, their reliance on time-consuming data augmentation introduces prohibitive latency during inference. Bypassing this bottleneck, another training-free line refines predictions using test-time fea-ture statistics [ 9], caches [ 33 ], or label propagation [ 13 ]. While highly efficient, they lack the capacity to handle severe distribution shifts. Recent works seek an optimal trade-off, focusing on effi-cient gradient updates at the visual branch. They primarily advance adaptation through weight averaging [ 18 ], multimodal-specific ob-jectives [2, 12, 14, 25], and class-prior correction [32, 35]. 
+
+## 3 Methodology 3.1 Problem Formulation 
+
+Zero-Shot CLIP Classification. Given a pre-trained CLIP model comprising an image encoder 𝑓 𝜃 and a text encoder 𝑓 𝜙 , we construct the zero-shot classifier for a label space Y = {1, . . . , 𝐶 }. Specifically, we wrap each class name 𝑐 ∈ Y in a task-specific prompt template 
+
+𝑇 (𝑐 ) (e.g., “a photo of a [CLASS].” ) and extract its ℓ2-normalized text prototype: 
+
+w𝑐 = 𝑓 𝜙 (𝑇 (𝑐 )) ∥𝑓 𝜙 (𝑇 (𝑐 ))∥ 2
+
+∈ R𝑑 , (1) where 𝑑 is the embedding dimension. Once constructed, the text encoder and these prototypes are kept frozen. For an input image x𝑖 ,the visual encoder extracts the normalized feature z𝑖 = 𝑓 𝜃 (x𝑖 ) ∈ R𝑑 .We first compute the cosine similarity 𝑠 𝑖,𝑐 between the visual feature and each text prototype. And the zero-shot prediction 𝑞 𝑖 ∈ R𝐶 is then obtained via a scaled softmax: 
+
+𝑠 𝑖,𝑐 = z⊤ 
+
+> 𝑖
+
+w𝑐 , 𝑞 𝑖,𝑐 = exp (𝜅 · 𝑠 𝑖,𝑐 )
+
+Í𝐶 𝑗 =1 exp (𝜅 · 𝑠 𝑖,𝑗 ) , (2) where 𝜅 is the predefined inverse temperature scalar. The maxi-mum predictive confidence and the corresponding pseudo-label are denoted by 𝑞 max  
+
+> 𝑖
+
+= max 𝑐 𝑞 𝑖,𝑐 and ˆ𝑦 𝑖 = arg max 𝑐 𝑞 𝑖,𝑐 , respectively. 
+
+Online Test-Time Adaptation. We consider a strict online test-time adaptation paradigm. At each time step 𝑡 , the pre-trained VLM performs a single-step update on an unlabeled batch B𝑡 , without access to source data, replay buffers, or test labels. To adapt the model, we update only the affine parameters (denoted by 𝜃 ) of the Local Margin Restoration for Test-Time Adaptation of Vision-Language Models MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. 0.00 0.02 0.04 0.06 0.08 0.10                
+
+> Top-1 / GT cosine gap
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> CDF
+> (a)
+> δ= 0.03
+> 53.5% of errors satisfy gap ≤δ
+> Many Errors Lie Within
+> A Narrow Cosine Gap
+> 12345
+> Severity
+> 2.25
+> 2.50
+> 2.75
+> 3.00
+> 3.25
+> 3.50
+> 3.75
+> 4.00
+> Median protected margin
+> (b) Near-Top Separation
+> Shrinks Under Shift
+> Gaussian Noise
+> Glass Blur
+> Fog
+> Brightness
+> Top-1 Top-10 Top-50 Top-100
+> Top-Kclasses
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Cum. mass (%)
+> 10.0
+> 19.7
+> 33.9
+> 44.9
+> (c) Shift Amplifies
+> Output Preference
+> Label freq.
+> Clean
+> Shifted
+> PMR-only PMR+AM
+> 0.0
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> Late-stage dominant share (%)
+> 14.7
+> 1.3
+> (d)
+> Adaptive Margin
+> Reduces Update Concentration
+
+Figure 1: Empirical failure patterns under test-time shift that motivate our design. Frost at severity 5 is used as a representative shift in (a), (c), and (d), while (b) summarizes representative corruption trends. (a) Many shifted errors remain locally recoverable under a narrow top-1/GT gap criterion. (b) Near-top separation progressively shrinks as corruption severity increases. (c) Shifted predictions become markedly more concentrated than both clean predictions and stream composition. (d) Local restoration alone leads to strong update concentration, which adaptive margin substantially suppresses. 
+
+LayerNorm layers at the visual branch. All remaining visual param-eters, alongside the text encoder 𝑓 𝜙 and the prototypes {w𝑐 }𝐶 𝑐 =1, are kept frozen throughout the adaptation. 
+
+## 3.2 Failure Regime and Design Principles 
+
+We analyze the failure patterns of test-time adaptation (TTA) for Vision-Language Models (VLMs) across two coupled dimensions: sample-level geometry and stream-level effects. 
+
+Sample-Level Geometry . Standard TTA relies on entropy mini-mization, assuming the top-1 prediction is reliable for adaptation. However, distribution shifts frequently corrupt this assumption. To locate the potential ground truth during these failures, we examine the local geometric structure of predictions via an oracle analysis on the corrupted data. For a misclassified sample 𝑖 , the similarity gap between the incorrect prediction ˆ𝑦 𝑖 and the ground-truth 𝑦 𝑖 is defined as: 
+
+Δ𝑖 = 𝑠 𝑖, ˆ𝑦 𝑖 − 𝑠 𝑖,𝑦 𝑖 , (3) As shown in Figure 1(a), a substantial fraction of misclassified sam-ples maintain a narrow gap ( Δ𝑖 ≤ 𝛿 ). This proximity highlights the structural flaw of entropy minimization: sharpening an incorrect top-1 prediction actively suppresses the nearby potential ground truth. Given the absence of ground-truth labels during testing, a robust strategy should preserve the entire near-top candidate set rather than committing to a single class. Let P𝑖 = {𝑐 | 𝑠 𝑖,𝑐 ≥ 𝑠 𝑖, ˆ𝑦 𝑖 − 𝛿 } denote this plausible near-top candidate set. However, the internal geometry of this set remains highly vulnerable. To quantify this, we measure the local margin between the weakest candidate in P𝑖 and the strongest outside competitor (hard negative): 
+
+𝑚 local  
+
+> 𝑖
+
+= min     
+
+> 𝑐 ∈ P 𝑖 (𝛿 )
+
+𝑠 𝑖,𝑐 − max    
+
+> 𝑐 ∉P𝑖 (𝛿 )
+
+𝑠 𝑖,𝑐 . (4) Mathematically, a vanishing margin indicates that external hard negatives begin to outscore the candidates within P𝑖 . This score overlap compromises the geometric structure of the candidate set, leaving the potential ground truth vulnerable to severe suppression. Figure 1(b) confirms this degradation, revealing that increasing corruption severity progressively compresses this local margin. The above observation and analysis motivate our first design principle. 
+
+Design Principle 1: Rather than forcing overconfident commit-ment to the current top-1 prediction, sample-level adaptation should explicitly preserve the plausible near-top candidates and restore their margin against hard negatives. 
+
+Stream-Level Effects. While Principle 1 effectively protects the potential ground truth at the sample level, its long-term effective-ness is compromised by a temporal vulnerability across the con-tinuous data stream. Vision-Language Models (VLMs) exhibit ini-tial output biases that introduce upward shifts in the similarity scores of specific classes. Because membership in P𝑖 relies on these scores, classes subject to these shifts frequently satisfy the selection threshold across the data stream. Consequently, they are dispro-portionately included in the local candidate sets and repeatedly undergo margin restoration. This creates a feedback loop: con-tinuously restoring local margins for these classes amplifies their global accumulation, eventually overriding the intended geometric improvements. To quantify this temporal degradation, we track the class-wise prediction frequency across the adaptation stream. As shown in Figure 1(c), the model’s output distribution exhibits increasing skew-ness over the data stream. This progressive bias accumulation ul-timately results in total class collapse, as confirmed in Figure 1(d). These observations yield a critical clue: a static, uniform margin strategy is fundamentally flawed for long-term TTA. To prevent dominant classes from hijacking the adaptation process, each pre-diction requires a separate, dynamically regulated margin calibrated by its global accumulation history. This dynamic requirement di-rectly motivates our second design principle. 
+
+Design Principle 2: For long-term effectiveness of Principle 1, preventing progressive bias accumulation by establishing dynamically calibrated margins for each class is essential. Based on the above observations, we design an online test-time adaptation framework that combines sample-level protected margin restoration with stream-level stabilization. Figure 2 provides an overview of our method. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Yan Huang, Guowei Wang, Xu Wang, Kangjun Liu, and Xin Lin Corrupted test stream 𝐀 𝐀 
+
+Text Prompts 𝐀 (𝐀 )
+
+Visual 
+
+Encoder 
+
+𝐀 𝐀 
+
+> Frozen text
+> prototypes
+
+𝐀 𝐀 
+
+Only LayerNorm 
+
+adapted 
+
+Text 
+
+Encoder 
+
+𝐀 𝐀 
+
+> LN
+
+{“ A photo of a [CLS] ”} 
+
+dog cat car ... airplane 
+
+> Cosine similarity
+> score
+
+𝐀 𝐀 
+
+> Normalized
+> feature
+
+𝐀 𝐀 
+
+> confidence
+> weight
+
+𝐀 𝐀 
+
+ℒPMR
+
+Adaptive Margin (AM) 
+
+> Adaptive Margin Zero-shot prediction
+
+𝐀 𝐀  
+
+> updated
+> weight
+> Update-side controller
+> pseudo-label mass 𝐀 𝐀 (𝐀 )
+
+𝐀 𝐀 𝐀 𝐀 
+
+Bias Correction (BC)   
+
+> Output-side bias correction
+> Corrected prediction
+> 𝐀 𝐀
+
+𝐀 𝐀 𝐀 𝐀 = 𝐀 ∙ 𝐀 𝐀 correction 
+
+> vector
+> 𝐀 𝐀
+> 𝐀 𝐀
+> average
+> prediction
+
+Protected Margin Restoration (PMR)     
+
+> Confidence-Gated Margin Restoration
+> Protected positive score 𝐀 𝐀
+> +
+> 𝐀
+> top-K
+> Protected
+> Positives 𝐀 𝐀
+> Hard
+> Negatives 𝐀 𝐀
+> negative
+> score
+> 𝐀 𝐀
+> −
+> weights frozen
+> weights trainable
+> gradient propagation
+> forward data stream
+
+Figure 2: Illustration of the proposed Local Margin Restoration (LMR) framework for online test-time adaptation of vision-language models. The framework is composed of three core components: (1) Protected Margin Restoration (PMR) protects plausible near-top classes from premature suppression to restore local semantic geometry; (2) Adaptive Margin (AM) dynamically regulates the update-side margin based on pseudo-label accumulation; and (3) Bias Correction (BC) calibrates the output predictions to prevent long-horizon performance collapse. 
+
+## 3.3 Protected Set-Anchored Margin Restoration 
+
+Our core adaptation objective is Protected Candidate-Set Margin Restoration (PMR), which directly targets the recoverable local-neighborhood regime described above. Rather than sharpening the current top-1 prediction, PMR explicitly constructs a protected candidate set of plausible near-top classes on the positive side and restores their local semantic margin against hard competitors outside that set. 
+
+Protected Candidate Set. Following the analysis in Sec. 3.2, we construct a protected candidate set around the current top predic-tion: 
+
+P𝑖 = 𝑐 ∈ Y 𝑠 𝑖,𝑐 ≥ 𝑠 𝑖, ˆ𝑦 𝑖 − 𝛿 , (5) where 𝛿 > 0 is a score-gap threshold. The set P𝑖 contains classes whose scores remain sufficiently close to the current top prediction, and these classes are therefore protected from being immediately treated as negatives during adaptation. 
+
+Soft Positive Aggregation. Within the candidate set, we aggregate the positive logits using normalized zero-shot posterior weights: 
+
+𝛼 𝑖𝑐 = 𝑞 𝑖𝑐 · I[𝑐 ∈ P 𝑖 ]
+
+Í𝐶 𝑗 =1 𝑞 𝑖 𝑗 · I[ 𝑗 ∈ P 𝑖 ] + 𝜀 , (6) where 𝜀 is a small constant for numerical stability. The protected positive score is then defined as 
+
+𝑠 + 
+
+> 𝑖
+
+= log ∑︁  
+
+> 𝑐 ∈ P 𝑖
+
+𝛼 𝑖,𝑐 exp (𝑜 𝑖,𝑐 ), (7) where 𝑜 𝑖,𝑐 = 𝜅 · 𝑠 𝑖,𝑐 indicates the scaled cosine similarity score. 
+
+Hard Negative Separation. To restore the local separation, we do not contrast the protected set against all remaining classes equally. Instead, we focus on the hardest external competitors outside the candidate set. Specifically, we define N𝑖 = arg topK 𝑐 ∉P𝑖 𝑠 𝑖,𝑐 , where 
+
+𝐾 is the number of hard negatives. The corresponding negative score is 
+
+𝑠 − 
+
+> 𝑖
+
+= log 1
+
+𝐾 ∑︁ 𝑐 ∈ N 𝑖 
+
+exp (𝑜 𝑖𝑐 )
+
+!
+
+. (8) By restricting negative pressure to hard competitors outside the protected neighborhood, PMR avoids explicitly pushing away still-plausible nearby classes. 
+
+Confidence-Gated Margin Restoration. Using Eqs. (7) and (8) ,we define the protected local margin of sample 𝑖 as 𝑚 𝑖 = 𝑠 + 
+
+> 𝑖
+
+− 𝑠 −
+
+> 𝑖
+
+and restore this margin toward a target value 𝛾 > 0 via 
+
+LPMR  
+
+> 𝑖
+
+= softplus (𝛾 − 𝑚 𝑖 ). (9) To suppress unreliable updates, we weight each sample by 
+
+𝑟 𝑖 =
+
+ 𝑞 max  
+
+> 𝑖
+
+− 𝜏 conf 
+
+1 − 𝜏 conf 
+
+
+
+· I[𝑞 max  
+
+> 𝑖
+
+≥ 𝜏 conf ], (10) where 𝑞 max  
+
+> 𝑖
+
+is the maximum posterior probability and 𝜏 conf is a fixed confidence threshold. The batch PMR objective is 
+
+LPMR =
+
+Í𝑖 𝑟 𝑖 LPMR 
+
+> 𝑖
+
+Í𝑗 𝑟 𝑗 + 𝜖 , (11) 
+
+## 3.4 Stream-Level Stabilization 
+
+While PMR addresses the sample-level geometry in Principle 1, stable online adaptation also requires controlling how restoration pressure accumulates over the test stream. As discussed in Sec. 3.2, a static and uniform margin is vulnerable to progressive bias accu-mulation: classes that are repeatedly favored by the current model tend to receive restoration more often, and such repeated reinforce-ment can gradually dominate the stream. To implement Principle 2 directly, we therefore replace the static PMR margin with a dynam-ically calibrated one. In addition, we further introduce an output-side bias correction module as a complementary stabilizer. PMR Local Margin Restoration for Test-Time Adaptation of Vision-Language Models MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. 
+
+remains the core sample-level restoration objective, while these two components improve its long-term stability. 
+
+Update-Side Adaptive Margin. Although PMR preserves the plau-sible near-top set for each sample, restoration is still anchored on the current pseudo-class ˆ𝑦 𝑖 . Consequently, classes that are repeatedly favored under shift are also more likely to trigger restoration across the stream and absorb disproportionately large update mass. Over time, this self-reinforcing process makes a static margin increas-ingly inappropriate, since it allocates similar restoration strength to pseudo-classes with very different accumulation histories. To quantify this effect, we maintain a running pseudo-class mass 
+
+𝑛 𝑡 (𝑐 ) = 𝑛 𝑡 −1 (𝑐 ) + ∑︁  
+
+> 𝑖 ∈ B 𝑡
+
+𝑟 𝑖 I[ ˆ𝑦 𝑖 = 𝑐 ], (12) where 𝑟 𝑖 is the confidence-based sample weight defined in Eq. (10) .This quantity summarizes how much reliable restoration mass has already been assigned to pseudo-class 𝑐 over the stream. Although output-side preference may first manifest itself through more fre-quent inclusion in the protected set, update-side accumulation is ultimately driven by which pseudo-class repeatedly serves as the restoration anchor. We therefore use hard anchor occupancy as the stream-level signal for update-side reinforcement. For sample 𝑖 , we define the running accumulation share of its current pseudo-class as 
+
+𝜌 𝑖 = 𝑛 𝑡 ( ˆ𝑦 𝑖 )
+
+Í𝑐 ′ 𝑛 𝑡 (𝑐 ′) + 𝜀 . (13) In implementation, we instantiate 𝜌 𝑖 with a leave-one-out readout of the confidence-weighted hard pseudo-class counts in Eq. (12) ,which avoids immediate self-reinforcement within the same batch. We then replace the static PMR target margin with a sample-specific one: 
+
+𝛾 𝑖 = ˜𝛾 0 − 𝛽 log (𝜌 𝑖 + 𝜀 ), (14) where ˜𝛾 0 is the absorbed base margin and 𝛽 > 0 controls the feed-back strength. Pseudo-classes that have already absorbed more updated mass receive a smaller target margin and hence weaker further reinforcement, whereas under-represented pseudo-classes retain stronger restoration pressure. In this way, adaptive margin implements Principle 2 directly: it regulates restoration strength according to stream history while leaving the locally plausible can-didate set itself unchanged. 
+
+Output-Side Residual Bias Correction. While adaptive margin mitigates update-side self-reinforcement, it does not directly cor-rect persistent class-wise preference in the emitted logits. Under test-time shift, some classes can remain systematically over-scored even before online updates accumulate, and this effect may per-sist even when update-side concentration is controlled. Since PMR and adaptive margin regulate how restoration pressure is allocated during adaptation rather than the logits themselves, they do not explicitly remove such residual output-side bias. To compensate for this effect, we introduce a lightweight closed-loop controller in logit space. Specifically, we maintain an additive correction vector b𝑡 ∈ R𝐶 and apply the previous correction to the current logits: 
+
+˜o𝑖 = o𝑖 + b𝑡 −1, (15) where o𝑖 denotes the uncorrected logits and ˜o𝑖 the corrected ones. The controller is initialized with b0 = 0.A single batch is too noisy to reveal persistent stream-level pref-erence, so we estimate class-wise output concentration through a running average prediction: 
+
+u𝑡 = 1
+
+|B 𝑡 |∑︁ 𝑖 ∈ B 𝑡 
+
+softmax ( ˜o𝑖 ), ¯u𝑡 = 𝜇 ¯u𝑡 −1 + ( 1 − 𝜇 )u𝑡 , (16) where 𝜇 ∈ [ 0, 1) is the EMA momentum. In practice, we bootstrap the controller by setting ¯u1 = u1.An additive correction in logit space corresponds to a multi-plicative reweighting in probability space. Accordingly, if a class persistently absorbs excessive predictive mass over the stream, de-creasing its logit by an amount proportional to the log of its running average prediction provides a natural counterbalance. Since soft-max is invariant to a global shift, only relative class offsets need to be corrected. We therefore update 
+
+b𝑡 = P(b𝑡 −1 − 𝜂 log ( ¯u𝑡 + 𝜀 )) , P = I − 1
+
+𝐶 ee ⊤, (17) where 𝜂 > 0 is the feedback gain, 𝜀 is a small constant for numerical stability, e ∈ R𝐶 is the all-ones vector, and P projects onto the zero-mean subspace. The updated b𝑡 is then used at the next step, yielding a simple feedback loop that gradually suppresses persistent over-scored classes. This module complements adaptive margin at a different level: adaptive margin regulates how restoration pressure accumulates through repeated updates, whereas residual bias correction directly compensates persistent class-wise preference in the emitted logits. 
+
+## 3.5 Gradient Insights 
+
+We provide a gradient-based interpretation of LMR and the stream-level stabilizers. Our goal here is not to establish a global conver-gence theorem for the full online adaptation process, but to clarify the effective update structure induced by each component. De-tailed derivations are deferred to the appendix. Throughout this subsection, we condition on the detached protected set P𝑖 , detached candidate weights 𝛼 𝑖𝑐 , the detached hard-negative set N𝑖 , and the scalar target margin 𝛾 𝑖 , and consider points away from support-switching events induced by top-𝐾 selection. For clarity, we omit the detached sample weight and the common batch-averaging con-stant, since they only rescale the contribution of this sample and do not change its update direction. 
+
+Protected gradient structure. Recall that LMR optimizes the protected margin 𝑚 𝑖 = 𝑠 + 
+
+> 𝑖
+
+− 𝑠 − 
+
+> 𝑖
+
+through LLMR  
+
+> 𝑖
+
+= softplus (𝛾 𝑖 − 𝑚 𝑖 ).
+
+Let 𝜈 𝑖 = 𝜎 (𝛾 𝑖 − 𝑚 𝑖 ). , where 𝜎 is the sigmoid function. Define the normalized positive and negative weights as 
+
+𝜋 + 
+
+> 𝑖𝑐
+
+= 𝛼 𝑖𝑐 exp (𝑜 𝑖𝑐 )
+
+Í𝑗 ∈ P 𝑖 𝛼 𝑖 𝑗 exp (𝑜 𝑖 𝑗 ) , 𝜋 − 
+
+> 𝑖𝑐
+
+= exp (𝑜 𝑖𝑐 )
+
+Í𝑗 ∈ N 𝑖 exp (𝑜 𝑖 𝑗 ) . (18) Then the per-sample logit gradient takes the following piecewise form: 
+
+𝜕 LLMR 
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+=
+
+
+
+−𝜈 𝑖 𝜋 + 
+
+> 𝑖𝑐
+
+, 𝑐 ∈ P 𝑖 ,𝜈 𝑖 𝜋 − 
+
+> 𝑖𝑐
+
+, 𝑐 ∈ N 𝑖 ,
+
+0, 𝑐 ∉ P𝑖 ∪ N 𝑖 .
+
+(19) This shows that LMR has an explicitly support-restricted gradient: classes inside the protected set are increased, masked external hard negatives are suppressed, and all remaining classes receive zero gradient. In particular, if the ground-truth class remains inside P𝑖 ,MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Yan Huang, Guowei Wang, Xu Wang, Kangjun Liu, and Xin Lin 
+
+it is not assigned explicit negative pressure. This explains why LMR is not equivalent to full-distribution soft pseudo-labeling: it restores a local score gap around a protected near-top region rather than matching the full predictive distribution. When the protected set degenerates to a singleton, i.e., P𝑖 = { ˆ𝑦 𝑖 }, only the current top-1 class receives positive-side support; recoverable near-top classes outside P𝑖 lose that protection, which explains why the top-1-only variant is weaker when multiple classes remain close in score. 
+
+Contrast to entropy minimization. Entropy minimization glob-ally sharpens the predictive distribution and can therefore rein-force an incorrect top-1 prediction. Specifically, for any class 𝑐 with 
+
+𝑞 𝑖,𝑐 > 0, the entropy objective induces a non-zero logit gradient, 
+
+𝜕 Lent 
+
+> 𝑖
+
+𝜕𝑜 𝑖,𝑐 
+
+= 𝑞 𝑖,𝑐 
+
+  − H ( q𝑖 ) − log 𝑞 𝑖,𝑐 
+
+,
+
+which is dense over the full output space (detailed derivations can be found in the appendix). In effect, the gradient drives the predic-tion toward lower entropy by increasing high-probability classes and suppressing low-probability ones, regardless of whether they are locally relevant to correcting the current mistake. By contrast, our objective assigns zero gradient outside P𝑖 ∪ N 𝑖 , thereby con-fining the update to restoring the local score gap among plausible candidates rather than globally sharpening the whole distribution. 
+
+Adaptive margin as negative feedback. Under the same con-ditioning, the adaptive margin does not change the support pat-tern in Eq. (19) ; it only rescales the update amplitude through 
+
+𝜈 𝑖 = 𝜎 (𝛾 𝑖 − 𝑚 𝑖 ). Substituting the adaptive margin definition from Eq. (14) yields 
+
+𝜕𝜈 𝑖 
+
+𝜕𝜌 𝑖 
+
+= − 𝛽 𝜌 𝑖 + 𝜖 𝜈 𝑖 (1 − 𝜈 𝑖 ) < 0. (20) Hence, the restoration pressure decreases monotonically as the running pseudo-class mass grows. This establishes the adaptive margin as a negative-feedback controller that counteracts repeated reinforcement of already dominant pseudo-classes in the stream. 
+
+## 4 Experiments 4.1 Experimental Setup 
+
+Datasets and protocol. We evaluate online test-time adaptation of CLIP under distribution shift on CIFAR-10-C [ 11 ], CIFAR-100-C [ 11 ], and ImageNet-C [ 3], following the standard common cor-ruption benchmark [ 6 ]. Unless otherwise specified, we report mean accuracy over all 15 corruption types at severity 5, treating each corruption type as an independent unlabeled test stream with one update per batch and no episodic reset. We further evaluate on ImageNet-A [ 7 ], ImageNet-R [ 5], ImageNet-V2 [ 20 ], and ImageNet-Sketch [27] to assess robustness under broader distribution shifts. 
+
+Implementation details. We use ViT-B/16 [ 4 ] as the visual back-bone of CLIP. Frozen text prototypes are constructed using the prompt template “ a photo of a class .” Our method updates only the affine parameters of visual LayerNorm layers, while keeping the text encoder fixed. We perform one gradient step per incoming batch, using Adam [ 10 ] with learning rate 0.001 and batch size 64. Unless otherwise specified, the key PMR hyperparameters are 
+
+𝛿 = 0.03 , NegTopK = 5, and confidence threshold 𝜏 conf = 0.3. For adaptive margin, we use ˜𝛾 0 = 𝛾 0 − 𝛽 log 𝐶 , with 𝛽 = 3.0 and 𝛾 0 = 0.3
+
+on CIFAR-10-C, and 𝛽 = 1.0 and 𝛾 0 = 4.0 on the other benchmarks. Bias correction uses update rate 𝜂 = 0.05 and EMA momentum 
+
+𝑚 = 0.8. Additional details are provided in the appendix. 
+
+Baselines. We compare our method against zero-shot CLIP [ 19 ]as the no-adaptation baseline and three groups of test-time adap-tation baselines. The first group contains generic gradient-based TTA objectives adapted to CLIP, including TENT [ 26 ] and ETA [ 16 ]. The second group contains CLIP-specific training-free adaptation methods, including TDA [ 9 ] and ECALP [ 13 ]. The third group con-tains gradient-based adaptation methods specifically designed for CLIP, including BATCLIP [ 14 ], Mint [ 2], and BITTA [ 25 ]. Additional details of the baseline methods are provided in the appendix. 
+
+## 4.2 Main Results 
+
+Results on Common Corruptions. Table 1 reports results on CIFAR-10-C, CIFAR-100-C, and ImageNet-C. Our method achieves the best mean accuracy on all three benchmarks, reaching 77.91%, 53.29%, and 36.08%, respectively. This corresponds to gains of +16.77, +17.49, and +11.56 points over zero-shot CLIP, and +3.85, +9.04, and +5.35 points over the strongest competing baseline on each dataset. Notably, our method ranks first on all 15 corruption types across all three datasets, showing that the gains are broad rather than corruption-specific. Compared with generic gradient-based TTA baselines, our method is substantially more robust under severe corruption; compared with CLIP-specific baselines, it remains con-sistently stronger across datasets, outperforming BATCLIP and BITTA on CIFAR-10-C and ImageNet-C, and Mint on CIFAR-100-C. These results indicate that the proposed method generalizes robustly across diverse corruption regimes. 
+
+Results on ImageNet variants. Beyond ImageNet-C, we fur-ther evaluate on ImageNet-A, ImageNet-R, ImageNet-Sketch, and ImageNet-V2, which cover broader distribution shifts. As shown in Table 2, our method achieves the best average accuracy, improv-ing over zero-shot CLIP by +3.59 points and over the strongest competing baseline by +1.85 points. It ranks first on ImageNet-A, ImageNet-R, and ImageNet-V2, and achieves the second-best result on ImageNet-Sketch with only a 0.19-point gap to the best method. These results show that the proposed adaptation strategy trans-fers effectively beyond synthetic common corruptions to broader diverse domain shifts. 
+
+## 4.3 Ablation Study and Analysis 
+
+Ablation on components. Table 3 reports the component abla-tion of our method. PMR alone is insufficient for stable stream-wise adaptation: relative to zero-shot CLIP, it improves ImageNet-C from 24.52 to 33.27, but brings only marginal gain on CIFAR-100-C (35.80 to 35.99) and even degrades CIFAR-10-C (61.14 to 58.23). This suggests that restoring local margins is beneficial, but its net effect depends on whether the update process remains stable over the stream. In contrast, adding adaptive margin to PMR yields substantial gains on all three datasets, improving PMR by +19.15, +15.08, and +1.08 on CIFAR-10-C, CIFAR-100-C, and ImageNet-C, respectively. This supports the view that repeated one-step updates otherwise over-concentrate on a small subset of pseudo-class an-chors. Bias correction alone also improves over zero-shot CLIP, but it does not substitute for adaptive margin: PMR+BC remains consistently weaker than PMR+AM. This suggests that update-side Local Margin Restoration for Test-Time Adaptation of Vision-Language Models MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. 
+
+Table 1: Classification accuracy (%) on CIFAR-10-C, CIFAR-100-C, and ImageNet-C across 15 corruption types at severity level 5. All evaluated methods are based on the ViT-B/16 backbone. We compare our approach with state-of-the-art Zero-Shot and Test-Time Adaptation (TTA) methods. Bold and underline denote the best and second-best results, respectively. Method Gauss. Shot Impu. Defo. Glas. Moti. Zoom Snow Fros. Fog Brit. Cont. Elas. Pixl. Jpeg AVG 
+
+CIFAR-10-C 
+
+CLIPZS [19] 37.91 41.66 54.42 71.75 40.89 67.86 73.61 73.84 77.34 70.26 84.42 62.32 53.82 47.60 59.44 61.14 TDA [9] 41.38 45.30 57.55 73.45 46.33 70.57 75.86 75.62 79.20 71.19 85.66 64.10 56.20 52.45 60.38 63.68 ECALP [13] 45.00 49.13 60.03 75.41 44.90 71.82 77.38 76.74 79.54 71.93 86.62 65.25 58.53 52.80 61.95 65.14 TENT [26] 16.22 19.31 44.74 80.19 24.53 76.19 82.05 83.35 83.31 81.01 91.25 81.85 62.71 67.66 57.74 63.47 ETA [16] 39.15 42.81 54.49 71.67 41.44 67.94 73.80 73.91 77.40 70.30 84.48 62.35 53.93 47.86 59.52 61.40 BATCLIP [14] 61.08 64.07 65.46 80.47 55.02 80.71 81.91 83.04 84.20 80.90 88.92 82.18 69.16 62.77 67.56 73.83 MINT [2] 60.44 64.36 69.57 78.70 52.70 80.43 80.57 81.72 82.23 79.89 89.94 79.13 65.31 62.82 66.83 72.98 BITTA [25] 61.92 66.43 64.97 79.63 58.14 80.02 80.61 81.72 83.71 81.10 86.76 81.69 70.89 64.91 68.38 74.06 
+
+Ours 66.83 67.98 72.22 82.83 64.01 82.81 83.39 85.06 86.06 84.71 91.92 86.15 73.23 71.51 69.94 77.91 
+
+CIFAR-100-C 
+
+CLIPZS [19] 19.64 21.45 25.37 42.50 20.10 43.20 48.00 49.73 41.64 45.00 57.00 34.45 29.19 23.94 32.49 35.80 TDA [9] 22.42 24.46 31.68 44.57 21.29 44.59 49.81 48.95 51.59 43.16 58.86 35.15 30.06 27.29 33.42 37.82 ECALP [13] 23.63 25.44 31.55 46.19 22.75 45.13 51.41 50.64 52.40 44.36 60.67 37.12 31.61 27.42 34.34 38.98 TENT [26] 8.01 8.82 9.26 51.46 8.35 52.26 55.42 54.45 45.52 50.78 65.48 52.21 36.32 41.92 38.90 38.61 ETA [16] 29.57 31.77 35.25 47.47 28.01 48.18 53.50 52.43 53.01 50.42 62.75 49.11 33.70 39.12 38.27 43.50 BATCLIP [14] 24.85 27.80 33.64 50.01 26.32 48.52 54.84 52.35 51.68 48.37 63.29 45.12 34.88 32.43 37.31 42.09 MINT [2] 29.68 33.72 40.64 50.89 27.66 49.38 55.33 52.49 52.20 49.94 65.71 48.42 36.28 33.17 38.27 44.25 BITTA [25] 26.60 29.11 35.87 50.03 27.07 49.26 54.87 51.92 52.11 48.6 63.00 46.85 35.18 32.56 37.51 42.70 
+
+Ours 38.91 41.44 48.47 56.79 38.61 57.15 61.36 60.70 61.07 59.00 70.36 63.17 45.35 51.58 45.39 53.29 
+
+ImageNet-C 
+
+CLIPZS [19] 11.20 12.48 12.04 23.36 15.16 24.48 22.68 32.36 29.82 35.82 54.02 17.30 12.76 31.04 33.34 24.52 TDA [9] 12.38 13.72 12.82 23.30 15.38 24.98 22.64 32.54 31.10 36.50 54.36 17.54 13.70 32.08 33.70 25.12 ECALP [13] 13.98 15.78 14.52 25.58 16.96 26.16 25.28 34.40 32.94 39.06 56.00 19.92 15.54 34.48 35.56 27.08 TENT [26] 5.14 5.70 7.44 25.22 19.34 26.80 24.16 33.56 30.40 37.74 54.22 22.50 13.90 35.02 36.08 25.15 ETA [16] 19.08 20.06 20.48 25.96 22.86 29.58 26.80 35.30 32.48 39.72 55.74 26.64 21.64 37.26 38.00 30.11 BATCLIP [14] 19.18 21.58 19.68 26.72 21.92 30.84 29.14 36.54 31.94 40.92 56.64 26.18 23.68 37.54 38.50 30.73 MINT [2] 20.26 21.84 21.54 27.26 22.26 31.36 27.70 34.04 30.64 40.88 55.02 26.06 20.58 37.88 38.88 30.41 BITTA [25] 20.76 22.46 20.72 26.50 22.22 30.02 28.98 35.48 31.14 39.68 53.72 27.24 22.26 35.94 36.58 30.25 
+
+Ours 23.06 25.46 24.88 30.22 29.48 35.98 33.86 41.60 38.10 46.22 58.56 34.10 32.92 43.66 43.06 36.08 Table 2: Classification accuracy (%) on ImageNet-Variant benchmarks. Bold and underline denote the best and second-best results, respectively. Method IN-A IN-R IN-S IN-V2 AVG 
+
+CLIPZS 47.73 73.99 46.12 60.75 57.15 TDA 49.28 75.47 48.88 61.20 58.71 ECALP 47.37 75.66 50.70 61.50 58.81 TENT 48.31 75.49 46.88 60.91 57.90 ETA 48.33 75.92 48.29 60.97 58.38 BATCLIP 48.85 72.34 39.95 60.48 55.41 MINT 51.16 75.81 48.24 60.34 58.89 BITTA 48.43 70.00 36.97 55.70 52.78 
+
+Ours 52.35 77.88 50.51 62.20 60.74 
+
+concentration and output-side class-wise preference are related but distinct failure modes. Finally, combining adaptive margin and bias correction gives the best results on all datasets, indicating that the two components are complementary: adaptive margin stabilizes the update process, while bias correction further compensates residual class-wise preference in the output logits. 
+
+Table 3: Component ablation on CIFAR10-C, CIFAR100-C, and ImageNet-C. AM denotes adaptive margin, and BC de-notes bias correction. We report mean accuracy (%). Variants Components Mean Accuracy (%) PMR AM BC C10-C C100-C IN-C 
+
+ZS - - - 61.14 35.80 24.52 Bias only - - ✓ 67.06 40.28 28.07 PMR only ✓ - - 58.23 35.99 33.27 PMR + AM ✓ ✓ - 77.38 51.07 34.35 PMR + BC ✓ - ✓ 59.87 38.48 35.11 Full ✓ ✓ ✓ 77.91 53.29 36.08 Low-Batch Robustness. Figure 3(a) compares our method with MINT and BATCLIP under varying batch sizes on ImageNet-C. Our method consistently performs best across all tested batch sizes, improving from 34.66 at batch size 1 to 36.08 at batch size 64. The advantage is particularly pronounced in the low-batch regime: at batch size 1, our method exceeds MINT and BATCLIP by 4.40 and 17.14 points, respectively. While BATCLIP is highly sensitive to MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Yan Huang, Guowei Wang, Xu Wang, Kangjun Liu, and Xin Lin 1 2 4 8 16 32 64                       
+
+> Batch size
+> 17.5
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> 35.0
+> Mean acc. (%)
+> low-batch regime
+> (a) Low-Batch Robustness
+> CLIPZS BATCLIP MINT Ours
+> 1.0 3.0 5.0 7.0 10.0 50.0 100.0
+> NegTopK
+> 34.0
+> 34.5
+> 35.0
+> 35.5
+> 36.0
+> 36.5
+> Mean acc. (%)
+> (b) Positive Set and NegTopK
+> Gap-based set Top-1-only
+> C10-C C100-C IN-C
+> Dataset
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Mean acc. (%)
+> (c) Sensitivity to δ
+> δ= 0.01
+> δ= 0.03
+> δ= 0.05
+> δ= 0.07
+> δ= 0.09
+> 020 40 60 80 100
+> Initial-error percentile
+> −15
+> −10
+> −5
+> 0
+> 5
+> GT-init. margin
+> (d) Local Margin Recovery
+> CLIPZS Tent MINT Ours
+
+Figure 3: Robustness and PMR ablations. (a) Our method remains robust across batch sizes, especially in the low-batch regime. (b) The gap-based positive set consistently outperforms the top-1-only variant, while performance is relatively insensitive to NegTopK. (c) Performance is stable across a moderate range of the protected-gap threshold 𝛿 , with the default choice lying inside the stable region. (d) Our method more effectively restores the local margin on initially misclassified samples. 
+
+small batches and MINT remains relatively stable but weaker over-all, our method reaches a near-saturated performance level with only modest batch sizes, indicating that it does not rely on large batches to produce effective online updates. 
+
+Effect of Positive Set and Hard Negatives. Figure 3(b) studies two implementation choices in PMR: the positive-set definition and the hard-negative set size. The gap-based positive set consistently outperforms the top-1-only variant for every tested value of Neg-TopK, indicating that preserving a plausible near-top candidate set is more effective than restoring only the current top-1 prediction. By contrast, performance is relatively stable across different NegTopK values. On ImageNet-C, the gap-based variant stays within a narrow range of 35.38–36.25 and achieves its best result at NegTopK = 10 .Overall, these results suggest that the main gain comes from the protected near-top positive set, while a moderate hard-negative set size is already sufficient in practice. 
+
+Hyperparameter Sensitivity. Among the hyper-parameters in our method, 𝛿 is the most directly tied to the definition of the protected near-top set in PMR. We therefore analyze its effect in the main text, while reporting the remaining sensitivity results in the appendix. Figure 3(c) examines the sensitivity to the protected-gap threshold 𝛿 . Across all three datasets, performance is stable within a moderate range of 𝛿 , showing that PMR is not overly sensitive to the precise boundary used to define the protected near-top set. The default setting 𝛿 = 0.03 lies inside this stable region and achieves the best or near-best performance on all datasets. In contrast, excessively large values of 𝛿 lead to clearer degradation, especially on CIFAR10-C and CIFAR100-C, because the protected set becomes too loose and begins to include classes that are less relevant to local recovery. 
+
+Local Margin Recovery Analysis. Figure 3(d) further verifies that our method restores the intended local decision geometry. For an initially misclassified sample 𝑥 𝑖 , we define the local margin as 
+
+𝑚 𝑖 = 𝑠 𝑖,𝑦 𝑖 − 𝑠 𝑖, ˆ𝑦 𝑖 , where 𝑦 𝑖 is the ground-truth label and ˆ𝑦 𝑖 denotes the initial CLIPZS prediction. A larger value of 𝑚 𝑖 indicates that the correct class is better recovered relative to the original erroneous winner. As shown in the figure, our method consistently shifts this margin upward compared with Tent and MINT across the full percentile range of initially misclassified samples. This suggests that PMR improves local recoverability in a targeted manner, rather than merely sharpening the currently predicted class. 
+
+Table 4: Single-sample test-time efficiency on ImageNet-C (severity 5, 𝑏𝑠 = 1). Method Time/img (ms) Peak mem. (MB) Trainable params 
+
+Source 11.4 570 0TDA 14.0 958 0ECALP 21.8 958 0Tent 33.8 1052 41.0K ETA 17.4 1052 41.0K BITTA 510.6 18.0K 65.5K MINT 56.2 1162 39.9K BATCLIP 510.6 18.0K 65.5K Ours 45.6 1162 39.9K 
+
+Efficiency. Table 4 compares the adaptation cost of different meth-ods under a unified single-sample online setting ( bs = 1). Training-free methods are the lightest, but they are also substantially weaker in the main accuracy results. Among adaptation methods that up-date visual LayerNorm parameters only, our method is more effi-cient than MINT while operating in the same trainable-parameter regime. By contrast, methods that adapt both visual and text-side parameters, such as BATCLIP and BITTA, incur substantially larger latency and memory overhead. 
+
+## 5 Conclusion 
+
+In this paper, we identified a key limitation of existing online test-time adaptation methods for vision-language models: over-committing to the current top-1 prediction can suppress locally recoverable alternatives and gradually destabilize adaptation over long target streams. To address this issue, we proposed the LMR 
+
+framework. At the sample level, PMR preserves plausible near-top candidates and restores their separation from hard negatives. At the stream level, AM and BC jointly stabilize online adaptation by regulating class-wise update concentration and compensating persistent output bias. Extensive experiments on image corruptions and ImageNet-Variants benchmarks show that LMR consistently outperforms strong baselines while remaining robust in challeng-ing low-batch streaming settings. We hope our findings on local margin restoration and stream-level stabilization can inspire future work on robust adaptation for vision-language models. Local Margin Restoration for Test-Time Adaptation of Vision-Language Models MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. 
+
+## Acknowledgments 
+
+This work was supported by the Guangdong Basic and Applied Basic Research Foundation under Grant No. 2023A1515110077. 
+
+## References 
+
+[1] Gustavo A Vargas Hakim, David Osowiechi, Mehrdad Noori, Milad Cher-aghalikhani, Ali Bahri, Moslem Yazdanpanah, Ismail Ben Ayed, and Christian Desrosiers. 2025. Clipartt: Adaptation of clip to new domains at test time. In 
+
+Proceedings of the Winter Conference on Applications of Computer Vision .[2] Wenxuan Bao, Ruxi Deng, and Jingrui He. 2025. Mint: A Simple Test-Time Adaptation of Vision-Language Models against Common Corruptions. In The Thirty-ninth Annual Conference on Neural Information Processing Systems .[3] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. 2009. Imagenet: A large-scale hierarchical image database. In 2009 IEEE conference on computer vision and pattern recognition .[4] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xi-aohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, et al . 2021. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Represen-tations .[5] Dan Hendrycks, Steven Basart, Norman Mu, Saurav Kadavath, Frank Wang, Evan Dorundo, Rahul Desai, Tyler Zhu, Samyak Parajuli, Mike Guo, et al . 2021. The many faces of robustness: A critical analysis of out-of-distribution generalization. In Proceedings of the IEEE/CVF international conference on computer vision .[6] Dan Hendrycks and Thomas Dietterich. 2019. Benchmarking Neural Network Robustness to Common Corruptions and Perturbations. In Proceedings of the International Conference on Learning Representations .[7] Dan Hendrycks, Kevin Zhao, Steven Basart, Jacob Steinhardt, and Dawn Song. 2021. Natural adversarial examples. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition .[8] Yan Huang, Yongyi Su, Xin Lin, Le Zhang, and Xun Xu. 2026. Enhancing general-ization of depth estimation foundation model via weakly-supervised adaptation with regularization. In Proceedings of the AAAI Conference on Artificial Intelligence ,Vol. 40. 5185–5193. [9] Adilbek Karmanov, Dayan Guan, Shijian Lu, Abdulmotaleb El Saddik, and Eric Xing. 2024. Efficient Test-Time Adaptation of Vision-Language Models. The IEEE/CVF Conference on Computer Vision and Pattern Recognition (2024). [10] Diederik P Kingma and Jimmy Ba. 2014. Adam: A method for stochastic opti-mization. arXiv preprint arXiv:1412.6980 (2014). [11] Alex Krizhevsky. 2009. Learning multiple layers of features from tiny images .Technical Report. University of Toronto. [12] Marc Lafon, Gustavo Adolfo Vargas Hakim, Clément Rambour, Christian Desrosiers, and Nicolas THOME. 2025. CLIPTTA: Robust Contrastive Vision-Language Test-Time Adaptation. In The Thirty-ninth Annual Conference on Neural Information Processing Systems .[13] Yushu Li, Yongyi Su, Adam Goodge, Kui Jia, and Xun Xu. 2025. Efficient and Context-Aware Label Propagation for Zero-/Few-Shot Training-Free Adaptation of Vision-Language Model. In The Thirteenth International Conference on Learning Representations .[14] Sarthak Maharana, Baoming Zhang, Leonid Karlinsky, Rogerio Feris, and Yunhui Guo. 2025. Batclip: Bimodal online test-time adaptation for clip. In Proceedings of the IEEE/CVF International Conference on Computer Vision .[15] Shu Manli, Nie Weili, Huang De-An, Yu Zhiding, Goldstein Tom, Anandkumar Anima, and Xiao Chaowei. 2022. Test-Time Prompt Tuning for Zero-shot General-ization in Vision-Language Models. In Advances in neural information processing systems .[16] Shuaicheng Niu, Jiaxiang Wu, Yifan Zhang, Yaofo Chen, Shijian Zheng, Peilin Zhao, and Mingkui Tan. 2022. Efficient Test-Time Model Adaptation without For-getting. In Proceedings of the 39th International Conference on Machine Learning .[17] Shuaicheng Niu, Jiaxiang Wu, Yifan Zhang, Zhiquan Wen, Yaofo Chen, Peilin Zhao, and Mingkui Tan. 2023. Towards Stable Test-Time Adaptation in Dynamic Wild World. In Internetional Conference on Learning Representations .[18] David Osowiechi, Mehrdad Noori, Gustavo A Hakim, Moslem Yazdanpanah, Ali Bahri, Milad Cheraghalikhani, Sahar Dastani, Farzad Beizaee, Ismail B Ayed, and Christian Desrosiers. 2024. Watt: Weight average test time adaptation of clip. In 
+
+Advances in neural information processing systems .[19] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. 2021. Learning Transferable Visual Models From Natural Language Supervision. In Proceedings of the 38th International Conference on Machine Learning .[20] Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar. 2019. Do imagenet classifiers generalize to imagenet?. In International conference on machine learning .[21] Ashshak Sharifdeen, Muhammad Akhtar Munir, Sanoojan Baliah, Salman Khan, and Muhammad Haris Khan. 2025. O-tpt: Orthogonality constraints for cali-brating test-time prompt tuning in vision-language models. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .[22] Lijun Sheng, Jian Liang, Zilei Wang, and Ran He. 2025. R-tpt: Improving adver-sarial robustness of vision-language models through test-time prompt tuning. In 
+
+Proceedings of the Computer Vision and Pattern Recognition Conference .[23] Yongyi Su, Xun Xu, and Kui Jia. 2022. Revisiting realistic test-time training: Sequential inference and adaptation by anchored clustering. In Advances in Neural Information Processing Systems .[24] Yongyi Su, Xun Xu, and Kui Jia. 2024. Towards Real-World Test-Time Adaptation: Tri-net Self-Training with Balanced Normalization. In Proceedings of the AAAI Conference on Artificial Intelligence .[25] Jingwei Sun, Jianing Zhu, Jiangchao Yao, Gang Niu, Masashi Sugiyama, and Bo Han. 2026. Bilateral Information-aware Test-time Adaptation for Vision-Language Models. In The Fourteenth International Conference on Learning Repre-sentations .[26] Dequan Wang, Evan Shelhamer, Shaoteng Liu, Bruno Olshausen, and Trevor Darrell. 2021. Tent: Fully Test-Time Adaptation by Entropy Minimization. In 
+
+International Conference on Learning Representations .[27] Haohan Wang, Songwei Ge, Zachary Lipton, and Eric P Xing. 2019. Learning Robust Global Representations by Penalizing Local Predictive Power. In Advances in Neural Information Processing Systems .[28] Ran Wang, Hua Zuo, Zhen Fang, and Jie Lu. 2024. Towards Robustness Prompt Tuning with Fully Test-Time Adaptation for CLIP’s Zero-Shot Generalization. In 
+
+Proceedings of the 32nd ACM International Conference on Multimedia .[29] Zehao Xiao, Shilin Yan, Jack Hong, Jiayin Cai, Xiaolong Jiang, Yao Hu, Jiayi Shen, Qi Wang, and Cees GM Snoek. 2025. DynaPrompt: Dynamic Test-Time Prompt Tuning. In The Thirteenth International Conference on Learning Representations .[30] Hee Suk Yoon, Eunseop Yoon, Joshua Tian Jin Tee, Mark A. Hasegawa-Johnson, Yingzhen Li, and Chang D. Yoo. 2024. C-TPT: Calibrated Test-Time Prompt Tuning for Vision-Language Models via Text Feature Dispersion. In International Conference on Learning Representations .[31] Longhui Yuan, Binhui Xie, and Shuang Li. 2023. Robust test-time adaptation in dynamic scenarios. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .[32] Maxime Zanella, Clément Fuchs, Christophe De Vleeschouwer, and Ismail Ben Ayed. 2025. Realistic test-time adaptation of vision-language models. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition .[33] Ce Zhang, Simon Stepputtis, Katia Sycara, and Yaqi Xie. 2024. Dual prototype evolving for test-time generalization of vision-language models. In Advances in Neural Information Processing Systems .[34] Marvin Zhang, Sergey Levine, and Chelsea Finn. 2022. Memo: Test time ro-bustness via adaptation and augmentation. In Advances in neural information processing systems .[35] Lihua Zhou, Mao Ye, Shuaifeng Li, Nianxin Li, Xiatian Zhu, Lei Deng, Hongbin Liu, and Zhen Lei. 2025. Bayesian test-time adaptation for vision-language models. In Proceedings of the Computer Vision and Pattern Recognition Conference .MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Yan Huang, Guowei Wang, Xu Wang, Kangjun Liu, and Xin Lin 
+
+## Appendix 
+
+In this supplementary material, we provide additional details for the main paper: 
+
+• Derivations for Theoretical Insights in Section A. 
+
+• Details of the baseline methods in Section B.1. 
+
+• Additional Experiments in Section C. 
+
+## A Derivations for Gradient Insights 
+
+We derive the effective update structure of LMR, with particular emphasis on the PMR objective and the stream-level stabilizers. Throughout, for a fixed sample 𝑖 , the protected set P𝑖 , candidate weights 𝛼 𝑖𝑐 , hard-negative set N𝑖 , and target margin 𝛾 𝑖 enter the derivation as detached quantities; accordingly, gradients are taken only through the remaining differentiable terms. Since masked top-𝐾 selection introduces only finitely many support-switching boundaries, the loss is piecewise smooth, and the gradients below are valid almost everywhere, i.e., away from those measure-zero switching points. 
+
+## A.1 Derivation of the PMR Gradient Structure 
+
+Recall that the positive and negative scores are defined as 
+
+𝑠 + 
+
+> 𝑖
+
+= log ∑︁  
+
+> 𝑐 ∈ P 𝑖
+
+𝛼 𝑖𝑐 exp (𝑜 𝑖𝑐 ), 𝑠 − 
+
+> 𝑖
+
+= log 1
+
+|N 𝑖 |∑︁ 𝑐 ∈ N 𝑖 
+
+exp (𝑜 𝑖𝑐 )
+
+!
+
+,
+
+(21) and that the local protected margin is 
+
+𝑚 𝑖 = 𝑠 + 
+
+> 𝑖
+
+− 𝑠 − 
+
+> 𝑖
+
+, LPMR  
+
+> 𝑖
+
+= softplus (𝛾 𝑖 − 𝑚 𝑖 ). (22) Let 
+
+𝜈 𝑖 = 𝜎 (𝛾 𝑖 − 𝑚 𝑖 ), (23) where 𝜎 (·) is the logistic sigmoid. Since 
+
+𝜕 softplus (𝑥 )
+
+𝜕𝑥 = 𝜎 (𝑥 ), (24) we obtain 
+
+𝜕 LPMR 
+
+> 𝑖
+
+𝜕𝑚 𝑖 
+
+= −𝜎 (𝛾 𝑖 − 𝑚 𝑖 ) = −𝜈 𝑖 . (25) We next differentiate the positive and negative scores with re-spect to the logits. For 𝑐 ∈ P 𝑖 ,
+
+𝜕𝑠 +
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+= 𝛼 𝑖𝑐 exp (𝑜 𝑖𝑐 )
+
+Í𝑗 ∈ P 𝑖 𝛼 𝑖 𝑗 exp (𝑜 𝑖 𝑗 ) ≜ 𝜋 + 
+
+> 𝑖𝑐
+
+, (26) while for 𝑐 ∉ P𝑖 ,
+
+𝜕𝑠 +
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+= 0. (27) Similarly, for 𝑐 ∈ N 𝑖 ,
+
+𝜕𝑠 −
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+= exp (𝑜 𝑖𝑐 )
+
+Í𝑗 ∈ N 𝑖 exp (𝑜 𝑖 𝑗 ) = 𝜋 − 
+
+> 𝑖𝑐
+
+, (28) while for 𝑐 ∉ N𝑖 ,
+
+𝜕𝑠 −
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+= 0. (29) Since 
+
+𝜕𝑚 𝑖 
+
+𝜕𝑜 𝑖𝑐 
+
+= 𝜕𝑠 +
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+− 𝜕𝑠 −
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+, (30) and the protected set and the hard-negative set are disjoint, com-bining Eqs. (25)–(30) yields 
+
+𝜕 LPMR 
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+=
+
+
+
+−𝜈 𝑖 𝜋 + 
+
+> 𝑖𝑐
+
+, 𝑐 ∈ P 𝑖 ,𝜈 𝑖 𝜋 − 
+
+> 𝑖𝑐
+
+, 𝑐 ∈ N 𝑖 ,
+
+0, 𝑐 ∉ P𝑖 ∪ N 𝑖 .
+
+(31) Equation (31) shows that the PMR term is explicitly support-restricted at the logit level: it assigns nonzero gradients only to classes in P𝑖 ∪ N 𝑖 . Protected classes receive negative logit gradients, whereas external hard negatives receive positive logit gradients. Under a direct gradient-descent step on the logits, this promotes the protected classes and suppresses the hard negatives. In particular, if the ground-truth class lies in P𝑖 , it is excluded from the negative branch and can only receive reinforcement through the protected positive term. 
+
+Top-1 degeneration. When P𝑖 = { ˆ𝑦 𝑖 }, only the current top-1 class receives positive-side support. Any recoverable near-top class out-side P𝑖 loses that protection; if it is selected into N𝑖 , it receives explicit negative pressure, and otherwise it receives no direct gra-dient. This explains why the top-1-only variant can still work, yet remains weaker than the full protected-set formulation when sev-eral classes stay close in score. 
+
+## A.2 Derivation of the Entropy Gradient 
+
+For comparison, consider entropy minimization on the predictive distribution 
+
+Lent  
+
+> 𝑖
+
+= −∑︁ 
+
+> 𝑐
+
+𝑞 𝑖𝑐 log 𝑞 𝑖𝑐 , 𝑞 𝑖𝑐 = exp (𝑜 𝑖𝑐 )
+
+Í𝑗 exp (𝑜 𝑖 𝑗 ) . (32) Using the softmax derivative 
+
+𝜕𝑞 𝑖 𝑗 
+
+𝜕𝑜 𝑖𝑐 
+
+= 𝑞 𝑖 𝑗 
+
+ I[ 𝑗 = 𝑐 ] − 𝑞 𝑖𝑐 
+
+, (33) we obtain 
+
+𝜕 Lent 
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+= −∑︁ 
+
+> 𝑗
+
+𝜕𝑞 𝑖 𝑗 
+
+𝜕𝑜 𝑖𝑐 
+
+(log 𝑞 𝑖 𝑗 + 1) (34) 
+
+= −∑︁ 
+
+> 𝑗
+
+𝑞 𝑖 𝑗 
+
+ I[ 𝑗 = 𝑐 ] − 𝑞 𝑖𝑐 
+
+ (log 𝑞 𝑖 𝑗 + 1) (35) 
+
+= −𝑞 𝑖𝑐 (log 𝑞 𝑖𝑐 + 1) + 𝑞 𝑖𝑐 ∑︁ 𝑗 
+
+𝑞 𝑖 𝑗 (log 𝑞 𝑖 𝑗 + 1). (36) Since 
+
+H ( q𝑖 ) = −∑︁ 
+
+> 𝑗
+
+𝑞 𝑖 𝑗 log 𝑞 𝑖 𝑗 ,∑︁ 
+
+> 𝑗
+
+𝑞 𝑖 𝑗 = 1, (37) we have ∑︁ 
+
+> 𝑗
+
+𝑞 𝑖 𝑗 (log 𝑞 𝑖 𝑗 + 1) = −H ( q𝑖 ) + 1. (38) Therefore, 
+
+𝜕 Lent 
+
+> 𝑖
+
+𝜕𝑜 𝑖𝑐 
+
+= 𝑞 𝑖𝑐 
+
+ −H ( q𝑖 ) − log 𝑞 𝑖𝑐 
+
+. (39) Unlike Eq. (31) , this gradient is dense over all classes, which explains why entropy minimization globally sharpens the full predictive distribution rather than restoring a local near-top margin. Local Margin Restoration for Test-Time Adaptation of Vision-Language Models MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. 
+
+## A.3 Derivation of Adaptive Margin as Negative Feedback 
+
+Under the same conditioning, the adaptive margin affects the per-sample update only through 
+
+𝜈 𝑖 = 𝜎 (𝛾 𝑖 − 𝑚 𝑖 ), (40) where 𝑚 𝑖 is treated as fixed with respect to the stream statistic 𝜌 𝑖 
+
+in this analysis. With 
+
+𝛾 𝑖 = ˜𝛾 0 − 𝛽 log (𝜌 𝑖 + 𝜖 ), (41) we have 𝜕𝛾 𝑖 
+
+𝜕𝜌 𝑖 
+
+= − 𝛽 𝜌 𝑖 + 𝜖 . (42) Using 
+
+𝜕𝜈 𝑖 
+
+𝜕𝛾 𝑖 
+
+= 𝜈 𝑖 (1 − 𝜈 𝑖 ), (43) the chain rule gives 
+
+𝜕𝜈 𝑖 
+
+𝜕𝜌 𝑖 
+
+= 𝜕𝜈 𝑖 
+
+𝜕𝛾 𝑖 
+
+𝜕𝛾 𝑖 
+
+𝜕𝜌 𝑖 
+
+= − 𝛽 𝜌 𝑖 + 𝜖 𝜈 𝑖 (1 − 𝜈 𝑖 ). (44) Since 𝛽 > 0, 𝜌 𝑖 + 𝜖 > 0, and 𝜈 𝑖 (1 − 𝜈 𝑖 ) > 0 whenever 0 < 𝜈 𝑖 < 1, we obtain 𝜕𝜈 𝑖 
+
+𝜕𝜌 𝑖 
+
+< 0. (45) Hence, the effective restoration pressure decreases monotonically as the running pseudo-class mass grows. This establishes the adaptive margin as a negative-feedback controller against repeated reinforce-ment of already dominant pseudo-classes. 
+
+Confidence-weighted update amplitude. If we define the detached confidence-weighted update magnitude as 
+
+𝑢 𝑖 = 𝑟 𝑖 𝜈 𝑖 , (46) where 𝑟 𝑖 is the detached confidence gate, then 
+
+𝜕𝑢 𝑖 
+
+𝜕𝜌 𝑖 
+
+= 𝑟 𝑖 
+
+𝜕𝜈 𝑖 
+
+𝜕𝜌 𝑖 
+
+< 0. (47) Thus, the same monotone negative-feedback property holds for the actual confidence-weighted restoration amplitude. 
+
+## A.4 Bias Correction as Relative Logit Reweighting 
+
+Recall that the corrected logits are 
+
+˜𝑜 𝑖𝑐 = 𝑜 𝑖𝑐 + 𝑏 𝑡 −1,𝑐 , (48) and the corresponding softmax probabilities are 
+
+˜𝑞 𝑖𝑐 = exp ( ˜𝑜 𝑖𝑐 )
+
+Í𝑗 exp ( ˜𝑜 𝑖 𝑗 ) . (49) Substituting Eq. (48) into Eq. (49) gives 
+
+˜𝑞 𝑖𝑐 = exp (𝑏 𝑡 −1,𝑐 ) exp (𝑜 𝑖𝑐 )
+
+Í𝑗 exp (𝑏 𝑡 −1,𝑗 ) exp (𝑜 𝑖 𝑗 ) . (50) Hence, additive correction in logit space is equivalent to multiplica-tive reweighting in probability space. This interpretation becomes especially clear from pairwise odds. For any two classes 𝑐 and 𝑗 ,
+
+˜𝑞 𝑖𝑐 
+
+˜𝑞 𝑖 𝑗 
+
+= exp  𝑏 𝑡 −1,𝑐 − 𝑏 𝑡 −1,𝑗 
+
+ 𝑞 𝑖𝑐 
+
+𝑞 𝑖 𝑗 
+
+, (51) where 𝑞 𝑖𝑐 denotes the uncorrected softmax probability. Therefore, only relative differences in the bias vector matter. Now consider the update before projection: 
+
+ˆb𝑡 = b𝑡 −1 − 𝜂 log ( ¯u𝑡 + 𝜖 ), (52) where the logarithm is applied element-wise. For any pair of classes 
+
+𝑐 and 𝑗 ,
+
+ˆ𝑏 𝑡,𝑐 − ˆ𝑏 𝑡,𝑗 = (𝑏 𝑡 −1,𝑐 − 𝑏 𝑡 −1,𝑗 ) − 𝜂 log ¯𝑢 𝑡 (𝑐 ) + 𝜖 
+
+¯𝑢 𝑡 ( 𝑗 ) + 𝜖 . (53) If ¯𝑢 𝑡 (𝑐 ) > ¯𝑢 𝑡 ( 𝑗 ), then the logarithmic ratio is positive, and thus the relative offset for class 𝑐 decreases. In other words, classes with persistently larger running predictive mass receive stronger negative relative correction. Finally, the projection 
+
+𝑃 = 𝐼 − 1
+
+𝐶 𝑒𝑒 ⊤ (54) removes the common mean component. For any vector x and any pair (𝑐, 𝑗 ),
+
+(𝑃 x)𝑐 − ( 𝑃 x)𝑗 = 𝑥 𝑐 − 𝑥 𝑗 . (55) Thus, the projection discards only the irrelevant global shift, to which the softmax is invariant, while preserving all relative class-wise corrections. 
+
+## B Additional Experimental Details B.1 Baseline implementation details. 
+
+Unless otherwise specified, we follow the official implementations and default hyperparameter settings of all baseline methods. All baselines are evaluated under the same test-time protocol, using CLIP ViT-B/16 with OpenAI weights. We use the prompt template “ aphoto of a class .” for all methods. TDA and ECALP are training-free, while the other baselines update normalization affine parameters online with one adaptation step per batch. 
+
+TDA. We use the training-free TDA setting with batch size 1. We use 𝛼 pos = 2.0, 𝛽 pos = 5.0, 𝛼 neg = 0.117 , and 𝛽 neg = 1.0. We use a normalized entropy range of (0.2, 0.5) for negative-cache selection and a negative mask threshold range of (0.03 , 1.0). The positive and negative cache capacities are 3 and 2, respectively. 
+
+ECALP. We use the training-free ECALP setting with batch size 1, 𝐾 text = 3, 𝐾 image = 8, 𝛾 = 10 .0, 𝛼 = 1.0, and 3 label-propagation iterations for all benchmarks. 
+
+TENT. For CIFAR-10-C and CIFAR-100-C, we use Adam with learn-ing rate 2.5 × 10 −4, 𝛽 1 = 0.9, and weight decay 0. For ImageNet-C, ImageNet-A, ImageNet-K, ImageNet-V2, and ImageNet-R, we use SGD with learning rate 2.5 × 10 −4 and weight decay 0. 
+
+ETA. For CIFAR-10-C and CIFAR-100-C, we use Adam with learning rate 2.5 × 10 −4, 𝛽 1 = 0.9, and weight decay 0. For ImageNet-C, ImageNet-A, ImageNet-K, ImageNet-V2, and ImageNet-R, we use SGD with learning rate 2.5 × 10 −4 and weight decay 0. We use the default entropy margin 𝐸 0 = 0.4, and set the diversity margin to 
+
+𝑑 = 0.05 .
+
+BATCLIP. We use one adaptation step per batch. For CIFAR-10-C, we use AdamW with learning rate 10 −3, weight decay 0.01, and batch size 200. For CIFAR-100-C, we use Adam with learning rate 
+
+5 × 10 −4, weight decay 0.01, and batch size 200. For ImageNet-C, ImageNet-A, ImageNet-K, ImageNet-V2, and ImageNet-R, we use MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. Yan Huang, Guowei Wang, Xu Wang, Kangjun Liu, and Xin Lin 
+
+AdamW with learning rate 5 × 10 −4, weight decay 0.01, and batch size 64. Following the bimodal adaptation setting, the text encoder is not frozen. 
+
+MINT. We use Adam with learning rate 7 × 10 −3, 𝛽 1 = 0.9, weight decay 0, and batch size 64 for all benchmarks. The prior strength for text-weight mixing is set to 10000. Following the original design, the model is reset after each batch while the running accumulators are preserved within the stream. 
+
+BITTA. We implement BITTA on top of BATCLIP by adding bilat-eral entropy-based sample selection and a high-entropy unlearning term. For CIFAR-10-C, we use AdamW with learning rate 10 −3,weight decay 0.01, and batch size 200. For CIFAR-100-C, ImageNet-C, ImageNet-A, ImageNet-K, ImageNet-V2, and ImageNet-R, we use AdamW with learning rate 5 × 10 −4, weight decay 0.01, with batch size 200 on CIFAR-100-C and 64 on the ImageNet-based bench-marks. We set 𝛼 = −3.8 × 10 −4, 𝛽 = 0.83 , high-entropy ratio 0.1,and unlearning weight 1.2. The text encoder is not frozen. 
+
+## C Additional Experiments. 
+
+Robustness on a Larger Backbone. To verify that the proposed method is not restricted to a specific backbone, we further evaluate the results on the larger ViT-L/14 backbone on ImageNet-C. We follow the same evaluation protocol as in the main paper and report classification accuracy under 15 corruption types at severity level 5. Table 5 shows that the proposed method consistently outperforms all competing methods across all corruption types and achieves the best average accuracy of 50.44%. This result suggests that the proposed adaptation mechanism remains effective when transferred to a stronger CLIP backbone. 
+
+Results with CuPL Prompt Templates To examine whether the proposed method remains effective under stronger text-side priors, we replace the simple prompt template used in the main paper (“a photo of a class”) with CuPL ensemble prompts and reevaluate all compatible methods on ImageNet-C. All other experimental settings remain unchanged. As shown in Table 6, our method still achieves the best overall performance, reaching an average accuracy of 38.07%. Compared with the strongest competing method under CuPL prompts, ETA, our method improves the average accuracy by 5.78 points. Moreover, relative to its simple-template counterpart, our method obtains a further gain of 1.99 points. These results suggest that stronger prompt templates provide additional benefits, but do not remove the need for test-time adaptation; instead, they are complementary to our adaptation mechanism. BATCLIP and BITTA are omitted because their formulations are not directly compatible with multi-template ensembling. Local Margin Restoration for Test-Time Adaptation of Vision-Language Models MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil. 
+
+Table 5: Classification accuracy (%) on ImageNet-C using the ViT-L/14 backbone. We evaluate the robustness of various methods under 15 corruption types at severity level 5. Bold denotes the best results. Method Gauss. Shot Impu. Defo. Glas. Moti. Zoom Snow Fros. Fog Brit. Cont. Elas. Pixl. Jpeg AVG 
+
+CLIPZS 27.36 29.44 28.68 34.62 25.24 40.94 36.76 49.86 44.10 49.70 65.38 35.10 30.34 53.50 42.24 39.55 TDA 27.44 29.60 29.52 34.78 26.28 41.86 37.58 50.80 45.58 51.46 65.96 36.18 31.24 54.02 42.46 40.32 ECALP 29.58 30.24 31.54 36.74 29.18 44.10 38.72 51.84 47.02 53.06 66.38 38.82 32.84 55.72 44.14 41.99 TENT 32.56 33.92 33.16 36.64 31.32 42.74 38.82 50.80 44.94 51.28 65.96 42.68 34.82 54.32 47.46 42.76 ETA 35.88 37.50 37.18 39.12 37.22 46.2 42.10 52.26 48.10 54.40 66.72 47.36 40.42 55.90 51.72 46.14 BATCLIP 33.44 33.54 34.44 35.36 32.50 43.48 40.82 51.00 44.44 53.22 66.16 42.72 39.54 53.90 50.52 43.67 MINT 32.48 34.08 36.72 37.90 35.40 45.22 43.28 53.58 45.52 55.06 65.78 44.30 43.26 55.66 52.20 45.36 
+
+Ours 39.44 41.04 41.64 43.26 41.98 48.96 47.46 56.30 51.60 59.24 68.26 52.76 50.32 58.56 55.80 50.44 Table 6: Classification accuracy (%) on ImageNet-C with CuPL ensemble prompts. All other experimental settings follow the main paper. The best results are highlighted in bold. Method Gauss. Shot Impu. Defo. Glas. Moti. Zoom Snow Fros. Fog Brit. Cont. Elas. Pixl. Jpeg AVG 
+
+CLIPZS 13.04 14.66 13.70 24.92 16.86 26.54 24.76 33.04 33.16 37.42 57.24 19.36 14.74 34.46 36.08 26.67 TDA 13.96 15.44 14.32 25.22 16.88 26.40 25.06 34.54 33.58 37.96 57.56 19.10 15.42 34.76 36.20 27.09 ECALP 15.40 17.00 15.50 26.60 17.94 27.24 27.10 36.26 34.92 39.90 58.04 21.02 17.46 37.12 36.66 28.54 TENT 7.20 8.90 11.10 27.20 21.10 28.92 26.10 34.40 33.58 39.26 57.60 24.98 15.86 38.08 39.12 27.56 ETA 20.64 21.56 21.64 27.66 24.36 31.50 28.92 37.42 35.44 42.40 58.44 29.06 24.16 40.20 40.92 32.29 MINT 21.52 22.84 22.60 28.66 24.06 32.74 29.72 35.86 33.22 42.24 57.76 27.60 22.62 40.16 42.10 32.25 
+
+Ours 24.36 26.72 26.16 31.88 31.72 37.24 36.00 43.80 40.48 47.64 61.12 36.00 35.60 46.20 46.08 38.07

@@ -1,0 +1,707 @@
+Title: Cross-Resolution Semantic Learning for Graph Domain Adaptation
+
+URL Source: https://arxiv.org/pdf/2607.29365v1
+
+Published Time: Mon, 03 Aug 2026 00:52:15 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# Cross-Resolution Semantic Learning for Graph Domain Adaptation 
+
+## Yingxu Wang 1,* , Haoze Huang 2,* , Zhongkai Zheng 3, Shangsong Liang 4, †
+
+> 1
+
+Mohamed bin Zayed University of Artificial Intelligence 
+
+> 2
+
+Fuzhou University 
+
+> 3
+
+Sun Yat-sen University 
+
+> 4
+
+Macao Polytechnic University 
+
+> *
+
+Equal contribution. †Corresponding author. yingxv.wang@gmail.com, 132301146@fzu.edu.cn, chengchhoi@mail2.sysu.edu.cn, liangshangsong@gmail.com 
+
+Abstract 
+
+Graph Domain Adaptation (GDA) transfers predictive knowl-edge from labeled source graphs to unlabeled target graphs under distribution shift. Existing methods align representa-tions or regularize graph structures, but do not explicitly model how class-discriminative knowledge learned at differ-ent source neighborhood ranges should be routed across target ranges. We call the neighborhood range encoded by a graph representation its propagation resolution and define seman-tic resolution shift as a cross-domain change in the propa-gation resolutions at which class-discriminative evidence is strongest. Such shifts can make fixed same-resolution pair-ing suboptimal and increase the risk of negative transfer. To address this issue, we propose Cross-Re solution Semantic 
+
+Learning (CReSL), a GDA method that learns soft source-to-target resolution correspondence from cross-domain class structure. First, CReSL constructs a multi-resolution repre-sentation bank using a shared Graph Neural Network and learnable resolution embeddings, with a resolution-indexed expert for each source resolution. Second, CReSL intro-duces Cross-Resolution Prototype Transport, which con-structs class-resolution prototypes from source labels and soft target posteriors and converts cross-domain prototype dis-crepancies into expert-specific routing over target resolutions. Third, CReSL introduces Cross-Resolution Target Grafting, which constructs posterior-weighted target-to-source proto-type displacements and enforces correspondence-weighted prediction consistency for instance-level adaptation under class uncertainty. Extensive experiments on graph bench-marks under diverse domain shifts show that CReSL out-performs strong representative baselines across most settings. 
+
+## Introduction 
+
+Graph Domain Adaptation (GDA) aims to transfer predic-tive knowledge from a labeled source graph domain to an unlabeled target graph domain under distribution shift (Wu et al. 2020; Cai et al. 2024; Wu et al. 2024). By leverag-ing source supervision together with unlabeled target data, GDA reduces reliance on costly target annotations and fa-cilitates the deployment of graph learning models across datasets collected from different environments, platforms, or time periods (Wang et al. 2024; Yin et al. 2023). Existing GDA methods improve transfer through adver-sarial or discrepancy-based representation alignment (Wu, He, and Ainsworth 2023; Wang et al. 2026c), cross-domain contrastive learning (Wang et al. 2026d; Ma et al. 2026), and 0-hop 1-hop 4-hop 2-hop      
+
+> More compatible
+> target resolution
+> Implicit same-
+> resolution transfer
+> Source
+> Domain
+> Propagation Resolution
+> Strength of class-discriminative evidence
+> Weak Strong
+> Target
+> Domain
+> Source D omain Target D omain
+> Semantic
+> resolution shift
+> 1-hop 2-hop
+> (a) Shared class semantics, shifted informative
+> propagation resolutions
+> (b) Implicit same-resolution transfer
+> can be suboptimal
+> Reference node Propagation Range
+> Class-discriminative Evidence Other Nodes
+
+Figure 1: Semantic resolution shift in GDA. (a) Informative propagation resolutions differ across domains. (b) Compati-ble source–target resolutions differ in propagation range. pseudo-label self-training (Luo et al. 2025). Graph-specific variants further exploit topology-aware reweighting (Liu et al. 2023), propagation calibration (Liu et al. 2024a), struc-tural consistency (You et al. 2023), and class-conditioned alignment (Liu et al. 2024c). However, a key limitation re-mains: these methods mainly align shared representations or calibrate propagation at the domain level, leaving the corre-spondence between source and target neighborhood ranges unspecified (Chen et al. 2026; Lei et al. 2025; Xiang et al. 2026). We refer to the neighborhood range encoded by a graph representation as its propagation resolution (Pilavcı et al. 2024). Under domain shift, the resolution profile of class-discriminative evidence may change even when class semantics are preserved; we term this phenomenon seman-tic resolution shift . As illustrated in Figure 1, knowledge learned at one source resolution may therefore be more com-patible with a different target resolution, making implicit same-resolution transfer prone to resolution mismatch and negative transfer (Yin et al. 2025a; Xiao et al. 2025). This raises a key question: how can GDA match each source res-olution to compatible target resolutions? 
+
+We aim to learn a source-to-target resolution correspon-dence informed by cross-domain class structure. This ob-jective raises three design challenges, as illustrated in Fig-ure 2: (1) Comparable Resolution-Specific Representa-tions. Representations at different propagation resolutions must preserve distinct class-discriminative evidence while remaining comparable across resolutions and domains (Xu et al. 2018b; Qiao et al. 2023). Direct fusion may erase res-arXiv:2607.29365v1 [cs.LG] 31 Jul 2026 Unknown Correspondence         
+
+> (1) Comparable Resolution-Specific
+> Representations
+> Obscured Evidence Incomparable Spaces
+> (2) Cross-Resolution Correspondence
+> without Target Labels
+> Soft Class Structure
+> Coupled
+> estimation Target Predictions
+> (3) Class-Uncertain Instance Transfer
+> Class A
+> Class B
+> Early Fusion
+> Source Target
+> 0-hop
+> 1-hop
+> 2-hop
+> 0-hop 1-hop 2-hop
+> Independent Encoders
+> Global Resolution
+> Correspondence
+> AB
+> Class-Conditioned
+> Directions
+> AB
+> Assignment
+> Mismatch
+
+Figure 2: Challenges in learning source-to-target resolution correspondence: (1) preserving resolution-specific evidence in a comparable space; (2) inferring correspondence under coupled target-posterior estimation; and (3) applying global correspondence to target graphs under class uncertainty. olution identity, whereas separate encoders may confound genuine resolution differences with encoder-specific vari-ation (Fang et al. 2025b; Wang et al. 2024). (2) Cross-Resolution Correspondence without Target Labels. Res-olution compatibility is not directly observable in the target domain, while structural statistics or marginal feature similar-ity may fail to reflect class-conditional organization. More-over, the target posteriors required to estimate this organiza-tion also depend on the unknown correspondence, creating a coupled estimation problem in which premature hard as-signments can reinforce early errors (Jiang et al. 2020; Wen et al. 2026). (3) Instance-Level Transfer under Class Un-certainty. A global correspondence captures average cross-domain compatibility but does not determine how it should guide each target graph (Kim et al. 2021; Dan et al. 2024b). Since different classes may require different transfer direc-tions and the class membership of each target graph is un-certain, hard assignment may shift its representation toward an incorrect semantic region (Wang et al. 2026b). To address these challenges, we propose Cross-Re solution 
+
+Semantic Learning (CReSL), a GDA method that learns source-to-target resolution correspondence informed by cross-domain class structure, as illustrated in Figure 3. First, CReSL constructs a multi-resolution representation bank with a shared GNN, learnable resolution embeddings, and resolution-specific experts, preserving distinct evidence in a common latent space. Second, CReSL introduces Cross-Resolution Prototype Transport (CRPT), which jointly re-fines target posteriors and resolution correspondence using source and target class-resolution prototypes, and converts prototype discrepancies into expert-specific routing over tar-get resolutions. Third, CReSL introduces Cross-Resolution Target Grafting (CRTG), which transforms the global corre-spondence into target-specific adaptation by mixing class-conditioned target-to-source prototype displacements ac-cording to each target posterior and enforcing routing-weighted prediction consistency. Extensive experiments on widely used graph benchmarks under diverse domain shifts demonstrate that CReSL outperforms representative state-of-the-art baselines across most cases. Our contributions can be summarized as follows: (1) We formulate semantic resolution shift in GDA as the cross-domain change in the resolution profile of class-discriminative evidence. (2) We propose CReSL, featuring multi-resolution encoding with resolution-specific experts, CRPT for prototype-guided cross-resolution correspondence learning, and CRTG for posterior-conditioned instance-level target adaptation. (3) Extensive experiments on widely used graph benchmarks under diverse domain shifts demonstrate that CReSL outperforms representative state-of-the-art base-lines across most settings. 
+
+## Related Work 
+
+Graph Domain Adaptation. GDA transfers predictive knowledge from a labeled source domain to an unlabeled tar-get domain under distribution shift (Wu et al. 2020; Cai et al. 2024). Existing approaches mainly rely on representation alignment, target self-training, and structure-aware adapta-tion (Liu et al. 2024b; Dan et al. 2024b). Adversarial and discrepancy-based objectives reduce cross-domain distribu-tion gaps, while contrastive learning and pseudo-labeling ex-ploit unlabeled target data (Dai et al. 2022). Graph-specific methods further incorporate topology reweighting, neigh-borhood preservation, structural regularization, or class-conditioned alignment (Yin et al. 2025b; Pang et al. 2023). Recent propagation-aware approaches also adjust diffusion depth or exploit higher-order neighborhoods to mitigate structural mismatch (Dan et al. 2024a; Shi et al. 2023). How-ever, these methods typically align a shared latent space, re-fine target predictions, or calibrate propagation at the domain level, without explicitly modeling how knowledge learned at each source propagation resolution should correspond to tar-get resolutions (Huang et al. 2024; Chen et al. 2026). In contrast, CReSL learns soft cross-resolution correspondence from cross-domain class-resolution prototypes and applies it through posterior-conditioned target adaptation. 
+
+Multi-Resolution Graph Representation Learning. Multi-resolution graph learning captures complementary evidence across different propagation ranges (Yang and Hong 2022; Zhang et al. 2022; Wang et al. 2025). Representative meth-ods use multi-hop propagation, layer-wise aggregation, hi-erarchical pooling, or spectral filtering to model local and higher-order structures (Chen et al. 2023; Wu et al. 2026; Wang et al. 2026a). Their resolution-specific features are typically selected, aggregated, or fused into a unified rep-resentation to improve predictive quality (Sun et al. 2023; Yao et al. 2024; Xiang et al. 2025). However, these methods primarily focus on within-domain representation enrichment and do not specify how knowledge acquired at a source prop-agation resolution should be transferred across target resolu-tions. Existing GDA methods incorporating multi-resolution information similarly use it to enrich or calibrate representa-tions, rather than learning explicit source-to-target resolution correspondence (Ngo et al. 2025; Shou et al. 2025).In con-trast, CReSL preserves comparable resolution-specific repre-sentations, learns soft cross-resolution correspondence, and applies it through posterior-conditioned target grafting. Shared 
+
+> GNN
+> Encoder
+> Expert
+
+## =
+
+# ··· 
+
+> Expert
+> Target Graphs
+> Source Graphs
+
+Multi-Resolution 
+
+Representation Bank Cross-Resolution Prototype Transport 
+
+Cross-Resolution 
+
+Target Grafting Figure 3: Overview of CReSL. A shared GNN with learnable resolution embeddings constructs comparable resolution-specific representations and associates each source resolution with a lightweight expert. Cross-Resolution Prototype Transport derives expert-specific routing over target resolutions from cross-domain class-resolution prototypes, while Cross-Resolution Target Grafting mixes class-conditioned target-to-source prototype displacements according to target posteriors. 
+
+## Methodology 
+
+In this paper, we study GDA for graph classification. Let 
+
+G = ( V, E, X) denote a graph, where V is the node set, E ⊆ V × V is the edge set, and X ∈ R|V|× dx is the node-feature matrix with dx features per node. We are given a labeled source domain Ds = {(Gsi , y si )}Ns 
+
+> i=1
+
+and an unlabeled target domain Dt = {Gti}Nt
+
+> i=1
+
+, where ysi ∈ Y = {1, . . . , C }. The two domains share the label space Y but satisfy Ps(G, Y )̸ =
+
+Pt(G, Y ). Let fΘ denote a graph classifier parameterized by Θ that produces a distribution over C classes. Its target-domain risk is defined as 
+
+Rt(fΘ) = E(Gt,Y t)∼Pt
+
+ℓ fΘ(Gt), Y t , (1) where Gt and Y t ∈ Y denote a target graph and its unob-served label, respectively, and ℓ is the classification loss. The ideal objective is Θ⋆ ∈ arg min Θ Rt(fΘ).
+
+Overview of CReSL 
+
+As shown in Figure 3, we propose CReSL, which learns source-to-target resolution correspondence for GDA. First, CReSL constructs a multi-resolution representation bank with a shared GNN and learnable resolution embeddings, and associates each source resolution with an expert. Second, 
+
+Cross-Resolution Prototype Transport (CRPT) builds class-resolution prototypes from source labels and soft target pos-teriors, and converts cross-domain prototype discrepancies into expert-specific routing distributions over target resolu-tions. Third, Cross-Resolution Target Grafting (CRTG) con-verts the global correspondence into target-specific adapta-tion by mixing class-conditioned target-to-source prototype displacements according to each target posterior. 
+
+Multi-Resolution Representation Bank and Source Experts 
+
+Learning source-to-target resolution correspondence re-quires representations that preserve resolution-specific ev-idence while remaining comparable across resolutions and domains (Fan et al. 2025a,b). Accordingly, we construct a multi-resolution representation bank using a shared GNN encoder and learnable resolution embeddings. For a graph G = ( V, E, X), let nG = |V| and AG ∈{0, 1}nG×nG denote its adjacency matrix. The normalized propagation matrix is defined as 
+
+eAG = AG + InG , SG = eD− 12 
+
+> G
+
+eAG eD− 12 
+
+> G
+
+, (2) where eDG = diag( eAG1nG ) is the degree matrix, InG is the identity matrix, and 1nG ∈ RnG is the all-ones vector. Let J = {0, . . . , J } denote the resolution index set and 
+
+R = ( r0, . . . , r J ) the corresponding nonnegative integer pre-propagation orders, with 0 = r0 < · · · < r J . We use rj
+
+to operationalize propagation resolution: r0 = 0 retains the original node features, while larger rj aggregate information from broader neighborhoods. The node features at resolution 
+
+j are 
+
+X(j) 
+
+> G
+
+= S rj 
+
+> G
+
+X, j ∈ J . (3) All resolutions are processed by a shared GNN encoder 
+
+Φθ . To preserve resolution identity under parameter sharing, we introduce a learnable resolution-embedding table Eres ∈
+
+R(J+1) ×dr , where dr is the embedding dimension. Its j-th row is e⊤ 
+
+> j
+
+, with ej ∈ Rdr identifying pre-propagation order 
+
+rj . Each resolution embedding is shared across source and target graphs. The graph representation at resolution j is defined as 
+
+z(j) 
+
+> G
+
+= READOUT 
+
+
+
+Φθ
+
+
+
+AG,
+
+h
+
+X(j) 
+
+> G
+
+∥ 1nG e⊤
+
+> j
+
+i 
+
+∈ Rd,
+
+(4) where [·∥· ] denotes feature concatenation, READOUT is a permutation-invariant pooling operator (Xu et al. 2018a), and d is the graph-representation dimension. The shared encoder maps all resolution-specific representations into a common latent space, while the resolution embeddings pre-serve their pre-propagation identities. The resulting multi-resolution representation bank is 
+
+ZG =
+
+
+
+z(0)  
+
+> G
+
+, . . . , z(J)
+
+> G
+
+
+
+. (5) To capture the discriminative knowledge associated with each source resolution, we assign a source expert hj : Rd →
+
+RC to resolution index j:
+
+hj (z) = Wj z + bj , Wj ∈ RC×d, bj ∈ RC , (6) where hj (z) is the logit vector over the C classes. During source supervision, hj is paired with z(j)
+
+> Gsi
+
+, so index j links pre-propagation order rj , representation z(j) 
+
+> G
+
+, and expert hj .We use global mixture weights to model the relative contri-butions of the source experts. Let a = [ a0, . . . , a J ]⊤ ∈ RJ+1 
+
+be a learnable score vector. The normalized weight of expert 
+
+hj is 
+
+αj = exp( aj )
+
+P 
+
+> j′∈J
+
+exp( aj′ ) , j ∈ J , (7) where P 
+
+> j∈J
+
+αj = 1 . Because resolution-specific represen-tations share the same latent space, hj (z(k)
+
+> Gti
+
+) is well-defined for any k ∈ J , enabling cross-resolution routing. 
+
+Cross-Resolution Prototype Transport 
+
+The multi-resolution representation bank provides resolution-specific representations, but source-to-target correspondence remains unknown. To address this issue, we introduce Cross-Resolution Prototype Transport (CRPT), which iteratively estimates soft target class structure and refines prototype-guided routing. To encode resolution correspondence and aggregate cross-resolution expert responses, we introduce a row-stochastic matrix Γ ∈ R(J+1) ×(J+1) + . The entry Γj,k weights the re-sponse of source expert hj when evaluated on target resolu-tion k, subject to 
+
+Γj,k ≥ 0, ∀j, k ∈ J , X
+
+> k∈J
+
+Γj,k = 1 , ∀j ∈ J . (8) The j-th row of Γ defines a soft routing distribution over target resolutions for expert hj . We initialize it uniformly as 
+
+Γj,k = 1 /(J + 1) .Using the current routing matrix, we infer soft class poste-riors for target graphs by aggregating expert responses across target resolutions: 
+
+ℓti = X
+
+> j∈J
+
+X
+
+> k∈J
+
+αj Γj,k hj
+
+
+
+z(k)
+
+> Gti
+
+
+
+, pti = σ ℓti
+
+ , (9) where σ(·) denotes the softmax function and pti =[pti, 1, . . . , p ti,C ]⊤ is the predicted class distribution of tar-get graph Gti. These posteriors provide soft memberships for estimating class structure at each target resolution. Together with source labels, they define class-resolution prototypes. Let Ns,c = |{ i | ysi = c}| denote the number of source samples in class c. For each c ∈ Y and j, k ∈ J , we define 
+
+μsc,j = 1
+
+Ns,c 
+
+X 
+
+> i:ysi=c
+
+z(j)
+
+> Gsi
+
+, μtc,k =
+
+PNt 
+
+> i=1
+
+pti,c z(k)
+
+> Gti
+
+PNt 
+
+> i=1
+
+pti,c + ε , (10) where ε > 0 ensures numerical stability. Here, μsc,j is the source class center at resolution j, while μtc,k is its probability-weighted target counterpart at resolution k.As hj exclusively processes source representations at res-olution j in mixture-based training, target resolutions with similar class-conditional geometry are more likely to support its resolution-indexed decision function. We therefore mea-sure the compatibility between source resolution j and target resolution k using the class-averaged prototype discrepancy 
+
+Dj,k = 1
+
+C
+
+> C
+
+X
+
+> c=1
+
+μsc,j − μtc,k  
+
+> 22
+
+, (11) where a smaller Dj,k indicates closer class-conditional struc-ture. We convert the discrepancy matrix into a refined routing matrix through row-wise softmax normalization: 
+
+Γ+ 
+
+> j,k
+
+= exp( −Dj,k /τ )
+
+P 
+
+> k′∈J
+
+exp( −Dj,k ′ /τ ) , j, k ∈ J , (12) where τ > 0 controls the routing concentration. A larger 
+
+Γ+ 
+
+> j,k
+
+gives expert hj greater weight on target resolution k.Since Dj,k is averaged over classes, the resulting routing is informed by class structure but shared across classes. Finally, we define a routing-weighted prototype-matching objective to reduce cross-domain discrepancies under the refined correspondence: 
+
+LCRPT = 1
+
+J + 1 
+
+X
+
+> j∈J
+
+X
+
+> k∈J
+
+Γ+
+
+> j,k
+
+Dj,k . (13) Within each adaptation step, the current Γ is used to infer tar-get posteriors, after which Γ+ is computed from the resulting prototypes, weights the adaptation objectives, and becomes the routing matrix for the next step. 
+
+Cross-Resolution Target Grafting 
+
+Class-resolution prototypes capture cross-domain class structure, while the refined routing matrix encodes global compatibility between source and target resolutions. How-ever, this class-shared correspondence does not specify how to adapt an individual target graph under uncertain class membership. We therefore introduce Cross-Resolution Tar-get Grafting (CRTG), which translates global correspon-dence into instance-specific adaptation through posterior-conditioned prototype displacements. For each class c ∈ Y and source–target resolution pair 
+
+(j, k ), we define the target-to-source prototype displacement as 
+
+∆j←kc = μsc,j − μtc,k . (14) Because source and target representations share the same latent space, this displacement is well-defined. The notation 
+
+j ← k indicates a translation from the target class prototype at resolution k toward the corresponding source prototype at resolution j.For target graph Gti, we combine the class-conditioned displacements using its current posterior: 
+
+∆j←ki =
+
+> C
+
+X
+
+> c=1
+
+pti,c ∆j←kc , (15) where pti,c is the probability assigned to class c. The re-sulting ∆j←ki ∈ Rd provides a posterior-weighted transfer direction that preserves class uncertainty without requiring a hard assignment. We then graft the target representation at resolution k toward the source class structure at resolution j:
+
+ezj←kGti
+
+= z(k)
+
+> Gti
+
++ β∆j←ki , qj←ki = σ
+
+
+
+hj
+
+ezj←kGti
+
+ 
+
+, (16) where β ∈ [0 , 1] controls the grafting magnitude and qj←ki is the class distribution predicted by expert hj from the grafted representation. Finally, we define a routing-weighted prediction-consistency objective that encourages grafted predictions from compatible resolution pairs to agree with the aggre-gate target posterior: 
+
+LCRTG = 1
+
+Nt(J + 1) 
+
+> Nt
+
+X
+
+> i=1
+
+X
+
+> j∈J
+
+X
+
+> k∈J
+
+Γ+ 
+
+> j,k
+
+KL 
+
+
+
+pti qj←ki
+
+
+
+,
+
+(17) where KL( ·∥· ) denotes the Kullback–Leibler divergence. 
+
+Learning Objective 
+
+Source supervision trains the source-expert mixture on the representations associated with their respective resolutions. For source graph Gsi , the class-logit vector and predicted distribution are 
+
+ℓsi = X
+
+> j∈J
+
+αj hj
+
+
+
+z(j)
+
+> Gsi
+
+
+
+, psi = σ(ℓsi ) , (18) where psi is the predicted source class distribution. The su-pervised cross-entropy loss is 
+
+Lsup = − 1
+
+NsNsX
+
+> i=1
+
+log psi,y si , (19) where psi,y si is the probability assigned to the ground-truth label ysi .The overall objective combines source supervision, prototype-guided cross-resolution correspondence learning, and posterior-conditioned target grafting: 
+
+L = Lsup + λCRP T LCRPT + λCRT G LCRTG , (20) where λCRP T ≥ 0 and λCRT G ≥ 0 balance the CRPT and CRTG objectives, respectively. 
+
+Theoretical Analysis 
+
+Theorem 1 (Target-Risk Decomposition for CReSL) .
+
+Let T be a class of complete CReSL states fixed independently of the labeled source sample. Define 
+
+f s
+
+> Θ
+
+(G) := σ
+
+P 
+
+> j∈J
+
+αj hj (z(j) 
+
+> G
+
+)
+
+
+
+and fΘ(G) := 
+
+σ
+
+P 
+
+> j,k ∈J
+
+αj Γj,k hj (z(k) 
+
+> G
+
+)
+
+
+
+. Assume uniformly over states, experts, and classes that logits on original and grafted rep-resentations are bounded, β ∈ [0 , 1] , πs(c), π t(c) > 0,
+
+0 ≤ ℓ ≤ Bℓ, ℓ(·, y ) is Lp-Lipschitz in ℓ1, z 7 → ℓ(σ(hj (z)) , y )
+
+is Lz -Lipschitz in ℓ2, and class-conditional representations have finite first moments. For every δ ∈ (0 , 1) , with proba-bility at least 1 − δ over Ss ∼ (Ps)Ns , simultaneously for all 
+
+Θ ∈ T,
+
+Rt(fΘ) ≤ bRs(f s
+
+> Θ
+
+) + 2 bRSs (ℓ ◦ F s) + 3 Bℓ
+
+s
+
+log(2 /δ )2Ns
+
++ Kres 
+
+q
+
+Dpop CRPT (Θ) + Kgraft 
+
+q
+
+Cpop CRTG (Θ) + Λ Θ,
+
+(21) 
+
+where bRs(f ) := N −1
+
+> s
+
+PNs 
+
+> i=1
+
+ℓ(f (Gsi ), y si ), Fs := {f s 
+
+> Θ
+
+:Θ ∈ T}, πd(c) := Pd(Y d = c) for d ∈ { s, t }, πt 
+
+> max
+
+:= max c πt(c), and α⋆ := sup Θ∈T max j∈J αj ≤ 1. The constants are Kres := (1 − β)Lz
+
+pCπ t
+
+> max
+
+α⋆(J + 1) and 
+
+Kgraft := Lp
+
+p2α⋆(J + 1) . Moreover, Dpop CRPT (Θ) and 
+
+Cpop CRTG (Θ) denote the population-level prototype discrep-ancy and grafting consistency under the refined routing, while ΛΘ collects residual prior, conditional-shape, posteri-or/prototype, and expert-mixture errors. 
+
+The theorem shows that the target risk is controlled by the source risk, cross-resolution prototype discrepancy, and grafting inconsistency, implying that minimizing these terms tightens the bound when the residual terms are sufficiently small. 
+
+## Experiments 
+
+Experimental Settings 
+
+Datasets. To evaluate the effectiveness of CReSL, we con-duct experiments on graph classification benchmarks under two representative types of domain shifts. (1) Structure-based shifts: We use Mutagenicity (Kazius, McGuire, and Bursi 2005), PROTEINS (Dobson and Doig 2003), NCI1 (Wale, Watson, and Karypis 2008), and ogbg-molhiv (Hu et al. 2021). Following (Yin et al. 2022, 2025b), each dataset is partitioned into multiple subdomains accord-ing to node and edge densities. (2) Feature-based shifts: 
+
+We further evaluate on PROTEINS, DD, BZR, BZR_MD, COX2, and COX2_MD (Sutherland, O’brien, and Weaver 2003), where the source and target domains primarily differ in their node feature distributions. 
+
+Baselines. We compare CReSL against representative baselines spanning three categories: (1) graph kernels and path-based models, including the WL subtree ker-nel (Shervashidze et al. 2011) and PathNN (Michel et al. 2023); (2) general-purpose graph neural networks, includ-ing GCN (Kipf and Welling 2016), GIN (Xu et al. 2018a), Methods Node Shift Edge Shift Feature Shift                                                                                                                                                                                    
+
+> M0 →M1 M0 →M2 M0 →M3 M0 →M1 M0 →M2 M0 →M3 P→DD→PC→CM CM →CB→BM BM →BWL subtree 34.3 40.4 52.7 34.4 47.6 52.7 43.0 42.2 53.1 58.2 51.3 44.0 GCN 64.1 ±1.4 65.5 ±2.0 56.9 ±2.1 66.3 ±1.7 63.6 ±1.4 56.0 ±1.4 48.9 ±2.0 60.9 ±2.3 51.2 ±1.8 66.9 ±1.8 48.7 ±2.0 78.8 ±1.7 GIN 66.5 ±2.1 52.0 ±1.7 53.7 ±1.7 67.1 ±1.7 54.2 ±2.6 55.4 ±1.9 57.3 ±2.2 61.9 ±1.9 53.8 ±2.5 55.6 ±2.0 49.9 ±2.4 79.2 ±2.8 GMT 65.7 ±1.8 62.1 ±2.1 59.0 ±2.0 67.9 ±1.3 61.5 ±1.8 58.2 ±2.4 59.5 ±2.5 50.7 ±2.2 49.3 ±1.8 58.2 ±2.0 50.2 ±2.3 74.4 ±1.8 CIN 65.1 ±1.7 66.0 ±1.7 55.2 ±1.5 66.3 ±1.8 60.8 ±1.7 55.8 ±2.4 59.1 ±2.6 58.0 ±2.7 51.2 ±2.0 55.6 ±1.5 49.2 ±1.4 74.2 ±1.9 PathNN 70.2 ±1.5 67.1 ±2.0 58.0 ±1.9 68.9 ±1.9 62.9 ±1.7 58.1 ±1.6 57.9 ±1.8 53.8 ±3.3 49.8 ±1.7 66.9 ±2.5 50.3 ±2.3 75.3 ±2.2 DEAL 77.1 ±0.9 70.9 ±0.9 60.3 ±1.1 76.6 ±1.6 70.6 ±1.2 60.2 ±2.1 61.7 ±2.0 60.0 ±1.5 52.7 ±2.7 69.4 ±2.9 52.4 ±2.9 78.6 ±1.4 SGDA 77.5 ±0.6 69.7 ±0.5 65.5 ±0.8 75.9 ±1.6 68.9 ±0.8 64.4 ±0.4 48.3 ±2.0 55.8 ±2.6 49.8 ±1.8 66.9 ±2.3 50.3 ±2.1 78.8 ±2.6 A2GNN 73.5 ±1.9 66.1 ±1.5 60.4 ±1.1 69.5 ±1.4 68.6 ±1.4 58.8 ±2.2 57.8 ±2.1 60.3 ±1.5 51.5 ±1.8 67.7 ±2.1 51.6 ±2.3 77.5 ±1.9 StruRW 78.3 ±1.3 69.7 ±1.3 62.6 ±0.7 76.1 ±1.5 69.0 ±1.3 62.1 ±1.0 59.1 ±2.3 58.8 ±2.8 51.2 ±2.0 54.8 ±2.9 49.2 ±1.4 74.7 ±2.1 PA-BOTH 69.8 ±1.5 63.8 ±1.9 55.3 ±1.1 74.7 ±1.1 65.3 ±1.3 52.2 ±1.5 54.2 ±3.2 56.7 ±2.6 52.9 ±2.8 61.8 ±2.0 47.5 ±3.0 78.8 ±1.9 GAA 79.3 ±1.2 71.2 ±0.7 65.6 ±1.3 77.5 ±1.2 70.0 ±1.2 66.5 ±1.3 62.4 ±0.6 64.1 ±0.8 59.4 ±1.8 78.4 ±1.2 57.2 ±3.3 78.5 ±3.0 TDSS 63.6 ±1.3 56.7 ±1.6 54.7 ±1.0 71.6 ±1.5 67.3 ±1.0 55.4 ±1.6 61.9 ±1.1 63.6 ±1.9 56.8 ±1.3 77.0 ±2.6 56.6 ±1.1 79.1 ±2.4 Ours 83.0 ±0.8 74.6 ±1.3 66.2 ±0.5 80.7 ±0.9 72.9 ±1.7 67.4 ±1.3 66.4 ±1.3 68.8 ±1.3 59.6 ±1.2 81.0 ±0.4 59.9 ±1.7 80.7 ±1.2
+
+Table 1: Graph classification results (in %) under node and edge density domain shifts on the Mutagenicity dataset, and feature domain shifts on DD, PROTEINS, BZR, BZR_MD, COX2, and COX2_MD. For convenience, PROTEINS, DD, COX2, COX2_MD, BZR, and BZR_MD are abbreviated as P, D, C, CM, B, and BM, respectively. Bold results indicate the best performance. Class 1 Source Points Class 0 Target Points 
+
+(a) CReSL (b) GAA 
+
+Figure 4: T-SNE visualizations of CReSL and the baseline GAA on the Mutagenicity dataset. GMT (Baek, Kang, and Hwang 2021), and CIN (Bodnar et al. 2021); and (3) graph domain adaptation methods, in-cluding DEAL (Yin et al. 2022), SGDA (Qiao et al. 2023), A2GNN (Liu et al. 2024a), StruRW (Liu et al. 2023), PA-BOTH (Liu et al. 2024c), GAA (Fang et al. 2025a), and TDSS (Chen et al. 2025). 
+
+Implementation Details. We implement CReSL in PyTorch on four NVIDIA GeForce RTX 3090 GPUs. The shared encoder Φθ is a three-layer GIN (Xu et al. 2018a), using representation dimension d = 128 , resolution-embedding dimension dr = 16 , and dropout 0.2. The multi-resolution representation bank uses J = 3 and R = ( r0, . . . , r J ) = (0 , 1, 2, 4) . We optimize the model using Adam with batch size 64 and learning rate 5 × 10 −4. We set the CRPT and CRTG weights to λCRPT = 10 −2 and λCRTG = 10 −3, re-spectively, and the grafting strength to β = 0 .5. Target labels are not used for hyperparameter tuning and only for post-hoc evaluation. All results are averaged over five independent runs for fair comparisons. 
+
+Performance Comparison 
+
+We report the performance of CReSL and all baselines un-der different domain shifts in Tables 1 and ?? –?? . The results support the following observations. (1) General-purpose GNNs outperform the WL subtree kernel, partic-ularly under structural shifts, suggesting that learned graph representations transfer more effectively than handcrafted kernel similarities in these settings. Nevertheless, their di-rect transfer performance remains limited because they do not explicitly account for cross-domain distribution gaps or semantic resolution shift. (2) GDA methods generally improve over non-adaptive models through representation alignment, structural reweighting, or propagation regulariza-tion. However, their gains vary across shifts, suggesting that representation-level alignment or domain-level propagation calibration may be insufficient when class-discriminative ev-idence moves across resolutions. (3) CReSL achieves the best performance on most tasks under both structural and feature shifts. These gains are consistent with its design: comparable multi-resolution representations preserve resolution-specific evidence, CRPT learns class-structure-informed soft corre-spondence across resolutions, and CRTG converts the global correspondence into posterior-conditioned target adaptation. Together, these components enable source experts to ex-ploit compatible target resolutions rather than fixed same-resolution pairs. In addition, Figure 4 compares the t-SNE visualizations of CReSL and GAA. CReSL produces more compact and better-separated target class clusters, providing qualitative support for improved target discriminability. 
+
+Cross-Resolution Correspondence Analysis 
+
+To assess whether the learned correspondence captures label-informed expert–resolution compatibility, we construct a post-hoc oracle matrix O, where Oj,k denotes the target accuracy of source expert hj evaluated on target representa-tions at resolution k. We compare its row-wise preferences Source Expert 
+
+Target resolution 
+
+> 0-hop
+> 4-hop
+> 1-hop
+> 2-hop
+> 4-hop
+> 2-hop
+> 1-hop
+> 0-hop
+
+(a) Oracle compatibility OSource  Resolution 
+
+Target resolution  
+
+> 0-hop
+> 4-hop
+> 1-hop
+> 2-hop
+> 4-hop
+> 2-hop
+> 1-hop
+> 0-hop
+
+(b) Learned correspondence Γ
+
+Figure 5: Oracle compatibility and learned cross-resolution correspondence matrices for CReSL on the Mutagenicity dataset. Class 1 Source Points Class 0 Row Target 
+
+(a) Source and raw target repre-sentations before grafting. Grafted Target Source Prototype 
+
+(b) Posterior-conditioned target displacements. 
+
+Figure 6: Visualization of cross-resolution target grafting on Mutagenicity. with the correspondence Γ learned without target labels. As shown in Figure 5, both matrices select the 2-hop, 2-hop, 2-hop, and 4-hop target resolutions for the 0-hop, 1-hop, 2-hop, and 4-hop source experts, respectively, yielding a 4/4
+
+(100% ) Top-1 agreement. The 0-hop and 1-hop experts prefer the 2-hop target representation, indicating cross-resolution shifts, whereas the 2-hop and 4-hop experts retain same-resolution matches. Thus, on this task, CReSL matches the oracle-preferred target resolution for all source experts, with target labels used only for post-hoc evaluation. 
+
+Cross-Resolution Target Grafting Analysis 
+
+To examine how the learned global correspondence guides individual target graphs, we visualize target representa-tions before and after grafting on the Mutagenicity dataset. Figure 6(a) shows that raw target representations remain dispersed relative to the source class regions, indicating residual instance-level mismatch before CRTG. Figure 6(b) shows that grafting induces sample-dependent movements toward different source regions rather than a uniform trans-lation. These movements arise from posterior-weighted com-binations of class-conditioned target-to-source prototype displacements. Thus, CRTG translates the global, class-structure-informed correspondence into instance-specific representation adjustments under class uncertainty, provid-ing qualitative support for the intended global-to-instance transfer mechanism.                                           
+
+> Methods M0 →M1 M1 →M0 M0 →M2 M2 →M0 M0 →M3 M3 →M0 CReSL w/o MR 72.9 71.1 58.7 71.3 54.5 52.9 CReSL w/o CRR 73.2 71.9 59.6 72.9 54.5 53.4 CReSL w/o CRPT 75.7 72.2 60.3 71.3 53.6 53.9 CReSL w/o CRTG 75.9 74.5 68.5 72.9 63.2 57.9 CReSL w/ HG 78.4 75.4 71.4 73.5 66.2 60.7 CReSL 80.7 76.9 72.9 74.5 67.4 63.4
+
+Table 2: The results of ablation studies on the Mutagenicity dataset. Bold results indicate the best performance. Accuracy       
+
+> 12345
+> 0.85
+> 0.80
+> 0.75
+> 0.70
+> M0 → M1 M0 → M2
+> M1 → M0 M2 → M0
+
+(a) Resolution depth JAccuracy        
+
+> 0.85
+> 0.80
+> 0.75
+> 0.70
+> M0 → M1 M0 → M2
+> M1 → M0 M2 → M0
+> 0.00 0.25 0.50 0.75 1.00
+
+(b) Grafting strength β
+
+Figure 7: Sensitivity of CReSL to resolution depth J and grafting strength β on the Mutagenicity dataset. 
+
+Ablation Study 
+
+To assess the contribution of each component in CReSL, we evaluate five variants: (1) CReSL w/o MR replaces the multi-resolution representation bank with a single-resolution representation; (2) CReSL w/o CRR replaces the learned cross-resolution routing with fixed same-resolution pairing; (3) CReSL w/o CRPT retains cross-resolution routing but removes the prototype-matching objective; (4) CReSL w/o CRTG removes posterior-conditioned target grafting; and (5) CReSL w/ HG replaces posterior-weighted displace-ment mixing with hard grafting, which selects the displace-ment of the maximum-posterior class. As shown in Table 2, we make the following observations. (1) Removing MR or CRR consistently degrades performance, demonstrating that complementary resolution-specific evidence and learned cross-resolution routing are both essential, while fixed same-resolution pairing cannot adequately capture shifted resolu-tion compatibility. (2) Removing CRPT or CRTG also leads to clear performance drops, confirming their complementary roles in aligning cross-domain class structure and resolving residual instance-level target mismatch, respectively. (3) HG outperforms the variant without CRTG but remains inferior to the complete model, showing that grafting itself is benefi-cial, while posterior-weighted displacement mixing provides more reliable adaptation than committing each target graph to a single pseudo-class. 
+
+Sensitivity Analysis 
+
+We analyze the sensitivity of CReSL to two key hyperparam-eters: the resolution parameter J and the grafting strength β.As shown in Figure 7(a), performance improves as J in-creases and reaches its best level at J = 3 . A small J pro-vides insufficient neighborhood ranges for identifying cross-resolution correspondence, whereas further increasing J in-troduces limited complementary information with additional computational cost. We then fix J = 3 and vary β. As shown in Figure 7(b), performance initially improves and subse-quently declines, with the best results obtained at β = 0 .5.This trend reflects a trade-off in target grafting: insufficient adjustment leaves sample-level mismatch unresolved, while excessive adjustment may distort the original target seman-tics and amplify estimation errors. Accordingly, we adopt 
+
+J = 3 and β = 0 .5 by default, which are pre-specified and fixed across all tasks. 
+
+## Conclusion 
+
+In this paper, we study semantic resolution shift in graph do-main adaptation and propose CReSL, which learns compa-rable resolution-specific representations, prototype-guided source-to-target resolution correspondence, and posterior-conditioned target grafting. Experiments across different shifts demonstrate the effectiveness of CReSL . In future work, we plan to extend CReSL to continuous and instance-adaptive resolution spaces and other domain tasks. 
+
+## References 
+
+Baek, J.; Kang, M.; and Hwang, S. J. 2021. Accurate learning of graph representations with graph multiset pooling. arXiv preprint arXiv:2102.11533 .Bodnar, C.; Frasca, F.; Otter, N.; Wang, Y.; Lio, P.; Montufar, G. F.; and Bronstein, M. 2021. Weisfeiler and lehman go cellular: Cw networks. Proceedings of the Conference on Neural Information Processing Systems , 34: 2625–2640. Cai, R.; Wu, F.; Li, Z.; Wei, P.; Yi, L.; and Zhang, K. 2024. Graph domain adaptation: A generative view. ACM Trans-actions on Knowledge Discovery from Data , 18(3): 1–24. Chen, J.; Gao, K.; Li, G.; and He, K. 2023. NAGphormer: A Tokenized Graph Transformer for Node Classification in Large Graphs. In Proceedings of the International Confer-ence on Learning Representations .Chen, W.; Guo, X.; Li, S.; Zhong, Y.; Zhang, Z.; Zhuang, F.; Liu, H.; Zhang, L.; Ye, G.; and He, H. 2026. Learn-ing Structure-Semantic Evolution Trajectories for Graph Do-main Adaptation. arXiv preprint arXiv:2602.10506 .Chen, W.; Ye, G.; Wang, Y.; Zhang, Z.; Zhang, L.; Wang, D.; Zhang, Z.; and Zhuang, F. 2025. Smoothness really matters: A simple yet effective approach for unsupervised graph do-main adaptation. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, 15875–15883. Dai, Q.; Wu, X.-M.; Xiao, J.; Shen, X.; and Wang, D. 2022. Graph transfer learning via adversarial domain adaptation with graph convolution. IEEE Transactions on Knowledge and Data Engineering , 35(5): 4908–4922. Dan, J.; Liu, W.; Liu, M.; Xie, C.; Dong, S.; Ma, G.; Tan, Y.; and Xing, J. 2024a. Hogda: Boosting semi-supervised graph domain adaptation via high-order structure-guided adaptive feature alignment. In Proceedings of the ACM International Conference on Multimedia , 11109–11118. Dan, J.; Liu, W.; Xie, X.; Yu, H.; Dong, S.; and Tan, Y. 2024b. Tfgda: Exploring topology and feature alignment in semi-supervised graph domain adaptation through robust clustering. Proceedings of the Conference on Neural Infor-mation Processing Systems , 37: 50230–50255. Dobson, P. D.; and Doig, A. J. 2003. Distinguishing enzyme structures from non-enzymes without alignments. Journal of molecular biology .Fan, W.; Fei, J.; Guo, D.; Yi, K.; Song, X.; Xiang, H.; Ye, H.; and Li, M. 2025a. Towards multi-resolution spatiotem-poral graph learning for medical time series classification. In Proceedings of the ACM Web Conference , 5054–5064. Fan, Y.; Yu, R.; Barclay, J. R.; Appling, A. P.; Sun, Y.; Xie, Y.; and Jia, X. 2025b. Multi-scale graph learning for anti-sparse downscaling. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, 27969–27977. Fang, R.; Li, B.; Kang, Z.; Zeng, Q.; Dashtbayaz, N. H.; Pu, R.; Wang, B.; and Ling, C. 2025a. On the benefits of attribute-driven graph domain adaptation. arXiv preprint arXiv:2502.06808 .Fang, R.; Li, B.; Zhao, J.; Pu, R.; Zeng, Q.; Xu, G.; Ling, C.; and Wang, B. 2025b. Homophily enhanced graph domain adaptation. arXiv preprint arXiv:2505.20089 .Hu, W.; Fey, M.; Ren, H.; Nakata, M.; Dong, Y.; and Leskovec, J. 2021. OGB-LSC: A Large-Scale Chal-lenge for Machine Learning on Graphs. arXiv preprint arXiv:2103.09430 .Huang, R.; Xu, J.; Jiang, X.; An, R.; and Yang, Y. 2024. Can modifying data address graph domain adaptation? In 
+
+Proceedings of the International ACM SIGKDD Conference on Knowledge Discovery & Data Mining , 1131–1142. Jiang, X.; Lao, Q.; Matwin, S.; and Havaei, M. 2020. Im-plicit class-conditioned domain alignment for unsupervised domain adaptation. In Proceedings of the International Con-ference on Machine Learning , 4816–4827. PMLR. Kazius, J.; McGuire, R.; and Bursi, R. 2005. Derivation and validation of toxicophores for mutagenicity prediction. 
+
+Journal of medicinal chemistry .Kim, M.; Joung, S.; Kim, S.; Park, J.; Kim, I.-J.; and Sohn, K. 2021. Cross-domain grouping and alignment for domain adaptive semantic segmentation. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 35, 1799–1807. Kipf, T. N.; and Welling, M. 2016. Semi-supervised classi-fication with graph convolutional networks. arXiv preprint arXiv:1609.02907 .Lei, P. I.; Chen, X.; Sheng, Y.; Liu, Y.; Gong, Z.; and Yang, Q. 2025. Gradual domain adaptation for graph learning. arXiv preprint arXiv:2501.17443 .Liu, M.; Fang, Z.; Zhang, Z.; Gu, M.; Zhou, S.; Wang, X.; and Bu, J. 2024a. Rethinking Propagation for Unsupervised Graph Domain Adaptation. Proceedings of the AAAI Con-ference on Artificial Intelligence , 13963–13971. Liu, M.; Zhang, Z.; Tang, J.; Bu, J.; He, B.; and Zhou, S. 2024b. Revisiting, benchmarking and understanding un-supervised graph domain adaptation. Proceedings of the Conference on Neural Information Processing Systems , 37: 89408–89436. Liu, S.; Li, T.; Feng, Y.; Tran, N.; Zhao, H.; Qiu, Q.; and Li, P. 2023. Structural re-weighting improves graph domain adaptation. In Proceedings of the International Conference on Machine Learning , 21778–21793. PMLR. Liu, S.; Zou, D.; Zhao, H.; and Li, P. 2024c. Pairwise Align-ment Improves Graph Domain Adaptation. Proceedings of the International Conference on Machine Learning .Luo, J.; Tang, Y.; Fu, Y.; Luo, X.; Kou, Z.; Xiao, Z.; Ju, W.; Zhang, W.; and Zhang, M. 2025. Sparse Causal Discov-ery with Generative Intervention for Unsupervised Graph Domain Adaptation. In Proceedings of the International Conference on Machine Learning , 41331–41345. PMLR. Ma, X.; Wang, Y.; Yi, S.; Ju, W.; Luo, J.; Zhao, Y.; Luo, X.; and Lv, J. 2026. Dual Prototype-Enhanced Contrastive Framework for Class-Imbalanced Graph Domain Adapta-tion. Proceedings of the Conference on Neural Information Processing Systems , 38: 48456–48482. Michel, G.; Nikolentzos, G.; Lutzeyer, J. F.; and Vazirgiannis, M. 2023. Path neural networks: Expressive and accurate graph neural networks. In Proceedings of the International Conference on Machine Learning , 24737–24755. PMLR. Ngo, B. H.; Bui, D. C.; Do-Tran, N.-T.; and Choi, T. J. 2025. Higda: Hierarchical graph of nodes to learn local-to-global topology for semi-supervised domain adaptation. In Pro-ceedings of the AAAI Conference on Artificial Intelligence ,volume 39, 6191–6199. Pang, J.; Wang, Z.; Tang, J.; Xiao, M.; and Yin, N. 2023. Sa-gda: Spectral augmentation for graph domain adaptation. In 
+
+Proceedings of the ACM International Conference on Multi-media , 309–318. Pilavcı, Y. Y.; Güneyi, E. T.; Cengiz, C.; and Vural, E. 2024. Graph domain adaptation with localized graph signal repre-sentations. Pattern Recognition , 155: 110628. Qiao, Z.; Luo, X.; Xiao, M.; Dong, H.; Zhou, Y.; and Xiong, H. 2023. Semi-supervised domain adaptation in graph trans-fer learning. In Proceedings of the International Joint Con-ference on Artificial Intelligence , 2279–2287. Shervashidze, N.; Schweitzer, P.; Van Leeuwen, E. J.; Mehlhorn, K.; and Borgwardt, K. M. 2011. Weisfeiler-lehman graph kernels. The Journal of Machine Learning Research. , 12(9). Shi, B.; Wang, Y.; Guo, F.; Shao, J.; Shen, H.; and Cheng, X. 2023. Improving graph domain adaptation with network hierarchy. In Proceedings of the International Conference on Information and Knowledge Management , 2249–2258. Shou, Y.; Cao, X.; Yan, P.; Hui, Q.; Zhao, Q.; and Meng, D. 2025. Graph domain adaptation with dual-branch encoder and two-level alignment for whole slide image-based survival prediction. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 19925–19935. Sun, J.; Wang, S.; Han, X.; Xue, Z.; and Huang, Q. 2023. All in a Row: Compressed Convolution Networks for Graphs. In Proceedings of the International Conference on Machine Learning .Sutherland, J. J.; O’brien, L. A.; and Weaver, D. F. 2003. Spline-fitting with a genetic algorithm: A method for devel-oping classification structure- activity relationships. Journal of chemical information and computer sciences .Wale, N.; Watson, I. A.; and Karypis, G. 2008. Comparison of descriptor spaces for chemical compound retrieval and classification. Knowledge and Information Systems , 14: 347– 375. Wang, Y.; Liang, V.; Yin, N.; Liu, S.; and Segal, E. 2026a. SGAC: a graph neural network framework for imbalanced and structure-aware AMP classification. Briefings in Bioin-formatics , 27(1): bbag038. Wang, Y.; Liu, X.; Wang, M.; Gao, S.; and Yin, N. 2026b. Riemannian Flow Matching for Disentangled Graph Domain Adaptation. arXiv preprint arXiv:2602.00656 .Wang, Y.; Wang, M.; Huang, Z.; Liu, S.; and Yin, N. 2026c. Nested graph pseudo-label refinement for noisy label domain adaptation learning. In Proceedings of the AAAI Conference on Artificial Intelligence , 31, 26697–26705. Wang, Y.; Wang, M.; Su, H.; Yin, N.; Yao, Q.; and Kwok, J. 2024. Degree-Conscious Spiking Graph for Cross-Domain Adaptation. arXiv preprint arXiv:2410.06883 .Wang, Y.; Zhang, K.; Huang, J.; Wang, M.; Xiao, M.; Gao, S.; and Yin, N. 2026d. Dsbd: Dual-aligned structural ba-sis distillation for graph domain adaptation. arXiv preprint arXiv:2604.03154 .Wang, Y.; Zhang, K.; Huang, J.; Yin, N.; Liu, S.; and Segal, E. 2025. ProtoMol: enhancing molecular property predic-tion via prototype-guided multimodal learning. Briefings in Bioinformatics , 26(6): bbaf629. Wen, H.; Zhang, C.; He, H.; Hang, H.; and Lei, M. 2026. Progressive Graph Structure Adjustment for Homophily Shift Adaptation. In Proceedings of the International Conference on Machine Learning .Wu, J.; He, J.; and Ainsworth, E. 2023. Non-iid transfer learning on graphs. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 37, 10342–10350. Wu, M.; Pan, S.; Zhou, C.; Chang, X.; and Zhu, X. 2020. Un-supervised domain adaptive graph convolutional networks. In Proceedings of the ACM Web Conference , 1457–1467. Wu, M.; Zheng, X.; Zhang, Q.; Shen, X.; Luo, X.; Zhu, X.; and Pan, S. 2024. Graph learning under distribu-tion shifts: A comprehensive survey on domain adaptation, out-of-distribution, and continual learning. arXiv preprint arXiv:2402.16374 .Wu, S.; Zhang, X.; Wang, G.; Han, X.; Zhu, J.; Cheng, X.; and Jiao, L. 2026. PixDiff: Multi-Resolution Diffusion Net-work with Pixelization for Hyperspectral Anomaly Detec-tion. IEEE Transactions on Geoscience and Remote Sensing .Xiang, Y.; Hong, Z.; Wang, Z.; Zhao, X.; Han, B.; and Liu, T. 2026. When safety collides: Resolving multi-category harm-ful conflicts in text-to-image diffusion via adaptive safety guidance. arXiv preprint arXiv:2602.20880 .Xiang, Y.; Hong, Z.; Yao, L.; Wang, D.; and Liu, T. 2025. Jailbreaking the non-transferable barrier via test-time data disguising. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 30671–30681. Xiao, Z.; Wang, H.; Lu, X.; Ye, W.; Chen, G.; and Zhao, J. 2025. SPA++: Generalized Graph Spectral Align-ment for Versatile Domain Adaptation. arXiv preprint arXiv:2508.05182 .Xu, K.; Hu, W.; Leskovec, J.; and Jegelka, S. 2018a. How powerful are graph neural networks? arXiv preprint arXiv:1810.00826 .Xu, K.; Li, C.; Tian, Y.; Sonobe, T.; Kawarabayashi, K.-i.; and Jegelka, S. 2018b. Representation learning on graphs with jumping knowledge networks. In Proceedings of the International Conference on Machine Learning , 5453–5462. pmlr. Yang, L.; and Hong, S. 2022. Omni-granular ego-semantic propagation for self-supervised graph representation learn-ing. In Proceedings of the International Conference on Ma-chine Learning , 25022–25037. PMLR. Yao, T.; Sun, J.; Cao, D.; Zhang, K.; and Chen, G. 2024. Mugsi: Distilling gnns with multi-granularity structural in-formation for graph classification. In Proceedings of the ACM Web Conference , 709–720. Yin, N.; Shen, L.; Li, B.; Wang, M.; Luo, X.; Chen, C.; Luo, Z.; and Hua, X.-S. 2022. Deal: An unsupervised do-main adaptive framework for graph-level classification. In 
+
+Proceedings of the ACM International Conference on Multi-media , 3470–3479. Yin, N.; Shen, L.; Wang, M.; Lan, L.; Ma, Z.; Chen, C.; Hua, X.-S.; and Luo, X. 2023. Coco: A coupled contrastive frame-work for unsupervised domain adaptive graph classification. In Proceedings of the International Conference on Machine Learning , 40040–40053. PMLR. Yin, N.; Shen, L.; Wang, M.; Liu, X.; Chen, C.; and Hua, X.-S. 2025a. Dream: a dual variational framework for un-supervised graph domain adaptation. IEEE Transactions on Pattern Analysis and Machine Intelligence .Yin, N.; Teng, X.; Cao, Z.; and Wang, M. 2025b. Coupling category alignment for graph domain adaptation. In Pro-ceedings of the International Joint Conference on Artificial Intelligence , 3561–3569. You, Y.; Chen, T.; Wang, Z.; and Shen, Y. 2023. Graph do-main adaptation via theory-grounded spectral regularization. In Proceedings of the International Conference on Learning Representations .Zhang, W.; Yin, Z.; Sheng, Z.; Li, Y.; Ouyang, W.; Li, X.; Tao, Y.; Yang, Z.; and Cui, B. 2022. Graph attention multi-layer perceptron. In Proceedings of the International ACM SIGKDD Conference on Knowledge Discovery & Data Min-ing , 4560–4570.
