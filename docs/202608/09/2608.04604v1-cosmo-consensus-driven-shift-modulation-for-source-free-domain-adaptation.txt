@@ -1,0 +1,2384 @@
+Title: COSMO: Consensus-Driven Shift Modulation for Source-Free Domain Adaptation
+
+URL Source: https://arxiv.org/pdf/2608.04604v1
+
+Published Time: Thu, 06 Aug 2026 00:42:06 GMT
+
+Number of Pages: 30
+
+Markdown Content:
+# COSMO: Consensus-Driven Shift Modulation for Source-Free Domain Adaptation 
+
+## Bo Li Junjie Peng Xiaohua Xie Jianhuang Lai School of Computer Science and Engineering, Sun Yat-sen University Guangzhou, China 
+
+## libo88@mail2.sysu.edu.cn 
+
+# Abstract 
+
+Source-free domain adaptation (SFDA) adapts a source-trained model to an unlabeled target domain without source data, a practical setting under privacy or storage constraints. Yet its self-generated super-vision can reinforce source bias under substantial domain shifts. Pretrained vision–language models (VLMs) offer complementary semantic knowledge, but the relative reliability of the source model and VLM varies across target samples. Existing cross-model guidance does not explicitly account for this variation and may overwrite valid source-derived evidence under conflict, a failure we term source-derived evidence forgetting . We formulate VLM-guided SFDA as a sample-wise reliability-allocation problem and propose Consensus-Driven Shift Modu-lation (COSMO). COSMO replaces expert-to-expert guidance with co-adaptation through an anchored shared consensus. It first forms a sample-specific ini-tial consensus that favors the more concentrated pre-diction. During adaptation, COSMO re-aggregates both branches’ evolving evidence and regulates how far the resulting consensus moves from its initial an-chor based on consensus uncertainty and training progress. This keeps the shared supervision anchored yet adaptive. Across four benchmarks, COSMO achieves state-of-the-art performance under matched VLM backbones. Further analyses indicate that it better balances the retention of valid source-derived evidence with the absorption of complementary VLM evidence. 
+
+# 1 Introduction 
+
+Source-free domain adaptation (SFDA) adapts a source-trained model to an unlabeled target domain without access to source data (Liang et al., 2020; Xia et al., 2021). Conventional SFDA recovers su-pervision from the source hypothesis and unlabeled 
+
+Figure 1: Conceptual comparison of VLM-guided SFDA. Ellipses summarize target-domain predictions; bars show an illustrative sample. (a) Cross-model guidance may overwrite valid source-derived evidence under expert conflict. (b) COSMO instead learns from an evolving shared consensus, retaining source-derived evidence while integrating complementary VLM evidence. target structure through pseudo-labels, prototypes, neighborhoods, or prediction regularization. However, under large domain shifts, these self-generated signals can inherit source bias and progressively reinforce erroneous decisions. Pretrained vision-language models (VLMs), such as CLIP (Radford et al., 2021), extend this informa-tion boundary with external visual-semantic knowl-edge. Recent VLM-guided SFDA methods customize VLM prompts (Tang et al., 2024b), correct VLM pre-dictions (Tang et al., 2025; Peng et al., 2026), or al-ternate bidirectional transfer between the task model and VLM (Han et al., 2026). Despite these advances, supervision is still exchanged through expert-specific predictions, with one expert guiding, correcting, or aligning the other. Such interaction becomes fragile when the experts disagree: the source model retains task-specific decision evidence learned from labeled source data, whereas the VLM contributes broader 1arXiv:2608.04604v1 [cs.CV] 5 Aug 2026 semantics acquired from image–text pretraining, so either expert may be uniquely correct on different target samples. Existing cross-model objectives do not explicitly allocate supervisory influence accord-ing to their sample-wise relative reliability; instead, the dominant signal is determined indirectly by the objective, loss weights, or update schedule. VLM guidance can therefore correct a source-biased error, but may also overwrite an initially correct source-derived decision, as illustrated in Fig. 1(a). We call this failure source-derived evidence forgetting . This exposes a central reliability-allocation problem: how can complementary evidence be integrated without blindly privileging either expert? We address this problem with Consensus-Driven Shift Modulation (COSMO) , which mediates cross-model interaction through a shared consen-sus instead of direct expert-to-expert guidance, as shown in Fig. 1(b). At initialization, COSMO con-structs a sample-specific consensus from the frozen source expert and the initially prompted VLM. For each sample, prediction entropy serves as a label-free proxy for relative predictive concentration and assigns greater influence to the more concentrated expert; it is not interpreted as calibrated correctness. Formally, this consensus is an entropy-conditioned reverse-KL barycenter whose closed-form solution is a weighted product of experts. By reinforcing compat-ible class evidence and mediating conflicts according to relative concentration, it provides a shared initial anchor without assigning either expert a fixed teacher role. During adaptation, the source-initialized target branch and the prompt-adapted VLM aggregate their current predictions into a dynamic consensus. Be-fore it is used for supervision, entropy-rank-guided Consensus Shift Modulation (CSM) rescales its dis-placement from the initial anchor according to each sample’s rank in the current consensus-entropy dis-tribution, using a bounded factor that decays to-ward one over training. Relatively low-entropy sam-ples remain closer to the initial anchor, reducing unnecessary drift, whereas high-entropy samples re-tain greater plasticity along the direction already inferred by the dynamic consensus. Both branches then learn synchronously from the same detached, modulated consensus, and their updated predictions are re-aggregated to form the next one. This re-aggregation–modulation–learning loop allows newly acquired target-domain evidence to enter subsequent supervision while keeping the initial evidence as a persistent reference. Our contributions are summarized as follows: • We identify and empirically diagnose source-derived evidence forgetting in VLM-guided SFDA, and formulate the problem as sample-wise reliability allocation between heterogeneous experts. • We propose COSMO , which replaces direct cross-model guidance with synchronous co-adaptation through an evolving shared con-sensus anchored to its initial state. We for-mulate the initial consensus as an entropy-conditioned reverse-KL barycenter, derive its closed-form weighted-PoE solution, and charac-terize decision-retention conditions under expert conflict. • Experiments on four benchmarks demonstrate state-of-the-art performance under matched VLM backbones. Ablations and conflict-conditioned analyses further show that COSMO 
+
+better retains valid source-derived decisions while absorbing complementary VLM evidence. 
+
+# 2 Related Work 
+
+Source-Free Domain Adaptation. Without source data, SFDA derives supervision from the source hypothesis and unlabeled target data. Existing methods reconstruct source structure from genera-tive models, classifier parameters, or estimated statis-tics (Kurmi et al., 2021; Tian et al., 2021; Ding et al., 2022); refine source predictions through information maximization, pseudo-labeling, or noise-robust learn-ing (Liang et al., 2020; Chen et al., 2022b; Yi et al., 2023); or exploit target-domain geometry and uncer-tainty (Huang et al., 2021; Yang et al., 2021, 2022; Litrico et al., 2023; Tang et al., 2024a). These signals can nevertheless remain coupled to source-model bias under large domain shifts. 
+
+Vision–Language Models for Domain Adapta-tion. With access to source data, VLM-based un-supervised domain adaptation (UDA) methods learn domain-aware prompts, debias predictions, or align visual–semantic representations across domains (Lai et al., 2023; Singha et al., 2023; Bai et al., 2024; Du et al., 2024). In SFDA, existing methods cus-tomize VLM prompts, distill their predictions, or iteratively refine cross-model guidance using adapta-tion dynamics (Tang et al., 2024b, 2025, 2026; Han et al., 2026). Recent approaches further integrate heterogeneous visual–semantic evidence through pre-diction fusion, neighborhood learning, multimodal alignment, or reliability-aware curricula (Zhan et al., 2024; Tarashima et al., 2025; Peng et al., 2025; Chen 2et al., 2025, 2026; Lee et al., 2025a). While these de-signs strengthen external supervision, collaboration is still organized around directed transfer, fused pseudo-labels, or curriculum-based selection. COSMO in-stead lets both evolving branches learn from a sample-conditioned shared consensus whose evolution is an-chored to their initial evidence. 
+
+Knowledge Distillation. Recent VLM distilla-tion covers cross-modal affinity, feature, and align-ment transfer (Wu et al., 2023; Yang et al., 2024; Feng et al., 2025); teacher-augmented multimodal pretraining (Vasu et al., 2024; Sameni et al., 2024); adaptation to unlabeled domains, downstream tasks, and heterogeneous students (Li et al., 2024; Lee et al., 2025b; Jang et al., 2025); and self- or multi-encoder distillation (Wu et al., 2024; Kim et al., 2025; Cao et al., 2025). Despite increasingly adaptive knowl-edge sources, these methods generally preserve a privileged teacher-to-student direction. COSMO in-stead uses the same detached consensus to supervise both branches, without assigning either branch a fixed teacher role. 
+
+# 3 Method 
+
+## 3.1 Problem Setup and Method Overview 
+
+We consider closed-set source-free domain adaptation with a shared label space Y = {1, . . . , K }. Let Dt =
+
+{xi}Ni=1 denote a target set of N unlabeled samples. We are given a source-trained model fs without access to its training data. We retain a frozen copy of fs
+
+as the source expert and initialize the target branch 
+
+ft from it. We additionally use a pretrained vision– language model (VLM) fv . Its pretrained encoders remain frozen, while its prompt context is optimized together with ft. We denote the initially prompted VLM by f (0)  
+
+> v
+
+, and the target and VLM branches at optimization step ℓ by f (ℓ) 
+
+> t
+
+and f (ℓ) 
+
+> v
+
+.For predictor m ∈ { s, t, v } and sample xi, let 
+
+z(ℓ) 
+
+> m,i
+
+∈ RK be its logits and p(ℓ) 
+
+> m,i
+
+= softmax( z(ℓ)
+
+> m,i
+
+)
+
+its prediction. The frozen source quantities are inde-pendent of ℓ, and we omit their step superscript when no ambiguity arises. We represent each prediction in the centered-logit coordinate 
+
+a(ℓ) 
+
+> m,i
+
+= Π log p(ℓ) 
+
+> m,i
+
+= Πz (ℓ)
+
+> m,i
+
+. (1) Here, Π = I − 1 
+
+> K
+
+11 ⊤ is the centering matrix and 1
+
+is the all-ones vector. Centering removes the additive ambiguity of logits without changing the correspond-ing prediction, providing a common coordinate for consensus construction and anchor-relative displace-ment. Further details are given in Appendix A.1. Figure 2(a) presents the overall framework. 
+
+COSMO addresses three questions: how to allo-cate the initial evidence between the source expert and VLM, how to incorporate newly acquired target-domain evidence into subsequent supervision, and how far the resulting consensus should move from its initial state. The first is addressed by the entropy-conditioned consensus construction in Fig. 2(b), the second by the dynamic re-aggregation loop in Fig. 2(a), and the third by Consensus Shift Modula-tion (CSM) in Fig. 2(c). 
+
+## 3.2 Entropy-Conditioned Consensus Construction 
+
+Sample-wise expert allocation. As illustrated in Fig. 2(b), consider an active expert set M and an expert m ∈ M . We quantify its predictive concentra-tion and normalize the resulting scores within each sample: 
+
+r(ℓ) 
+
+> m,i
+
+= max 
+
+n
+
+log K − H p(ℓ)
+
+> m,i
+
+, ϵ 
+
+o
+
+,w(ℓ) 
+
+> m,i
+
+= r(ℓ)
+
+> m,i
+
+P 
+
+> n∈M
+
+r(ℓ)
+
+> n,i
+
+,
+
+(2) where ϵ > 0 prevents degenerate weights. Since 
+
+log K−H(p) = KL( p∥u) for the uniform distribution 
+
+u, r(ℓ) 
+
+> m,i
+
+measures predictive concentration relative to uniformity. We use it only to allocate relative influ-ence between the active experts within a sample, not as a calibrated estimate of correctness. 
+
+Consensus construction. Given the allocation weights, we define the shared prediction as the sample-conditioned reverse-KL barycenter 
+
+q(ℓ) 
+
+> M,i
+
+= arg min 
+
+> q∈∆K−1
+
+X
+
+> m∈M
+
+w(ℓ) 
+
+> m,i
+
+KL 
+
+
+
+q∥p(ℓ)
+
+> m,i
+
+
+
+. (3) Its closed-form solution can be expressed in centered-logit and probability form as 
+
+c(ℓ) 
+
+> M,i
+
+= X
+
+> m∈M
+
+w(ℓ)
+
+> m,i
+
+a(ℓ)
+
+> m,i
+
+, q(ℓ) 
+
+> M,i
+
+= softmax  c(ℓ)
+
+> M,i
+
+,q(ℓ) 
+
+> M,i,k
+
+∝ Y
+
+> m∈M
+
+ p(ℓ)
+
+> m,i,k
+
+w(ℓ) 
+
+> m,i
+
+.
+
+(4) Thus, the reverse-KL barycenter corresponds to an entropy-conditioned product of experts in probabil-ity space, pooling compatible class-wise log evidence 3Figure 2: Overview of COSMO . (a) For each target sample, the frozen source expert and initially prompted VLM form a cached consensus anchor, while the current target and prompt-adapted VLM branches form a dynamic consensus. CSM modulates its anchor-relative displacement, and the detached result supervises both branches. (b) Entropy-conditioned weighting yields a weighted product of experts that emphasizes more concentrated predictions and reinforces compatible evidence. (c) Consensus-entropy rank contracts, preserves, or extends the consensus shift, while temporal decay gradually removes the modulation. while resolving conflicts through sample-specific allo-cation. The complete derivation is provided in Ap-pendix A.2. At initialization, the active pair is the frozen source expert and the initially prompted VLM, M = {s, v }.We abbreviate the resulting centered consensus and distribution as c(0)  
+
+> i
+
+and q(0)  
+
+> i
+
+, respectively, and cache 
+
+c(0)  
+
+> i
+
+as the fixed initial-consensus anchor . Under expert conflict, the initial consensus retains the source decision when, against every competing class, the weighted source margin exceeds the opposing weighted VLM margin; an analogous condition holds for the VLM decision. These conditions character-ize decision retention rather than correctness. Their complete forms are given in Appendix A.3. 
+
+## 3.3 Dynamic Consensus Co-Adaptation 
+
+The initial consensus captures the evidence avail-able before adaptation. As training proceeds, the target branch acquires target-domain structure and the VLM prompts become task-specific, so their pre-dictions and relative contributions should evolve. At each optimization step ℓ, we reuse Eqs. (2)– (4) with the active pair M = {t, v }. We denote the resulting centered-logit state and prediction by c(ℓ)
+
+> i
+
+and q(ℓ) 
+
+> i
+
+. They are computed once from the two pre-update branch predictions. The frozen source expert does not directly enter this dynamic pair; its initial evidence persists through the anchor c(0)  
+
+> i
+
+.CSM transforms the unmodulated dynamic consen-sus before the resulting detached snapshot supervises both branches. Their updated predictions are re-aggregated at the next step, forming a re-aggregation– modulation–learning loop that incorporates newly acquired evidence without direct cross-model chasing. 
+
+## 3.4 Consensus Shift Modulation 
+
+Dynamic re-aggregation incorporates newly acquired evidence, but accepting each sample’s full anchor-relative displacement may unnecessarily overwrite pre-adaptation evidence recorded by the initial con-sensus. We therefore introduce entropy-rank-guided Consensus Shift Modulation (CSM), illustrated in Fig. 2(c), to preserve the direction inferred by dy-namic re-aggregation while regulating its magnitude 4according to relative consensus uncertainty. At the beginning of epoch e ∈ { 0, . . . , E − 1}, we evaluate the unmodulated dynamic consensus over the target set and denote the resulting predictions by {¯q(e) 
+
+> i
+
+}Ni=1 . We compute 
+
+h(e) 
+
+> i
+
+= H(¯ q(e) 
+
+> i
+
+)log K , u(e) 
+
+> i
+
+= 2 rank (e)(h(e) 
+
+> i
+
+)
+
+N − 1 − 1,d(e) = 1 − eE − 1 , γ(e) 
+
+> i
+
+= 1 + λd (e)u(e) 
+
+> i
+
+.
+
+(5) where rank (e)(·) ∈ [0 , N −1] is the zero-based average rank among target samples, ordered from lower to higher consensus entropy. Hence, u(e) 
+
+> i
+
+∈ [−1, 1] is a centered uncertainty rank; E > 1 and λ denote the number of epochs and modulation strength, respec-tively. For a step ℓ in epoch e, CSM rescales the anchor-relative displacement in centered-logit space: 
+
+∆c(ℓ) 
+
+> i
+
+= c(ℓ) 
+
+> i
+
+− c(0)  
+
+> i
+
+,
+
+bc(ℓ) 
+
+> i
+
+= c(0)  
+
+> i
+
++ γ(e) 
+
+> i
+
+∆c(ℓ) 
+
+> i
+
+,
+
+bq(ℓ) 
+
+> i
+
+= softmax 
+
+bc(ℓ)
+
+> i
+
+
+
+.
+
+(6) Samples with lower consensus-entropy ranks ( u(e) 
+
+> i
+
+<
+
+0) have γ(e) 
+
+> i
+
+< 1 and contract the anchor-relative displacement, whereas higher-ranked samples ( u(e) 
+
+> i
+
+>
+
+0) have γ(e) 
+
+> i
+
+> 1 and extend it along the direction inferred by dynamic re-aggregation. When u(e) 
+
+> i
+
+=0 or d(e) = 0 , CSM leaves the dynamic consensus unchanged. Since u(e) 
+
+> i
+
+∈ [−1, 1] , d(e) ∈ [0 , 1] , and 0 ≤
+
+λ < 1, we have 0 < 1 − λd (e) ≤ γ(e) 
+
+> i
+
+≤ 1 + λd (e) < 2.Thus, CSM changes only the shift magnitude without canceling or reversing its direction; the strict bound on λ excludes complete suppression. As d(e) decays to zero, CSM reduces to the identity transformation. Formal properties are given in Appendix A.4. Finally, the two entropy cues operate at distinct scopes: H(p(ℓ)
+
+> m,i
+
+) in Eq. (2) is compared across experts within each sample to allocate their relative influ-ence, whereas h(e) 
+
+> i
+
+is ranked across target samples to regulate the magnitude of consensus adaptation. 
+
+## 3.5 Objective and Optimization 
+
+The modulated consensus is computed once from the pre-update branches and detached before either branch is optimized. For a mini-batch B, let eqi =sg( bqi), where sg( ·) denotes stop-gradient. The branch objectives are 
+
+Lv = LIIC 
+
+ pv , eq,
+
+Lt = α LIIC 
+
+ pt, eq + βLCE − δH (¯ pt),
+
+LCOSMO = Lt + Lv ,
+
+(7) where α, β, δ ≥ 0 weight consensus alignment, hard-label classification, and prediction diversity, respec-tively. Following IIC (Ji et al., 2019), LIIC maximizes batch-level mutual information between a branch prediction and the shared consensus. For the tar-get branch, LCE uses the hard consensus decision 
+
+byi = arg max k bqi,k . The batch-mean prediction is 
+
+¯pt = |B| −1 P 
+
+> i∈B
+
+pt,i ; minimizing −H(¯ pt) encour-ages prediction diversity and prevents category col-lapse. Both branch losses are formed from the same pre-update consensus snapshot, although their objectives need not be identical. The additional target-side terms consolidate the deployed classifier, whereas the VLM branch adapts only its prompts through soft consensus alignment. At each step, the target model and VLM prompts are updated synchronously, while the source expert and pretrained VLM encoders remain frozen. Only the adapted target branch is re-tained for inference. Complete loss definitions and the training algorithm are provided in Appendices B.1– B.3. 
+
+# 4 Experiments 
+
+## 4.1 Experimental Setup 
+
+Datasets and Evaluation. We evaluate COSMO 
+
+on four standard closed-set SFDA benchmarks: Office-31 (Saenko et al., 2010), Office-Home (Venkateswara et al., 2017), VisDA-C (Peng et al., 2018), and DomainNet-126 (Saito et al., 2019). We report target-domain top-1 accuracy on Office-31, Office-Home, and DomainNet-126, and mean per-class accuracy on VisDA-C. Dataset-level scores average all transfer tasks equally. Unless stated otherwise, COSMO re-sults are averaged over three independent runs; target labels are used only for evaluation. Dataset statistics and protocols are detailed in Appendices C.1–C.3. 
+
+Baselines and Implementation. We compare against the source model and zero-shot CLIP (Rad-ford et al., 2021); representative non-VLM SFDA methods (Liang et al., 2020; Yang et al., 2021, 2022; Chen et al., 2022a; Tang et al., 2024a); source-available VLM-guided UDA methods (Ge et al., 2023; Lai et al., 2023; Singha et al., 2023; Bai et al., 2024; Du et al., 2024); and source-free VLM-guided SFDA 5Method Venue VLM SF Office-Home VisDA-C A→C A →P A →R C →A C →P C →R P →A P →C P →R R →A R →C R →P Avg. S→RSource – – – 43.6 67.0 73.8 49.9 60.2 62.8 51.6 40.8 72.5 64.4 46.4 78.2 59.3 49.0 CLIP ICML’21 B/32 – 64.8 86.5 87.2 77.9 86.5 87.2 77.9 64.8 87.2 77.9 64.8 86.5 79.1 87.3 SHOT ICML’20 – ✓ 56.7 77.9 80.6 68.0 78.0 79.4 67.9 54.5 82.3 74.2 58.6 84.5 71.9 82.7 NRC NeurIPS’21 – ✓ 57.7 80.3 82.0 68.1 79.8 78.6 65.3 56.4 83.0 71.0 58.6 85.6 72.2 85.9 AaD NeurIPS’22 – ✓ 59.3 79.3 82.1 68.9 79.8 79.5 67.2 57.4 83.1 72.1 58.5 85.4 72.7 88.0 TPDS IJCV’24 – ✓ 59.3 80.3 82.1 70.6 79.4 80.9 69.8 56.8 82.1 74.5 61.2 85.3 73.5 87.6 PADCLIP ICCV’23 B/16                                                                                                                                              
+
+> ✗76.4 90.6 90.8 86.7 92.3 92.0 86.0 74.5 91.5 86.9 79.1 93.1 86.7 90.9 ADCLIP ICCVW’23 ✗70.9 92.5 92.1 85.4 92.4 92.5 86.7 74.3 93.0 86.9 72.6 93.8 86.1 90.7 PDA AAAI’24 ✗73.5 91.4 91.3 86.0 91.6 91.5 86.0 73.5 91.7 86.4 73.0 92.4 85.7 89.7 DAMP CVPR’24 ✗75.7 94.2 92.0 86.3 94.2 91.9 86.2 76.3 92.4 86.1 75.6 94.0 87.1 90.9
+> COSMO –✓78.8 94.6 93.2 88.0 94.3 92.8 87.6 78.0 93.2 88.5 77.8 94.4 88.4 92.0
+> DIFO CVPR’24 B/32
+> ✓70.6 90.6 88.8 82.5 90.6 88.8 80.9 70.1 88.9 83.4 70.5 91.2 83.1 90.3 ProDe ICLR’25 ✓72.7 92.3 90.5 82.5 91.5 90.7 82.5 72.5 90.8 83.0 72.6 92.2 84.5 91.0 VSFOT CVPR’26 ✓75.0 91.7 91.4 83.0 91.8 91.4 83.5 75.0 91.4 83.7 74.3 91.9 85.3 90.6
+> COSMO –✓76.4 92.6 92.0 85.7 92.4 91.9 84.3 76.1 91.7 85.6 75.5 92.7 86.4 91.4
+
+Table 1: Closed-set adaptation results (%) on Office-Home and VisDA-C. “VLM” denotes the image-encoder backbone of the vision-language model, and “SF” indicates source-free adaptation. VLM-guided methods are compared only within matched-backbone groups; the best and second-best results in each group are shown in 
+
+bold and underlined, respectively. methods (Tang et al., 2024b, 2025; Han et al., 2026). The target branch uses ResNet-50, except ResNet-101 on VisDA-C. We use CLIP ViT-B/16 or ViT-B/32, freezing its encoders and logit scale and adapting only the prompt context. VLM-guided comparisons use matched VLM backbones. We set λ = 0 .5 in all main experiments unless otherwise stated. Ap-pendices D–E detail implementation and comparison protocols. 
+
+## 4.2 Comparison with State-of-the-Art Methods 
+
+Office-Home and VisDA-C. Table 1 compares closed-set adaptation methods, with VLM-guided results grouped by backbone. Using ViT-B/32, 
+
+COSMO achieves 86.4% on Office-Home and 91.4% on VisDA-C, outperforming VSFOT and ProDe by 1.1 and 0.4 points, respectively. It also ranks first on all 12 Office-Home transfers. With ViT-B/16, 
+
+COSMO reaches 88.4% and 92.0%, exceeding the strongest source-available, matched-backbone base-lines by 1.3 and 1.1 points despite operating without source data. The gains therefore persist across both CLIP backbones and benchmarks. 
+
+DomainNet-126 and Office-31. On DomainNet-126, Table 2 shows that COSMO with ViT-B/32 achieves 85.1%, exceeding ProDe by 1.2 points and ranking first on all 12 transfers in the matched source-free group. Its ViT-B/16 variant further reaches 88.1%, outperforming the strongest source-available, matched-backbone baseline by 0.5 points. On the smaller, saturated Office-31 benchmark, COSMO 
+
+obtains 92.7% with ViT-B/32, matching the best source-free result, and 93.0% with ViT-B/16. Com-plete Office-31 results are reported in Appendix F.1. 
+
+Multiple Foundation Models. Under CoMA’s matched CLIP and InstructBLIP configuration (Lee et al., 2025a), single-stage COSMO achieves 92.0% on Office-Home, versus CoMA’s reported 90.7% with multi-stage distillation. Full results are provided in Appendix F.5. 
+
+## 4.3 Ablation Study 
+
+Component Contributions. Table 3 sepa-rates supervision topology, dynamic consensus re-aggregation, and CSM. Reciprocal cross-model trans-fer improves one-way VLM distillation by 3.6/1.7 points on Office-Home/DomainNet-126. A fixed shared consensus obtains 82.6/80.8%, whereas re-aggregating it with the current target or VLM pre-diction raises accuracy to 85.4/83.4% and 85.1/82.9%, respectively. Using both evolving branches performs best without CSM at 85.8/84.6%, exceeding recip-rocal transfer by 1.0/2.6 points. This indicates that the gain arises from joint dynamic re-aggregation, not merely from replacing directed transfer with a fixed shared target. CSM further adds 0.6/0.5 points, yielding the full results of 86.4/85.1%. Additional 6Method Venue VLM SF DomainNet-126 C→P C→R C→S P→C P→R P→S R→C R→P R→S S→C S→P S→R Avg. Source – – – 44.6 59.8 47.5 53.3 75.3 46.2 55.3 62.7 46.4 55.1 50.7 59.5 54.7 CLIP ICML’21 B/32 – 77.6 89.9 74.5 78.9 89.9 74.5 78.9 77.6 74.5 78.9 77.6 89.9 80.2 SHOT ICML’20 – ✓ 63.5 78.2 59.5 67.9 81.3 61.7 67.7 67.6 57.8 70.2 64.0 78.0 68.1 NRC NeurIPS’21 – ✓ 62.6 77.1 58.3 62.9 81.3 60.7 64.7 69.4 58.7 69.4 65.8 78.7 67.5 AdaCon CVPR’22 – ✓ 60.8 74.8 55.9 62.2 78.3 58.2 63.1 68.1 55.6 67.1 66.0 75.4 65.4 TPDS IJCV’24 – ✓ 62.9 77.1 59.8 65.6 79.0 61.5 66.4 67.0 58.2 68.6 64.3 75.3 67.1 DAPL TNNLS’23 B/16                                                                                                                      
+
+> ✗83.3 92.4 81.1 86.4 92.1 81.0 86.7 83.3 80.8 86.8 83.5 91.9 85.8 ADCLIP ICCVW’23 ✗84.3 93.7 82.4 87.5 93.5 82.4 87.3 84.5 81.6 87.9 84.8 93.0 86.9 DAMP CVPR’24 ✗86.4 93.3 83.5 87.2 93.4 84.1 87.2 86.5 82.5 87.3 86.6 93.4 87.6
+> COSMO –✓86.5 94.0 83.8 88.0 93.8 84.1 87.7 86.8 83.8 88.4 86.6 94.0 88.1
+> DIFO CVPR’24 B/32
+> ✓76.6 87.2 74.9 80.0 87.4 75.6 80.8 77.3 75.5 80.5 76.7 87.3 80.0 ProDe ICLR’25 ✓81.4 92.2 77.8 83.3 91.9 78.6 84.9 81.3 78.9 83.8 81.3 91.8 83.9 VSFOT CVPR’26 ✓79.5 90.4 77.2 83.0 90.5 77.5 83.3 79.8 76.9 83.5 79.6 90.4 82.6
+> COSMO –✓82.8 92.7 79.7 84.8 92.7 80.2 85.4 82.8 79.8 84.7 82.9 92.7 85.1
+
+Table 2: Closed-set adaptation results (%) on DomainNet-126. The notation and matched-backbone comparison conventions follow Table 1.                                      
+
+> Setting Re-aggregation CSM Office-Home DomainNet-126 Target VLM VLM →Target ––81.2 80.3 VLM ↔Target ––84.8 82.0 Shared consensus
+> ✗✗✗82.6 80.8
+> ✓✗✗85.4 83.4
+> ✗✓✗85.1 82.9
+> ✓✓✗85.8 84.6
+> COSMO ✓✓✓86.4 85.1
+
+Table 3: Ablation of supervision topology, dynamic consensus re-aggregation, and CSM using CLIP ViT-B/32 (12-shift average accuracies, %). For shared-consensus variants, checkmarks and crosses under Target/VLM denote current and initial branch pre-dictions, respectively. component configurations and objective ablations are reported in Appendices G.1 and G.3, respectively. 
+
+Consensus Construction. Table 4 separates pool-ing geometry from the allocation cue. Under MoE, expert-entropy weighting improves adapted accuracy over uniform weighting by 0.4/0.6 points on Office-Home/VisDA-C. PoE further improves adapted accuracy under both uniform weighting (0.2/1.1 points) and expert-entropy weighting (0.5/1.0 points). Within PoE, expert entropy achieves the best or tied-best result in all four evaluations, reaching 81.6/86.4% on Office-Home and 84.5/91.4% on VisDA-C for initial/adapted accuracy. MSP and mar-gin remain competitive but are not consistently opti-                                  
+
+> Fusion Weighting Office-Home VisDA-C Init. Adapted Init. Adapted MoE Uniform 80.7 85.5 84.1 89.8 Expert entropy 81.1 85.9 84.4 90.4 PoE Uniform 81.2 85.7 83.9 90.9 MSP 81.6 86.2 84.3 91.3 Margin 81.0 86.1 84.0 91.4
+> Expert entropy (norm.) 77.5 84.6 80.4 90.4
+> Expert entropy 81.6 86.4 84.5 91.4
+
+Table 4: Ablation of consensus construction using CLIP ViT-B/32. “Init.”/“Adapted” denote initial-consensus/adapted-target accuracies (%); Office-Home is averaged over 12 shifts. MoE/PoE denote weighted arithmetic/geometric pooling, MSP denotes maximum softmax probability, and “norm.” applies unsupervised global logit-scale normalization before expert-entropy computation. Best values are bold. mal, while logit-scale normalization degrades every result, particularly at initialization. We therefore use expert-entropy-weighted PoE throughout. 
+
+## 4.4 Mechanism Analysis 
+
+Informativeness of Entropy Cues. Figure 3 evaluates the two entropy orderings used by COSMO .When only one initial expert is correct, the source-expert win rate rises monotonically as its entropy decreases relative to the VLM, yielding a macro AU-ROC of 0.830. Consensus error likewise increases across consensus-entropy quintiles, with macro AU-7Figure 3: Informativeness of the two entropy cues on Office-Home. (a) Source-expert win rate among samples where exactly one initial expert is correct, binned by ∆H = HV − HS ; the dashed line denotes the overall win rate. (b) Consensus error rate across consensus-entropy quintiles before and after adapta-tion. Curves show 12-shift means with 95% confidence intervals; boxed values report macro AUROC. Labels are used only for post-hoc analysis. 
+
+Figure 4: Directional validation of CSM on Office-Home A →C. Positive ˜λ follows the proposed entropy-rank assignment, negative values reverse it, and zero disables modulation. Curves compare different decay schedules; the star marks the default setting. ROCs of 0.863 before adaptation and 0.889 afterward. Thus, relative expert entropy guides within-sample allocation, while consensus entropy provides the cross-sample ordering used by CSM. 
+
+Directional Validation of CSM. Figure 4 tests the direction and temporal schedule of CSM using a signed diagnostic coefficient. Across decay schedules, all tested positive settings outperform the unmod-ulated baseline, whereas reversing the entropy-rank assignment consistently reduces accuracy. The gain therefore depends on contracting shifts for relatively low-entropy samples and extending them for high-
+
+Figure 5: Conflict-conditioned outcomes on Office-Home. Samples are grouped by the initial correctness of the source expert ( S) and VLM ( V ). (a) Accuracy on the four subsets. (b) Source-only retention RS ¯V
+
+versus VLM-only absorption A ¯SV . Results are aver-aged over 12 shifts; labels are used only for post-hoc analysis. entropy samples, rather than on generic displacement rescaling. Performance remains stable over the tested positive range and decay schedules; we use λ = 0 .5
+
+with decay starting at epoch 0.
+
+Conflict-Conditioned Adaptation Outcomes. 
+
+Figure 5 evaluates retention and absorption under ini-tial expert conflict. Direct VLM distillation exhibits a pronounced imbalance, retaining only 42 .8% of source-only correct decisions while absorbing 95 .2% 
+
+of VLM-only correct decisions. COSMO improves both criteria over DIFO and ProDe, reaching 78 .1% 
+
+source-only retention and 91 .1% VLM-only absorp-tion. Without CSM, these values decrease to 76 .0% 
+
+and 90 .0% , respectively. The results indicate that shared-consensus adaptation improves the retention– absorption balance, with CSM providing a further gain on both conflict subsets. 
+
+# 5 Conclusion 
+
+We studied VLM-guided SFDA as a sample-wise reliability-allocation problem and identified source-derived evidence forgetting under expert conflict. We proposed COSMO , which replaces direct cross-8model guidance with co-adaptation through an an-chored shared consensus. An entropy-conditioned initial consensus allocates expert influence, dynamic re-aggregation incorporates evolving target evidence, and CSM regulates departure from the initial an-chor. Across four benchmarks, COSMO achieves state-of-the-art performance under matched VLM backbones. Ablations and mechanism analyses sup-port the proposed reliability cues and design choices, while conflict-conditioned results show a better bal-ance between retaining valid source-derived decisions and absorbing complementary VLM evidence. These results demonstrate anchored yet adaptive consen-sus supervision as an effective alternative to direct cross-model transfer in VLM-guided SFDA. 9Appendix Overview 
+
+These appendices complement the main text with complete mathematical, experimental, and repro-ducibility details. Section A provides the centered-logit derivations, the entropy-conditioned reverse-KL barycenter, decision-retention conditions, and formal properties of Consensus Shift Modulation (CSM). Section B specifies the complete objective and op-timization algorithm, while Secs. C–E describe the datasets, evaluation, implementation, and compari-son protocols. Section F reports complete benchmark results and extensions; Sec. G provides additional component, consensus-construction, and objective ablations; Sec. H presents extended representation and sensitivity analyses; and Sec. I evaluates compu-tational efficiency. 
+
+# A Additional Mathematical Derivations and Properties 
+
+## A.1 Centered-Logit Representation 
+
+We first make explicit the representation used in Eq. (1) of the main paper. Let K ≥ 2, let 1 ∈ RK be the all-ones vector, and define 
+
+Π = I − 1
+
+K 11 ⊤. (S1) The matrix Π is the orthogonal projector onto 1⊥ =
+
+{a ∈ RK : 1⊤a = 0 }:
+
+Π⊤ = Π, Π2 = Π, Π1 = 0. (S2) 
+
+Proposition A.1 (Softmax-invariant centered co-ordinates) . Let z ∈ RK be finite logits and p =softmax( z). Then 
+
+a := Π log p = Πz , softmax( a) = p. (S3) 
+
+Moreover, a is the unique zero-mean logit vector whose softmax is p.Proof. Writing Z(z) = PKj=1 exp( zj ), we have 
+
+log p = z − log Z(z)1. (S4) Multiplication by Π removes the class-independent term, which proves Π log p = Πz . Furthermore, 
+
+Πz = z − ¯z1, ¯z = 1
+
+K 1⊤z.
+
+Softmax is invariant to addition of a common scalar, hence softmax( Πz ) = softmax( z) = p.For uniqueness, suppose that b ∈ 1⊥ and 
+
+softmax( b) = p. Equality of two softmax outputs implies b = log p + c1 for some c ∈ R. Applying Π
+
+and using Πb = b gives b = Π log p = a.The representation preserves all pairwise log odds: 
+
+aj − ak = zj − zk = log pj
+
+pk
+
+for every j, k. (S5) It therefore preserves both the distribution and its top-1 decision while removing the arbitrary ad-ditive logit offset. In particular, for any c ∈ R,
+
+softmax( z + c1) = softmax( z), and every member of this equivalence class maps to the same a.
+
+What centering does not remove. Centering is a coordinate choice, not confidence calibration. For 
+
+τ > 0, softmax( τ a) generally differs from softmax( a);thus, multiplicative logit-scale differences between heterogeneous experts remain. Correspondingly, the entropy-conditioned allocation in the main paper uses the raw predictive concentration of each expert and should not be interpreted as calibrated correctness. 
+
+Concentration relative to uniformity. Let u =(1 /K )1. For any strictly positive categorical distribu-tion p,
+
+log K − H(p) = 
+
+> K
+
+X
+
+> k=1
+
+pk log pk
+
+1/K = KL( p∥u) ≥ 0.
+
+(S6) Equality holds only for the uniform distribution. This identity explains why Eq. (2) of the main paper mea-sures departure from uniformity. It does not imply that a more concentrated prediction is necessarily more accurate under domain shift. 
+
+## A.2 Derivation of the Entropy-Conditioned Reverse-KL Barycenter 
+
+Fix a target sample xi and an optimization step ℓ.Let M be the active expert set and, for each m ∈ M ,let 
+
+p(ℓ) 
+
+> m,i
+
+= softmax 
+
+
+
+z(ℓ)
+
+> m,i
+
+
+
+∈ int(∆ K−1).
+
+Finite softmax logits make every class probability strictly positive. As in Eq. (2) of the main paper, define 
+
+r(ℓ) 
+
+> m,i
+
+= max 
+
+n
+
+log K − H
+
+
+
+p(ℓ)
+
+> m,i
+
+
+
+, ϵ 
+
+o
+
+,w(ℓ) 
+
+> m,i
+
+= r(ℓ)
+
+> m,i
+
+P 
+
+> n∈M
+
+r(ℓ)
+
+> n,i
+
+, ϵ > 0.
+
+(S7) Consequently, 
+
+w(ℓ) 
+
+> m,i
+
+> 0, X
+
+> m∈M
+
+w(ℓ) 
+
+> m,i
+
+= 1 . (S8) 10 The weights depend on the current expert predictions, but they are fixed with respect to the barycenter variable q in the following optimization. To simplify notation within the derivation, omit 
+
+i and ℓ, and write pm = p(ℓ) 
+
+> m,i
+
+and wm = w(ℓ)
+
+> m,i
+
+. The shared prediction in Eq. (3) of the main paper is 
+
+q⋆ 
+
+> M
+
+= arg min 
+
+> q∈∆K−1
+
+X
+
+> m∈M
+
+wm KL( q∥pm). (S9) 
+
+Proposition A.2 (Closed-form reverse-KL barycen-ter) . The problem in Eq. (S9) has the unique solution 
+
+q⋆ 
+
+> M,k
+
+=
+
+Y
+
+> m∈M
+
+p wm
+
+> m,k K
+
+X
+
+> j=1
+
+Y
+
+> m∈M
+
+p wm
+
+> m,j
+
+, k = 1 , . . . , K. (S10) 
+
+Proof. Introduce a Lagrange multiplier η for P 
+
+> k
+
+qk =1. On the simplex interior, the Lagrangian is 
+
+L(q, η ) = X
+
+> m∈M
+
+wmKX
+
+> k=1
+
+qk log qk
+
+pm,k 
+
++ η
+
+> K
+
+X
+
+> k=1
+
+qk − 1
+
+!
+
+.
+
+(S11) Using P 
+
+> m
+
+wm = 1 , stationarity with respect to qk
+
+gives 
+
+∂L
+
+∂q k
+
+= log qk + 1 − X
+
+> m∈M
+
+wm log pm,k + η = 0 . (S12) Therefore, 
+
+qk = C exp X
+
+> m∈M
+
+wm log pm,k 
+
+!
+
+= C Y
+
+> m∈M
+
+p wm
+
+> m,k
+
+,
+
+(S13) where the class-independent constant C > 0 is deter-mined by normalization. This yields Eq. (S10). For completeness, define 
+
+gk = Y
+
+> m∈M
+
+p wm
+
+> m,k
+
+, G =
+
+> K
+
+X
+
+> j=1
+
+gj , q⋆k = gk/G. 
+
+Using the standard convention 0 log 0 = 0 , equiva-lently 0 log(0 /a ) = 0 for a > 0, we have, for every 
+
+q ∈ ∆K−1,
+
+X
+
+> m∈M
+
+wm KL( q∥pm) = 
+
+> K
+
+X
+
+> k=1
+
+qk log qk
+
+gk
+
+= KL( q∥q⋆) − log G. 
+
+(S14) Because all gk are positive, q⋆ lies in the simplex interior. The nonnegativity and equality condition of KL divergence show that it is the unique global minimizer, including over the simplex boundary. 
+
+Corollary A.3 (Centered-logit and weighted-PoE equivalence) . Let 
+
+am = Π log pm = Πz m. (S15) 
+
+Then the barycenter can equivalently be written as 
+
+cM = X
+
+> m∈M
+
+wmam,
+
+q⋆ 
+
+> M
+
+= softmax( cM) = Normalize Y
+
+> m∈M
+
+p wm
+
+> m
+
+!
+
+,
+
+(S16) 
+
+where the product and exponentiation are component-wise and Normalize( g) = g/(1⊤g).Proof. By Proposition A.1, log pm = am + bm1 for some scalar bm. Hence 
+
+X
+
+> m∈M
+
+wm log pm = X
+
+> m∈M
+
+wmam + X
+
+> m∈M
+
+wmbm
+
+!
+
+1.
+
+The final term is class independent and disappears under softmax. Combining this fact with Eq. (S10) proves all three forms. Thus, “entropy-conditioned” specifies how the sample-wise weights are chosen, while “reverse-KL barycenter,” “weighted product of experts,” and “weighted mean in centered-logit coordinates” are three equivalent descriptions of the resulting consen-sus. 
+
+Relation to probability averaging. The KL di-rection is essential to this form. Reversing the argu-ments gives the forward-KL problem 
+
+arg min 
+
+> q∈∆K−1
+
+X
+
+> m∈M
+
+wm KL( pm∥q) = X
+
+> m∈M
+
+wmpm,
+
+(S17) which is the arithmetic mixture of expert proba-bilities. By contrast, Eq. (S10) pools class-wise log evidence. This derivation establishes the geometry of the construction; it does not by itself assert that one fusion rule must be more accurate. 
+
+## A.3 Decision-Retention Conditions under Expert Conflict 
+
+We now specialize the initial construction to the active pair M = {s, v }. For a fixed sample xi, abbre-viate 
+
+ps = ps,i , pv = p(0)  
+
+> v,i
+
+,ws = w(0)  
+
+> s,i
+
+, wv = w(0)  
+
+> v,i
+
+, q(0) = q(0) 
+
+> {s,v },i
+
+.
+
+(S18) 11 The weights are strictly positive and satisfy ws +wv =1. Assume first that each expert has a unique top-1 decision, 
+
+ys = arg max 
+
+> k
+
+ps,k , yv = arg max 
+
+> k
+
+pv,k . (S19) We first consider the generic no-tie case in which each expert has a unique top-1 decision. Ties are discussed at the end of this subsection. 
+
+Lemma A.4 (Pairwise consensus margin) . For any two classes j and k, the initial consensus satisfies 
+
+log q(0) 
+
+> j
+
+q(0) 
+
+> k
+
+= ws log ps,j 
+
+ps,k 
+
++ wv log pv,j 
+
+pv,k 
+
+. (S20) 
+
+Proof. Take the logarithm of the ratio between the 
+
+jth and kth entries in Eq. (S10). The shared normal-ization constant cancels. 
+
+Agreement case. If ys = yv = y, then both terms on the right-hand side of Eq. (S20) are strictly posi-tive for every k̸ = y. Therefore, 
+
+ys = yv = y =⇒ arg max 
+
+> k
+
+q(0)  
+
+> k
+
+= y. (S21) Hence, conflict is the only case in which allocation must mediate opposing top-1 evidence. 
+
+Proposition A.5 (Exact source-decision retention condition) . Suppose ys̸ = yv . For each k̸ = ys, define the positive source margin and the VLM opposition against the source decision as 
+
+ms(k) = log ps,y s
+
+ps,k 
+
+> 0,bv→s(k) = 
+
+
+
+log pv,k 
+
+pv,y s
+
+
+
+> +
+
+, [a]+ = max {a, 0}.
+
+(S22) 
+
+The initial consensus uniquely retains the source de-cision if and only if 
+
+wsms(k) > w v bv→s(k) for every k̸ = ys. (S23) 
+
+Proof. By Lemma A.4, 
+
+log q(0) 
+
+> ys
+
+q(0) 
+
+> k
+
+= wsms(k) − wv log pv,k 
+
+pv,y s
+
+. (S24) If pv,k ≤ pv,y s , the second term in Eq. (S24) is non-negative, so the consensus strictly favors ys over k
+
+because ms(k) > 0. If pv,k > p v,y s , positivity of the consensus margin is exactly wsms(k) > w v bv→s(k).Combining the two cases, the consensus favors ys over every competing class if and only if Eq. (S23) holds. This is equivalent to ys being the unique consensus maximizer. Because ws/w v = rs/r v , the same condition can be written directly in terms of the entropy-conditioned concentration scores: 
+
+rsms(k) > r v bv→s(k) for every k̸ = ys, (S25) where 
+
+rs = max {log K − H(ps), ϵ },rv = max {log K − H(pv ), ϵ }.
+
+Equivalently, define 
+
+ρv→s = max  
+
+> k̸=ys
+
+bv→s(k)
+
+ms(k) . (S26) Then the exact condition is 
+
+ws
+
+wv
+
+= rs
+
+rv
+
+> ρ v→s. (S27) The maximum over all competitors is necessary: in a multiclass problem, the weighted product may select a third class that is the top-1 decision of neither expert. Comparing only ys with yv therefore does not establish source-decision retention. 
+
+Corollary A.6 (Compact sufficient source condi-tion) . Define 
+
+Ms = min  
+
+> k̸=ys
+
+ms(k),Bv→s = max  
+
+> k̸=ys
+
+bv→s(k). (S28) 
+
+Then 
+
+wsMs > w v Bv→s =⇒ arg max 
+
+> k
+
+q(0)  
+
+> k
+
+= ys. (S29) 
+
+Proof. For every k̸ = ys,
+
+wsms(k) ≥ wsMs > w v Bv→s ≥ wv bv→s(k).
+
+Proposition A.5 completes the proof. The compact inequality is sufficient but not neces-sary because the smallest source margin and largest VLM opposition may occur at different classes. Equa-tion (S23) or, equivalently, Eq. (S27), gives the exact condition. 
+
+Proposition A.7 (Exact VLM-decision retention condition) . Suppose ys̸ = yv . For every k̸ = yv ,define 
+
+mv (k) = log pv,y v
+
+pv,k 
+
+> 0,bs→v (k) = 
+
+
+
+log ps,k 
+
+ps,y v
+
+
+
+> +
+
+.
+
+(S30) 12 The initial consensus uniquely retains the VLM deci-sion if and only if 
+
+wv mv (k) > w sbs→v (k) for every k̸ = yv . (S31) 
+
+Equivalently, with 
+
+ρs→v = max  
+
+> k̸=yv
+
+bs→v (k)
+
+mv (k) , (S32) 
+
+the condition is wv /w s = rv /r s > ρ s→v .Proof. Exchange the roles of s and v in the proof of Proposition A.5. A compact sufficient VLM condition follows sym-metrically. Let 
+
+Mv = min  
+
+> k̸=yv
+
+mv (k), Bs→v = max  
+
+> k̸=yv
+
+bs→v (k). (S33) Then 
+
+wv Mv > w sBs→v =⇒ arg max 
+
+> k
+
+q(0)  
+
+> k
+
+= yv . (S34) 
+
+Tie convention and scope of the result. Strict inequalities above guarantee a unique retained de-cision. Replacing “ >” by “ ≥” guarantees only that the corresponding expert decision belongs to the consensus argmax set; the reported top-1 label then depends on the deterministic tie-breaking rule. These conditions characterize decision retention , not cor-rectness. A retained source decision may be wrong, and a rejected source decision may be correct. This is why the conflict-conditioned analysis in the main paper uses labels only post hoc to separately measure source-only retention and VLM-only absorption. 
+
+## A.4 Formal Properties of Consensus Shift Modulation 
+
+We retain the notation of Eqs. (5)–(6) in the main paper. At the beginning of epoch e ∈ { 0, . . . , E − 1},with E > 1, the unmodulated dynamic consensus is evaluated over all N > 1 target samples, producing 
+
+{¯q(e) 
+
+> i
+
+}Ni=1 . Define 
+
+h(e) 
+
+> i
+
+= H(¯ q(e) 
+
+> i
+
+)log K ,u(e) 
+
+> i
+
+= 2 rank (e)(h(e) 
+
+> i
+
+)
+
+N − 1 − 1,d(e) = 1 − eE − 1 ,γ(e) 
+
+> i
+
+= 1 + λd (e)u(e) 
+
+> i
+
+, 0 ≤ λ < 1.
+
+(S35) Here rank (e)(·) ∈ [0 , N − 1] is the zero-based average rank in ascending consensus entropy. For a step ℓ in epoch e, CSM acts in centered-logit space as 
+
+∆c(ℓ) 
+
+> i
+
+= c(ℓ) 
+
+> i
+
+− c(0)  
+
+> i
+
+,
+
+bc(ℓ) 
+
+> i
+
+= c(0)  
+
+> i
+
++ γ(e) 
+
+> i
+
+∆c(ℓ) 
+
+> i
+
+,
+
+bq(ℓ) 
+
+> i
+
+= softmax 
+
+bc(ℓ)
+
+> i
+
+
+
+.
+
+(S36) 
+
+Proposition A.8 (Rank range, ordering, and mono-tone invariance) . For every target sample and epoch, 
+
+−1 ≤ u(e) 
+
+> i
+
+≤ 1. (S37) 
+
+If h(e) 
+
+> i
+
+< h (e) 
+
+> j
+
+, then u(e) 
+
+> i
+
+≤ u(e) 
+
+> j
+
+. Moreover, replacing all entropy values within an epoch by any strictly in-creasing transformation leaves their ranks, and hence all u(e) 
+
+> i
+
+, unchanged. Proof. The affine map r 7 → 2r/ (N − 1) − 1 sends 
+
+[0 , N − 1] to [−1, 1] and is increasing. A strictly in-creasing transformation preserves all order relations and ties, including their average ranks. The rank operation is therefore insensitive to the numerical spacing of the consensus entropies across samples. This property applies only to the cross-sample CSM rank in Eq. (S35); it does not alter the raw within-sample expert allocation in Eq. (S7). 
+
+Proposition A.9 (Bounded positive modulation) .
+
+For every i and e,
+
+0 < 1 − λd (e) ≤ γ(e) 
+
+> i
+
+≤ 1 + λd (e) < 2. (S38) 
+
+Consequently, CSM can neither cancel a nonzero dy-namic shift nor reverse its direction. Proof. Equation (S35) gives d(e) ∈ [0 , 1] , and Propo-sition A.8 gives u(e) 
+
+> i
+
+∈ [−1, 1] . Therefore, 
+
+1 − λd (e) ≤ 1 + λd (e)u(e) 
+
+> i
+
+≤ 1 + λd (e).
+
+Because 0 ≤ λ < 1, the lower endpoint is at least 
+
+1−λ > 0, and the upper endpoint is at most 1+ λ < 2.A positive scalar cannot cancel or reverse a nonzero vector. 
+
+Proposition A.10 (Anchor-relative geometry) . For any norm ∥ · ∥ ,
+
+bc(ℓ) 
+
+> i
+
+− c(0)  
+
+> i
+
+= γ(e)
+
+> i
+
+
+
+c(ℓ) 
+
+> i
+
+− c(0) 
+
+> i
+
+
+
+,
+
+bc(ℓ) 
+
+> i
+
+− c(0)  
+
+> i
+
+= γ(e) 
+
+> i
+
+c(ℓ) 
+
+> i
+
+− c(0)  
+
+> i
+
+.
+
+(S39) 
+
+If ∆c(ℓ)
+
+> i
+
+̸ = 0, then: 
+
+13 1. 0 < γ(e) 
+
+> i
+
+< 1 places the modulated state strictly between the anchor and the dynamic state ( contraction ); 2. γ(e) 
+
+> i
+
+= 1 leaves the dynamic state unchanged ( identity ); 3. 1 < γ (e) 
+
+> i
+
+< 2 places it beyond the dynamic state on the same ray from the anchor ( bounded ex-tension ). In all three cases, the unmodulated and modulated shifts are positively collinear. If ∆c(ℓ) 
+
+> i
+
+= 0, then 
+
+bc(ℓ) 
+
+> i
+
+= c(ℓ) 
+
+> i
+
+= c(0)  
+
+> i
+
+for every admissible γ(e) 
+
+> i
+
+.Proof. The first equality follows directly from Eq. (S36); absolute homogeneity of a norm and the positivity of γ(e) 
+
+> i
+
+give the second. The three cases follow from the value of the scalar. In particular, below-median entropy ranks u(e) 
+
+> i
+
+< 0
+
+contract the shift whenever λd (e) > 0, above-median ranks u(e) 
+
+> i
+
+> 0 extend it, and u(e) 
+
+> i
+
+= 0 leaves it unchanged. This statement concerns relative rank, rather than an absolute entropy threshold. 
+
+Corollary A.11 (Preservation of the centered-logit subspace) . If 1⊤c(0)  
+
+> i
+
+= 0 and 1⊤c(ℓ) 
+
+> i
+
+= 0 , then 
+
+1⊤bc(ℓ) 
+
+> i
+
+= 0 . (S40) 
+
+Proof. Equation (S36) is an affine combination of two vectors in the linear subspace 1⊥.
+
+Proposition A.12 (Temporal decay to the iden-tity) . The deviation of the modulation factor from one satisfies 
+
+γ(e) 
+
+> i
+
+− 1 = λd (e) u(e) 
+
+> i
+
+≤ λd (e). (S41) 
+
+Consequently, 
+
+bc(ℓ) 
+
+> i
+
+− c(ℓ) 
+
+> i
+
+= γ(e) 
+
+> i
+
+− 1 ∆c(ℓ)
+
+> i
+
+≤ λd (e) ∆c(ℓ) 
+
+> i
+
+.
+
+(S42) 
+
+At the final epoch, d(E − 1) = 0 , so γ(E−1)  
+
+> i
+
+= 1 and CSM is exactly the identity map. It is also the identity for every epoch if λ = 0 .Proof. The first equality follows from Eq. (S35); the bound uses |u(e) 
+
+> i
+
+| ≤ 1. Subtracting c(ℓ) 
+
+> i
+
+from both sides of Eq. (S36) gives 
+
+bc(ℓ) 
+
+> i
+
+− c(ℓ) 
+
+> i
+
+=
+
+
+
+γ(e) 
+
+> i
+
+− 1
+
+
+
+∆c(ℓ) 
+
+> i
+
+,
+
+and the norm bound follows. The endpoint state-ments are immediate. 
+
+Effect on class log odds. Since both states are centered logits, CSM induces, for every pair of classes 
+
+j, k ,
+
+log bq(ℓ)
+
+> i,j
+
+bq(ℓ)
+
+> i,k
+
+= bc(ℓ) 
+
+> i,j
+
+− bc(ℓ)
+
+> i,k
+
+= (1 − γ(e) 
+
+> i
+
+)
+
+
+
+c(0)  
+
+> i,j
+
+− c(0) 
+
+> i,k
+
+
+
++ γ(e)
+
+> i
+
+
+
+c(ℓ) 
+
+> i,j
+
+− c(ℓ)
+
+> i,k
+
+
+
+.
+
+(S43) For contraction, this is an interpolation of anchor and dynamic log odds; for extension, it is an extrapolation along the same anchor-relative direction. 
+
+Scope of the guarantees. The properties above establish boundedness, positive collinearity, centered-coordinate preservation, and decay to the identity. They do not guarantee that CSM preserves the top-1 class: the line in Eq. (S36) may cross a decision hyperplane. Nor do they imply that target accuracy improves monotonically. The empirical directional validation in the main paper tests whether the pro-posed rank assignment is beneficial for adaptation. 
+
+# B Full Objective and Optimiza-tion Details 
+
+## B.1 Complete IIC Formulation 
+
+We first specify the batch-level IIC alignment objec-tive (Ji et al., 2019) used in Eq. (7) of the main paper. For a mini-batch B of size B = |B| , let p(ℓ) 
+
+> m,i
+
+∈ ∆K−1
+
+be the pre-update prediction of branch m ∈ { t, v }
+
+for sample xi. The modulated consensus is detached before either branch is optimized: 
+
+eq(ℓ) 
+
+> i
+
+= sg 
+
+bq(ℓ)
+
+> i
+
+
+
+, i ∈ B , (S44) where sg( ·) denotes stop-gradient. Thus, the consen-sus is fixed within the current update, while gradients are retained through the prediction of the branch being optimized. 14 For branch m, define the empirical soft joint distri-bution between its predicted class a and consensus class b as 
+
+J(m) 
+
+> ab
+
+= 1
+
+B
+
+X
+
+> i∈B
+
+p(ℓ) 
+
+> m,i,a
+
+eq(ℓ) 
+
+> i,b
+
+, a, b ∈ { 1, . . . , K }.
+
+(S45) Because both factors are categorical distributions, 
+
+P 
+
+> a,b
+
+J(m) 
+
+> ab
+
+= 1 . Its marginals are 
+
+J(m) 
+
+> a·
+
+=
+
+> K
+
+X
+
+> b=1
+
+J(m) 
+
+> ab
+
+, J(m) 
+
+> ·b
+
+=
+
+> K
+
+X
+
+> a=1
+
+J(m) 
+
+> ab
+
+. (S46) The IIC loss is the negative mutual information of this batch-level joint distribution: 
+
+LIIC 
+
+
+
+p(ℓ) 
+
+> m
+
+, eq(ℓ)
+
+= −
+
+> K
+
+X
+
+> a=1
+> K
+
+X
+
+> b=1
+
+J(m) 
+
+> ab
+
+log J(m)
+
+> ab
+
+J(m) 
+
+> a·
+
+J(m)
+
+> ·b
+
+= −I
+
+
+
+Pm; eQ
+
+
+
+.
+
+(S47) This objective aligns class associations between each branch and the shared consensus over the mini-batch. Unlike a sample-wise KL or soft cross-entropy loss, it also contains the prediction marginals and therefore favors informative, non-collapsed batch assignments. In implementation, the joint distribution is numer-ically normalized and its arguments are clipped by a small positive constant before evaluating the loga-rithm. 
+
+## B.2 Complete COSMO Training Ob-jective 
+
+We next collect the shared supervision construction and all loss terms. The initial consensus anchor is formed once from the frozen source expert and the initially prompted VLM: 
+
+c(0)  
+
+> i
+
+= w(0)  
+
+> s,i
+
+as,i + w(0)  
+
+> v,i
+
+a(0)  
+
+> v,i
+
+,
+
+q(0)  
+
+> i
+
+= softmax 
+
+
+
+c(0) 
+
+> i
+
+
+
+. (S48) The centered-logit anchor c(0)  
+
+> i
+
+is cached and held fixed during adaptation. At optimization step ℓ, the current target and VLM branches form the unmodu-lated dynamic consensus 
+
+c(ℓ) 
+
+> i
+
+= w(ℓ) 
+
+> t,i
+
+a(ℓ) 
+
+> t,i
+
++ w(ℓ) 
+
+> v,i
+
+a(ℓ)
+
+> v,i
+
+,
+
+q(ℓ) 
+
+> i
+
+= softmax 
+
+
+
+c(ℓ)
+
+> i
+
+
+
+, (S49) where the weights are obtained from Eq. (2) of the main paper with the active expert set M = {t, v }.For a step in epoch e, CSM produces 
+
+bc(ℓ) 
+
+> i
+
+= c(0)  
+
+> i
+
++ γ(e)
+
+> i
+
+
+
+c(ℓ) 
+
+> i
+
+− c(0) 
+
+> i
+
+
+
+,
+
+bq(ℓ) 
+
+> i
+
+= softmax 
+
+bc(ℓ)
+
+> i
+
+
+
+,
+
+eq(ℓ) 
+
+> i
+
+= sg 
+
+bq(ℓ)
+
+> i
+
+
+
+,
+
+(S50) with γ(e) 
+
+> i
+
+= 1 + λd (e)u(e) 
+
+> i
+
+as defined in Eq. (5) of the main paper. Equations (S49) and (S50) are evaluated once from the two pre-update predictions. The result-ing detached distribution is the common supervision snapshot for both branch objectives. For the target branch, the hard consensus label and batch-mean prediction are 
+
+by(ℓ) 
+
+> i
+
+= arg max 
+
+> k
+
+eq(ℓ) 
+
+> i,k
+
+, p(ℓ) 
+
+> t
+
+= 1
+
+B
+
+X
+
+> i∈B
+
+p(ℓ) 
+
+> t,i
+
+. (S51) The hard-label classification loss is 
+
+LCE = − 1
+
+B
+
+X
+
+> i∈B
+
+log p(ℓ)
+
+> t,i, by(ℓ)
+> i
+
+. (S52) Using H(p) = − P 
+
+> k
+
+pk log pk, the complete branch-specific objectives are 
+
+Lv = LIIC 
+
+
+
+p(ℓ) 
+
+> v
+
+, eq(ℓ)
+
+,
+
+Lt = α LIIC 
+
+
+
+p(ℓ) 
+
+> t
+
+, eq(ℓ)
+
++ β LCE − δ H 
+
+
+
+p(ℓ)
+
+> t
+
+
+
+,
+
+LCOSMO = Lt + Lv .
+
+(S53) Here, α, β, δ ≥ 0 weight soft consensus alignment, hard-label consolidation, and target-side prediction diversity, respectively. Since the objective is mini-mized, the last term maximizes the entropy of the target branch’s batch marginal and discourages cate-gory collapse. The VLM branch uses only soft consen-sus alignment: its prompt context is optimized, while its image encoder, text encoder, and logit scale re-main frozen. The target branch is the deployed model and therefore additionally receives hard-label and di-versity terms. Dataset-specific coefficient values are reported in Appendix D.4. 
+
+## B.3 Training Algorithm 
+
+Let θt denote the parameters of the target branch and 
+
+ϕ the learnable VLM prompt context. Before adap-tation, ft(·; θt) is initialized from the source model 
+
+fs. The frozen source expert and initially prompted VLM are evaluated over the target set to construct and cache {c(0)  
+
+> i
+
+}Ni=1 .15 At the beginning of every epoch e, the current tar-get and VLM branches are evaluated over the com-plete target set without parameter updates. Their unmodulated dynamic consensuses {¯q(e) 
+
+> i
+
+}Ni=1 deter-mine the normalized entropies, tie-aware ranks u(e) 
+
+> i
+
+,and modulation factors γ(e) 
+
+> i
+
+in Eq. (5) of the main paper. These sample-indexed factors are then fixed within that epoch. 
+
+Algorithm 1 Optimization of COSMO 
+
+Require: Unlabeled target set Dt, source expert fs,pretrained VLM fv , and total epochs E. 
+
+> 1:
+
+Initialize target branch ft ← fs and prompt con-text ϕ. 
+
+> 2:
+
+Freeze fs, the VLM encoders, and the VLM logit scale.  
+
+> 3:
+
+Construct and cache anchors {c(0)  
+
+> i
+
+}Ni=1 using 
+
+M = {s, v }. 
+
+> 4:
+
+for e = 0 , . . . , E − 1 do  
+
+> 5:
+
+Evaluate the unmodulated dynamic consensus over Dt. 
+
+> 6:
+
+Compute {u(e) 
+
+> i
+
+, γ (e) 
+
+> i
+
+}Ni=1 . 
+
+> 7:
+
+for mini-batch B ⊂ D t do  
+
+> 8:
+
+Compute pre-update predictions p(ℓ) 
+
+> t
+
+and 
+
+p(ℓ) 
+
+> v
+
+. 
+
+> 9:
+
+Construct c(ℓ) 
+
+> i
+
+using M = {t, v }. 
+
+> 10:
+
+Apply CSM relative to c(0)  
+
+> i
+
+and detach eq(ℓ) 
+
+> i
+
+. 
+
+> 11:
+
+Form Lt and Lv from this same snapshot.  
+
+> 12:
+
+Update θt and ϕ with their respective objec-tives.  
+
+> 13:
+
+end for  
+
+> 14:
+
+end for  
+
+> 15:
+
+return Adapted target branch ft.Crucially, neither branch is updated before the shared supervision snapshot for the current mini-batch has been formed. Although the two parame-ter groups may be handled by separate optimizers, both losses use the same pre-update detached con-sensus; no branch is supervised by the other branch’s post-update prediction. During adaptation, the train-able components are the target branch and VLM prompt context. The source expert, pretrained VLM encoders, VLM logit scale, cached anchors, and the consensus snapshot within each update remain fixed. After adaptation, only ft is retained, so COSMO 
+
+introduces no additional branch or consensus compu-tation at inference. 
+
+# C Datasets and Evaluation Pro-tocols 
+
+## C.1 Dataset Statistics and Domain Splits 
+
+We evaluate on the same four closed-set benchmarks as in the main paper. Their statistics under the eval-uated splits are summarized in Table S1.                  
+
+> Dataset Domains Classes Images Tasks Office-31 331 4,652 6Office-Home 465 15,588 12 VisDA-C 212 152,397/55,388 1DomainNet-126 4126 ∼145,000 12
+
+Table S1: Dataset statistics. VisDA-C image counts are reported as Synthetic/Real. 
+
+Office-31. Office-31 (Saenko et al., 2010) contains 4,652 images from 31 shared categories in three do-mains: Amazon (A), DSLR (D), and Webcam (W). 
+
+Office-Home. Office-Home (Venkateswara et al., 2017) contains 15,588 images from 65 categories in four domains: Art (A), Clipart (C), Product (P), and Real World (R). 
+
+VisDA-C. VisDA-C (Peng et al., 2018) is asynthetic-to-real benchmark with 12 categories. We use its training split of 152,397 rendered images as the source domain and its validation split of 55,388 real images as the target domain, following the standard unsupervised adaptation protocol. 
+
+DomainNet-126. DomainNet-126 (Saito et al., 2019) is the standard 126-category subset used by prior VLM-guided SFDA work. It contains approxi-mately 145,000 images from four DomainNet styles: Clipart (C), Painting (P), Real (R), and Sketch (S). 
+
+## C.2 Adaptation Tasks and Evaluation Metrics 
+
+All experiments follow closed-set adaptation: the source and target domains share the same K cat-egories. For a directed transfer S → T , the source model is trained with labeled data from S; during adaptation, only this source-trained model, the pre-trained VLM, and unlabeled samples from T are available. Source images and target labels are not accessed. 16 For Office-31, we evaluate all six ordered transfers among {A, D, W}. For Office-Home, we evaluate all 12 ordered transfers among {A, C, P, R}. VisDA-C contains the single Synthetic-to-Real transfer S →
+
+R. For DomainNet-126, we evaluate all 12 ordered transfers among {C, P, R, S}.For Office-31, Office-Home, and DomainNet-126, performance on a transfer task τ is target-domain top-1 accuracy: 
+
+Acc τ = 1
+
+NτNτX
+
+> i=1
+
+I
+
+
+
+arg max 
+
+> k
+
+pt,i,k = yi
+
+
+
+. (S54) For VisDA-C, we report mean per-class accuracy,              
+
+> mAcc VisDA =1
+> K
+> KX
+> k=1
+> P
+> iI[yi=k]I[arg max jpt,i,j =k]
+> P
+> iI[yi=k],
+> (S55)
+
+which assigns equal weight to each of its 12 cat-egories. Dataset-level scores for the multi-transfer benchmarks are macro-averages over directed tasks: 
+
+Score D = 1
+
+|T D |
+
+X 
+
+> τ∈T D
+
+Acc τ . (S56) Thus, each transfer task contributes equally, indepen-dently of its number of target samples. 
+
+## C.3 Run, Aggregation, and Reporting Protocols 
+
+Unless explicitly stated otherwise, every COSMO 
+
+transfer experiment is repeated with R = 3 indepen-dent adaptation runs. Let Aτ,r denote the evaluation score for task τ in run r. We first average the runs within each task and then macro-average the task means: 
+
+Aτ = 1
+
+R
+
+> R
+
+X
+
+> r=1
+
+Aτ,r ,AD = 1
+
+|T D |
+
+X 
+
+> τ∈T D
+
+Aτ .
+
+(S57) The main tables report Aτ and AD as percentages, rounded only after aggregation. Run-wise values and standard deviations are provided in Appendix F.3. Target labels are used only after adaptation for computing the reported metrics. They are not used to construct the consensus, optimize either branch, select checkpoints, or tune hyperparameters. Labels used in the mechanism analyses are likewise restricted to post-hoc stratification and scoring. For the Office-Home mechanism analyses in the main paper, statistics are computed separately for each of the 12 transfer tasks and then macro-averaged. Entropy bins and quintiles are formed within each task before aggregation, preventing large target do-mains from dominating the curves. Reported macro AUROC values average task-level AUROCs, and the 95% confidence intervals in Fig. 3 are computed across the 12 task-level statistics. 
+
+# D Implementation Details 
+
+## D.1 Source-Model Training 
+
+Following the source-training protocol of ProDe (Tang et al., 2025), we independently train a source model on each labeled source domain. ProDe in turn bases its source-model training on the official AdaContrast implementation (Chen et al., 2022a); we retain this protocol and state the benchmark-specific settings below. For each transfer task, the target branch is initialized from the corresponding source model, while a second frozen copy is retained as the source expert. After source training, source images and labels are discarded and are never accessed during target adaptation. For Office-31 and Office-Home, the source model uses an ImageNet-1K-pretrained ResNet-50 feature extractor; VisDA-C uses ResNet-101. In all three cases, the feature extractor is followed by a 512-dimensional linear bottleneck with BatchNorm and a weight-normalized linear classifier. We do not apply ReLU or dropout after the bottleneck. DomainNet-126 follows the official AdaContrast configuration with ResNet-50, a 256-dimensional bottleneck fol-lowed by BatchNorm, and a weight-normalized linear classifier (Chen et al., 2022a). Source supervision is cross-entropy with label smoothing: 
+
+ey = (1 − σ)y + σK 1, σ = 0 .1, (S58) where K is the number of classes. For every bench-mark, we randomly split each labeled source domain into 90% for training and 10% for validation, and re-tain the checkpoint with the highest source-validation accuracy. The corresponding source-training settings are summarized in Table S3. For Office-31, Office-Home, and VisDA-C, we use SGD with Nesterov momentum 0.9, weight decay 
+
+10 −3, and the polynomial learning-rate schedule 
+
+ηj = η0(1 + 10 j/J )−0.75 , (S59) where j and J are the current and total optimization steps. The feature extractor uses 0.1η0, whereas the 17 Dataset Target CLIP Epochs Batch η0 ηρ α β δ ϵ λ                                            
+
+> Office-31 R-50 B/16 or B/32 30 64 1×10 −21×10 −31.3 0.10 1.0 1×10 −50.5 Office-Home R-50 B/16 or B/32 30 64 5×10 −35×10 −41.3 0.40 1.0 1×10 −50.5 VisDA-C R-101 B/16 or B/32 15 64 5×10 −35×10 −41.0 0.05 0.1 1×10 −50.5 DomainNet-126 R-50 B/16 or B/32 30 64 5×10 −35×10 −41.3 0.40 0.5 1×10 −30.5
+
+Table S2: Target-adaptation configuration. CSM decays linearly over the full training budget shown in the Epochs column.                     
+
+> Dataset Head LR Epochs Batch Backbone Office-31 1×10 −2100 64 R-50 Office-Home 1×10 −250 64 R-50 VisDA-C 1×10 −310 64 R-101 DomainNet-126 2×10 −360 128 R-50
+
+Table S3: Source-model training settings. “Head LR” denotes the initial learning rate of the bottleneck and classifier. bottleneck and classifier use η0. For DomainNet-126, the official AdaContrast configuration uses SGD with Nesterov momentum 0.9, weight decay 10 −4, and cosine learning-rate decay. Its initial learning rates are 2×10 −4 for the ResNet-50 backbone and 2×10 −3
+
+for the bottleneck and classifier (Chen et al., 2022a). Source training applies resizing to 256 × 256 , random 
+
+224 ×224 cropping, horizontal flipping, and ImageNet normalization. Validation uses a 224 ×224 center crop after resizing. 
+
+## D.2 VLM and Prompt Configuration 
+
+We use the OpenAI CLIP implementation (Radford et al., 2021) with ViT-B/32 or ViT-B/16. Results obtained with the two VLM backbones are reported in separate comparison groups. The CLIP image en-coder, text encoder, token embeddings, projection layers, and learned logit scale remain frozen through-out adaptation. Only a learnable textual context shared across classes is optimized. The prompt contains four context tokens initial-ized from the CLIP token embeddings of “a photo of a”, followed by the fixed class name. Thus, the initial prompt is “a photo of a [CLASS].” We use one prompt per class without prompt ensembling or learnable class tokens. Class names are read from the fixed benchmark lists, with underscores replaced by spaces; no synonym expansion or plural rewriting is applied. Within our implementation, the initial VLM prediction and subsequent prompt adaptation use the same class names and initial template. The VLM branch uses its deterministic prepro-cessing: bicubic resizing of the shorter side to 224, a 
+
+224 × 224 center crop, RGB conversion, and CLIP normalization. The target branch instead uses the ResNet preprocessing described below. Accordingly, the two branches observe different backbone-specific views of the same target sample; we do not use weak– strong view consistency. CLIP and prompt forward passes use mixed precision, while the main target-model optimization is performed in FP32. We keep CLIP’s learned logit scale fixed and do not intro-duce an additional prediction temperature. Expert reliability is computed directly from the current pre-dictive distributions without temperature calibration or multiplicative logit normalization. 
+
+## D.3 Target-Adaptation Optimization 
+
+Trainable parameters. Target adaptation up-dates the target feature extractor, bottleneck, classi-fier, and textual prompt context. The source expert and all pretrained CLIP parameters remain frozen. We use two independent SGD optimizers for the target and prompt branches. Both use Nesterov mo-mentum 0.9, weight decay 10 −3, and the polynomial schedule above. Let η0 denote the benchmark-specific base learning rate. For Office-31, Office-Home, and VisDA-C, the bottleneck uses η0, while the feature extractor, classifier, and prompt context use 0.1η0.For DomainNet-126, all target-model components use η0 and the prompt context uses 0.1η0.
+
+Data processing and BatchNorm. All adapta-tion experiments use a target batch size of 64. Each epoch contains one optimization pass over the un-labeled target set, preceded by a no-update full-set scan that refreshes the target-set entropy ranks. Tar-get training resizes an image to 256 × 256 , applies a random 224 × 224 crop and horizontal flip, and normalizes it with ImageNet statistics. Evaluation replaces the random crop with a center crop. The tar-get model uses ordinary training-mode BatchNorm; no per-sample BatchNorm, strong augmentation, or dual-view objective is used. 18 Consensus update. Before adaptation, we evalu-ate the frozen source expert and initially prompted VLM to cache the initial-consensus anchor for each target sample. At the beginning of every epoch, we evaluate the current unmodulated dynamic consen-sus over the complete target set using deterministic views and refresh the target-set entropy ranks. The initial scan supplies the ranks for the first epoch. Within each mini-batch, the entropy-conditioned PoE consensus is constructed once from the two branches’ pre-update predictions and then modu-lated by CSM. The resulting distribution is detached and shared by the target and prompt objectives. Al-though the two branches have separate optimizers, both are updated against this same pre-update snap-shot; an update to one branch therefore cannot alter the supervision used by the other branch in the same iteration. The source expert participates only in the initial anchor and is not inserted into the dynamic expert pair. For CSM, the default modulation strength is λ =0.5. Its differential effect decays linearly from one at the start of adaptation to zero at the end of the fixed training budget. The entropy ranks and the modulation are computed without target labels. No learning-rate warm-up or gradient clipping is used. We report the target model from the final epoch without target-label-based early stopping or model selection; the VLM branch is discarded at inference. 
+
+## D.4 Hyperparameters and Repro-ducibility Settings 
+
+Table S2 lists the complete benchmark-level config-uration. Here, η0 is the target-model base learning rate and ηρ is the prompt learning rate. The co-efficients α, β, and δ weight target-side consensus alignment, hard-label classification, and prediction diversity, respectively; ϵ is the numerical stabilizer used in the entropy-based weighting and probability computations. The CSM coefficient λ is fixed across all experiments. The loss coefficients follow the benchmark-specific protocols on which our implementation is based. The only principal CSM hyperparameter, λ, is set to 0.5 for every benchmark. Once selected, each benchmark-level configuration is fixed across all of its directed transfer tasks, without task-specific tuning. The sen-sitivity analysis in the main paper varies the signed modulation coefficient and decay onset on Office-Home A →C; it does not change the default settings used for the main results. Target labels are used only for final evaluation and post-hoc mechanism analysis, never for adaptation, hyperparameter selection, early        
+
+> Setting Source Methods Reference –Source, zero-shot CLIP Non-VLM SFDA No SHOT, NRC, AaD, AdaCon, TPDS VLM-guided UDA Yes DAPL, PADCLIP, ADCLIP, PDA, DAMP VLM-guided SFDA No DIFO, ProDe, VSFOT,
+> COSMO
+
+Table S4: Comparison groups and access to labeled source data during adaptation. A dash denotes a non-adaptation reference. stopping, or checkpoint selection. 
+
+COSMO is implemented in Python 3.10 with Py-Torch 2.3 and CUDA 12.1. Each transfer task is trained on a single NVIDIA A100 GPU. Unless oth-erwise stated, COSMO results are averaged over three independent runs with seeds 2020, 2021, and 2022. Reported baseline results retain the evaluation and repetition protocols of their source papers. 
+
+# E Comparison Protocol 
+
+## E.1 Method Categorization and Back-bone Matching 
+
+Table S4 summarizes the data available to each com-parison group. Source and zero-shot CLIP (Rad-ford et al., 2021) are non-adaptation references. SHOT (Liang et al., 2020), NRC (Yang et al., 2021), AaD (Yang et al., 2022), AdaCon (Chen et al., 2022a), and TPDS (Tang et al., 2024a) are conventional non-VLM SFDA methods. DAPL (Ge et al., 2023), PAD-CLIP (Lai et al., 2023), ADCLIP (Singha et al., 2023), PDA (Bai et al., 2024), and DAMP (Du et al., 2024) are VLM-guided UDA methods that retain labeled source data during adaptation. DIFO (Tang et al., 2024b), ProDe (Tang et al., 2025), and VSFOT (Han et al., 2026) perform VLM-guided adaptation with-out source data, as does COSMO . No compared method uses target labels during adaptation. The deployed target architecture of COSMO 
+
+is ResNet-50 on Office-31, Office-Home, and DomainNet-126, and ResNet-101 on VisDA-C. VLM-guided results are grouped by the CLIP image-encoder backbone, ViT-B/16 or ViT-B/32, and best/second-best markings are assigned only within the corresponding VLM-backbone group. Thus, “matched backbone” in the main result tables refers specifically to the VLM backbone. Conventional SFDA methods do not use a VLM and are therefore not part of this matching. Target-model architectures 19 follow the reported protocol of each baseline and are stated separately when reproduction is required; we do not assume that every reported baseline shares our exact source checkpoint. Source-available VLM-guided UDA methods are included as informative references but do not have the same data-access set-ting as COSMO .
+
+## E.2 Sources and Reproduction of Baseline Results 
+
+Table S5 summarizes the provenance of the results used in the main-text and appendix comparisons. The Source and zero-shot CLIP (Radford et al., 2021) reference rows are obtained from our own evalua-tions rather than copied from prior work. The Source row directly evaluates our trained source checkpoints on the corresponding target domains, while zero-shot CLIP uses CLIP ViT-B/32 with the fixed ini-tial prompt and no target adaptation. The reported 
+
+COSMO results are likewise obtained from our imple-mentation and, unless otherwise stated, are averaged over three independent runs. The remaining baseline results are taken from the corresponding cited papers and therefore retain their original model-selection, repetition, and rounding conventions, except for the ResNet-50 ProDe (Tang et al., 2025) result on DomainNet-126 reproduced below. For DomainNet-126, the default ProDe (Tang et al., 2025) result does not use the same ResNet-50 tar-get backbone as COSMO . We therefore reproduce ProDe with ResNet-50, a 256-dimensional bottle-neck, and CLIP ViT-B/32. The reproduction covers all twelve directed transfers, uses the same indepen-dently trained source models as COSMO , and follows a 30-epoch adaptation schedule with batch size 64 and base learning rate 5 × 10 −3. We fix the configura-tion across all transfers and do not use target labels for tuning, early stopping, or checkpoint selection. A single run with seed 2020 yields the 12-task macro average of 83.9% reported in the main table. 
+
+# F Complete Benchmark Results and Extensions 
+
+This section provides the complete Office-31 re-sults, class-wise VisDA-C results, run-level variability on Office-Home, additional source-free comparisons with CLIP ViT-B/16, and the extension to multiple foundation models. Unless stated otherwise, the re-sult provenance and comparison conventions follow Sec. E. 
+
+## F.1 Complete Office-31 Results 
+
+Table S6 reports Office-31 results aggregated by tar-get domain, where each target-domain score aver-ages the two directed transfers ending in that do-main. This compact presentation highlights the more challenging transfers to Amazon while retaining the complete six-transfer average. With CLIP ViT-B/32, 
+
+COSMO obtains the best →A result and ties the strongest matched-backbone source-free baseline in average accuracy at 92.7%. With CLIP ViT-B/16, 
+
+COSMO further reaches 93.0% and ranks first on all three target-domain aggregates within the matched-backbone group. 
+
+## F.2 Class-Wise Results on VisDA-C 
+
+Table S7 complements the mean per-class accuracy in the main paper with results for all 12 VisDA-C categories. The source-available VLM-guided UDA methods in the ViT-B/16 block report class-wise re-sults in their original evaluations (Lai et al., 2023; Singha et al., 2023; Bai et al., 2024; Du et al., 2024) and are included to align the comparison set with the corresponding block of Table 1 in the main paper. The DIFO and ProDe class-wise values are reported in their original papers (Tang et al., 2024b, 2025). VSFOT is omitted because it reports only the aggre-gate VisDA-C score (Han et al., 2026). The remaining conventional SFDA rows follow the provenance sum-marized in Sec. E. Within the ViT-B/32 source-free group, COSMO 
+
+achieves the highest mean per-class accuracy at 91.4%. With ViT-B/16, it further reaches 92.0%, the best matched-backbone mean, and obtains the leading result on bicycle, car, knife, person, plant, and truck. The class-wise changes between the two 
+
+COSMO backbones are not uniform, indicating that the aggregate gain does not arise from every category improving equally. 
+
+## F.3 Run-Level Results and Variability 
+
+Table S8 reports the individual runs of COSMO 
+
+on all 12 Office-Home transfers using three indepen-dent seeds. All runs use the same CLIP ViT-B/32 configuration, hyperparameters, and evaluation pro-tocol. The reported standard deviations are sample standard deviations across the three runs. 
+
+COSMO obtains an Office-Home average of 
+
+86 .410 ± 0.084% , with run-level averages ranging from 86.345% to 86.505%. Across individual trans-fers, the sample standard deviation ranges from 0.040 to 0.370 percentage points, with an average of 0.199 20 Result(s) VLM Provenance Evaluation protocol Source – Our evaluation Direct target-domain evaluation of our trained source checkpoints; no target adaptation. Zero-shot CLIP B/32 Our evaluation CLIP ViT-B/32 with the fixed initial prompt; no target adaptation.             
+
+> COSMO B/16 or B/32 Our evaluation Three independent adaptation runs with seeds 2020, 2021, and 2022. Conventional SFDA (SHOT, NRC, AaD, AdaCon, TPDS) –Original papers Values and evaluation protocols follow the corresponding cited papers. Source-available VLM-guided UDA (DAPL, PADCLIP, ADCLIP, PDA, DAMP) B/16 Original papers Values and evaluation protocols follow the corresponding cited papers. Source-free VLM-guided SFDA (DIFO, ProDe, VSFOT) B/32 Original papers Values follow the corresponding cited papers, except for ProDe on DomainNet-126 below. ProDe on DomainNet-126 B/32 Our reproduction One run with seed 2020 using a ResNet-50 target backbone for target-backbone matching.
+
+Table S5: Provenance of the results used in the main-text and appendix comparison tables. Source, zero-shot CLIP, COSMO , and the indicated ProDe result are evaluated in our pipeline; the remaining values are taken from the corresponding cited papers. A dash indicates that no VLM is used.                                                                                                 
+
+> Method Venue VLM SF Office-31
+> →A→D→WAvg. Source –––60.6 89.0 85.9 78.5 CLIP ICML’21 B/32 –77.3 81.3 79.6 79.4 SHOT ICML’20 –✓74.4 96.9 94.7 88.6 NRC NeurIPS’21 –✓75.2 98.0 94.9 89.4 AaD NeurIPS’22 –✓75.8 98.2 95.6 89.9 AdaCon CVPR’22 –✓75.7 80.3 87.2 81.0 TPDS IJCV’24 –✓75.6 98.5 96.6 90.2 DAPL TNNLS’23 B/16
+> ✗81.1 81.5 81.1 81.2 PDA AAAI’24 ✗83.0 95.5 95.1 91.2
+> COSMO –✓83.8 98.4 96.9 93.0
+> DIFO CVPR’24 B/32
+> ✓83.1 98.0 96.4 92.5 ProDe ICLR’25 ✓82.8 98.3 96.7 92.6 VSFOT CVPR’26 ✓83.4 98.3 96.3 92.7
+> COSMO –✓83.7 98.2 96.2 92.7
+
+Table S6: Closed-set adaptation results (%) on Office-31, aggregated by target domain. Each target-domain score averages the two directed transfers ending in that domain. “VLM” denotes the image-encoder back-bone of the vision-language model, and “SF” indi-cates source-free adaptation. Best and second-best results are shown in bold and underlined, respec-tively, within each matched VLM-backbone group. points. Thus, no evaluated transfer has a standard deviation above 0.4 points under this configuration. The observed seed variation is small relative to the 1.1-point difference between COSMO and the reported VSFOT average in the matched ViT-B/32 comparison. This comparison characterizes empirical stability rather than formal statistical significance, because only three COSMO runs are available and the competing method was not evaluated through paired repeated trials in the same implementation. 
+
+## F.4 Additional Source-Free Compar-isons with ViT-B/16 
+
+The main paper compares VLM-guided methods within matched CLIP-backbone groups. Table S9 further isolates source-free methods evaluated with CLIP ViT-B/16. The DIFO and ProDe values are taken from the ViT-B/16 evaluations reported by ProDe (Tang et al., 2025); this DIFO configuration was not reported in the original DIFO paper. All rows use a ResNet-50 target model, except ResNet-101 on VisDA-C. COSMO improves over the strongest prior source-free result by 0.8, 1.5, and 0.3 points on Office-31, Office-Home, and VisDA-C, respectively, while matching ProDe on DomainNet-126. 
+
+## F.5 Extension to Multiple Foundation Models 
+
+We extend COSMO from two heterogeneous experts to a configuration with a source-initialized ResNet-50 target branch, CLIP ViT-B/32, and Salesforce/ instructblip-flan-t5-xl (Dai et al., 2023). The reliability scores are normalized jointly over the three active predictions, after which consensus construc-21 Method Venue VLM SF VisDA-C plane bcycl bus car horse knife mcycl person plant sktbrd train truck Mean SHOT ICML’20 – ✓ 95.0 87.4 80.9 57.6 93.9 94.1 79.4 80.4 90.9 89.8 85.8 57.5 82.7 NRC NeurIPS’21 – ✓ 96.8 91.3 82.4 62.4 96.2 95.9 86.1 80.6 94.8 94.1 90.4 59.7 85.9 AaD NeurIPS’22 – ✓ 97.4 90.5 80.8 76.2 97.3 96.1 89.8 82.9 95.5 93.0 92.0 64.7 88.0 AdaCon CVPR’22 – ✓ 97.0 84.7 84.0 77.3 96.7 93.8 91.9 84.8 94.3 93.1 94.1 49.7 86.8 TPDS IJCV’24 – ✓ 97.6 91.5 89.7 83.4 97.5 96.3 92.2 82.4 96.0 94.1 90.9 40.4 87.6 PADCLIP ICCV’23 B/16                                                                                                                     
+
+> ✗98.1 93.8 87.1 85.5 98.0 96.0 94.4 86.0 94.9 93.3 93.5 70.2 90.9 ADCLIP ICCVW’23 ✗99.6 92.8 94.0 78.6 98.8 95.4 96.8 83.9 91.5 95.8 95.5 65.7 90.7 PDA AAAI’24 ✗99.2 91.1 91.9 77.1 98.4 93.6 95.1 84.9 87.2 97.3 95.3 65.3 89.7 DAMP CVPR’24 ✗98.7 92.8 91.7 80.1 98.9 96.9 94.9 83.2 93.9 94.9 94.8 70.2 90.9
+> COSMO –✓98.6 94.3 89.2 85.7 98.1 98.9 93.9 86.4 95.8 97.1 94.9 71.2 92.0
+> DIFO CVPR’24 B/32
+> ✓97.5 89.0 90.8 83.5 97.8 97.3 93.2 83.5 95.2 96.8 93.7 65.9 90.3 ProDe ICLR’25 ✓98.3 92.4 86.6 80.5 98.1 98.0 92.3 84.3 94.7 97.0 94.1 75.6 91.0
+> COSMO –✓98.3 91.7 88.6 81.7 97.4 98.7 94.3 85.6 95.0 96.2 94.3 74.8 91.4
+
+Table S7: Class-wise closed-set adaptation results (%) on VisDA-C. Category abbreviations follow prior work: bcycl, mcycl, and sktbrd denote bicycle, motorcycle, and skateboard. “VLM” denotes the image-encoder backbone, and “SF” indicates source-free adaptation. Best and second-best values are shown in bold 
+
+and underlined, respectively, within each matched VLM-backbone group. Tied second-best values are all underlined.                                                                       
+
+> Transfer Seed 2020 Seed 2021 Seed 2022 Mean Std. A→C76.480 76.230 76.550 76.420 0.168 A→P92.630 92.660 92.540 92.610 0.062 A→R92.026 91.757 92.307 92.030 0.275 C→A85.283 85.943 85.904 85.710 0.370 C→P92.220 92.400 92.520 92.380 0.151 C→R91.977 91.676 91.957 91.870 0.168 P→A83.993 84.324 84.643 84.320 0.325 P→C76.034 76.103 76.103 76.080 0.040 P→R91.887 91.376 91.927 91.730 0.307 R→A85.543 85.493 85.704 85.580 0.110 R→C75.490 75.720 75.200 75.470 0.261 R→P92.580 92.880 92.700 92.720 0.151
+> Avg. 86.345 86.380 86.505 86.410 0.084
+
+Table S8: Run-level target accuracies (%) of COSMO 
+
+with CLIP ViT-B/32 on Office-Home. Mean and sample standard deviation are computed over three independent runs using the unrounded values. “Avg.” macro-averages the 12 transfers separately within each run. tion and CSM retain the same forms as in the two-expert setting. This experiment evaluates whether the shared-consensus formulation can incorporate an additional foundation model whose output is not natively expressed as classification logits. InstructBLIP first generates a caption for each tar-get image. We encode the caption and class names                     
+
+> Method Venue O-31 O-Home VisDA-C DN-126 DIFO CVPR’24 92.2 85.5 91.0 –ProDe ICLR’25 92.2 86.9 91.7 88.1
+> COSMO –93.0 88.4 92.0 88.1
+
+Table S9: Additional source-free VLM-guided compar-isons using CLIP ViT-B/16. O-31, O-Home, and DN-126 denote Office-31, Office-Home, and DomainNet-126, respectively. Best and second-best values are shown in bold and underlined; a dash indicates that the corresponding result was not reported. with thenlper/gte-base (Li et al., 2023); their co-sine similarities, scaled by 100, form the InstructBLIP classification proxy. In the frozen variant, the cap-tions, GTE embeddings, and resulting proxy logits remain fixed. In the text-adapter variant, the caption embeddings remain fixed, while a 256-dimensional residual adapter is applied to the class-name em-beddings and optimized with the same consensus-alignment objective. Table S10 compares the two extensions with CoMA (Lee et al., 2025a), which also combines CLIP ViT-B/32 and InstructBLIP on Office-Home. The frozen extension reaches 91.8%, indicating that the additional foundation model can be incorporated without updating its proxy. The lightweight text adapter provides a further 0.2-point gain, reaching 92.0% and the best result on 11 of the 12 transfers; 22 Method A→C A→P A→R C→A C→P C→R P→A P→C P→R R→A R→C R→P Avg. CoMA 83.8 95.6 94.2 89.1 95.9 93.7 89.2 83.9 93.6 89.4 84.6 95.8 90.7                             
+
+> COSMO (frozen) 86.6 95.8 94.8 90.2 95.7 94.5 90.1 86.6 94.6 90.2 86.3 95.7 91.8
+> COSMO (text adapter) 87.0 96.1 94.9 89.8 96.0 94.7 90.2 87.0 94.8 90.6 87.0 96.0 92.0
+
+Table S10: Extension to multiple foundation models on Office-Home (accuracy, %). All methods use a ResNet-50 target model and combine CLIP ViT-B/32 with InstructBLIP. “Frozen” fixes the caption-derived classification proxy, while “text adapter” updates only the residual adapter on the class-name embeddings. Best and second-best values are shown in bold and underlined, respectively. the frozen variant remains best on C →A. 
+
+# G Additional Ablations 
+
+This section complements the ablations in the main paper from three perspectives. Section G.1 evaluates CSM under partial branch re-aggregation, Sec. G.2 extends the initial-consensus comparison to all four benchmarks, and Sec. G.3 decomposes the complete training objective. Unless otherwise specified, all experiments use CLIP ViT-B/32 and follow the benchmark configurations and reporting protocols described in Secs. C and D. 
+
+## G.1 CSM across Re-aggregation Topologies 
+
+Table S11 extends the component ablation in the main paper by applying CSM to the two partial re-aggregation variants. In these variants, either the current target prediction or the current VLM pre-diction is combined with the other branch’s initial prediction; the joint variant uses the current predic-tions of both branches. CSM improves every re-aggregation topology. It raises target-only re-aggregation by 0.5/0.6 points on Office-Home/DomainNet-126 and VLM-only re-aggregation by 0.2/0.4 points. Applied to joint re-aggregation, CSM further improves 85 .8/84 .6% to 
+
+86 .4/85 .1% . Thus, its benefit is not specific to the simultaneous evolution of both branches. Joint re-aggregation nevertheless remains benefi-cial. Full COSMO outperforms the target-only vari-ant with CSM by 0.5/1.1 points and the VLM-only variant with CSM by 1.1/1.8 points. The results separate the two effects: CSM improves the anchor-relative evolution induced by each topology, while jointly re-aggregating both current branches provides the strongest consensus supervision.                                                     
+
+> Re-aggregation Target Acc. Setting Target VLM CSM Office-Home DomainNet-126 VLM →Target –––81.2 80.3 VLM ↔Target –––84.8 82.0 Fixed consensus ✗✗✗82.6 80.8 Target re-agg. ✓✗✗85.4 83.4
+> ✓✗✓85.9 84.0 VLM re-agg. ✗✓✗85.1 82.9
+> ✗✓✓85.3 83.3 Joint re-agg. ✓✓✗85.8 84.6
+> COSMO ✓✓✓86.4 85.1
+
+Table S11: Extended ablation of supervision topology, branch re-aggregation, and CSM using CLIP ViT-B/32 (12-shift average target accuracies, %). For the shared-consensus variants, a checkmark indicates that the current prediction of the corresponding branch enters re-aggregation; a cross indicates that its initial prediction is used. Dashes denote directed-transfer baselines for which re-aggregation and CSM are not applicable. 
+
+## G.2 Initial Consensus Construction across Benchmarks 
+
+Table S12 extends the initial-consensus analysis to all four benchmarks. Because all entries are evalu-ated before target adaptation, this experiment iso-lates consensus construction from the subsequent optimization trajectory. The PoE variants share the same centered-logit pooling and differ only in the sample-wise allocation cue. Besides uniform weighting and the raw expert en-tropy used by COSMO , we evaluate three label-free controls for heterogeneous expert scales. Scale nor-malization applies global logit-scale normalization before entropy computation; rank normalization re-places each expert’s entropy by its within-expert target-set rank; and temperature alignment selects temperatures that match the experts’ target-set mean entropy. Target labels are used only to evaluate the 23 Predictor / fusion Weighting Office-31 Office-Home VisDA-C DomainNet-126 Source expert – 78.50 59.30 49.00 54.70 VLM expert – 79.40 79.10 87.30 80.20 PoE Uniform 87.24 81.16 83.87 80.77 Entropy (scale-norm.) 86.47 77.53 80.39 76.75 Entropy (rank-norm.) 86.64 79.73 81.93 78.97 Entropy (T-aligned) 86.64 78.08 79.66 77.28     
+
+> Entropy (raw) 87.31 81.58 84.54 81.61
+
+Table S12: Initial predictor and consensus accuracies (%) using CLIP ViT-B/32. All entries are evaluated before target adaptation. Office-31, Office-Home, and DomainNet-126 are averaged over 6, 12, and 12 directed transfers, respectively; VisDA-C reports mean per-class accuracy. “Scale-norm.”, “rank-norm.”, and “T-aligned” denote global logit-scale normalization, within-expert entropy-rank normalization, and label-free mean-entropy alignment, respectively. Bold marks the best PoE result, and the gray row is the allocation used by COSMO .resulting initial predictions. Raw expert entropy yields the best PoE consen-sus on every benchmark. Relative to uniform PoE, it improves initial accuracy by 0.07 , 0.42 , 0.67 , and 
+
+0.84 points on Office-31, Office-Home, VisDA-C, and DomainNet-126, respectively. It also exceeds the stronger individual expert on three benchmarks. On VisDA-C, the raw-entropy PoE remains 2.76 points below the VLM expert, but it is still the strongest among the evaluated PoE variants. Among the scale-controlled alternatives, rank nor-malization performs best, but remains 0.67 –2.64 
+
+points below raw entropy. Global scale normalization and mean-entropy alignment lead to larger reductions on most benchmarks. These results do not treat raw entropy as calibrated correctness; they show that, among the evaluated label-free cues, the experts’ native predictive concentration provides the most effective relative allocation for the initial consensus. 
+
+## G.3 Training-Objective Ablations 
+
+Table S13 decomposes the objective in Eq. (7) of the main paper into VLM-side IIC alignment (V-IIC), target-side IIC alignment (T-IIC), hard-consensus cross-entropy, and target-side prediction diversity. Consensus construction, branch re-aggregation, and CSM are kept unchanged; only the indicated loss terms are removed. All four terms contribute to the final result. Re-moving V-IIC and T-IIC reduces the Office-Home average by 1.37 and 2.09 points, respectively, indicat-ing that alignment of both evolving branches with the shared consensus is beneficial. Removing prediction diversity causes a smaller 0.87 -point reduction. Hard-consensus classification provides the largest individual contribution: without it, accuracy drops by                                      
+
+> Setting V-IIC T-IIC Hard CE Div. Acc.
+> Full objective ✓✓✓✓86.41
+> w/o V-IIC ✗✓✓✓85.04 w/o T-IIC ✓✗✓✓84.32 w/o Hard CE ✓✓✗✓79.66 w/o Diversity ✓✓✓✗85.54 Soft alignment only ✓✓✗✗77.91 Hard CE only ✗✗✓✗84.92
+
+Table S13: Ablation of the COSMO training objec-tive on Office-Home using CLIP ViT-B/32 (12-shift average target accuracy, %). V-IIC and T-IIC denote VLM-side and target-side IIC alignment with the shared consensus; Hard CE uses the hard consensus decision, and Div. denotes target-side prediction di-versity. 
+
+6.75 points. The soft-alignment-only variant reaches 
+
+77 .91% , whereas hard CE alone obtains 84 .92% . Nev-ertheless, the full objective exceeds the hard-CE-only variant by 1.49 points. Hard consensus deci-sions therefore provide the primary instance-level signal, while branch-wise soft alignment and predic-tion diversity offer complementary collaborative and distribution-level regularization. 
+
+# H Extended Mechanism Analy-sis 
+
+This section provides two complementary diagnos-tics on Office-Home A →C. We first examine the discriminability of the adapted target features and then evaluate sensitivity to the objective coefficients. These experiments are intended for post-hoc analysis and do not use target labels during adaptation or 24 model selection. 
+
+## H.1 Target Feature Discriminability 
+
+We compare Source, SHOT, DIFO, ProDe, COSMO 
+
+w/o CSM, and the full COSMO . SHOT is adapted for 15 epochs, whereas DIFO, ProDe, and the two 
+
+COSMO variants use 30 epochs. The full COSMO 
+
+panel uses the canonical target-set entropy ranking adopted in the main experiments. For each method, we extract the 512-dimensional target bottleneck features immediately before the classifier, apply ℓ2
+
+normalization, and use the same deterministic eval-uation pipeline. The t-SNE visualization (van der Maaten and Hinton, 2008) uses the same samples from ten fixed classes for every method, whereas the accuracy and feature-space metric reported in each panel are computed over all 65 classes and all 4,365 target samples. Each t-SNE projection is fitted in-dependently and is therefore used only to inspect within-panel class mixing and local separation; its coordinates, scale, and global shape are not compara-ble across methods. The panel values are single-run diagnostics with seed 2020 rather than the three-run averages in the main comparison tables. The feature-analysis checkpoints and the efficiency-profiling runs in Table S14 were produced in separate experimental executions; their small single-run accuracy differences are therefore not used for cross-table comparisons. Let μk denote the normalized feature centroid of class k. We measure within-class dispersion and between-class separation by 
+
+Dintra = 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+1
+
+nk
+
+X
+
+> i:yi=k
+
+[1 − cos( fi, μk)] ,Dinter = 2
+
+K(K − 1) 
+
+X
+
+> k<l
+
+[1 − cos( μk, μl)] ,J = Dinter 
+
+Dintra 
+
+.
+
+(S60) A larger J indicates greater inter-class separation relative to within-class dispersion. This metric is used only to describe the learned feature geometry and is not optimized during adaptation. Figure S1 shows that the unadapted Source repre-sentation has substantial class overlap, with 43.6% accuracy and J = 1 .60 . SHOT improves both quan-tities to 55.0% and 2.70, but several selected classes remain locally mixed. DIFO produces the largest J
+
+of 4.02 and visibly compact clusters, yet reaches only 69.9% accuracy; ProDe attains 72.8% with J = 3 .34 .The mismatch between DIFO’s high J and its lower classification accuracy indicates that compact class geometry alone does not determine the quality of the deployed classifier. Well-separated feature clusters may still be imperfectly aligned with the classifier decision regions. The consensus-based variants achieve the high-est target accuracies. COSMO w/o CSM reaches 75.9% with J = 3 .41 , while the full method further improves these values to 76.4% and 3.44. Their pro-jections exhibit comparatively compact class-specific regions with less local mixing than Source and SHOT. Compared with ProDe, COSMO does not achieve the largest J, but it delivers higher target accuracy together with slightly better class-discriminability statistics. The smaller improvement from adding CSM suggests that it refines the discriminative orga-nization established by dynamic consensus learning rather than fundamentally reorganizing the feature space. Overall, the results support improved target-feature discriminability under COSMO , while also showing that neither a two-dimensional projection nor a single clustering statistic should be treated as a substitute for target classification accuracy. 
+
+## H.2 Sensitivity to Objective Weights 
+
+We further evaluate the coefficients in the training ob-jective on Office-Home A →C. For this diagnostic, we write the total loss as Lt + λv Lv , where the objective in Eq. (7) of the main paper corresponds to λv = 1 .Each of λv , α, β, and δ is varied independently while all remaining coefficients are fixed at their defaults. We use relative scales {0.50 , 0.75 , 1.00 , 1.25 , 1.50 };the corresponding default coefficients are λv = 1 .00 ,
+
+α = 1 .30 , β = 0 .40 , and δ = 1 .00 . Thus, for example, the sweep for α is {0.65 , 0.975 , 1.30 , 1.625 , 1.95 }. This analysis is not used for task-specific hyperparameter selection. As shown in Fig. S2, the VLM-side IIC weight λv is stable around its default: all settings remain between 76.01% and 76.29%, and the default is only 0.09 points below the best value. The hard-consensus CE weight β also exhibits a broad plateau from 0.75 × to 
+
+1.50 × its default, where the accuracy varies only from 76.20% to 76.29%; a substantially smaller weight of 
+
+0.50 × causes a clearer drop to 75.03%. The diversity weight δ remains near 76.2% over scales from 0.50 ×
+
+to 1.25 ×, but excessive weighting at 1.50 × reduces accuracy to 75.62%. The target-side IIC coefficient α shows the clearest directional trend. Down-weighting it reduces accuracy to 74.96% at 0.50 ×, whereas larger values gradually improve performance to 76.47% at 1.50 ×. The default remains within 0.27 points of the best A →C setting and is kept fixed across all tasks and benchmarks 25 Figure S1: Target-feature visualization on Office-Home A →C. Each panel shows an independently fitted t-SNE projection of the same target samples from ten fixed classes. Titles report target accuracy and the discriminability ratio J, both evaluated using all 65 classes. The ratio J is computed in the original normalized 512-dimensional feature space rather than in the t-SNE projection. Results use seed 2020; the full COSMO 
+
+panel uses canonical target-set ranking. These diagnostic runs were conducted separately from the efficiency profiling in Table S14. rather than tuned for this transfer. Taken together, the sweeps show that COSMO is broadly insensitive to moderate changes in λv , β, and δ around their defaults, while sufficient target-side soft alignment is more important for this particular transfer. 
+
+# I Computational Efficiency 
+
+We analyze the training cost of COSMO on Office-Home A →C and compare it with SHOT and ProDe. All methods are run for 30 epochs on a single NVIDIA A100-PCIE-40GB GPU with target batch size 64 and seed 2020. The VLM-based methods use CLIP ViT-B/32, and ProDe uses a source-bank batch size of 64. The reported time excludes the one-time construction of the CLIP feature cache. Because these are single-run measurements, small accuracy differences should not be interpreted as statistically meaningful. 
+
+Computational complexity. For a mini-batch of size B and K classes, entropy-conditioned PoE con-struction, consensus modulation, and the associated sample-wise post-processing require O(BK ) time and memory and introduce no additional trainable mod-ule. The canonical target-set ranking additionally performs one no-update forward pass of the current target and VLM branches over all N target sam-ples per epoch. Once these predictions are available, consensus construction, entropy computation, and sorting require O(N K + N log N ) post-processing. The cached sample-wise logit states require O(N K )
+
+storage; on A →C, one float32 bank of size 4,365 × 65 
+
+occupies only about 1.08 MiB. Table S14 shows that the core consensus operations add negligible memory and little per-iteration cost. Relative to ProDe, COSMO with batch-local ranking increases time per epoch from 47.92 to 48.14 seconds, corresponding to only 0.46% additional time, while improving target accuracy by 3.58 points. The peak-26 Method Target Acc. (%) Total Time Time/Epoch (s) Effective Throughput (sample/s) Peak Memory (GiB) SHOT 54.91 11.37 min 22.74 191.9 23.60 ProDe 72.85 23.96 min 47.92 91.1 24.20                   
+
+> COSMO w/o CSM 75.76 24.50 min 48.99 89.1 24.21
+> COSMO (target-set rank) 76.29 28.11 min 56.21 77.7 24.21
+> COSMO (batch-local rank) 76.43 24.07 min 48.14 90.7 24.21
+
+Table S14: Training efficiency on Office-Home A →C. All entries use 30 epochs, target batch size 64, seed 2020, and the same A100-PCIE-40GB GPU. ProDe and the COSMO variants use CLIP ViT-B/32. The target-set-rank row is the canonical COSMO configuration used in the main experiments; batch-local rank is a practical approximation that computes entropy ranks within each mini-batch. Effective throughput is the target-set size divided by the wall-clock time per optimization epoch, including the rank-refresh scan when applicable. Total time excludes one-time CLIP feature-cache construction. 
+
+Figure S2: One-at-a-time sensitivity of target accu-racy to the objective weights on Office-Home A →C. The horizontal axis gives the scale applied to each coefficient’s default value, and stars mark the default configuration. All other coefficients remain fixed. memory measurements are effectively identical after rounding; the unrounded logs differ by approximately 7 MiB. The w/o-CSM variant is similarly close to ProDe in both training time and memory, indicating that PoE construction and sample-wise modulation are not the main computational bottlenecks. The additional cost of canonical COSMO mainly comes from the epoch-level target-set scan used to refresh the global entropy ranks. Replacing it with batch-local ranks reduces time per epoch from 56.21 to 48.14 seconds, a 14.36% reduction, and increases effective throughput from 77.7 to 90.7 samples/s, a 16.73% improvement. Its single-run accuracy is 0.14 points higher than the canonical variant; this small difference is not treated as evidence that batch-local ranking is more accurate. The result instead shows that a local approximation can recover nearly the same adaptation behavior when lower training cost is preferred. CSM itself provides a positive accuracy contribu-tion under both ranking schemes: target-set rank-ing improves the w/o-CSM result from 75.76% to 76.29%, while batch-local ranking reaches 76.43%. SHOT is faster because it optimizes only the target branch, whereas ProDe and COSMO jointly update a target model and a prompt branch. At inference, 
+
+COSMO discards the VLM branch, cached consen-sus states, and CSM machinery, retaining only the adapted target model; it therefore introduces no ad-ditional inference-time parameters or computation. 27 References 
+
+Shuanghao Bai, Min Zhang, Wanqi Zhou, Siteng Huang, Zhirong Luan, Donglin Wang, and Badong Chen. Prompt-based distribution alignment for unsupervised domain adaptation. In Proceedings of the AAAI conference on artificial intelligence ,volume 38, pages 729–737, 2024. Jiajun Cao, Yuan Zhang, Tao Huang, Ming Lu, Qizhe Zhang, Ruichuan An, Ningning Ma, and Shang-hang Zhang. Move-kd: Knowledge distillation for vlms with mixture of visual encoders. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 19846–19856, June 2025. Dian Chen, Dequan Wang, Trevor Darrell, and Sayna Ebrahimi. Contrastive test-time adaptation. In 
+
+Proceedings of the IEEE/CVF conference on com-puter vision and pattern recognition , pages 295–305, 2022a. Dongjie Chen, Kartik Patwari, Zhengfeng Lai, Xi-aoguang Zhu, Sen-ching Cheung, and Chen-Nee Chuah. Empowering source-free domain adapta-tion via mllm-guided reliability-based curriculum learning. In 2026 IEEE/CVF Winter Confer-ence on Applications of Computer Vision (WACV) ,pages 4262–4272. IEEE, 2026. Lijuan Chen, Yunxiang Bai, Ying Hu, Qiong Wang, and Xiaozhi Qi. Source-free domain adaptation via multimodal space-guided alignment. Pattern Recognition , page 112827, 2025. Weijie Chen, Luojun Lin, Shicai Yang, Di Xie, Shil-iang Pu, and Yueting Zhuang. Self-supervised noisy label learning for source-free unsupervised domain adaptation. In 2022 IEEE/RSJ International Con-ference on Intelligent Robots and Systems (IROS) ,pages 10185–10192. IEEE, 2022b. Wenliang Dai, Junnan Li, Dongxu Li, Anthony Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pas-cale Fung, and Steven Hoi. InstructBLIP: To-wards general-purpose vision-language models with instruction tuning. In Thirty-seventh Confer-ence on Neural Information Processing Systems ,2023. URL https://openreview.net/forum?id= vvoWPYqZJA. Ning Ding, Yixing Xu, Yehui Tang, Chao Xu, Yunhe Wang, and Dacheng Tao. Source-free domain adap-tation via distribution estimation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 7212–7222, 2022. Zhekai Du, Xinyao Li, Fengling Li, Ke Lu, Lei Zhu, and Jingjing Li. Domain-agnostic mutual prompt-ing for unsupervised domain adaptation. In Pro-ceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pages 23375– 23384, 2024. Qianhan Feng, Wenshuo Li, Tong Lin, and Xinghao Chen. Align-kd: Distilling cross-modal alignment knowledge for mobile vision-language large model enhancement. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recog-nition (CVPR) , pages 4178–4188, June 2025. Chunjiang Ge, Rui Huang, Mixue Xie, Zihang Lai, Shiji Song, Shuang Li, and Gao Huang. Domain adaptation via prompt learning. IEEE Transac-tions on Neural Networks and Learning Systems ,36(1):1160–1170, 2023. Shuo Han, Xu Tang, Jingjing Ma, and Xiangrong Zhang. Vision-language model guided source-free domain adaptation via optimal transport. In Pro-ceedings of the IEEE/CVF Conference on Com-puter Vision and Pattern Recognition , pages 36989– 36998, 2026. Jiaxing Huang, Dayan Guan, Aoran Xiao, and Shi-jian Lu. Model adaptation: Historical contrastive learning for unsupervised domain adaptation with-out source data. Advances in neural information processing systems , 34:3635–3649, 2021. Jinseong Jang, Chunfei Ma, and Byeongwon Lee. Vl2lite: Task-specific knowledge distillation from large vision-language models to lightweight net-works. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) , pages 30073–30083, June 2025. Xu Ji, Joao F Henriques, and Andrea Vedaldi. Invari-ant information clustering for unsupervised image classification and segmentation. In Proceedings of the IEEE/CVF international conference on com-puter vision , pages 9865–9874, 2019. Sanghwan Kim, Rui Xiao, Mariana-Iuliana Georgescu, Stephan Alaniz, and Zeynep Akata. Cosmos: Cross-modality self-distillation for vision language pre-training. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 14690–14700, June 2025. Vinod K Kurmi, Venkatesh K Subramanian, and Vinay P Namboodiri. Domain impression: A source 28 data free domain adaptation method. In Proceed-ings of the IEEE/CVF winter conference on appli-cations of computer vision , pages 615–625, 2021. Zhengfeng Lai, Noranart Vesdapunt, Ning Zhou, Jun Wu, Cong Phuoc Huynh, Xuelu Li, Kah Kuen Fu, and Chen-Nee Chuah. Padclip: Pseudo-labeling with adaptive debiasing in clip for unsupervised do-main adaptation. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 16155–16165, 2023. Huisoo Lee, Jisu Han, Hyunsouk Cho, and Wonjun Hwang. Collaborative learning with multiple foun-dation models for source-free domain adaptation, 2025a. URL https://arxiv.org/abs/2511.19147. Jungsoo Lee, Debasmit Das, Munawar Hayat, Sungha Choi, Kyuwoong Hwang, and Fatih Porikli. Cus-tomkd: Customizing large vision foundation for edge model improvement via knowledge distillation. In Proceedings of the Computer Vision and Pat-tern Recognition Conference , pages 25176–25186, 2025b. Zehan Li, Xin Zhang, Yanzhao Zhang, Dingkun Long, Pengjun Xie, and Meishan Zhang. Towards general text embeddings with multi-stage contrastive learn-ing, 2023. URL https://arxiv.org/abs/2308.03281. Zheng Li, Xiang Li, Xinyi Fu, Xin Zhang, Weiqiang Wang, Shuo Chen, and Jian Yang. Promptkd: Un-supervised prompt distillation for vision-language models. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) , pages 26617–26626, June 2024. Jian Liang, Dapeng Hu, and Jiashi Feng. Do we really need to access the source data? source hypothe-sis transfer for unsupervised domain adaptation. In International conference on machine learning ,pages 6028–6039. PMLR, 2020. Mattia Litrico, Alessio Del Bue, and Pietro Morerio. Guiding pseudo-labels with uncertainty estimation for source-free unsupervised domain adaptation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 7640–7650, 2023. Jiawen Peng, Jiaxin Chen, Rong Pan, and Andy J Ma. Language-guided alignment and distillation for source-free domain adaptation. Neurocomput-ing , 648:130501, 2025. Junjie Peng, You Wu, Haoyi Wu, Jialong Han, Xi-aohua Xie, Kewei Tu, and Jianhuang Lai. Grkv: Global regression for training-free kv cache com-pression in long-context llms. arXiv preprint arXiv:2605.31105 , 2026. Xingchao Peng, Ben Usman, Neela Kaushik, Dequan Wang, Judy Hoffman, and Kate Saenko. Visda: A synthetic-to-real benchmark for visual domain adaptation. In Proceedings of the IEEE Confer-ence on Computer Vision and Pattern Recognition Workshops , pages 2021–2026, 2018. Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning transferable visual mod-els from natural language supervision. In Inter-national conference on machine learning , pages 8748–8763. PmLR, 2021. Kate Saenko, Brian Kulis, Mario Fritz, and Trevor Darrell. Adapting visual category models to new domains. In European conference on computer vision , pages 213–226. Springer, 2010. Kuniaki Saito, Donghyun Kim, Stan Sclaroff, Trevor Darrell, and Kate Saenko. Semi-supervised domain adaptation via minimax entropy. In Proceedings of the IEEE/CVF international conference on com-puter vision , pages 8050–8058, 2019. Sepehr Sameni, Kushal Kafle, Hao Tan, and Simon Jenni. Building vision-language models on solid foundations with masked distillation. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , pages 14216–14226, June 2024. Mainak Singha, Harsh Pal, Ankit Jha, and Bi-plab Banerjee. Ad-clip: Adapting domains in prompt space using clip. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) Workshops , pages 4355–4364, Oc-tober 2023. Song Tang, An Chang, Fabian Zhang, Xiatian Zhu, Mao Ye, and Changshui Zhang. Source-free do-main adaptation via target prediction distribution searching. International journal of computer vision ,132(3):654–672, 2024a. Song Tang, Wenxin Su, Mao Ye, and Xiatian Zhu. Source-free domain adaptation with frozen mul-timodal foundation model. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 23711–23720, 2024b. 29 Song Tang, Wenxin Su, Yan Gan, Mao Ye, Jian-wei Dr. Zhang, and Xiatian Zhu. Proxy denoising for source-free domain adaptation. In The Thir-teenth International Conference on Learning Rep-resentations , 2025. URL https://openreview.net/ forum?id=FIj9IEPCKr. Song Tang, Yunxiang Bai, Wenxin Su, Mao Ye, Jian-wei Zhang, and Xiatian Zhu. Source-free domain adaptation with vision-language prior, 2026. URL https://arxiv.org/abs/2604.17748. Shuhei Tarashima, Xinqi Shu, and Norio Tagawa. Vi-laad: Enhancing "attracting and dispersing” source-free domain adaptation with vision-and-language model, 2025. URL https://arxiv.org/abs/2503. 23529. Jiayi Tian, Jing Zhang, Wen Li, and Dong Xu. Vdm-da: Virtual domain modeling for source data-free domain adaptation. IEEE Transactions on Cir-cuits and Systems for Video Technology , 32(6): 3749–3760, 2021. Laurens van der Maaten and Geoffrey Hinton. Visual-izing Data using t-SNE. Journal of Machine Learn-ing Research , 9(86):2579–2605, 2008. URL http: //jmlr.org/papers/v9/vandermaaten08a.html. Pavan Kumar Anasosalu Vasu, Hadi Pouransari, Far-tash Faghri, Raviteja Vemulapalli, and Oncel Tuzel. Mobileclip: Fast image-text models through multi-modal reinforced training. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 15963–15974, 2024. Hemanth Venkateswara, Jose Eusebio, Shayok Chakraborty, and Sethuraman Panchanathan. Deep hashing network for unsupervised domain adaptation. In Proceedings of the IEEE conference on computer vision and pattern recognition , pages 5018–5027, 2017. Kan Wu, Houwen Peng, Zhenghong Zhou, Bin Xiao, Mengchen Liu, Lu Yuan, Hong Xuan, Michael Valenzuela, Xi Stephen Chen, Xinggang Wang, et al. Tinyclip: Clip distillation via affinity mim-icking and weight inheritance. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 21970–21980, 2023. Size Wu, Wenwei Zhang, Lumin Xu, Sheng Jin, Xi-angtai Li, Wentao Liu, and Chen Change Loy. CLIPSelf: Vision transformer distills itself for open-vocabulary dense prediction. In The Twelfth In-ternational Conference on Learning Representa-tions , 2024. URL https://openreview.net/forum? id=DjzvJCRsVf. Haifeng Xia, Handong Zhao, and Zhengming Ding. Adaptive adversarial network for source-free do-main adaptation. In Proceedings of the IEEE/CVF international conference on computer vision , pages 9010–9019, 2021. Chuanguang Yang, Zhulin An, Libo Huang, Junyu Bi, Xinqiang Yu, Han Yang, Boyu Diao, and Yongjun Xu. Clip-kd: An empirical study of clip model dis-tillation. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition ,pages 15952–15962, 2024. Shiqi Yang, Joost Van de Weijer, Luis Herranz, Shangling Jui, et al. Exploiting the intrinsic neigh-borhood structure for source-free domain adapta-tion. Advances in neural information processing systems , 34:29393–29405, 2021. Shiqi Yang, Shangling Jui, Joost Van De Weijer, et al. Attracting and dispersing: A simple approach for source-free domain adaptation. Advances in Neural Information Processing Systems , 35:5802– 5815, 2022. Li Yi, Gezheng Xu, Pengcheng Xu, Jiaqi Li, Ruizhi Pu, Charles Ling, Ian McLeod, and Boyu Wang. When source-free domain adaptation meets learn-ing with noisy labels. In The Eleventh Interna-tional Conference on Learning Representations ,2023. URL https://openreview.net/forum?id= u2Pd6x794I. Mengmeng Zhan, Zongqian Wu, Rongyao Hu, Ping Hu, Heng Tao Shen, and Xiaofeng Zhu. Towards dynamic-prompting collaboration for source-free domain adaptation. In Kate Larson, editor, Pro-ceedings of the Thirty-Third International Joint Conference on Artificial Intelligence, IJCAI-24 ,pages 1643–1651. International Joint Conferences on Artificial Intelligence Organization, 8 2024. doi: 10.24963/ijcai.2024/182. URL https://doi.org/10. 24963/ijcai.2024/182. Main Track. 30

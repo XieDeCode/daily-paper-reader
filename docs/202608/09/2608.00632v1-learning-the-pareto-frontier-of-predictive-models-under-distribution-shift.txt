@@ -1,0 +1,451 @@
+Title: Learning the Pareto Frontier of Predictive Models under Distribution Shift
+
+URL Source: https://arxiv.org/pdf/2608.00632v1
+
+Published Time: Tue, 04 Aug 2026 00:39:51 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# Learning the Pareto Frontier of Predictive Models under Distribution Shift 
+
+Yiming Dong 1, Jiwei Zhao 1,2 , and Yang Lu 31Department of Biostatistics & Medical Informatics, University of Wisconsin–Madison 
+
+> 2
+
+Department of Statistics, University of Wisconsin–Madison 
+
+> 3
+
+Department of Biomedical Engineering, University of Wisconsin–Madison 
+
+Abstract 
+
+Modern machine learning pipelines increasingly rely on reusing pretrained and foundation mod-els across downstream tasks. These pretrained models can differ not only in performance but also in how they can be used: some only provide black-box predictions, while others may per-mit white-box access to internal representations that can be probed or fine-tuned. When it is deployed to the target in the presence of distribution shift, no single strategy, including but not limited to, zero-shot application, fine-tuning, directly training a target-specific model, is uni-formly the best, and the right choice usually depends on the source-target shift that is typically unknown in advance. In this work, we propose Frontier Learning, a framework that treats a library of candidate models spanning different training histories and access regimes as comple-mentary sources of information rather than mutually exclusive alternatives. Frontier Learning constructs a unified target-domain feature by concatenating internal representations from white-box candidates as well as prediction outputs from black-box candidates, then fits a lightweight, regularized supervised learner on this concatenated representation using labeled target data. Because the resulting hypothesis class contains predictors obtained by zero-shot reuse, fine-tuning, and direct training as special cases, empirical risk minimization over the frontier learner is guaranteed to be no worse, on the training sample, than any individual baseline. We evaluate the framework in simulations spanning varying degrees of source-target compatibility and in two real-world distribution-shift settings: visual domain adaptation on DomainNet/VisDA and clinical mortality prediction across intensive care unit domains using MIMIC-IV-Notes. Across all settings, Frontier Learning matches or outperforms the strongest individual reuse strategy, with the largest gains arising precisely when no single baseline is reliable across the range of shift considered. These results suggest that, in an era of proliferating black-box and white-box foundation models, learning to combine candidate representations and predictions is a practical, statistically grounded alternative to committing to a single pretrained model for reuse. 
+
+Keywords: Distribution shift; Transfer learning; Foundation model; Model ensemble; Represen-tation learning; Black-box vs. white-box model access. 1arXiv:2608.00632v1 [cs.LG] 1 Aug 2026 1 Introduction 
+
+Machine learning is shifting from the classical paradigm of training one task-specific predictor on one dataset toward a new paradigm of reusing and adapting large pretrained models across many downstream tasks (Bommasani et al., 2021). This shift is especially visible in generative AI and large language models (LLMs), which can perform new tasks through prompting or in-context examples without task-specific gradient updates (Brown et al., 2020; OpenAI, 2023). In practice, however, pretrained models differ not only in predictive performance but also in accessibility: some are black-box systems that return predictions through an API, whereas others are white-box or open-weight systems whose representations and parameters can be inspected or modified (Sun et al., 2022). For downstream biomedical tasks, the goal is no longer only to fit a model on the target data, but also to decide how to use external models that may have already learned from large-scale data but whose relevance to the target population is uncertain (Bommasani et al., 2023). These disparate access regimes lead naturally to three common predictive strategies. The first is zero-shot reuse, in which a pretrained or externally hosted model is applied directly to the target population without task-specific retraining (Brown et al., 2020; OpenAI, 2023). This strategy is attractive when internal model access is unavailable or retraining is computationally prohibitive, but its predictions can be biased or miscalibrated when the target distribution differs from the model’s training or alignment distribution (Guo et al., 2017). The second strategy is fine-tuning, in which a white-box model is adapted to the target task by updating all parameters or a parameter-efficient subset, such as adapters or low-rank updates (Houlsby et al., 2019; Hu et al., 2022). Fine-tuning can effectively exploit pretrained representations, but it requires choosing which model to adapt and can overfit when labeled target data are limited (Pan and Yang, 2010). The third strategy is direct training using only target-domain data. This strategy avoids reliance on a potentially misleading source model but discards pretrained knowledge and can have high variance in small target samples (Qui˜ nonero-Candela et al., 2008). None of these strategies is uniformly preferable across all scenarios. Modern model ecosys-tems contain many strong but heterogeneous candidates, including GPT (OpenAI, 2023), Llama (Grattafiori et al., 2024), Qwen (Bai et al., 2023), DeepSeek (Liu et al., 2024), and domain-specific models (Singhal et al., 2023). These models can differ in pretraining data, architecture, post-training procedure, calibration, reasoning behavior, access mode, and target-domain reliability (Bommasani et al., 2023). The difficulty is amplified under distribution shift, where a model de-veloped in one population, cohort, hospital, imaging protocol, or documentation system may be deployed in another setting with different covariates, outcome prevalence, measurement processes, annotation practices, or selection mechanisms (Qui˜ nonero-Candela et al., 2008). Thus, the ana-lyst faces a dilemma: a black-box model may be convenient but unreliable, a fine-tuned white-box model may be powerful but over-adapted, and a directly trained model may be locally aligned but data inefficient. We propose Frontier Learning, a framework for learning over a frontier of predictive models under distribution shift. Rather than treating zero-shot, fine-tuning, and direct models as mutually 2exclusive alternatives, Frontier Learning treats them as candidate sources of information whose usefulness can be learned from target-domain labels. The framework accommodates both white-box and black-box candidate models. We use the term “frontier” to emphasize that these candidate models represent different tradeoffs among target fit, source reliance, labeled-sample efficiency, computational cost, and access to model internals. The goal is not to decide which model is the best, but to use the available target labels to learn how the candidate models should contribute to the final predictor. Operationally, Frontier Learning begins with a library of candidate models generated under different training and access regimes. For white-box candidates, the framework can use internal representations, such as bottleneck or penultimate-layer features. For black-box candidates, the framework uses prediction outputs. A lightweight supervised learner is trained on the resulting collection of representations and predictions using labeled target-domain data. This access-adaptive design allows Frontier Learning to synthesize information from zero-shot, fine-tuned, and directly trained models, together with prediction outputs from black-box models, within a single predictive framework. The main statistical advantage of Frontier Learning is that standard predictive strategies remain recoverable as special cases of the learned frontier predictor. If the target learner uses only a source-trained candidate, it recovers a zero-shot-style predictor; if it uses only a fine-tuned candidate, it recovers a fine-tuning-based predictor; and if it uses only a directly trained candidate, it recovers direct target training. Consequently, the frontier hypothesis class contains these baseline classes as special cases, yielding a no-worse empirical-risk property on the labeled target sample used to train the frontier learner. This property should not be interpreted as an unconditional guarantee of lower test risk. Rather, it provides a structural basis for cautious model composition, with regularization and validation used to control finite-sample generalization. This paper makes four contributions. First, we formulate prediction under distribution shift as a model-frontier learning problem motivated by the modern foundation-model ecosystem, where candidate models may differ in both training regime (zero-shot, fine-tuned, or directly trained) and access regime (black-box or white-box). Second, we introduce a unified framework that combines internal representations from accessible models with prediction outputs from inaccessible mod-els. Third, we establish a no-worse empirical-risk property through hypothesis-class containment, showing that standard model-construction strategies are recoverable as special cases. Fourth, we evaluate the proposed method in simulations and real-data studies, including visual domain shift and clinical note-based mortality prediction across intensive-care-unit domains, demonstrating that learning over the model frontier can match or improve upon strong individual candidates while pro-viding a practical route to more cautious model reuse under distribution shift. In the era of LLMs and foundation models, Frontier Learning offers a statistical route from choosing a single pre-trained model to learning over a heterogeneous frontier of candidates, enabling more reliable reuse of large-scale AI models under distribution shift. 32 Related works 
+
+Frontier Learning is related to transfer learning and domain adaptation, but it differs by learning over a frontier of candidate models rather than adapting a single source model. Transfer learning studies how knowledge from a source domain can improve performance in a target domain when target data are limited (Pan and Yang, 2010). Dataset shift and domain-adaptation theory show that source-domain performance alone does not guarantee target-domain performance when the source and target distributions differ (Qui˜ nonero-Candela et al., 2008). Deep domain-adaptation methods often address this problem by learning domain-invariant or target-adapted representa-tions, as in domain-adversarial neural networks (Ganin et al., 2016). Source-free methods relax the need for source data by adapting target features while preserving a source-trained hypothesis (Liang et al., 2020). Multi-source domain adaptation further considers how to use multiple source domains, often through feature alignment or distribution matching across domains (Peng et al., 2019). Frontier Learning differs from these approaches because it does not aim to produce a single adapted representation; instead, it uses labeled target data to learn how to combine zero-shot, fine-tuned, directly trained, and black-box candidate models within one predictive frontier. Frontier Learning is related to prediction-side calibration and prediction-powered inference be-cause all three treat model outputs as useful but imperfect information. Modern neural networks are often poorly calibrated, and post-hoc methods such as temperature scaling can improve the agreement between predicted probabilities and observed frequencies without changing the under-lying predictor (Guo et al., 2017). Under domain shift, calibration becomes more difficult because source-target mismatch affects both predictive accuracy and uncertainty estimation; methods such as TransCal therefore recalibrate transferred models to improve reliability under adaptation (Wang et al., 2020). Prediction-powered inference takes a broader statistical view, using machine predic-tions together with a smaller set of gold-standard labels to obtain valid inference for population quantities without assuming that the predictive model is correct (Angelopoulos et al., 2023). Fron-tier Learning shares this cautious view of machine predictions, but pursues a different goal. Rather than recalibrating a fixed predictor, Frontier Learning treats predictions and representations from multiple candidate models as supervised target-domain features, allowing the final learner to use and combine transferred information according to target labels. Frontier Learning is statistically closest to ensemble learning, stacking, and Super Learner, but the meanings of the model library are different. Stacked generalization and stacked regression learn a second-stage model that combines predictions from multiple base learners (Wolpert, 1992). The Super Learner framework provides a loss-based ensemble procedure with oracle-type guarantees relative to a prespecified library of candidate learners (van der Laan et al., 2007). Frontier Learning inherits this statistical spirit, but its library is not merely a set of algorithms trained on the same target dataset. Instead, the library consists of models produced under different training histories, source-target relationships, and access regimes, including zero-shot models, fine-tuned models, directly trained models, and black-box models. When internal representations are available, Frontier Learning also moves beyond ordinary prediction stacking by combining representation-level 4information that may be discarded by final prediction heads. Lastly, Frontier Learning also connects to Pareto and multi-objective perspectives because its candidate models encode different practical tradeoffs. In multi-objective optimization, a Pareto frontier represents solutions for which no objective can be improved without worsening another objective (Deb et al., 2002). In multi-task and multi-objective learning, this perspective has been used to reason about competing performance criteria and tradeoff surfaces rather than a single scalar optimum (Sener and Koltun, 2018). Frontier Learning uses the term “frontier” in a more model-centric sense: zero-shot reuse, fine-tuning, and direct training represent different tradeoffs among target fit, source reliance, sample efficiency, computation, and model access. The method then uses labeled target data to learn over this induced predictive frontier, recovering strong individual candidates when appropriate and exploiting complementary candidates when possible. 
+
+# 3 Method 
+
+3.1 Problem setup 
+
+Let PT denote the target distribution over input–outcome pairs ( X, Y ) ∈ X × Y . We observe a labeled target sample DT = {(xi, y i)}ni=1 drawn from PT . The goal is to construct a target-domain predictor f : X → A , where A is the prediction space. For regression, A = R; for binary classification, A = [0 , 1]; and for K-class classification, A = ∆ K−1, the probability simplex over K
+
+classes. Given a task-specific loss function ℓ, the target risk is 
+
+RT (f ) = E(X,Y )∼P T {ℓ(Y, f (X)) }.
+
+The source and target domains exhibit a distribution shift while still sharing transferable pre-dictive information (Fig. 1a). The objective is to effectively leverage this transferable information while remaining robust to distribution shift using the available labeled target data. In addition to the labeled target sample, as illustrated in Fig. 1b, we assume the access to a library of candidate models that may be obtained under different model construction regimes. Some candidates are source-trained models applied directly to the target population without any target-domain adaptation, which we refer to as zero-shot models. Some candidates are initialized from pretrained source checkpoints and adapted using target-domain labels, which we refer to as fine-tuned models. Others are trained using only target-domain data, which we refer to as directly trained models. The library may also contain models trained on different source domains, models with different architectures, or proprietary predictors accessible only through queries. The central difficulty is that no candidate model is uniformly the best under distribution shift. A zero-shot model may encode useful source-domain structure but could be miscalibrated in the target population. A fine-tuned model may adapt source representations but can overfit when labeled target data are limited. A directly trained model is directly aligned with target labels but may have high variance. Frontier Learning treats these candidate models as points on a common 5predictive frontier and uses labeled target data to learn how their available information should be combined. 
+
+3.2 Candidate models and access regimes 
+
+As illustrated in Fig. 1c, candidate models differ not only in how they are constructed, but also in what information they expose. We distinguish between white-box and black-box models. For a white-box model fm, we assume access to an internal representation. For neural-network mod-els, this representation may be a bottleneck feature, a pooled embedding, or a penultimate-layer activation. We write 
+
+fm(x) = cm(rm(x)) ,
+
+where rm(x) ∈ Rdm is the extracted latent representation with dm as the representation dimension-ality, and cm(·) is the final prediction of the model. Frontier Learning uses latent representations 
+
+rm(x) because they preserve task-relevant information about the input that is not fully captured by the final prediction output. For a black-box candidate model, internal representations and param-eters are not available. In this case, Frontier Learning uses the model’s prediction output, denoted by qm(x) ∈ Ram . For regression, qm(x) is typically a scalar prediction. For binary classification, it may be a logit, probability, or risk score. For multi-class classification, it may be a vector of logits or predicted class probabilities. When logits are available, we use them in preference to normalized probabilities because they preserve pre-softmax score information. If only hard labels are returned, they can be encoded as categorical indicators, although this discards uncertainty information con-tained in continuous scores. For black-box models, this limitation can be partially mitigated by querying the model multiple times under non-deterministic decoding and using the empirical fre-quency of returned labels as a soft approximation to the model’s predictive distribution, following the sampling-and-aggregation principle used in black-box LLM uncertainty estimation (Lin et al., 2023). Thus, we define the signal contributed by candidate m as: 
+
+ψm(x) = 
+
+
+
+rm(x), if candidate m is used as a white-box model ,qm(x), if candidate m is used as a black-box model .
+
+In the experiments in this paper, we use hidden representations for white-box models and prediction outputs for black-box models unless otherwise specified. As illustrated in Fig. 1d, Frontier Learning constructs a unified target-domain representation by concatenating the signals from all candidate models: Ψ( x) = [ ψ1(x); ψ2(x); · · · ; ψM (x)] ∈ RD,
+
+where 
+
+D =
+
+> M
+
+X
+
+> m=1
+
+dim {ψm(x)}.
+
+6We refer to Ψ( x) as the frontier representation . It contains the information made available by the candidate models, including hidden representations from white-box models and prediction outputs from black-box models. All candidate models are held fixed during the Frontier Learning stage. 
+
+3.3 Target-supervised frontier learner 
+
+Given the frontier representation Ψ( x), Frontier Learning trains a lightweight supervised learner 
+
+gθ : RD → A 
+
+using labeled target-domain data. The final Frontier Learning predictor is 
+
+fFL (x) = gbθ(Ψ( x)) ,
+
+where the parameter θ is estimated by regularized empirical risk minimization: 
+
+bθ = arg min 
+
+> θ∈Θ
+
+"
+
+1
+
+|I tr |
+
+X
+
+> i∈I tr
+
+ℓ{yi, g θ(Ψ( xi)) } + λΩ( θ)
+
+#
+
+,
+
+where Itr indexes the target observations used to train the frontier learner, Ω( θ) is a regularization penalty, and λ ≥ 0 is selected using validation data or cross-validation. For regression tasks, we use a regularized linear frontier learner, 
+
+gθ(z) = β0 + β⊤z, 
+
+with coefficients estimated by ( bβ0, bβ) = arg min 
+
+> β0,β
+
+"
+
+1
+
+|I tr |
+
+X
+
+> i∈I tr
+
+{yi − β0 − β⊤Ψ( xi)}2 + λ∥β∥22
+
+#
+
+.
+
+For binary classification tasks, we use a regularized logistic frontier learner, 
+
+P(Y = 1 | X = x) = σ{β0 + β⊤Ψ( x)},
+
+where σ(t) = 1 /(1 + exp( −t)) and the parameters are estimated by penalized binary cross-entropy. For multi-class classification tasks, we use a regularized multinomial logistic frontier learner, 
+
+P(Y = k | X = x) = exp( w⊤ 
+
+> k
+
+Ψ( x) + bk)
+
+PKℓ=1 exp( w⊤ 
+
+> ℓ
+
+Ψ( x) + bℓ) , k = 1 , . . . , K, 
+
+with parameters estimated by minimizing the cross-entropy loss: (cW , bb) = arg min 
+
+> W,b
+
+"
+
+1
+
+|I tr |
+
+X
+
+> i∈I tr
+
+ℓCE {yi, softmax( W Ψ( xi) + b)} + λ∥W ∥2
+
+> F
+
+#
+
+.
+
+7We deliberately use shallow regularized learners. The goal of Frontier Learning is not to train a new high-capacity model on top of all candidates, but to learn a stable target-domain combination of candidate information. Regularization encourages the frontier learner to downweight candidate signals that are uninformative or harmful under target-domain shift. Because this stage only fits a lightweight shallow learner on fixed candidate representations or predictions, Frontier Learning adds little computational overhead relative to training or fine-tuning the candidate models themselves. 
+
+3.4 Frontier Learning as a unified framework 
+
+The construction above makes Frontier Learning a unified framework rather than a single transfer-learning strategy. Standard approaches such as zero-shot reuse, fine-tuning, and direct training correspond to using different candidate models. Frontier Learning instead places these models in a shared frontier representation and lets the target-domain learner determine how much each candidate model should contribute. To see this, we partition the candidate models into white-box candidates W and black-box candidates B. For m ∈ W , the candidate contributes an internal rep-resentation rm(x); for m ∈ B , it contributes a prediction output qm(x). The frontier representation can therefore be written as: Ψ( x) = [ {rm(x) : m ∈ W} ; {qm(x) : m ∈ B} ] .
+
+The final learner gθ is then trained on this representation using labeled target-domain data. Thus, Frontier Learning covers both representation-level learning from white-box models and prediction-level learning from black-box models. This formulation contains several familiar procedures as limiting cases. If all candidate models are black-box and only prediction outputs are used, then Frontier Learning reduces to supervised prediction-level stacking. If all candidate models are white-box and hidden representations are used, then Frontier Learning becomes a representation-level learner over the concatenated feature spaces of the candidate models. If the final learner uses only one candidate block, then the resulting predictor reduces to a single-model strategy: using only a zero-shot block recovers a zero-shot-style predictor, using only a fine-tuned block recovers a fine-tuning-based predictor, and using only a directly trained block recovers direct training. The precise meaning of “recovers” depends on what information from each candidate is included in ψm(x). If the prediction output qm(x) = fm(x) is included, then the original candidate prediction is available directly to the frontier learner. If only the internal representation rm(x) is included, exact recovery of the original candidate predictor 
+
+fm(x) = cm(rm(x)) requires that the candidate head cm(·) belongs to the class of frontier learners used in the final stage. Methodology-wise, Frontier Learning does not require the analyst to decide in advance whether zero-shot reuse, fine-tuning, or direct training will be most effective. Instead, it embeds these strategies as candidate components within a larger target-supervised predictor. In theory, because of its architecture, Frontier Learning is guaranteed to achieve the training risk no worse than either of its candidate models. To be more formal, denote fzs (x) the zero-shot model 8output (internal representation if white-box or prediction output if black-box), and, similarly, fft (x)the fine-tuning model output and fdir (x) the output of the directly trained model. For simplicity, denote fbaseline (x) the output of a “baseline” candidate model where the baseline could be either zs, ft, dir or any other candidate model being considered. In addition, we also denote Fbaseline the function class of a particular baseline candidate model and FFL the function class of the Frontier Learning. Since Frontier Learning hypothesis class contains all baseline model classes as special cases, 
+
+Fbaseline ⊆ F FL ,
+
+empirical risk minimization over the Frontier Learning class satisfies inf  
+
+> f∈F FL
+
+bRT (f ) ≤ inf  
+
+> f∈F baseline
+
+bRT (f ).
+
+Thus, Frontier Learning is guaranteed to achieve training risk no worse than any individual baseline candidate model, including either zs, ft or dir. 
+
+3.5 Illustrative linear case 
+
+We give a simple linear example to clarify how Frontier Learning combines candidate information. Consider the linear-predictor scale used in linear regression, logistic regression, or multinomial logistic regression. Suppose that the frontier learner is linear in the candidate signals. Then the linear predictor can be written as: 
+
+ηFL (x) = β0 + X
+
+> m∈W
+
+α⊤
+
+> m
+
+rm(x) + X
+
+> m∈B
+
+γ⊤
+
+> m
+
+qm(x),
+
+where αm weights the representation block from white-box model m, and γm weights the prediction-output block from black-box model m. For regression, the final prediction is fFL (x) = ηFL (x). For binary classification, ηFL (x) is passed through a logistic link. For multi-class classification, the same construction is applied class-wise to define the multinomial logits. This expression shows how candidate models enter the frontier learner. If αm = 0, the represen-tation from white-box model m is ignored. If γm = 0, the prediction output from black-box model m
+
+is ignored. If only one block has nonzero weight, the frontier learner reduces to a single-candidate predictor. If multiple blocks have nonzero weights, the final predictor combines complementary information across candidates. For further intuition, suppose that each white-box representation is an affine transformation of a candidate-specific backbone representation: 
+
+rm(x) = Amϕm(x) + am, m ∈ W ,
+
+where ϕm(x) denotes the backbone feature representation of model m. Substituting this expression 9into the linear predictor gives: 
+
+ηFL (x) = β0 + X
+
+> m∈W
+
+α⊤
+
+> m
+
+{Amϕm(x) + am} + X
+
+> m∈B
+
+γ⊤
+
+> m
+
+qm(x).
+
+Equivalently, 
+
+ηFL (x) = eβ0 + X
+
+> m∈W
+
+eα⊤
+
+> m
+
+ϕm(x) + X
+
+> m∈B
+
+γ⊤
+
+> m
+
+qm(x),
+
+where 
+
+eαm = A⊤
+
+> m
+
+αm, eβ0 = β0 + X
+
+> m∈W
+
+α⊤
+
+> m
+
+am.
+
+Thus, in the linear case, Frontier Learning can be interpreted as learning a target-domain linear predictor over the union of candidate backbone feature spaces, together with any available black-box prediction outputs. This example also clarifies why representation-level Frontier Learning is more general than ordinary prediction stacking. Prediction stacking can only weight the final outputs 
+
+qm(x). In contrast, representation-level Frontier Learning can use intermediate features rm(x) or 
+
+ϕm(x), which may contain task-relevant information that was not expressed in the model’s final prediction. The mixed-access version combines both views: predictions are used when models are black-box, and internal representations are used when models are white-box. 
+
+# 4 Simulation Studies 
+
+4.1 Overview 
+
+We first evaluate Frontier Learning in a controlled regression experiment designed to study how the method behaves as the alignment between source and target information varies. The purpose of this simulation is not to mimic a specific application, but to isolate a central feature of the proposed framework: zero-shot reuse, fine-tuning, and direct training may each be useful in different regimes, and a target-supervised frontier learner should be able to combine their complementary information rather than selecting one strategy in advance. We consider one source domain and one target domain. For the source domain, we generate 
+
+nS = 10 ,000 samples and split them into training, validation, and test sets of sizes 8000, 1000, and 1000, respectively. For the target domain, we generate nT = 5000 samples and split them into training, validation, and test sets of sizes 3000, 1000, and 1000, respectively. All simulation results are averaged over 100 independent repetitions. All candidate models use the same two-layer multilayer perceptron architecture. For an input vector x ∈ R30 , the first hidden layer is h1(x) = σ(W1x + b1), the second hidden layer is h2(x) = 
+
+σ(W2h1(x) + b2), and the final prediction is f (x) = W3h2(x) + b3, where σ(t) = max( t, 0) is the ReLU activation function. Both hidden layers have dimension 128. The second hidden layer h2(x)is used as the hidden representation for white-box candidates. Models are trained using mean squared error loss. We use AdamW with initial learning rate 10 Source data Target data Distribution Shift 
+
+# a Setting #1: Zero-shot prediction       
+
+> Source data Source label Target data Target label Train Predict
+> Setting #2: Fine-tuning
+> Source data Source label Target data Target label Train Fine-tune
+> Setting #3: Direct
+> Source data Source label Target data Target label Train Train
+
+X
+
+# bKnowledge Reuse Shift Robustness  
+
+> ChatGPT Claude Gemini DeepSeek Qwen LLaMA Target data
+> Setting #1 Setting #2 Setting #3 Setting #1
+> Frontier Learning Target label
+> Knowledge Reuse
+> Shift Robustness
+> Efficient Training
+> Lightweight model for prediction Outputs (Zero-shot) Representations (Fine-tuning) Representations (Direct) Concatenated representations
+
+# c dFigure 1: Overview of the Frontier Learning framework for robust prediction under dis-tribution shift. (a) Source and target domains exhibit distribution shift while sharing transferable predictive information. (b) Three practical transfer learning settings are considered: zero-shot pre-diction, fine-tuning, and direct, illustrating the trade-off between knowledge reuse and robustness to distribution shift. (c) Frontier Learning unifies predictions from multiple foundation models trained under different transfer settings to leverage their complementary strengths. (d) Rather than combining model outputs directly, Frontier Learning concatenates latent representations from white-box models and prediction outputs from black-box models, and trains a lightweight predictor on the resulting frontier representation using labeled target data. 10 −3, batch size 1024, and weight decay 10 −4, together with a cosine learning-rate decay schedule. For fine-tuning, we use a smaller learning rate of 10 −4. All models are trained for at most 200 epochs with early stopping based on validation MSE and patience 30. We compare Frontier Learning against three standard strategies. The first is source zero-shot, where the source-trained model is applied directly to the target domain without adaptation; this candidate is treated as black-box, so only its scalar prediction output is used. The second is fine-tuning, where the model is initialized from the source checkpoint and fully fine-tuned on the target training set; this candidate is treated as white-box, so its hidden representation is used. The third is direct target training, where a model is trained from random initialization using only target-domain data; this candidate is also treated as white-box. For Frontier Learning, we construct the frontier representation as Ψ( x) = [ qzs (x); rft (x); rdir (x)], where qzs (x) is the scalar prediction from the source zero-shot model, and rft (x) and rdir (x) are 128-dimensional hidden representations from the fine-tuned and directly trained models. Thus, the frontier representation has dimension 1 + 128 + 128 = 257. A regularized linear regression model is then trained on the target training set, with hyperparameters selected using the target validation set. Because the task is regression, we evaluate all methods using MSE, RMSE, MAE, and R2. We 11 emphasize MSE in the main text and Figure 2, and report the full set of metrics in Table 1. 
+
+4.2 Simulation setup 
+
+For both domains, the covariate dimension is d = 30. Source and target covariates are independently sampled from the same Gaussian distribution X ∼ N (μ, Σ), where μ = 0 and the covariance matrix has entries Σ ij = σ2 
+
+> X
+
+c|i−j|. Unless otherwise specified, we set σX = 0 .3 and c = 0 .5, so adjacent features are positively correlated but the marginal feature scale remains moderate. The response is generated as Y = f (X) + ϵ, where ϵ ∼ N (0 , σ 2 
+
+> ϵ
+
+) is independent Gaussian noise with σϵ = 0 .1. The true regression function is f (x) = P30  
+
+> j=1
+
+x2 
+
+> j
+
++ P15  
+
+> k=1
+
+x2k−1x2k, combining nonlinear main effects with adjacent-pair interactions. This same response function is used in both source and target domains. Therefore, the simulation does not introduce shift by changing the outcome mechanism itself; instead, it introduces shortcut shift through the feature views available to source and target models. To control the degree of source-target alignment, we vary the number of shared feature di-mensions, denoted by dshare , over 0, 10, 20, and 30. All models remain defined on the same 30-dimensional input space, but source and target learners are trained with domain-specific feature masks. When dshare = 0, the source model uses dimensions 1–15, while the target model uses dimensions 16–30, so the two feature views are disjoint. When dshare = 10, the source model uses dimensions 1–20, while the target model uses dimensions 11–30, so the two views share dimensions 11–20. When dshare = 20, the source model uses dimensions 1–25, while the target model uses dimensions 6–30, so the two views share dimensions 6–25. When dshare = 30, both source and target models use all dimensions 1–30, corresponding to full alignment. This design creates a gradual transition from severe shortcut shift to complete source-target alignment. At low dshare , source and target models rely on largely different feature subsets, so direct reuse or adaptation of source information may be unreliable. At high dshare , the source and target views become increasingly compatible, and fine-tuning is expected to become more competitive. This makes the simulation useful for evaluating whether Frontier Learning can remain effective across different degrees of source-target compatibility. 
+
+4.3 Simulation results 
+
+Figure 2 summarizes the results. The three individual baselines behave differently as the number of shared dimensions changes. When dshare = 0, the source zero-shot model has the lowest MSE among the baselines, with MSE 0 .8359, compared with 0 .8576 for direct target training and 0 .8635 for fine-tuning. When dshare = 10, zero-shot remains the strongest individual baseline, with MSE 0.5746. When dshare = 20, zero-shot reuse again performs best among the baselines, with MSE 0.3090. When dshare = 30, where source and target feature views are fully aligned, fine-tuning achieves the strongest baseline performance, with MSE 0 .0608. This variation confirms that no single standard strategy is uniformly best across shortcut-shift settings. 12 0 10 20 30 Number of Shared Features   
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0 Mean Squared Error Performance of Frontier Learning under Different Levels of Distribution Shift Zero-shot Fine-tuning Frontier Learning
+> 0.84 0.57 0.31 0.07 0.86 0.62 0.41 0.24 0.86 0.58 0.34 0.06 0.09 0.12 0.13 0.06
+> Direct
+
+Figure 2: Mean squared error (MSE) across varying numbers of shared feature dimensions between source and target models. Lower values indicate better performance. Frontier Learning combines the source zero-shot prediction with hidden representations from fine-tuned and directly trained candidates, achieving the lowest MSE across all shortcut-shift settings. In contrast, Frontier Learning achieves the lowest MSE in all four settings. Its MSE values are 0.0889, 0 .1212, 0 .1316, and 0 .0555 for dshare = 0, 10, 20, and 30, respectively. Relative to the best individual baseline in each setting, this corresponds to MSE reductions of approximately 89 .4%, 78 .9%, 57 .4%, and 8 .8%. The improvement is largest when the individual candidate models are weak or capture complementary information, and it becomes smaller when one baseline is already strong, as in the fully aligned setting. The same pattern is reflected in the secondary metrics. Frontier Learning obtains the lowest RMSE and MAE and the highest R2 in all four settings. For example, when dshare = 0, Frontier Learning improves R2 from 0 .4836 for the best baseline to 0 .9451. When dshare = 30, where the performance gap is smaller, Frontier Learning still improves R2 from 0 .9624 for fine-tuning to 0.9657. These results support the main premise of Frontier Learning: by treating zero-shot reuse, fine-tuning, and direct training as candidate information sources rather than mutually exclusive choices, the frontier learner can adapt to the shift regime and recover a more stable target-domain predictor. 
+
+# 5 Real-World Applications 
+
+We evaluate Frontier Learning on two real-world distribution-shift settings: visual domain adapta-tion in DomainNet/VisDA and clinical mortality prediction across ICU domains in MIMIC-IV-Note. These applications test two complementary aspects of the framework. The visual experiment evalu-ates a mixed-access setting in which white-box models contribute bottleneck representations and a black-box zero-shot model contributes prediction outputs. The clinical NLP experiment evaluates 13 Table 1: Full simulation results (mean ± std over 100 independent repetitions) across varying numbers of shared feature dimensions ( dshare ). Bold indicates the best performance in each setting.                                                                                                                                                                                                      
+
+> dshare Method MSE RMSE MAE R2
+> 0Zero-shot 0.8359 ±0.0510 0.9138 ±0.0278 0.7035 ±0.0180 0.4836 ±0.0253 Fine-tuning 0.8635 ±0.0585 0.9287 ±0.0314 0.7126 ±0.0188 0.4667 ±0.0269 Direct 0.8576 ±0.0574 0.9255 ±0.0309 0.7123 ±0.0185 0.4705 ±0.0246 Frontier Learning 0.0889 ±0.0081 0.2979 ±0.0134 0.2248 ±0.0076 0.9451 ±0.0043
+> 10 Zero-shot 0.5746 ±0.0416 0.7575 ±0.0272 0.5753 ±0.0151 0.6449 ±0.0243 Fine-tuning 0.5784 ±0.0464 0.7599 ±0.0302 0.5752 ±0.0157 0.6426 ±0.0266 Direct 0.6160 ±0.0431 0.7844 ±0.0272 0.6009 ±0.0145 0.6195 ±0.0218 Frontier Learning 0.1212 ±0.0098 0.3478 ±0.0140 0.2662 ±0.0092 0.9251 ±0.0055
+> 20 Zero-shot 0.3090 ±0.0242 0.5555 ±0.0216 0.4115 ±0.0113 0.8089 ±0.0153 Fine-tuning 0.3403 ±0.0237 0.5830 ±0.0204 0.4348 ±0.0125 0.7895 ±0.0158 Direct 0.4090 ±0.0313 0.6391 ±0.0245 0.4907 ±0.0161 0.7474 ±0.0159 Frontier Learning 0.1316 ±0.0114 0.3624 ±0.0156 0.2760 ±0.0108 0.9186 ±0.0080
+> 30 Zero-shot 0.0687 ±0.0073 0.2618 ±0.0138 0.1977 ±0.0082 0.9576 ±0.0038 Fine-tuning 0.0608 ±0.0050 0.2464 ±0.0100 0.1881 ±0.0063 0.9624 ±0.0028 Direct 0.2439 ±0.0276 0.4930 ±0.0281 0.3818 ±0.0202 0.8495 ±0.0146 Frontier Learning 0.0555 ±0.0050 0.2353 ±0.0106 0.1784 ±0.0059 0.9657 ±0.0026
+
+representation-level Frontier Learning across heterogeneous clinical domains. 
+
+5.1 Application to visual domain adaptation in DomainNet/VisDA 
+
+5.1.1 Setup 
+
+We evaluate Frontier Learning on the VisDA-2019 benchmark, which is built on the large-scale DomainNet dataset. DomainNet contains approximately 0.6 million images across 345 object cate-gories and six visually distinct domains: Clipart, Infograph, Painting, Quickdraw, Real, and Sketch (Peng et al., 2019). These domains exhibit substantial shifts in texture, style, abstraction level, and visual complexity, making the benchmark a useful testbed for cross-domain visual prediction. We consider the supervised domain adaptation setting, where labeled target-domain data are available. We use Painting as the target domain. This choice is motivated by the pairwise zero-shot transfer matrix in Supplementary Table S1: incoming zero-shot accuracy to Painting varies widely across source domains, ranging from 1.60% for Quickdraw to 45.68% for Real. This heterogeneity indicates that different source domains have substantially different compatibility with the target domain, making Painting an informative setting for evaluating whether Frontier Learning can integrate heterogeneous candidate models. All image classifiers use a SHOT-style architecture (Liang et al., 2020) with a ResNet-50 fea-ture extractor initialized from ImageNet pretrained weights (He et al., 2016), a 256-dimensional bottleneck layer, and a linear classifier head. The output of the final pooling layer of ResNet-50 is mapped to a bottleneck representation r(x) ∈ R256 , which is used as the candidate representation for white-box models. 14 We consider four candidate models: Direct (Painting), Fine-tuning (Real), Fine-tuning (Cli-part), and Zero-shot (Sketch). Direct (Painting) is trained directly on the Painting domain start-ing from ImageNet initialization. Fine-tuning (Real) and Fine-tuning (Clipart) are initialized from source-domain checkpoints and subsequently fine-tuned on the Painting training split. These two sources are selected because Real and Clipart have the two highest zero-shot transfer accuracies to Painting among all source domains. Zero-shot (Sketch) is used as a black-box zero-shot candidate: the Sketch-trained model is applied directly to Painting without target-domain adaptation, and only its prediction output is used by the frontier learner. The original Painting training split is divided into training and validation subsets using a 0.9/0.1 split, while the official test split is used for final evaluation. Source models are trained independently on their corresponding source domains using supervised classification. During fine-tuning, we update the last residual block of ResNet-50 together with the bottleneck and classifier layers, while earlier backbone layers remain frozen. Models are trained using SGD with batch size 256. The bottleneck dimension is fixed at 256, label smoothing with parameter 0.1 is applied, and fine-tuning is performed for 30 epochs with learning rate 10 −2 and weight decay 10 −3.For Frontier Learning, we extract 256-dimensional bottleneck representations from the three white-box candidates, Direct (Painting), Fine-tuning (Real), and Fine-tuning (Clipart), and com-bine them with the prediction output from the black-box Zero-shot (Sketch) candidate. The re-sulting frontier representation is used to train an ℓ2-regularized logistic regression classifier on the Painting target-domain training split. During this stage, all candidate feature extractors remain fixed. Hyperparameters are selected using the validation split, and the final model is evaluated once on the held-out target-domain test set. We report top-1 classification accuracy as the primary metric, averaged over ten independent repetitions. 
+
+5.1.2 Results 
+
+Figure 3 summarizes the Painting-domain results. The Zero-shot (Sketch) zero-shot candidate performs substantially worse than the other candidates, achieving 31.76% accuracy. This reflects the considerable visual shift between the Sketch and Painting domains. Among the white-box candidates, Fine-tuning (Real) and Fine-tuning (Clipart) achieve competitive accuracies of 67.85% and 67.21%, respectively, but both remain slightly below Direct (Painting), which achieves 68.17%. Frontier Learning achieves the highest accuracy, 69.55%, outperforming all individual candi-dates. Compared with the strongest individual candidate, Direct (Painting), this is an absolute improvement of 1.38 percentage points and a relative classification-error reduction of approximately 4.3%. The result is notable because the frontier includes a weak zero-shot candidate, yet the target-supervised learner is still able to improve over all individual baselines. This supports the main idea of Frontier Learning: weak source candidates do not need to be selected as final predictors, but their outputs can be included as candidate signals and downweighted when they are not useful for the target task. 15 Zero-shot (Sketch) Fine-tuning (Clipart) Fine-tuning (Real) Direct (Painting) Frontier Learning    
+
+> 30
+> 40
+> 50
+> 60
+> 70 Accuracy (%)
+> 31.76 67.21 67.85 68.17 69.55
+
+Figure 3: Top-1 classification accuracy on the Painting target domain. Frontier Learning combines bottleneck representations from directly trained and fine-tuned white-box candidates together with the prediction output of a black-box zero-shot candidate. The Sketch zero-shot candidate is treated as a fixed black-box model and therefore has zero standard deviation. 
+
+5.2 Application to clinical mortality prediction in MIMIC-IV-Note 
+
+5.2.1 Setup 
+
+We further evaluate Frontier Learning on MIMIC-IV-Note, a large-scale collection of deidentified clinical notes linked to the MIMIC-IV electronic health record database (Johnson et al., 2023). MIMIC-IV-Note contains discharge summaries, radiology reports, nursing notes, and physician notes from patients admitted to Beth Israel Deaconess Medical Center. We use discharge summaries because they summarize the hospitalization trajectory, including diagnoses, procedures, treatments, and outcomes. The prediction task is in-hospital mortality, defined using the hospital expire flag. Domains are defined according to the patient’s first ICU care unit. We focus on five ICU domains: MICU, SICU, CVICU, CCU, and TSICU. Samples are filtered to require a valid discharge summary and a non-missing mortality label. Duplicated notes are removed, and the first ICU care unit is used as the domain identifier. No minimum note length threshold is imposed, and the analysis is not restricted to first ICU stays only. CVICU is selected as the target domain because it has the lowest mean incoming zero-shot AUPRC across source domains in Supplementary Table S2, indicating that existing source-trained models transfer relatively poorly to CVICU. In the processed data, the CVICU domain contains approximately 11,356 samples with an in-hospital mortality rate of approximately 3.8%. We use a hierarchical transformer architecture for long-document prediction (Vaswani et al., 2017). Each discharge summary is divided into non-overlapping chunks of at most 512 tokens, with 16 Table 2: Top-1 classification accuracy on the Painting target domain. Frontier Learning combines bottleneck representations from directly trained and fine-tuned white-box candidates together with the prediction output of a black-box zero-shot candidate. The Sketch zero-shot candidate is treated as a fixed black-box model and therefore has zero standard deviation. Method Accuracy Zero-shot (Sketch) 0.3176 ± 0.0000 Fine-tuning (Real) 0.6785 ± 0.0016 Fine-tuning (Clipart) 0.6721 ± 0.0012 Direct (Painting) 0.6817 ± 0.0009 
+
+Frontier Learning 0.6955 ± 0.0015 
+
+the maximum number of chunks fixed at 8. Each chunk is encoded using ClinicalBERT (Alsentzer et al., 2019), which is kept frozen throughout the experiments. The ClinicalBERT embedding for each chunk is projected to a 256-dimensional latent representation, and the sequence of chunk rep-resentations is processed by a transformer encoder. An attention-pooling layer then aggregates the contextualized chunk representations into a 256-dimensional note-level representation r(x), which is used as the candidate representation for Frontier Learning. The projection layer, transformer encoder, attention-pooling layer, and prediction head are trained for the mortality task, while the ClinicalBERT encoder remains frozen. All models are trained using weighted binary cross-entropy to account for the severe class imbalance in mortality prediction. The positive-class weight is set to the ratio of negative to positive samples. Optimization is performed using AdamW with learning rate 2 × 10 −5, cosine annealing, validation-tuned weight decay, and batch size 1024. Models are trained for up to 100 epochs, with model selection based on validation performance. We consider four candidate models for the CVICU target domain: Fine-tuning (MICU), Zero-shot (SICU), Zero-shot (CCU), and Direct (CVICU). Direct (CVICU) is trained directly on CVICU target-domain data. Fine-tuning (MICU) is initialized from a MICU source-domain checkpoint and fine-tuned on CVICU. Zero-shot (SICU) and Zero-shot (CCU) are zero-shot candidates, where source-trained models are applied directly to CVICU without adaptation. Unlike the visual experiment, all candidate models in this clinical NLP experiment are treated as white-box models, including the zero-shot candidates. Here, zero-shot refers to the absence of CVICU adaptation, not to the absence of internal access. Accordingly, Frontier Learning ex-tracts the 256-dimensional note-level representation from each candidate and concatenates the four representations into a 1024-dimensional frontier representation. An ℓ2-regularized logistic frontier learner is then trained on the CVICU training split, while all candidate encoders remain fixed. Model selection is performed using validation AUPRC. We report accuracy, F1 score, AUROC, and AUPRC, with AUPRC treated as the primary metric because in-hospital mortality is rare in this target domain. 17 Zero-shot (SICU) Zero-shot (CCU) Fine-tuning (MICU) Direct (CVICU) Frontier Learning 
+
+> 0.50
+> 0.55
+> 0.60
+> 0.65
+> 0.70 AUPRC
+> 0.56 0.57 0.65 0.57 0.66
+
+Figure 4: AUPRC on the MIMIC-IV-Note CVICU mortality prediction task. Frontier Learning combines note-level representations from fine-tuned, zero-shot, and directly trained ICU-domain candidates and achieves the highest AUPRC among the compared methods. 
+
+5.2.2 Results 
+
+Figure 4 summarizes the MIMIC-IV-Note results. Among the individual candidates, Fine-tuning (MICU) achieves the strongest AUPRC, 0.6494, suggesting that MICU provides the most transfer-able source representation for the CVICU mortality task. The two zero-shot candidates perform worse: Zero-shot (SICU) achieves an AUPRC of 0.5576, and Zero-shot (CCU) achieves an AUPRC of 0.5680. Direct (CVICU) obtains an AUPRC of 0.5664, indicating that direct target-domain train-ing alone is insufficient to match the best transferred candidate under the severe class imbalance in this task. Frontier Learning achieves the highest AUPRC, 0.6638, improving over the best individual candidate by 0.0144 absolute AUPRC, or approximately 2.2% relative improvement. It also obtains the highest accuracy, 0.9299, and the highest F1 score, 0.4834. The AUROC of Frontier Learning is lower than that of Fine-tuning (MICU), indicating that the improvement is not uniform across all ranking metrics. However, because AUPRC is more informative for rare-outcome prediction, the primary result supports the use of Frontier Learning for combining heterogeneous ICU-domain representations in imbalanced clinical prediction. 
+
+# 6 Discussion 
+
+In this work, we introduced Frontier Learning, a framework for robust prediction under distribution shift by learning from the complementary information contained in multiple candidate models. 18 Table 3: Classification performance on the MIMIC-IV-Note in-hospital mortality prediction task, reported as mean ± standard deviation. AUPRC is the primary evaluation metric due to severe class imbalance. Bold indicates the best performance in each column. Method Accuracy F1 AUROC AUPRC Zero-shot (SICU) 0.9235 ± 0.0063 0.4091 ± 0.0263 0.9470 ± 0.0051 0.5576 ± 0.0423 Zero-shot (CCU) 0.8913 ± 0.0064 0.3718 ± 0.0228 0.9492 ± 0.0048 0.5680 ± 0.0501 Fine-tuning (MICU) 0.9086 ± 0.0194 0.4299 ± 0.0425 0.9619 ± 0.0065 0.6494 ± 0.0334 Direct (CVICU) 0.8845 ± 0.0108 0.3720 ± 0.0187 0.9523 ± 0.0050 0.5664 ± 0.0391 
+
+Frontier Learning 0.9299 ± 0.0220 0.4834 ± 0.0612 0.9452 ± 0.0187 0.6638 ± 0.0310 
+
+Rather than selecting a single source model or adaptation strategy, Frontier Learning combines heterogeneous representations learned under different training regimes and domains into a unified predictor. Our empirical results across simulations, computer vision, and clinical prediction tasks demonstrate that this simple strategy consistently improves predictive performance, particularly when labeled target data are limited and no single candidate model is uniformly optimal. The success of Frontier Learning suggests that different candidate models often capture distinct aspects of the underlying prediction task. Source-trained models preserve transferable knowledge, fine-tuned models adapt to target-specific characteristics, and directly trained models provide un-biased information from the target domain. By learning over these complementary representations, Frontier Learning is able to exploit useful information that would otherwise be discarded when relying on a single transfer strategy. Our work also has several limitations. First, the quality of the learned frontier depends on the diversity and usefulness of the candidate model library. If all candidate models produce highly re-dundant representations, the benefit of aggregation may be limited. Second, the current framework adopts simple feature concatenation followed by a lightweight downstream learner. More sophisti-cated representation fusion methods, such as attention-based aggregation or adaptive feature selec-tion, may further improve performance while controlling model complexity. Finally, although our experiments demonstrate consistent empirical gains, a theoretical understanding of when represen-tation aggregation improves generalization under distribution shift remains an important direction for future work. The increasing availability of pretrained foundation models further broadens the applicability of Frontier Learning. As modern machine learning systems increasingly consist of collections of het-erogeneous black-box and white-box models, learning over multiple pretrained models rather than selecting a single one may become a practical paradigm for robust adaptation under distribution shift. We hope this work motivates further investigation into representation-level aggregation as a general framework for transfer learning. 19 7 Software 
+
+The implementation of frontier learning is available at https://github.com/batmen-lab/frontier_ learning .
+
+# 8 Supplementary Material 
+
+VisDA-2019.. The VisDA-2019 benchmark contains images from six visual domains (clipart, infograph, painting, quickdraw, real, and sketch) covering 345 object categories. In our experiments, Painting is treated as the target domain, while models trained on other domains serve as candidate source models. The dataset is available at http://ai.bu.edu/M3SDA/ .
+
+MIMIC-IV.. MIMIC-IV is a publicly available electronic health record database. We use the discharge notes associated with ICU admissions as the input text and define different ICU units as distinct domains for transfer learning experiments. The dataset is available at https://physionet. org/content/mimiciv/ .
+
+# SUPPLEMENT S1 Additional Experiment Details 
+
+VisDA: Zero-Shot Transfer Matrix and Experimental Design 
+
+Table S1 reports the pairwise zero-shot top-1 accuracy (%) across all six DomainNet domains, where entry ( s, t ) denotes the accuracy achieved by a model trained on domain s and applied directly to domain t without any adaptation. Table S1: Pairwise zero-shot transfer accuracy (%) across DomainNet domains. Rows denote source domains and columns denote target domains. Diagonal entries are left blank. Clipart Infograph Painting Quickdraw Real Sketch Clipart — 14.4657 33.9726 9.6406 50.3904 37.7227 Infograph 26.0024 — 27.9486 1.4512 42.6446 22.4390 Painting 36.9988 15.1793 — 2.2821 55.2801 33.2189 Quickdraw 8.4042 0.9805 1.5988 — 4.2737 8.2742 Real 45.7608 18.1147 45.6841 4.8019 — 33.7549 Sketch 44.5187 11.9461 31.7622 10.2357 44.2878 —Column mean 32.3370 12.1373 28.1933 5.6823 39.3753 27.0817 
+
+Choice of target domain.. We select Painting as the target domain because it exhibits the greatest heterogeneity in incoming zero-shot accuracy across source domains, ranging from 1 .60% 20 Table S2: Zero-shot performance (AUPRC) across ICU domains. MICU CVICU SICU CCU TSICU MICU — 0.5930 0.6970 0.7791 0.6025 CVICU 0.6276 — 0.6291 0.6983 0.5605 SICU 0.6932 0.5631 — 0.7369 0.6405 CCU 0.7063 0.5802 0.6760 — 0.5774 TSICU 0.6674 0.5656 0.7004 0.7124 —Column mean 0.6736 0.5755 0.6759 0.7317 0.5952 (Quickdraw) to 45 .68% (Real). This wide spread indicates that different source domains vary substantially in their compatibility with Painting, making it an informative testbed for evaluating whether Frontier Learning can effectively integrate heterogeneous source information. 
+
+Choice of fine-tuning sources.. Among all source domains, Fine-tuning (Real) and Fine-tuning (Clipart) achieve the two highest zero-shot accuracies (45 .68% and 33 .97%, respectively), indicating that these two domains are the most compatible with Painting in terms of visual characteristics. We therefore select Real and Clipart as fine-tuning sources, as initializing from the most compatible source checkpoints is expected to yield the strongest adapted models. 
+
+Choice of zero-shot source.. We include Zero-shot (Sketch) as the black-box zero-shot base-line. Sketch achieves a moderate zero-shot accuracy of 31 .76% to Painting, offering complementary stylistic information distinct from the photorealistic Real and the stylized Clipart domains. Info-graph and Quickdraw are excluded due to their substantially lower zero-shot performance (27 .95% and 1 .60%, respectively), suggesting minimal transferable information to the Painting domain. 
+
+MIMIC-IV-Note: Zero-Shot Transfer Matrix and Experimental Design 
+
+Table S2 reports the pairwise zero-shot AUPRC across all five ICU domains, where entry ( s, t )denotes the AUPRC achieved by a model trained on domain s and applied directly to domain t
+
+without any adaptation. 
+
+Choice of target domain.. We select CVICU as the target domain because it receives the lowest mean zero-shot AUPRC across all source domains (0 .576), indicating that existing source-trained models transfer poorly to CVICU. This makes CVICU the most challenging and informative target for evaluating transfer learning robustness. 
+
+Choice of fine-tuning source.. Among all source domains, Fine-tuning (MICU) achieves the highest zero-shot AUPRC (0 .593), suggesting that MICU is the most clinically compatible source for the CVICU target. We therefore select MICU as the single fine-tuning source, as initializing from the most compatible source checkpoint is expected to yield the strongest adapted model. 21 Choice of zero-shot sources.. We include Zero-shot (SICU) and Zero-shot (CCU) as zero-shot baselines to provide complementary source-domain representations within the Frontier Learning ensemble. TSICU is excluded to keep the ensemble size manageable, as its zero-shot AUPRC to CVICU (0 .566) is comparable to that of SICU (0 .563) and offers limited additional diversity. Together, the four models—Fine-tuning (MICU), Zero-shot (SICU), Zero-shot (CCU), and Direct (CVICU)—cover a range of training regimes and source–target compatibility levels, providing a diverse candidate library for Frontier Learning. 
+
+# References 
+
+Alsentzer, E., Murphy, J., Boag, W., Weng, W., Jindi, D., Naumann, T., and McDermott, M. (2019). Publicly available clinical BERT embeddings. In Proceedings of the 2nd Clinical Natural Language Processing Workshop , pages 72–78. Angelopoulos, A. N., Bates, S., Fannjiang, C., Jordan, M. I., and Zrnic, T. (2023). Prediction-powered inference. Science , 382(6671):669–674. Bai, J., Bai, S., Chu, Y., Cui, Z., Dang, K., Deng, X., Fan, Y., Ge, W., Han, Y., Huang, F., et al. (2023). Qwen technical report. arXiv preprint arXiv:2309.16609 .Bommasani, R., Hudson, D. A., Adeli, E., Altman, R., Arora, S., von Arx, S., Bernstein, M. S., Bohg, J., Bosselut, A., Brunskill, E., et al. (2021). On the opportunities and risks of foundation models. arXiv preprint arXiv:2108.07258 .Bommasani, R., Liang, P., and Lee, T. (2023). Holistic evaluation of language models. Annals of the New York Academy of Sciences , 1525(1):140–146. Brown, T. B., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P., Neelakantan, A., Shyam, P., Sastry, G., and Askell, A. (2020). Language models are few-shot learners. Advances in Neural Information Processing Systems , 33:1877–1901. Deb, K., Pratap, A., Agarwal, S., and Meyarivan, T. (2002). A fast and elitist multiobjective genetic algorithm: NSGA-II. IEEE Transactions on Evolutionary Computation , 6(2):182–197. Ganin, Y., Ustinova, E., Ajakan, H., Germain, P., Larochelle, H., Laviolette, F., March, M., and Lempitsky, V. (2016). Domain-adversarial training of neural networks. Journal of Machine Learning Research , 17(59):1–35. Grattafiori, A., Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Vaughan, A., et al. (2024). The Llama 3 herd of models. arXiv preprint arXiv:2407.21783 .Guo, C., Pleiss, G., Sun, Y., and Weinberger, K. Q. (2017). On calibration of modern neural networks. In International Conference on Machine Learning , pages 1321–1330. PMLR. 22 He, K., Zhang, X., Ren, S., and Sun, J. (2016). Deep residual learning for image recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition , pages 770–778. Houlsby, N., Giurgiu, A., Jastrzebski, S., Morrone, B., Laroussilhe, Q. D., Gesmundo, A., At-tariyan, M., and Gelly, S. (2019). Parameter-efficient transfer learning for NLP. In International Conference on Machine Learning , pages 2790–2799. PMLR. Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., Chen, W., et al. (2022). LORA: Low-rank adaptation of large language models. International Conference on Learning Representations , 1(2):3. Johnson, A., Pollard, T., Horng, S., Celi, L. A., and Mark, R. (2023). MIMIC-IV-Note: Deidentified free-text clinical notes. PhysioNet .Liang, J., Hu, D., and Feng, J. (2020). Do we really need to access the source data? source hypothesis transfer for unsupervised domain adaptation. In International Conference on Machine Learning , pages 6028–6039. PMLR. Lin, Z., Trivedi, S., and Sun, J. (2023). Generating with confidence: Uncertainty quantification for black-box large language models. arXiv preprint arXiv:2305.19187 .Liu, A., Feng, B., Xue, B., Wang, B., Wu, B., Lu, C., Zhao, C., Deng, C., Zhang, C., Ruan, C., et al. (2024). Deepseek-v3 technical report. arXiv preprint arXiv:2412.19437 .OpenAI (2023). GPT-4 Technical Report. Pan, S. J. and Yang, Q. (2010). A survey on transfer learning. IEEE Transactions on Knowledge and Data Engineering , 22:1345–1359. Peng, X., Bai, Q., Xia, X., Huang, Z., Saenko, K., and Wang, B. (2019). Moment matching for multi-source domain adaptation. In Proceedings of the IEEE International Conference on Computer Vision , pages 1406–1415. Qui˜ nonero-Candela, J., Sugiyama, M., Schwaighofer, A., and Lawrence, N. D. (2008). Dataset shift in machine learning . Mit Press. Sener, O. and Koltun, V. (2018). Multi-task learning as multi-objective optimization. Advances in Neural Information Processing Systems , 31. Singhal, K., Azizi, S., Tu, T., Mahdavi, S., Wei, J., Chung, H. W., Scales, N., Tanwani, A., Cole-Lewis, H., Pfohl, S., et al. (2023). Large language models encode clinical knowledge. Nature ,620(7972):172–180. Sun, T., Shao, Y., Qian, H., Huang, X., and Qiu, X. (2022). Black-box tuning for language-model-as-a-service. In International Conference on Machine Learning , pages 20841–20855. PMLR. 23 van der Laan, M. J., Polley, E. C., and Hubbard, A. E. (2007). Super learner. Statistical Applications in Genetics and Molecular Biology , (6):25. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A., Kaiser, L., and Polo-sukhin, I. (2017). Attention is all you need. In Advances in Neural Information Processing Systems , pages 5998–6008. Wang, X., Long, M., Wang, J., and Jordan, M. I. (2020). Transferable calibration with lower bias and variance in domain adaptation. Advances in Neural Information Processing Systems ,33:19212–19223. Wolpert, D. H. (1992). Stacked generalization. Neural Networks , 5(2):241–259. 24
