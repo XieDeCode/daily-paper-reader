@@ -1,0 +1,474 @@
+Title: Subtype Robustness Is Not Just Accuracy: Calibration Under Unseen Subtype Shift
+
+URL Source: https://arxiv.org/pdf/2608.00928v1
+
+Published Time: Tue, 04 Aug 2026 01:00:39 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Subtype Robustness Is Not Just Accuracy: Calibration Under Unseen Subtype Shift 
+
+# Hanyu Su 1, Carlota Julbe i Juanola 1, Yibo Hu 1
+
+> 1
+
+Illinois Institute of Technology 
+
+Abstract 
+
+Subtype robustness asks whether a model keeps the correct coarse prediction when test examples come from fine-grained subtypes absent from training but still inside a known coarse cat-egory. Prior work studies this almost entirely through accuracy. We ask whether the model also stays calibrated. We present the first systematic study of the question across ImageNet, BREEDS, iNaturalist and CIFAR-100 with five architectures. Calibration breaks down on unseen subtypes, where accuracy drops while confidence barely follows, leaving the model sys-tematically overconfident exactly where it has become less accurate. At matched accuracy loss, generic image corruption causes a much larger drop in confidence, so the effect is not a general consequence of losing accuracy. The model reacts to visible degradation but not to in-taxonomy novelty. Recali-bration tuned on seen subtypes narrows the gap but does not close it, and out-of-distribution scores flag the affected inputs only weakly. Subtype robustness should therefore be evaluated through calibration, not accuracy alone. 1
+
+# Introduction 
+
+Deep learning systems are often deployed in settings where the correct semantic decision remains unchanged, even though its fine-grained realizations continue to vary. In hierarchical label spaces, this means that test examples may come from fine-grained subtypes absent from training, while their correct coarse labels remain within the known taxonomy. This is the setting of subtype robustness : the model need not recover the exact unseen subtype, but it should still preserve the correct coarse semantic prediction. Figure 1 illustrates it. This setting is distinct from classical out-of-distribution (OOD) detection: the input still carries a valid coarse label, so the failure is a wrong coarse prediction. In many applications the coarse decision is the primary target, and failing to recover the exact subtype costs less than predicting the wrong coarse category (Bertinetto et al. 2020; Garg, Sani, and Anand 2022). Real-world systems routinely meet new variants of known categories while the coarse decision stays the same. A species classifier deployed for biodiversity monitoring, for example, continually meets newly catalogued species under a known genus or family: the fine-grained label is novel, the coarse taxonomic decision is not. 
+
+> 1
+
+The code and data are available at https://github.com/yibo-hu-lab/subtype-robustness 
+
+Prior work on subtype robustness has focused primarily on accuracy. Hendrycks and Dietterich (2019) reported seen– unseen subtype gaps, and Santurkar et al. (2021) introduced BREEDS for controlled subtype-split evaluation. Accuracy alone, however, gives an incomplete view. A model’s coarse accuracy can fall on unseen subtypes while its confidence barely follows, leaving it systematically overconfident on the predictions it now gets wrong. This overconfidence is a calibration failure: a calibrated model’s confidence matches its accuracy (Guo et al. 2017), so confidence that stays high while accuracy falls is by definition miscalibrated. To our knowledge, calibration under subtype-level novelty is unexplored. Common image corruptions behave differently. As the im-age degrades, models become less accurate and less confident, as observed broadly under distribution shift (Ovadia et al. 2019): the image looks different, and the model reacts. Sub-type shift breaks that link, because the image looks normal and its coarse label is still correct. We formalize subtype robustness as a same-coarse-label, unseen-fine-subtype shift, read off a single model through matched accuracy, confidence, and calibration gaps ( ∆acc ,
+
+∆conf , ∆cal ), and make three contributions. 
+
+• Confidence does not follow accuracy. Across ImageNet, BREEDS (Living-17, Nonliving-26), iNaturalist, and CIFAR-100, and across architectures, coarse accuracy drops on unseen subtypes while confidence barely follows, leaving the model overconfident where it has become less accurate. The size of the accuracy drop varies by dataset: steep where the taxonomy is sparse, mild where it is densely sampled. The signal also fails per sample: failure-detection AUROC and risk–coverage both degrade. 
+
+• The failure does not appear under matched generic corruption. At matched accuracy loss, generic image corruption lowers confidence far more than subtype novelty does. 
+
+• The post-hoc tools we test do not recover the lost calibration. Recalibration tuned on seen subtypes narrows but does not close the seen–unseen calibration gap, and inference-time confidence and OOD scores flag unseen subtypes only weakly. arXiv:2608.00928v1 [cs.LG] 2 Aug 2026 SUPERCLASSES       
+
+> (coarse label) SEEN SUBTYPES UNSEEN SUBTYPES EVALUATION OUTCOMES
+> airplane automobile
+> bird cat
+> ship
+> deer
+> VEHICLE ANIMAL MODEL
+> ship: deer:
+> Correct unseen subtype True = VEHICLE Prediction = VEHICLE Confidence = high High-confidence error True = ANIMAL Prediction = VEHICLE Confidence = high
+> Trained on seen subtypes Evaluated on unseen subtypes
+
+Figure 1: Toy example of subtype robustness. The model is trained on airplane and automobile (vehicle ), and bird and cat 
+
+(animal ), then evaluated on unseen subtypes ship and deer from the same supertypes. The unseen ship is correctly predicted as 
+
+vehicle , and the unseen deer is misclassified as vehicle instead of animal , yet the model is equally confident in both. 
+
+# Related Work 
+
+Subtype robustness and subpopulation shift. The subtype robustness setting traces to Hendrycks and Dietterich (2019), whose Appendix G measures accuracy on held-out subtypes of known coarse categories, and it has remained largely under-explored since. The closest benchmark continuation is BREEDS, which constructs hierarchy-aware source–target splits with disjoint subtype support under curated ImageNet superclasses (Santurkar et al. 2021). In the failure-detection literature, Jaeger et al. (2023) include a CIFAR-100 “sub-class shift” condition in their evaluation of misclassification-detection metrics. Broader subpopulation- and domain-shift benchmarks provide an umbrella, though the underlying shift definitions differ (Koh et al. 2021; Yang et al. 2023). 
+
+Hierarchical classification and semantic error structure. 
+
+A related line studies hierarchy-aware prediction, where errors within a taxonomy are not equally severe and a coarse-label error is treated differently from a fine-grained one (Deng et al. 2010; Barz and Denzler 2019; Bertinetto et al. 2020; Karthik et al. 2021; Garg, Sani, and Anand 2022; Jain, Karthik, and Gandhi 2023). 
+
+Calibration and recalibration under shift. Calibration methods assess whether model confidence is aligned with em-pirical correctness (Guo et al. 2017; Widmann, Lindsten, and Zachariah 2019; Minderer et al. 2021). Modern networks can become substantially miscalibrated under distribution shift, including OOD and novel-class settings (Hendrycks, Mazeika, and Dietterich 2019; Kong et al. 2020; Hu et al. 2021; Hu and Khan 2021). Large pretrained models are reported to be better calibrated and more robust to such shift (Minderer et al. 2021). A common fix for calibration under shift is to re-weight the calibration data toward the test distribution (Wang et al. 2025; Hu et al. 2026; Cheung, Veeraraghavan, and Balakrishnan 2026; Kong et al. 2026). Finally, Lyu, Zhou, and Zhong (2025) offer a candidate mechanism: under-represented groups re-ceive inflated training logits. Our setting is the extreme case, because unseen subtypes are absent from training rather than merely rare. 
+
+Out-of-distribution detection. Detection methods flag in-puts whose label lies outside the taxonomy, using output-based scores such as the maximum softmax probability (Hendrycks and Gimpel 2017) and the energy score (Liu et al. 2020), or feature-based scores such as the Mahalanobis distance (Lee et al. 2018). We therefore ask whether these scores respond to a novel subtype whose coarse label is still valid. Benchmarks in this area have been argued to conflate semantic with covari-ate shift, with detectors responding mainly to the former (Zhu et al. 2024). Subtype shift fits neither cleanly: the label stays inside the taxonomy, as in covariate shift, yet what changes is semantic rather than appearance. 
+
+# Problem Setup 
+
+Hierarchical classification 
+
+Multiclass classification maps instances x ∈ X to one of K ≥
+
+2 discrete labels K := {1, . . . , K }. We assume these labels are partitioned into J mutually exclusive, nonempty subsets 
+
+K1, . . . , KJ indexed by J := {1, . . . , J }, with 2 ≤ J ≤ K.We call the labels k ∈ K subtypes and the parts j ∈ J 
+
+supertypes , and write g(k) for the supertype of subtype k,so that g(·) : K → J is surjective. 
+
+Definition 1 (Seen/unseen subtypes) . We assume a nonempty subset S ⊆ K of seen subtypes , whose complement U := 
+
+K \ S is the set of unseen subtypes , so that 1 ≤ |S| < K .Every supertype is represented among the seen subtypes: 
+
+g(S) = g(U) = J .
+
+Each part Kj = g−1(j) therefore splits into Sj := Kj ∩ S ,the seen subtypes under j, and Uj := Kj ∩ U , the unseen ones. We write nj := |S j | for how many seen subtypes a supertype has. The Analysis section relates this quantity to the size of the calibration collapse. Training scheme 
+
+All models are trained using only examples whose subtype labels belong to S, and predict the supertype. The key con-straint is that no examples from U are used for representation learning, classifier training, calibration, or model selection, except in the post-hoc calibration experiment where we state otherwise. Model selection and any post-hoc calibrator are fit on seen-val , a held-out set of images drawn from the same seen subtypes used for training, never on test. Every split is carved at the image level within S, so no subtype label is withheld from training. The four-way train / seen-val / test-seen / test-unseen split is detailed in Appendix A. 
+
+Training procedure. All main-table models are trained 
+
+direct-coarse : a single network optimized end-to-end on the supertype label from a random initialization, uniformly across all datasets, as in BREEDS (Santurkar et al. 2021). Hendrycks and Dietterich (2019) instead reuse a fine-pretrained frozen backbone, a two-stage protocol on a pretrained network. We report the protocol (one- vs. two-stage) and initialization (from-scratch vs. ImageNet-pretrained) axes as controls in Appendix B, where the protocol is neutral and pretraining mitigates the overconfidence without removing it. 
+
+Evaluation scheme 
+
+Accuracy. We evaluate on both seen and unseen subtype splits, always scoring the predicted supertype. For an example 
+
+(x, y ), the coarse-label error is 1{bj(x)̸ = g(y)}. Accuracy is computed separately on examples with y ∈ S and y ∈ U .
+
+Calibration. Let pj (x) denote the model probability as-signed to supertype j. We define the confidence and correct-ness of a prediction as 
+
+c(x) = max  
+
+> j∈J
+
+pj (x),r(x, y ) = 1{arg max j∈J pj (x) = g(y)}.
+
+We measure calibration with the expected calibration er-ror (ECE) over 15 equal-width bins (Naeini, Cooper, and Hauskrecht 2015) (Appendix C covers the estimator and its binning bias). Given that ECE is a binned estimator, we corrob-orate every gap with an equal-mass recomputation and with two binning-free proper scores (Gneiting and Raftery 2007), the negative log-likelihood (NLL) and the Brier score (Brier 1950), all in Appendix D. Since ECE averages | cacc − dconf |,all three quantities share one scale, and we report accuracy, confidence, ECE, and the seen −unseen gaps defined below in percentage points throughout. 
+
+Per-sample discrimination. Calibration is an aggregate property and can be orthogonal to whether confidence dis-criminates correct from incorrect predictions per sample.On each split we therefore also report the two standard failure-detection measures (Jaeger et al. 2023): the areas under the ROC curve (AUROC, whether c(x) separates correct from incorrect predictions) and the risk–coverage curve (AURC, lower is better). Both are rank-based, so unlike the calibration gap, a loss here cannot be repaired by rescaling confidence. 
+
+Subtype accuracy, confidence, and calibration gaps. We summarize each model by three matched seen-versus-unseen gaps, ∆acc = acc S − acc U , ∆conf = ¯ cS − ¯cU , and ∆cal =ECE U − ECE S , where ¯c• is the mean confidence c(x) on the split. A model is calibration-robust to subtype shift when ∆cal stays small. When instead ∆conf ≪ ∆acc , the two gaps dissociate , and we call the resulting failure silent overconfidence .
+
+# Experiments 
+
+Research Questions 
+
+RQ1 (Calibration under subtype shift). When a model loses accuracy on unseen subtypes, does it stay calibrated there, and does high confidence still indicate a correct prediction? 
+
+RQ2 (Comparison with generic corruption). If generic image corruption is tuned to cost the same accuracy as subtype shift, does it cost the same confidence? 
+
+RQ3 (Standard remedies). Can the calibration gap be closed after training, either by (a) recalibrating on seen subtypes or (b) catching novel subtypes at inference with standard OOD scores? 
+
+Datasets and Evaluation Settings 
+
+ImageNet-25 (IN-25 ) (Deng et al. 2009) is the largest of our benchmarks: 25 broad categories as supertypes, with 383 seen subtypes (ImageNet-1K synsets) and 3,872 held-out unseen subtypes (ImageNet-22K-only synsets) under those same categories. Its number of seen subtypes per supertype is deliberately uneven ( dog many, fungus few), inherited from ImageNet-1K, and we do not rebalance it. 
+
+BREEDS (Santurkar et al. 2021) is derived from the same ImageNet-1K classes but purpose-built for hierarchy-aware seen/unseen subtype splits. We take two tasks that span the living/man-made divide, Living-17 (Liv-17 ; 17 supertypes; natural, animate) and Nonliving-26 (NL-26 ; 26 supertypes; man-made), each supertype split into two seen and two unseen subtypes. 
+
+iNaturalist (iNat-25 ) (Van Horn et al. 2021) carries a real Linnaean taxonomy (order ⊇ family ⊇ genus ⊇ species), so an unseen subtype is literal: a held-out species under a known order. We use 25 orders as supertypes, splitting each order’s species into 3,427 seen and 3,427 held out. It is also the only benchmark that supplies a model-free notion of subtype distance (taxonomic rank). 
+
+CIFAR-100 (Krizhevsky 2009) is a low-resolution sanity check rather than a primary benchmark: 20 supertypes, 60 of the 100 fine classes seen and 40 held out, at 32 × 32 with two small models (AlexNet, ResNet-18). Across all datasets we evaluate on a per-supertype-balanced test set. Appendix A gives full construction, splits, and per-class counts, and Appendix E details the iNaturalist taxonomy build. 
+
+Models and Baselines 
+
+We compare five architectures: 
+
+• Historical baseline: AlexNet (Krizhevsky, Sutskever, and Hinton 2012). Table 1: Accuracy, confidence and ECE on seen and unseen subtypes, with the seen −unseen gap for each, all in percentage points . On every row ECE is close to confidence minus accuracy, hence ∆cal ≈ ∆acc − ∆conf . Appendix D checks the gap against equal-mass binning and against two binning-free proper scores.                                                                                                                                                                                                                      
+
+> Accuracy ↑Confidence ECE ↓
+> Dataset Model Seen Unseen ∆acc Seen Unseen ∆conf Seen Unseen ∆cal
+> CIFAR-100 AlexNet 72.0 37.2 34.8 89.3 82.0 7.2 17.3 44.9 27.6 ResNet-18 84.7 44.8 39.9 90.9 78.5 12.4 6.2 33.8 27.5 IN-25 AlexNet 80.7 51.3 29.4 82.8 72.7 10.1 2.1 21.4 19.3 ResNet-18 90.0 60.0 30.0 92.6 81.2 11.3 2.6 21.2 18.6 ResNet-50 91.0 60.7 30.3 93.4 82.3 11.2 2.5 21.7 19.2 ViT-B/16 84.1 50.1 34.0 92.5 83.9 8.6 8.4 33.8 25.4 ConvNeXt-T 91.3 61.3 30.0 95.4 86.7 8.7 4.1 25.4 21.3 Liv-17 AlexNet 86.8 53.8 33.0 91.2 81.4 9.8 5.2 27.7 22.5 ResNet-18 90.1 61.4 28.7 94.0 86.0 8.0 4.0 25.0 21.0 ResNet-50 89.2 56.8 32.4 93.4 84.4 8.9 4.5 27.6 23.1 ViT-B/16 79.8 42.5 37.2 91.2 82.0 9.2 11.4 39.5 28.0 ConvNeXt-T 89.4 57.3 32.1 94.4 87.1 7.3 5.2 29.8 24.7 NL-26 AlexNet 75.7 39.8 35.9 80.1 64.3 15.8 4.6 24.6 20.0 ResNet-18 84.1 46.5 37.6 90.0 74.6 15.4 6.1 28.1 22.0 ResNet-50 84.0 45.3 38.6 88.1 71.8 16.2 4.4 26.5 22.1 ViT-B/16 63.2 30.3 32.9 84.4 76.0 8.5 21.2 45.8 24.5 ConvNeXt-T 80.9 42.9 38.0 89.8 76.6 13.2 8.9 33.7 24.8 iNat-25 AlexNet 68.6 61.2 7.4 72.5 70.3 2.2 3.9 9.1 5.1 ResNet-18 75.6 62.8 12.8 85.9 81.6 4.3 10.3 18.8 8.5 ResNet-50 76.2 63.6 12.6 86.6 82.9 3.6 10.3 19.3 9.0 ViT-B/16 65.4 56.2 9.2 87.2 85.2 2.0 21.8 29.0 7.2 ConvNeXt-T 79.5 69.6 9.8 91.7 89.6 2.2 12.3 19.9 7.7
+
+• Residual models: ResNet-18 and ResNet-50 (He et al. 2016). 
+
+• Modern backbones: ViT-B/16 (Dosovitskiy et al. 2021) and ConvNeXt-T (Liu et al. 2022). On the full-resolution ( 224 × 224 ) datasets (IN-25, BREEDS, iNat-25) we sweep all five architectures; CIFAR-100 uses only the small models (AlexNet, ResNet-18) that train competently at 32 × 32 .For calibration, we evaluate two standard post-hoc calibra-tors, tuned on a held-out image split from the seen subtypes and then applied to unseen subtypes: temperature scaling and vector scaling (Guo et al. 2017). For detection, we use three standard scores. Two read the output distribution: maximum softmax probability (MSP) (Hendrycks and Gimpel 2017) and the energy score (Liu et al. 2020). The third reads the representation: the Mahalanobis distance to the nearest seen-class feature centroid (Lee et al. 2018). An output score can only flag what the model already doubts; a feature score can flag inputs that look novel even when the output is confident. The full training and evaluation recipe is given in Table 5. The two controlled variations reported separately, the fine-pretrained-frozen protocol on CIFAR-100 and BREEDS and an ImageNet-1K-pretrained backbone on IN-25, are covered in Appendix B. 
+
+Accuracy drops but confidence barely follows (RQ1) 
+
+We first confirm the accuracy phenomenon reported by prior subtype and subpopulation-shift work, then turn to calibration. Table 1 reports what each model does on unseen subtypes and how far that falls from the seen split. Coarse accuracy drops by 29 –40 points on CIFAR-100, IN-25 and BREEDS and by a milder 7–13 on iNat-25, but confidence drops by only 
+
+2–16 . On unseen subtypes accuracy lands at 30 –70% while confidence stays at 64 –90% . ECE therefore rises from 2–22 
+
+points on seen subtypes to 9–46 on unseen, so miscalibration increases by 5–28 points on every model. The gap is not a binning artifact: it is unchanged to within 0.7 points under equal-mass bins, and the binning-free NLL and Brier both rise from seen to unseen on every row (Appendix D). Figure 2 makes the dissociation visible for ResNet-50, one metric per panel: accuracy falls steeply from seen to unseen subtypes, confidence barely moves, and the calibration error rises on every dataset. Per-architecture reliability diagrams are in Appendix F. Confidence also degrades as a per-sample signal. On unseen subtypes the failure-detection AUROC falls on every dataset, by 0.15 –0.18 on CIFAR-100, IN-25 and BREEDS and by 0.05 
+
+on iNat-25, consistent with its much smaller accuracy gap, and the risk–coverage AURC rises 2.3× to 18 × (Appendix G). Used to decide when to abstain, such a model lets through far more errors while answering the same fraction of inputs. This part of the failure is harder to repair than ∆cal , because AUROC and AURC depend on the order of the confidence IN-25 Liv-17 NL-26 iNat-25 020 40 60 80 100          
+
+> Accuracy (%)
+> 91 61 89 57 84 45 76 64
+> IN-25 Liv-17 NL-26 iNat-25 020 40 60 80 100
+> Con fi dence (%)
+> 93 82 93 84 88 72 87 83
+> IN-25 Liv-17 NL-26 iNat-25 010 20 30
+> Calibration error, ECE (%)
+> 222 528 427 10 19
+> Seen subtypes Unseen subtypes
+
+Figure 2: Seen versus unseen subtypes (ResNet-50, direct-coarse from scratch). Accuracy drops far more than confidence does, and the calibration error rises from 2–10 points on seen subtypes to 19 –28 on unseen. scores rather than their values, and recalibration changes only the values. 
+
+Confidence holds up under subtype shift, unlike under matched generic corruption (RQ2) 
+
+Miscalibration under distribution shift is already known (Ova-dia et al. 2019; Hendrycks, Mazeika, and Dietterich 2019); the question is whether subtype novelty behaves like the shifts that literature studies. We compare against a matched generic-shift arm built from the ImageNet-C corruptions (Hendrycks and Dietterich 2019). We apply all 15 of them, at all 5 severi-ties, to the seen-subtype images of every dataset, leaving the coarse labels unchanged. Corrupting our own seen images rather than using the released ImageNet-C copies matters here: the clean and corrupted arms are then literally the same images, so the only thing that changes is image quality. The comparison rests on two choices. First, accuracy loss must be matched: a corruption that destroys more accuracy will naturally cost more confidence, so confidence drops are only comparable at equal accuracy loss. We therefore interpolate each corruption along its own severity curve to the accuracy loss of that dataset’s subtype shift. Second, no corruption is hand-picked: every corruption that can reach that accuracy loss contributes one point, and we report the mean over all of them. Matching a single best-fitting corruption instead would be fragile, since which one fits best changes with the severity grid. A corruption enters only when its five severities bracket the subtype accuracy loss, which leaves 14 of the 15 corruptions on IN-25, 11 on each BREEDS task, and 3 on iNat-25, whose subtype gap is smaller than most corruptions cost even at severity 1. Figure 3 collects the surviving arms. At matched accuracy loss, generic corruption costs 17 .3 points of confidence on average against 9.9 for subtype shift ( 18 .6 vs. 
+
+10 .8 on IN-25, 19 .0 vs. 8.9 on Liv-17, 23 .1 vs. 16 .2 on NL-26, 
+
+8.3 vs. 3.8 on iNat-25). The model loses the same accuracy either way, yet on every dataset it gives up less confidence to the subtype shift: it reacts to visible degradation and stays blind to in-taxonomy novelty. The corruption control is run on ResNet-50; the dissociation between ∆acc and ∆conf it builds on is present on all five architectures (Table 1). 0 5 10 15 20 25     
+
+> Con fi dence drop at matched accuracy loss (points)
+> iNat-25 NL-26 Liv-17 IN-25 3.8 8.3 16.2 23.1 8.9 19.0 10.8 18.6
+> Subtype shift Generic corruption
+
+Figure 3: Confidence given up at matched accuracy loss (ResNet-50, direct-coarse from scratch); the corruption value is the mean over every ImageNet-C corruption that can reach that dataset’s subtype accuracy loss. Both arms use the clean accuracy of the same seen images as reference, so the subtype gaps differ marginally from Table 1. 
+
+Post-hoc recalibration narrows but does not close the seen–unseen calibration gap (RQ3a) 
+
+We tune the two post-hoc calibrators on a held-out image split from the seen subtypes and apply them to unseen subtypes, a transfer that looks safe because the task and the coarse labels are unchanged and only the set of fine subtypes differs. Table 2 gives the numbers and Figure 4 the shape, both for ResNet-50. Temperature scaling lowers the unseen ECE on every dataset, by 18 –57% (IN-25 21 .7 → 17 .8, iNat-25 
+
+19 .3 → 8.3). Read on its own that looks like a repair, but what the calibrator fixes is the split it was tuned on. On IN-25 the seen ECE falls to almost nothing ( 2.5 uncalibrated, 1.4
+
+under temperature, 1.0 under vector scaling), while every bin of the unseen split stays below the diagonal in Figure 4. That leaves ∆cal at 7–17 . iNat-25 is where recalibration helps most, and even there the calibrated unseen ECE ( 8.3) is six times the calibrated seen ECE ( 1.4). The richer vector scaling improves the seen split most and transfers worst to unseen subtypes (Liv-17 unseen ECE 25 .3 vs. 19 .6 under plain temperature), because it may overfit the seen split it was tuned on. On every dataset the calibrated unseen ECE Table 2: Post-hoc calibration (ResNet-50, direct-coarse from scratch), in percentage points. Each calibrator is tuned on a held-out image split from the seen subtypes and then applied to unseen subtypes; None is the uncalibrated model. 
+
+Dataset Method ECE S ↓ ECE U ↓ ∆cal ↓
+
+IN-25 None 2.5 21.7 19.2 Temperature 1.4 17.8 16.4 Vector 1.0 16.6 15.6 Liv-17 None 4.5 27.6 23.1 Temperature 2.2 19.6 17.4 Vector 3.7 25.3 21.6 NL-26 None 4.4 26.5 22.1 Temperature 1.6 18.7 17.1 Vector 3.4 25.0 21.6 iNat-25 None 10.3 19.3 9.0 Temperature 1.4 8.3 6.9 Vector 4.8 12.5 7.7 
+
+stays far above the calibrated seen ECE. Recalibration has been reported to transfer across hierarchy levels for vision-language models (Tu et al. 2024). That transfer does not hold under discriminative subtype shift. The same holds for all five architectures on all four datasets: temperature scaling never drives ∆cal to zero (Appendix H). A temperature fit on the unseen split itself does close most of the gap, but it cannot be chosen without knowing which inputs are unseen, which is what motivates the detection question below (Appendix I). 0 .5 10.5 1           
+
+> IN-25 Accuracy  unseen 21.7
+> seen 2.5
+> Uncalibrated
+> 0.5 1
+> unseen 17.8
+> seen 1.4
+> Temperature
+> 0.5 1
+> unseen 16.6
+> seen 1.0
+> Vector
+> 0.5 1
+> Con fi dence
+> 0.5 1
+> iNat-25 Accuracy  unseen 19.3
+> seen 10.3 0.5 1
+> Con fi dence
+> unseen 8.3
+> seen 1.4 0.5 1
+> Con fi dence
+> unseen 12.5
+> seen 4.8
+> Accuracy in bin Gap to perfect calibration
+
+Figure 4: Reliability diagrams on the unseen split (ResNet-50 direct-coarse from scratch, 15 equal-width bins; seen-fit temperature T ∗S = 1 .2 on IN-25 and 1.65 on iNat-25). Bars below the diagonal are overconfident; each panel carries its unseen and seen ECE. 
+
+Inference-time scores flag novel subtypes only weakly (RQ3b) 
+
+We ask whether a standard detection score can separate unseen-subtype from seen-subtype inputs, so that a system could at least know when to distrust its own confidence. We score every test input with the maximum softmax probability (MSP) (Hendrycks and Gimpel 2017), the logit-based energy score (Liu et al. 2020), and the feature-based Mahalanobis distance to the nearest seen-class centroid (Lee et al. 2018; Heng and Soh 2026; Barker, Bethell, and Gerasimou 2026). Each score is evaluated on its own by the novelty-detection 
+
+AUROC: the probability that a randomly drawn unseen-subtype input is scored as more novel than a randomly drawn seen-subtype one, so 0.5 means the two populations are indistinguishable. This is a different question from the failure-detection AUROC of RQ1, which asks whether confidence separates correct from incorrect predictions inside a single split. All three scores separate the two populations poorly (Ta-ble 3). The two output-based scores, MSP and energy, reach only ∼0.70 on the three larger benchmarks and 0.56 on iNat-25. That is above chance but far from usable: at a threshold that flags 5% of seen-subtype inputs, MSP catches only 12 –
+
+16% of unseen-subtype inputs ( 6% on iNat-25), because the two score distributions overlap heavily. The feature-based Mahalanobis distance sits just below chance on every dataset (0.45 –0.47 ), ranking unseen subtypes as slightly less novel than seen ones. A network trained only on the coarse label collapses same-supertype subtypes together, so an unseen subtype ends up looking like the seen ones in feature space. Confidence correlates with correctness, so this separation could be trivial error detection rather than novelty detection. Restricting each score to inputs the model classifies correctly on both splits lowers MSP and energy by at most 0.04 (Ap-pendix G), so the signal does respond to novelty, but far too weakly to act on. No architecture does better (Appendix H). On a from-scratch model, then, confidence does not track subtype novelty, post-hoc recalibration does not remove it, and inference-time detection surfaces it only weakly. Table 3: Novelty-detection AUROC of each score (ResNet-50, direct-coarse from scratch): how well it ranks unseen-subtype above seen-subtype inputs, 0.5 = indistinguishable. This is a triage signal, not the failure-detection AUROC of Appendix G and not standard out-of-taxonomy OOD rejection. Restricting each score to inputs classified correctly on both splits lowers it by at most 0.04 (Appendix G). 
+
+Dataset MSP Energy Mahalanobis IN-25 0.723 0.711 0.453 Liv-17 0.723 0.698 0.456 NL-26 0.740 0.738 0.463 iNat-25 0.563 0.563 0.473 Calibration collapse varies by superclass and tracks seen-subtype diversity 
+
+The per-class collapse is highly heterogeneous: some coarse classes keep near-perfect calibration on unseen subtypes, others collapse completely (per-supertype accuracy and ECE in Appendix J). This matches the mechanism of Lyu, Zhou, and Zhong (2025): under-represented groups receive inflated training logits, and so become overconfident without losing accuracy. Subtype shift is the extreme case, since unseen subtypes are absent from training rather than merely rare. We ask whether the collapse is predictable from seen-side signals. The one that tracks it is the number of seen subtypes per coarse class, nj = |S j |. On IN-25 (the only dataset where it varies), supertypes with few seen subtypes are the most overconfident on unseen ones while richly-sampled ones (e.g. dog , 117 subtypes) stay calibrated (Figure 5; Spearman 
+
+ρ = −0.82 ), consistent with a sublinear ( ≈ 1/√nj ) coverage rate (Jo, Kim, and Chae 2026). The trend is not a difficulty artifact: regressing per-supertype overconfidence on 1/√nj
+
+and seen accuracy shows 1/√nj to be the dominant predictor (t = 4 .2), while seen accuracy carries no signal ( t = 0 .0). A controlled k-sweep supports a causal reading: holding the per-class image budget fixed and varying only the seen-subtype count shrinks ∆cal monotonically from 31 (k=1 ) to 
+
+23 (k=4 ; Appendix K). The count is useful in aggregate but not per class. Ranking supertypes by it and keeping only the better-sampled half roughly halves the overconfidence in the retained supertypes (10 .2, against 21 .6 across all supertypes), so it works as a coarse triage signal. It does not say which individual super-type will collapse, and the two obvious alternatives, feature dispersion and confidence margin, carry no signal at all. Initialization matters more than protocol. Switching to the two-stage fine-pretrained-frozen protocol keeps ∆cal within 6
+
+points, while an ImageNet-1K-pretrained backbone lowers it from 19 .2 to 12 .8 on IN-25 without closing it (Appendix B). 
+
+Discussion and Future Work 
+
+The practical upshot is that subtype robustness must be audited with calibration, since accuracy alone hides the failure. A model that loses accuracy on novel subtypes goes on reporting almost the same confidence there, and neither post-hoc recalibration nor inference-time detection recovers the lost calibration. The two failure modes are complementary: an aggregate miscalibration that a single temperature could repair only with oracle knowledge of which inputs are unseen, and a per-sample discrimination loss that no monotone rescaling can touch. Post-hoc recalibration addresses the first and inference-time detection the second, so neither reaches this regime. Subtype shift also behaves differently from generic co-variate shift. At matched accuracy loss, visible corruption reduces confidence much more sharply, whereas confidence barely moves on unseen subtypes even though the inputs look ordinary and still have a valid coarse label (RQ2). Together with the loss of per-sample discrimination on unseen subtypes (RQ1), this shows that subtype robustness has been evaluated too narrowly. Preserving coarse-label accuracy is not enough 1 2 3 5 10 20 50 100 Seen subtypes per superclass nj (log scale) 0.0 0.2 0.4 0.6 0.8 Overcon fi dence on unseen   
+
+> bear big cat dog fungus utensil
+> ∝ 1/ √nj(guide)
+
+Figure 5: Per-supertype overconfidence (mean confidence −
+
+accuracy on unseen subtypes) against the number of seen subtypes nj (IN-25, ResNet-50 direct-coarse from scratch). Each point is one of the 25 supertypes; the curve is a 1/√nj
+
+guide (Spearman ρ = −0.82 ). if confidence no longer reflects reliability, so subtype robust-ness should be treated as a joint requirement on prediction and confidence. We study image classification, and we isolate the phe-nomenon rather than propose a training method, so several directions stay open. The most direct is dense prediction, where subtype shift acts at the pixel or region level in se-mantic segmentation and object detection. Beyond vision, whether the same silent overconfidence arises in language or tabular models is untested, and so is whether foundation and vision-language models behave differently. Our one pretrain-ing control points only to partial mitigation (Appendix B), where an ImageNet-pretrained backbone narrows the gap without closing it. Three method-side handles are worth pursuing. Training-time objectives such as evidential learning, outlier exposure, or subtype-diversity augmentation would attack the miscal-ibration at its source. A detector designed for in-taxonomy novelty rather than out-of-taxonomy rejection would give the triage signal that the off-the-shelf scores of RQ3b fail to pro-vide. A larger diversity sweep than our k=1 to 4 would turn the seen-subtype effect from a supported direction into a quan-titative law. Until such tools exist, the immediate evaluation requirement is clear: confidence reliability should be reported alongside coarse accuracy whenever subtype robustness is claimed. 
+
+Generative AI use statement. Generative AI tools were used solely for language editing and suggestions on the organi-zation of the exposition. All research questions, experimental design, analyses, results, and conclusions were developed by the authors. The authors reviewed and verified all AI-assisted edits, including all references, and take full responsibility for the content of the manuscript. Acknowledgments 
+
+This work used Jetstream2 at Indiana University through ACCESS allocation CIS260254 from the Advanced Cyber-infrastructure Coordination Ecosystem: Services & Support (ACCESS) program, which is supported by U.S. National Science Foundation grants #2138259, #2138286, #2138307, #2137603, and #2138296. Results were also obtained us-ing the Chameleon testbed, supported by the National Sci-ence Foundation. We thank the Jetstream2, ACCESS, and Chameleon support teams for the computational infrastruc-ture used in this work. We also thank Yutong Wang for helpful discussions during the early stages of this project. 
+
+# References 
+
+Barker, C.; Bethell, D.; and Gerasimou, S. 2026. Robust Adversarial Quantification via Conflict-Aware Evidential Deep Learning. In International Conference on Learning Representations .Barz, B.; and Denzler, J. 2019. Hierarchy-based image embeddings for semantic image retrieval. In WACV .Bertinetto, L.; Mueller, R.; Tertikas, K.; Samangooei, S.; and Lord, N. A. 2020. Making better mistakes: Leveraging class hierarchies with deep networks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 12506–12515. Brier, G. W. 1950. Verification of forecasts expressed in terms of probability. Monthly Weather Review , 78(1): 1–3. Cheung, M. Y.; Veeraraghavan, A.; and Balakrishnan, G. 2026. COMPASS: Robust Feature Conformal Prediction for Medical Segmentation Metrics. In International Conference on Learning Representations .Deng, J.; Berg, A. C.; Li, K.; and Fei-Fei, L. 2010. What does classifying more than 10,000 image categories tell us? In European conference on computer vision , 71–84. Springer. Deng, J.; Dong, W.; Socher, R.; Li, L.-J.; Li, K.; and Fei-Fei, L. 2009. ImageNet: A Large-Scale Hierarchical Image Database. In CVPR .Dosovitskiy, A.; Beyer, L.; Kolesnikov, A.; Weissenborn, D.; Zhai, X.; Unterthiner, T.; Dehghani, M.; Minderer, M.; Heigold, G.; Gelly, S.; Uszkoreit, J.; and Houlsby, N. 2021. An Image is Worth 16x16 Words: Transformers for Image Recog-nition at Scale. In International Conference on Learning Representations .Garg, A.; Sani, D.; and Anand, S. 2022. Learning hierarchy aware features for reducing mistake severity. In European Conference on Computer Vision , 252–267. Springer. Gneiting, T.; and Raftery, A. E. 2007. Strictly proper scoring rules, prediction, and estimation. Journal of the American Statistical Association , 102(477): 359–378. Guo, C.; Pleiss, G.; Sun, Y.; and Weinberger, K. Q. 2017. On calibration of modern neural networks. In International Conference on Machine Learning , 1321–1330. PMLR. He, K.; Zhang, X.; Ren, S.; and Sun, J. 2016. Deep Residual Learning for Image Recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) .Hendrycks, D.; and Dietterich, T. 2019. Benchmarking Neural Network Robustness to Common Corruptions and Perturbations. In International Conference on Learning Representations .Hendrycks, D.; and Gimpel, K. 2017. A Baseline for De-tecting Misclassified and Out-of-Distribution Examples in Neural Networks. In International Conference on Learning Representations .Hendrycks, D.; Mazeika, M.; and Dietterich, T. 2019. Deep Anomaly Detection with Outlier Exposure. In International Conference on Learning Representations .Heng, A.; and Soh, H. 2026. Know When to Abstain: Op-timal Selective Classification with Likelihood Ratios. In 
+
+International Conference on Learning Representations .Hu, Y.; and Khan, L. 2021. Uncertainty-aware reliable text classification. In Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining , 628– 636. Hu, Y.; Ou, Y.; Zhao, X.; Cho, J.-H.; and Chen, F. 2021. Multidimensional uncertainty-aware evidential neural net-works. In Proceedings of the AAAI conference on artificial intelligence , volume 35, 7815–7822. Hu, Z.; Zhang, Z.; Wang, Y.; Rutkowski, L.; and Tao, D. 2026. CoFact: Conformal Factuality Guarantees for Language Models under Covariate Shift. In International Conference on Learning Representations .Jaeger, P. F.; Lüth, C. T.; Klein, L.; and Bungert, T. J. 2023. A Call to Reflect on Evaluation Practices for Failure Detection in Image Classification. In International Conference on Learning Representations .Jain, K.; Karthik, S.; and Gandhi, V. 2023. Test-time amend-ment with a coarse classifier for fine-grained classification. 
+
+Advances in Neural Information Processing Systems , 36: 63372–63384. Jo, S. H.; Kim, S.; and Chae, M. 2026. Mitigating Spuri-ous Correlation via Distributionally Robust Learning with Hierarchical Ambiguity Sets. In International Conference on Learning Representations .Karthik, S.; Prabhu, A.; Dokania, P. K.; and Gandhi, V. 2021. No cost likelihood manipulation at test time for making better mistakes in deep networks. In International Conference on Learning Representations .Koh, P. W.; Sagawa, S.; Marklund, H.; Xie, S. M.; Zhang, M.; Balsubramani, A.; Hu, W.; Yasunaga, M.; and Liang, P. 2021. WILDS: A Benchmark of in-the-Wild Distribution Shifts. In 
+
+International Conference on Machine Learning , 5637–5664. PMLR. Kong, J.; Tang, W.; Kong, D.; Kong, L.; Yang, G.; and Jiang, B. 2026. Adaptive Conformal Prediction via Mixture-of-Experts Gating Similarity. In International Conference on Learning Representations .Kong, L.; Jiang, H.; Zhuang, Y.; Lyu, J.; Zhao, T.; and Zhang, C. 2020. Calibrated Language Model Fine-Tuning for In-and Out-of-Distribution Data. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) , 1326–1340. Krizhevsky, A. 2009. Learning Multiple Layers of Features from Tiny Images. Technical report, University of Toronto. Krizhevsky, A.; Sutskever, I.; and Hinton, G. E. 2012. Im-ageNet Classification with Deep Convolutional Neural Net-works. In Pereira, F.; Burges, C.; Bottou, L.; and Weinberger, K., eds., Advances in Neural Information Processing Systems ,volume 25. Curran Associates, Inc. Lee, K.; Lee, K.; Lee, H.; and Shin, J. 2018. A Simple Unified Framework for Detecting Out-of-Distribution Samples and Adversarial Attacks. In Advances in Neural Information Processing Systems (NeurIPS) .Liu, W.; Wang, X.; Owens, J. D.; and Li, Y. 2020. Energy-based Out-of-distribution Detection. In Advances in Neural Information Processing Systems (NeurIPS) .Liu, Z.; Mao, H.; Wu, C.-Y.; Feichtenhofer, C.; Darrell, T.; and Xie, S. 2022. A ConvNet for the 2020s. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 11976–11986. Lyu, J.; Zhou, K.; and Zhong, Y. 2025. A Statistical Theory of Overfitting for Imbalanced Classification. arXiv:2502.11323. Minderer, M.; Djolonga, J.; Romijnders, R.; Hubis, F.; Zhai, X.; Houlsby, N.; Tran, D.; and Lucic, M. 2021. Revisiting the calibration of modern neural networks. Advances in neural information processing systems , 34: 15682–15694. Naeini, M. P.; Cooper, G.; and Hauskrecht, M. 2015. Obtain-ing well calibrated probabilities using bayesian binning. In 
+
+Proceedings of the AAAI conference on artificial intelligence ,volume 29. Ovadia, Y.; Fertig, E.; Ren, J.; Nado, Z.; Sculley, D.; Nowozin, S.; Dillon, J. V.; Lakshminarayanan, B.; and Snoek, J. 2019. Can You Trust Your Model’s Uncertainty? Evaluating Predic-tive Uncertainty under Dataset Shift. In Advances in Neural Information Processing Systems (NeurIPS) .Santurkar, S.; Tsipras, D.; Ilyas, A.; and Madry, A. 2021. BREEDS: Benchmarks for Subpopulation Shift. In Interna-tional Conference on Learning Representations .Tu, W.; Deng, W.; Campbell, D.; Gould, S.; and Gedeon, T. 2024. An Empirical Study Into What Matters for Calibrating Vision-Language Models. In International Conference on Machine Learning .Van Horn, G.; Cole, E.; Beery, S.; Wilber, K.; Belongie, S.; and Mac Aodha, O. 2021. Benchmarking Representation Learning for Natural World Image Collections. arXiv preprint arXiv:2103.16483 .Wallin, E.; Kahl, F.; and Hammarstrand, L. 2025. ProHOC: Probabilistic Hierarchical Out-of-Distribution Classification via Multi-Depth Networks. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Wallin, E.; Kahl, F.; and Hammarstrand, L. 2026. Semi-Supervised Hierarchical Open-Set Classification. In Proceed-ings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) .Wang, N.-S.; Yaldiz, D. N.; Bakman, Y. F.; and Karimireddy, S. P. 2025. Conformal Prediction Adaptive to Unknown Subpopulation Shifts. arXiv preprint arXiv:2506.05583 .Widmann, D.; Lindsten, F.; and Zachariah, D. 2019. Calibra-tion tests in multi-class classification: A unifying framework. 
+
+Advances in neural information processing systems , 32. Yang, Y.; Zhang, H.; Katabi, D.; and Ghassemi, M. 2023. Change is hard: a closer look at subpopulation shift. In 
+
+Proceedings of the 40th International Conference on Machine Learning , 39584–39622. Zhu, Y.; Chen, Y.; Li, X.; Zhang, R.; Xue, H.; Tian, X.; Jiang, R.; Miao, B.; Metaxas, D. N.; Neill, D. B.; et al. 2024. ImageNet-OOD: Deciphering Modern Out-of-Distribution Detection Algorithms. In International Conference on Learn-ing Representations .Appendix 
+
+A. Datasets: final sizes, splits, and construction. All five benchmarks share one recipe: a coarse supertype valid on both train and test, with its fine subtypes partitioned into 
+
+seen (training) and unseen (test-only); the model predicts the supertype. We use a strict four-way split : train / seen-val 
+
+/ test-seen / test-unseen . train , seen-val and test-seen are disjoint sets of images carved from the same seen subtypes, so no subtype label is withheld from training; seen-val is used both for model selection and for fitting the post-hoc calibrators of RQ3a (never fit on test). test-unseen holds the images of the unseen subtypes. No images are copied : each split is a directory of symbolic links into a single source copy of the dataset, and the exact partition is frozen in a seeded split_manifest.json , the open-sourceable artifact: we release the subtype lists and the deterministic construction code (reproducible from --seed alone), not the images. Models (AlexNet, ResNet-18, ResNet-50, ViT-B/16 and ConvNeXt-T; CIFAR-100 uses only AlexNet and ResNet-18) are trained from scratch on the supertype label; all metrics are computed on a per-supertype-balanced test set with equal-width ECE (Appendix B reports a second-seed check). Table 4 gives the final sizes and Table 5 the full training and evaluation recipe. 
+
+B. Protocol and initialization controls. The main table fixes two axes (direct-coarse, from scratch). We vary each as a control fit, like the main results, on a held-out seen-val. 
+
+Protocol is neutral (Table 6): across CIFAR-100 and both BREEDS tasks, switching one-stage direct-coarse for two-stage fine-pretrained-frozen leaves the unseen calibration gap essentially unchanged ( |∆∆ cal | < 6, small against gaps of 
+
+20 –30 ) at matched accuracy, so the two-stage protocol neither creates nor repairs silent overconfidence. Pretraining reduces but does not remove the gap (Table 7): on IN-25 an ImageNet-1K-pretrained frozen backbone lowers ∆cal (19 .2 → 12 .8)without closing it, and it does so by making confidence itself more responsive (at essentially unchanged ∆acc , ∆conf rises from 11 .2 to 14 .5), while it brings the subtype and generic-corruption arms together (their ∆conf /∆acc ratios become close) and makes unseen subtypes detectable (Mahalanobis 
+
+0.45 → 0.75 ), because its 1K features displace the 22K-only unseen synsets in feature space. These controls unify: the from-scratch coarse features are blind to in-taxonomy nov-elty (the dissociation holds and detection fails), whereas an ImageNet-pretrained backbone partly sees it: confidence now falls somewhat under subtype shift (narrowing the disso-ciation) and the unseen synsets become separable. Yet the overconfidence is only reduced, not removed. Pretraining is thus a partial mitigation, and the protocol axis changes nothing. 
+
+Seed sensitivity. The seen/unseen subtype split, the data, and the per-architecture recipe are fixed, so a model-init seed changes only the weight initialization. As a robustness check we retrained a second seed and found the calibration gaps unchanged in sign and closely matched in magnitude. 
+
+C. The calibration gap is robust to the binning scheme. 
+
+The standard equal-width estimator (Naeini, Cooper, and Hauskrecht 2015) partitions [0 , 1] into bins {Ib}Bb=1 with 
+
+Bb = {i : c(xi) ∈ Ib}; on a split T ,
+
+[ECE( T ) = 
+
+> B
+
+X
+
+> b=1
+
+|Bb||T | cacc( Bb) − dconf( Bb) , (1) where empty bins contribute zero. This estimator is biased, and the bias grows as samples-per-bin shrink, so we never read a calibration gap off ECE alone. Our confidences are also heavily concentrated: on IN-25, 80% of seen-split and 50% of unseen-split predictions fall in the single top equal-width bin, exactly the regime in which equal-width ECE is criticised as unstable. Appendix D therefore recomputes every gap under equal-mass bins and against two binning-free proper scores. 
+
+D. The calibration gap does not depend on the ECE histogram. Table 8 recomputes every gap in the main table (Table 1) two ways. First under equal-mass (adaptive) bins, which place roughly equal counts per bin and so resolve the concentrated high-confidence region finely: the two binning schemes agree to within 0.7 points on every row. Second with two binning-free proper scores (Gneiting and Raftery 2007), the negative log-likelihood NLL = − 1 
+
+> |T|
+
+P 
+
+> i
+
+log pg(yi)(xi)
+
+and the Brier score 1 
+
+> |T|
+
+P
+
+> i
+
+P 
+
+> j
+
+(pj (xi) − 1{g(yi) = j})2;both rise from seen to unseen on all 22 rows, and their rise tracks ∆cal closely (Spearman ρ = 0 .96 and 0.95 ). The gap is therefore a property of the predicted probabilities, not of where the bin edges fall. 
+
+E. Per-dataset construction details. We detail here the construction of iNaturalist (iNat-25) (Van Horn et al. 2021), whose real biological taxonomy broadens coverage along an axis the other main datasets cannot reach. It is evaluated with the identical pipeline used in the main text: train a coarse (supertype) classifier on seen subtypes, then measure accuracy and calibration on held-out (unseen) subtypes, so ECE/NLL/Brier/ ∆cal are directly comparable. 
+
+iNaturalist. From iNat2021 ( 10 ,000 species, 2.7M images; we use the official 50 -image/species train_mini subset for training and the 10 /species val split for evaluation) we take a biological rank as the supertype (order: the 25 orders with 
+
+≥ 100 species, spanning three kingdoms; or family for finer, better-balanced supertypes) and split the species under each supertype into seen vs. unseen. The 25 -order subset covers 
+
+≈ 6,854 species, giving ≈ 171 K training images ( 3,427 seen species ×50 ) and ≈ 34 K images per test split ( ×10 ); order imbalance is handled by macro-averaging rather than capping. A ResNet-50 is trained from scratch to predict the supertype on seen-species images; held-out species (same supertypes) form the test split. Since the supertype is a true taxonomic node, the seen →unseen taxonomic distance (same genus / family / order) is a controlled severity knob. Ready-made species partitions are available from prior work (Wallin, Kahl, and Hammarstrand 2025, 2026). 
+
+Protocol. ResNet-50 from scratch to avoid pretraining leakage; per-supertype-balanced accuracy and ECE (adaptive binning); the two post-hoc calibrators, seen-side risk predic-tors, and confidence-based detection computed exactly as in the main text. A matched generic-corruption (covariate-shift) Table 4: The five subtype-shift benchmarks: construction, splits, and protocol. One schema throughout: predict the coarse 
+
+supertype , train only on seen subtypes, test on both seen and unseen subtypes of the same supertype. “subt. (s/u)” = fine subtypes seen/unseen; image counts are the built subset sizes. “Who splits; protocol” gives the partition source and how the supertype classifier is built: direct-coarse (end-to-end on supertype labels, from scratch) or fine-pretrained frozen (train on seen subtypes, freeze, learn a supertype head). The IN-25 split is deliberately imbalanced across supertypes (e.g. dog 117 vs fungus 1 seen subtype), inherited from ImageNet-1K; we do not rebalance it and instead evaluate on a per-supertype-balanced test set. All five benchmarks are built and the full train →logits →calibration pipeline is validated end-to-end. Train counts are the seen set after the val holdout; IN-25’s train pool is ⊂488,644 and all test sizes are the per-supertype-balanced evaluation sets. 
+
+Dataset #super subt. (s/u) train test-seen test-unseen Who splits; protocol CIFAR-100 20 60/40 30,000 6,000 4,000 us ( k=3 /2); direct-coarse (scratch) IN-25 25 383/3,872 ∼488,644 7,179 7,500 Hendrycks; direct-coarse (scratch) Liv-17 17 34/34 39,780 1,700 1,700 BREEDS; direct-coarse (scratch) NL-26 26 52/52 60,108 2,600 2,600 BREEDS; direct-coarse (scratch) iNat-25 25 3,427/3,427 171,000 34,000 34,000 us (order); direct-coarse (scratch) 
+
+Table 5: Training and evaluation recipe. ResNet-50 is the primary backbone; all five architectures are swept on IN-25 and BREEDS, while CIFAR-100 uses AlexNet and ResNet-18. “Init” and “Protocol” are the two training axes. Hyper-parameters marked “seen-VAL” are tuned per dataset on the held-out seen-subtype validation split, not fixed a priori. The calibration metrics (proper scores, equal-width ECE, per-supertype balancing) are defined in the Evaluation section. Post-hoc calibrators and detection scores are fit and applied only at evaluation time on saved logits. 
+
+Component Setting Backbones (sweep) AlexNet, ResNet-18, ResNet-50 (primary), ViT-B/16, ConvNeXt-T; CIFAR-100 uses only AlexNet and ResNet-18 Init from scratch (all main-table datasets); an ImageNet-1K-pretrained backbone on IN-25 is a separate initialization control Protocol direct-coarse (all main-table datasets); the from-scratch fine-pretrained-frozen variant (CIFAR-100, BREEDS) is a separate control (Appendix B) Input resolution 32 (CIFAR-100, except AlexNet/ViT-B/16 upsampled to 224); 224 (BREEDS, iNat-25, IN-25) Optimizer SGD (momentum 0.9) for ResNet/AlexNet; AdamW ( β=(0 .9, 0.999) , linear warmup) for ViT-B/16 and ConvNeXt-T, which diverge under SGD; cosine LR decay; weight decay 10 −4–5 × 10 −4 (SGD) or 0.05 
+
+(AdamW) Learning rate / batch lr 0.1 (SGD); 10 −3/3 × 10 −4 (AdamW ViT/ConvNeXt); batch 128, reduced to 96 on the memory-limited IN-25 transformer runs Model selection per-dataset epoch budget (BREEDS, iNat-25 90; IN-25 50; CIFAR-100 120–150 backbone + 40–50 head); cosine schedule; best-on-seen-VAL checkpoint kept, not the last epoch Seeds the seen/unseen subtype split and the recipe are fixed, so a seed re-initializes the model only; every reported number is a single run at seed 42 , and a second-seed robustness check is reported in Appendix B Compute one NVIDIA A100 (GRID A100X-20C vGPU, 20 GB), 16 CPU cores, 58 GB RAM; Ubuntu 24.04 LTS; Python 3.12.3, PyTorch 2.12.1 (CUDA 12.6), torchvision 0.27.1, cuDNN 9.10.2, NumPy 2.4.4 Accuracy coarse (supertype) accuracy, seen vs. unseen Calibration NLL, Brier (proper scores, primary); equal-width ECE, per-supertype balanced Discrimination failure-detection AUROC and risk-coverage AURC (seen vs. unseen) Post-hoc calibrators temperature scaling, vector scaling (fit on seen-VAL, applied to unseen); oracle-T residual Detection scores MSP, energy, Mahalanobis (overall and within-correct) Table 6: Protocol control: one-stage direct-coarse vs. two-stage fine-pretrained-frozen, at matched accuracy, across three datasets (five architectures on each BREEDS task, the two small ones on CIFAR-100). All gaps are in percentage points. Confidence stays as unresponsive under one protocol as the other, and the unseen calibration gap barely moves ( |∆∆ cal | < 6, against gaps of 
+
+20 –30 ), so the protocol neither creates nor repairs silent overconfidence. 
+
+∆acc ∆conf ∆cal 
+
+Dataset Model 1-stage 2-stage 1-stage 2-stage 1-stage 2-stage ∆∆ cal 
+
+CIFAR-100 AlexNet 34.8 33.6 7.2 6.8 27.6 26.8 −0.8
+
+ResNet-18 39.9 39.9 12.4 11.6 27.5 28.3 +0 .8
+
+Liv-17 AlexNet 33.0 33.8 9.8 9.4 22.5 24.4 +1 .9
+
+ResNet-18 28.7 29.7 8.0 8.8 21.0 20.3 −0.6
+
+ResNet-50 32.4 31.6 8.9 9.0 23.1 22.7 −0.4
+
+ViT-B/16 37.2 34.9 9.2 9.6 28.0 25.2 −2.8
+
+ConvNeXt-T 32.1 32.9 7.3 9.0 24.7 23.9 −0.7
+
+NL-26 AlexNet 35.9 38.6 15.8 15.4 20.0 23.0 +3 .0
+
+ResNet-18 37.6 38.3 15.4 16.1 22.0 22.0 −0.0
+
+ResNet-50 38.6 38.2 16.2 15.9 22.1 22.0 −0.2
+
+ViT-B/16 32.9 30.2 8.5 11.1 24.5 19.1 −5.4
+
+ConvNeXt-T 38.0 36.2 13.2 14.7 24.8 21.4 −3.3
+
+Table 7: Initialization control (IN-25, ResNet-50): from-scratch direct-coarse vs. ImageNet-1K-pretrained frozen. Gaps are in percentage points. Pretraining reduces but does not remove the unseen calibration gap ( ∆cal ), and it does so by making confidence more responsive: at essentially unchanged 
+
+∆acc , ∆conf rises from 11 .2 to 14 .5. It also brings the sub-type and generic-corruption arms together (their ∆conf /∆acc 
+
+ratios become close) and makes unseen subtypes detectable (Mahalanobis novelty-detection AUROC). 
+
+From scratch Pretrained (direct-coarse) (frozen) Accuracy gap ∆acc 30.3 28.0 Confidence gap ∆conf 11.2 14.5 Calibration gap ∆cal +19 .2 +12 .8
+
+Subtype ratio 0.37 0.52 Generic ratio 0.76 0.56 Mahalanobis novelty AUROC 0.453 0.747 
+
+arm is run to confirm that the calibration failure follows semantic subtype novelty rather than appearance degradation. 
+
+F. Full reliability diagrams. Figure 6 draws reliability curves (binned confidence vs. empirical accuracy) for all five architectures on IN-25, seen and unseen. The seen curves track the diagonal; the unseen curves sit well below it (over-confident) on every architecture, so the gap is not an artifact of any one backbone. 
+
+G. Per-sample discrimination: failure-detection AUROC and risk–coverage AURC. Calibration is an aggregate property and does not say whether confidence still ranks individual predictions usefully, so we report two per-sample measures on each split (Table 9). The failure-detection AU-ROC asks whether c(x) separates correct from incorrect predictions within a split: it is the probability that a ran-domly drawn correct prediction is more confident than a Table 8: The calibration gap under a second binning scheme and under two binning-free proper scores. ∆cal is in percent-age points; ∆NLL and ∆Brier are the unseen minus seen rise in each score. All three move together on every row. 
+
+∆cal Proper scores Dataset Model eq.-width eq.-mass ∆NLL ∆Brier CIFAR-100 AlexNet 27.6 27.5 2.99 0.580 ResNet-18 27.5 27.5 2.14 0.630 IN-25 AlexNet 19.3 19.3 1.34 0.425 ResNet-18 18.6 18.7 1.44 0.458 ResNet-50 19.2 19.2 1.46 0.463 ViT-B/16 25.4 25.4 2.18 0.561 ConvNeXt-T 21.3 21.3 1.72 0.491 Liv-17 AlexNet 22.5 23.2 1.87 0.527 ResNet-18 21.0 20.7 1.74 0.478 ResNet-50 23.1 23.4 1.84 0.519 ViT-B/16 28.0 28.1 2.42 0.617 ConvNeXt-T 24.7 24.8 2.03 0.548 NL-26 AlexNet 20.0 20.0 1.68 0.498 ResNet-18 22.0 22.2 2.01 0.558 ResNet-50 22.1 22.4 1.95 0.564 ViT-B/16 24.5 24.5 2.38 0.522 ConvNeXt-T 24.8 24.8 2.21 0.572 iNat-25 AlexNet 5.1 5.1 0.32 0.098 ResNet-18 8.5 8.5 0.70 0.198 ResNet-50 9.0 9.0 0.72 0.199 ViT-B/16 7.2 7.2 0.74 0.154 ConvNeXt-T 7.7 7.7 0.73 0.166 0.0 0.2 0.4 0.6 0.8 1.0 con fi dence 0.0 0.2 0.4 0.6 0.8 1.0 accuracy 
+
+AlexNet (ECE 0.021 / 0.214) 
+
+> seen unseen
+
+0.0 0.2 0.4 0.6 0.8 1.0 con fi dence 0.0 0.2 0.4 0.6 0.8 1.0 accuracy 
+
+ResNet-18 (ECE 0.026 / 0.212) 
+
+> seen unseen
+
+0.0 0.2 0.4 0.6 0.8 1.0 con fi dence 0.0 0.2 0.4 0.6 0.8 1.0 accuracy 
+
+ResNet-50 (ECE 0.025 / 0.217) 
+
+> seen unseen
+
+0.0 0.2 0.4 0.6 0.8 1.0 con fi dence 0.0 0.2 0.4 0.6 0.8 1.0 accuracy 
+
+ViT-B/16 (ECE 0.084 / 0.338) 
+
+> seen unseen
+
+0.0 0.2 0.4 0.6 0.8 1.0 con fi dence 0.0 0.2 0.4 0.6 0.8 1.0 accuracy 
+
+ConvNeXt-T (ECE 0.041 / 0.254) 
+
+> seen unseen
+
+seen tracks the diagonal; unseen sits below it (overcon fi dent) on every architecture Figure 6: Reliability diagrams (IN-25, from scratch, direct-coarse; ResNet-50 and four other backbones): the unseen curve falls below the diagonal (overconfident) on every architecture, and temperature scaling would slide each curve along, not onto, the diagonal. randomly drawn incorrect one ( 1 = perfect, 0.5 = chance). The AURC is the area under the risk–coverage curve obtained by answering only the most confident fraction of inputs and abstaining on the rest (lower is better), so a rise means the same confidence-thresholded policy now incurs more error at equal coverage. Both degrade on unseen subtypes for every dataset, and the magnitude follows the severity of the shift: the drop is +0 .15 –
+
+0.18 on CIFAR-100, IN-25 and BREEDS, whose accuracy gaps are 29 –40 points, but only +0 .05 on iNat-25, whose accuracy gap is 12 .6; AURC rises 2.3× (iNat-25) to 18 ×
+
+(IN-25). AUROC is rank-based and therefore invariant to any monotone rescaling of confidence: unlike the calibration gap, this degradation cannot be repaired by temperature scaling. 
+
+Novelty or error detection? The novelty-detection AU-ROCs of Table 3 could in principle be trivial error detection: accuracy is lower on unseen subtypes, and confidence cor-relates with correctness, so a score that merely ranks errors would separate the two splits. Restricting each score to in-puts the model classifies correctly on both splits removes that confound. The separation survives, falling by at most 
+
+0.04 : MSP 0.723 → 0.684 (IN-25), 0.723 → 0.701 (Liv-17), 
+
+0.740 → 0.714 (NL-26) and 0.563 → 0.538 (iNat-25), with en-ergy behaving the same way ( 0.711 → 0.681 , 0.698 → 0.680 ,
+
+0.738 → 0.702 , 0.563 → 0.545 ). Mahalanobis is already at chance, so its within-correct value is within noise and omitted. The weak signal is therefore a genuine response to subtype novelty rather than an artifact of correctness. Table 9: Per-sample discrimination (ResNet-50; ResNet-18 for CIFAR-100, matching the main table), seen vs. unseen. Failure-detection AUROC (higher is better, 0.5 = chance) and risk–coverage AURC (lower is better).                                           
+
+> failure-detection AUROC AURC Dataset ∆acc seen ↑unseen ↑∆↓seen ↓unseen ↓
+> CIFAR-100 39.9 0.894 0.733 +0.161 0.031 0.363 IN-25 30.3 0.931 0.783 +0.148 0.011 0.196 Liv-17 32.4 0.928 0.748 +0.180 0.014 0.248 NL-26 38.6 0.917 0.757 +0.160 0.028 0.331 iNat-25 12.6 0.895 0.846 +0.049 0.058 0.136
+
+H. Do the RQ3 conclusions depend on the architecture? 
+
+The main text reports RQ3a and RQ3b on ResNet-50. Since both only need saved logits, we can repeat them for all five architectures at no additional training cost (Table 10). The conclusions do not move. Seen-tuned temperature scaling re-duces ∆cal on every one of the 20 (dataset, architecture) pairs but never to zero, leaving 3.3 to 19 .4 points; vector scaling leaves 5.1 to 23 .4. Novelty detection stays weak everywhere, with the maximum softmax probability between 0.52 and 
+
+0.75 AUROC. The one pattern the ResNet-50 row hides is that ViT-B/16 has the largest gap on all three ImageNet-derived benchmarks, both before and after recalibration, so a more modern backbone is not the safer choice here. 
+
+I. Is the gap repairable by a single temperature? The standard fix for miscalibration under shift, re-weighting the Table 10: RQ3 across architectures (direct-coarse from scratch). ∆cal in percentage points under no calibration, temperature scaling and vector scaling; novelty-detection AUROC for the two output-based scores.                                                                                  
+
+> ∆cal ↓Novelty AUROC Dataset Model None Temp. Vec. MSP Energy IN-25 AlexNet 19.3 17.6 13.2 0.644 0.631 ResNet-18 18.6 15.5 15.1 0.717 0.706 ResNet-50 19.2 16.4 15.6 0.723 0.711 ViT-B/16 25.4 19.3 19.8 0.691 0.695 ConvNeXt-T 21.3 16.9 17.5 0.727 0.723 Liv-17 AlexNet 22.5 18.6 20.8 0.715 0.695 ResNet-18 21.0 16.3 19.7 0.728 0.697 ResNet-50 23.1 17.4 21.6 0.723 0.698 ViT-B/16 28.0 19.4 23.4 0.705 0.690 ConvNeXt-T 24.7 18.8 22.8 0.717 0.696 NL-26 AlexNet 20.0 17.3 19.2 0.693 0.680 ResNet-18 22.0 17.4 20.3 0.747 0.747 ResNet-50 22.1 17.1 21.6 0.740 0.738 ViT-B/16 24.5 17.5 18.5 0.650 0.656 ConvNeXt-T 24.8 18.1 21.1 0.730 0.730 iNat-25 AlexNet 5.1 3.3 5.1 0.523 0.519 ResNet-18 8.5 6.7 7.3 0.563 0.558 ResNet-50 9.0 6.9 7.7 0.563 0.563 ViT-B/16 7.2 4.7 5.6 0.539 0.541 ConvNeXt-T 7.7 5.3 6.4 0.545 0.549
+
+seen calibration set toward the unseen distribution, cannot help here: it borrows the corrective scale from calibration examples that resemble the test input, and an unseen subtype has almost none. As a diagnostic rather than a deployable remedy, we therefore fit an unseen-oracle temperature T ∗U directly on the unseen split, using its labels and hence unattainable in practice. It is far larger than the seen-fit T ∗S (T ∗U ≈ 2–3 vs. 
+
+1.2–1.7) and brings the unseen ECE down to 2–5, so the aggregate overconfidence is a coherent single-scale error that one temperature could repair in principle. Two caveats keep this from being a remedy. First, temperature is monotone, so even the oracle leaves the per-sample discrimination loss of RQ1 untouched: it repairs the average confidence, not the broken ranking of correct against incorrect predictions. Second, no single temperature serves both splits at once, since the unseen-oracle scale over-softens the seen inputs (their ECE rises to ≈10 ). It would have to be applied selectively, which requires knowing which inputs are unseen, and that is the detection question of RQ3b. 
+
+J. Per-category heterogeneity. The collapse is highly un-even across coarse classes. Table 11 gives per-supertype seen/unseen accuracy and ECE (IN-25, ResNet-50), sorted by accuracy drop: supertypes with few seen subtypes collapse almost completely ( big cat , accuracy 96 .0% seen vs. 5.3% 
+
+unseen, ECE 2 vs. 81 ), while richly-sampled ones stay cali-brated ( dog , 117 subtypes, ECE 1.4 vs. 2.2), mirroring the 
+
+nj trend of Figure 5. Table 11: Per-supertype collapse (IN-25, ResNet-50), sorted by accuracy drop. nj = number of seen subtypes; accuracy (%) and ECE on seen vs. unseen. 
+
+Superclass nj Acc S Acc U ECE S ECE U
+
+big cat 3 96.0 5.3 2.1 80.6 bear 2 88.3 19.3 7.6 60.0 beverage 1 92.0 32.7 4.8 33.2 fungus 1 70.9 17.3 17.2 56.3 aquatic mammal 3 90.0 43.0 5.2 34.5 utensil 5 80.7 34.7 8.4 39.2 vegetable 11 93.3 49.7 2.9 27.5 primate 12 94.7 62.0 2.2 22.1 building 7 87.3 55.7 7.5 20.1 insect 9 97.3 66.3 1.3 17.1 appliance 9 81.7 52.3 6.6 24.0 footwear 4 86.7 59.7 6.1 20.6 ungulate 11 89.3 64.3 5.9 19.8 electronic equip. 9 90.7 67.3 4.5 13.3 cat 5 89.7 67.0 5.8 20.2 geological form. 5 88.7 67.7 3.0 13.4 fruit 13 92.7 71.7 2.2 11.4 musical instr. 15 90.3 73.0 4.0 10.9 fish 11 94.3 81.3 1.4 7.0 clothing 33 93.0 82.0 3.2 4.9 amphibian 8 92.3 82.0 4.5 9.8 reptile 28 93.3 85.0 3.4 5.7 bird 34 97.7 91.3 1.5 3.5 wheeled vehicle 27 95.7 90.0 3.1 5.1 dog 117 98.7 96.0 1.4 2.2 
+
+K. Fine-label diversity ( k-sweep). Table 12 varies the number of seen fine subtypes per supertype, k, on IN-25 (ResNet-50, from scratch) while holding the per-class image budget fixed, so only fine-label diversity changes. The unseen calibration gap falls monotonically as k grows ( ∆cal 31 → 23 
+
+from k=1 to 4). This upgrades the correlational nj trend of the Analysis to a causal statement: training on more fine subtypes causes less overconfidence on unseen ones, holding image count fixed. (Subtypes are capped here, so the absolute gap is larger than the full-data main-table row.) Table 12: Fine-label diversity k-sweep (IN-25, ResNet-50 from scratch; per-class image budget fixed). Raising the number of seen subtypes per supertype monotonically shrinks the unseen calibration gap. 
+
+k ECE S ECE U ∆cal ↓ Seen acc Unseen acc 1 1.9 32.5 30.6 79.8 26.1 2 3.3 32.2 28.9 85.2 35.9 3 4.0 27.8 23.8 85.6 44.4 4 3.2 25.8 22.6 85.8 45.8
