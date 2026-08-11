@@ -6,81 +6,77 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-10
-- 运行时间：2026-08-10 21:14:32 UTC
+- 最新运行日期：2026-08-11
+- 运行时间：2026-08-11 21:26:48 UTC
 - 运行状态：成功
 - 本次总论文数：19
 - 精读区：7
 - 速读区：12
 
 ### 今日简报（AI）
-今日共读19篇论文，精读2篇、速读12篇，重点聚焦视觉-语言模型与实时目标检测。
-
-最值得关注的两篇9分工作：MuRA通过多秩适配提升测试时视觉-语言泛化效率，YOLOv14为复杂成像条件提供自适应实时检测方案。
-
-下一步可优先深入精读这两篇高分论文，并结合Qwen-3D与遥感联邦学习等8分工作扩展视野。
-- 详情：[/202608/10/README](/202608/10/README)
+今日共读19篇论文，精读7篇、速读12篇，重点关注遥感变化检测与城市多模态理解。最值得精读的是AdaDINO（10分）和Geo-Embed（9分），前者用冻结DINO实现高效遥感变化检测，后者推动城市统一多模态嵌入。建议普通读者优先从这两篇切入，再结合速读中的NDVI重建和VLM联邦学习扩展视野。
+- 详情：[/202608/11/README](/202608/11/README)
 
 ### 精读区论文标签
-1. [MuRA: Multi-Rank Adaptation for Efficient and Effective Test-Time Vision-Language Generalization](/202608/10/2608.03885v1-mura-multi-rank-adaptation-for-efficient-and-effective-test-time-vision-language-generalization)  
+1. [AdaDINO: Pair-Aware In-Backbone Adaptation of Frozen DINO for Efficient Remote Sensing Change Detection](/202608/11/2608.07982v1-adadino-pair-aware-in-backbone-adaptation-of-frozen-dino-for-efficient-remote-sensing-change-detection)  
+   标签：评分：10.0/10、query:rs-fm
+   evidence：将冻结的DINO视觉基础模型通过成对感知骨干内适应用于遥感变化检测
+2. [Geo-Embed: Towards Unified Multimodal Embeddings for Urban Understanding](/202608/11/2608.03826v1-geo-embed-towards-unified-multimodal-embeddings-for-urban-understanding)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：面向城市理解的地理空间统一多模态嵌入与基准
+3. [EvBS: Event-guided Blur Synthesis for Domain-adaptive Motion Deblurring](/202608/11/2608.08066v1-evbs-event-guided-blur-synthesis-for-domain-adaptive-motion-deblurring)  
    标签：评分：9.0/10、query:cross-domain
-   evidence：基于多秩LoRA的测试时适应以应对视觉-语言模型分布漂移
-2. [YOLOv14: Adaptive Real-Time Object Detection for Diverse Imaging Conditions](/202608/10/2608.04720v2-yolov14-adaptive-real-time-object-detection-for-diverse-imaging-conditions)  
+   evidence：直接面向预训练去模糊模型的域漂移问题，提出事件引导的模糊合成方法
+4. [Test-Time Prototype Adaptation for Open-Vocabulary Semantic Segmentation](/202608/11/2608.08290v1-test-time-prototype-adaptation-for-open-vocabulary-semantic-segmentation)  
    标签：评分：9.0/10、query:cross-domain
-   evidence：直接应对目标检测中的域偏移问题，覆盖航拍视角和游戏渲染场景等多种成像条件
-3. [UniJEPA: A Unified Joint-Embedding Predictive Architecture for Task-Agnostic Visual World Modeling](/202608/10/2608.07409v1-unijepa-a-unified-joint-embedding-predictive-architecture-for-task-agnostic-visual-world-modeling)  
-   标签：评分：9.0/10、query:world-models
-   evidence：统一的联合嵌入预测架构用于视觉世界建模
-4. [RSVideo: Are Your Vision-Language Models Ready for Remote Sensing Videos?](/202608/10/2608.02039v2-rsvideo-are-your-vision-language-models-ready-for-remote-sensing-videos)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：在遥感视频上基准测试视觉语言基础模型，回答VLM是否准备好用于遥感视频理解
-5. [SeCo-SBIR: Semantically Consistent Prompt Learning for Zero-Shot Sketch-Based Image Retrieval](/202608/10/2608.03120v1-seco-sbir-semantically-consistent-prompt-learning-for-zero-shot-sketch-based-image-retrieval)  
+   evidence：基于预训练CLIP的免训练测试时原型适配，用于开放词汇语义分割
+5. [Domain-Aware Pruning: Sparsity and Domain Generalization via Regularized Probabilistic Masking](/202608/11/2608.08624v1-domain-aware-pruning-sparsity-and-domain-generalization-via-regularized-probabilistic-masking)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：直接面向域泛化和分布外鲁棒性，使用概率掩码实现稀疏性
+6. [LASA: Language-and-Source-Anchored Alignment for Domain Generalized Semantic Segmentation](/202608/11/2608.08805v1-lasa-language-and-source-anchored-alignment-for-domain-generalized-semantic-segmentation)  
+   标签：评分：9.0/10、query:cross-domain
+   evidence：面向语义分割的领域泛化方法
+7. [Distilled Roads: Generalisable Road Network Extraction Across Sensors, Resolutions, and Region](/202608/11/2608.03407v1-distilled-roads-generalisable-road-network-extraction-across-sensors-resolutions-and-region)  
    标签：评分：8.0/10、query:cross-domain
-   evidence：草图和照片域差距，零样本检索，提示学习
-6. [Distilled Roads: Generalisable Road Network Extraction Across Sensors, Resolutions, and Region](/202608/10/2608.03407v1-distilled-roads-generalisable-road-network-extraction-across-sensors-resolutions-and-region)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：跨传感器、分辨率和区域的道路网络提取，处理域偏移
-7. [HyTBE: Hyperbolic Target-Background Expert Model for Cross-Domain Infrared Small Target Detection](/202608/10/2608.05771v2-hytbe-hyperbolic-target-background-expert-model-for-cross-domain-infrared-small-target-detection)  
-   标签：评分：8.0/10、query:cross-domain
-   evidence：跨域红外小目标检测与目标-背景关系偏移
+   evidence：面向路网提取的跨传感器与区域领域泛化
 
 ### 速读区论文标签
-1. [Global-Scale Self-Supervised Spatiotemporal Learning for NDVI Time-Series Reconstruction](/202608/10/2608.02322v1-global-scale-self-supervised-spatiotemporal-learning-for-ndvi-time-series-reconstruction)  
+1. [Global-Scale Self-Supervised Spatiotemporal Learning for NDVI Time-Series Reconstruction](/202608/11/2608.02322v1-global-scale-self-supervised-spatiotemporal-learning-for-ndvi-time-series-reconstruction)  
    标签：评分：8.0/10、query:stm
-   evidence：提出全球尺度自监督时空框架用于NDVI时间序列重建
-2. [Qwen-3D: A Generalist 3D Vision-Language Model for Spatial Understanding](/202608/10/2608.02980v1-qwen-3d-a-generalist-3d-vision-language-model-for-spatial-understanding)  
-   标签：评分：8.0/10、query:world-models
-   evidence：提出了用于空间理解的通用3D视觉语言模型
-3. [On the Effectiveness of Adaptation Strategies for VLM-Based Federated Learning in Remote Sensing](/202608/10/2608.04791v1-on-the-effectiveness-of-adaptation-strategies-for-vlm-based-federated-learning-in-remote-sensing)  
+   evidence：NDVI时间序列重建中的自监督时空学习
+2. [On the Effectiveness of Adaptation Strategies for VLM-Based Federated Learning in Remote Sensing](/202608/11/2608.04791v1-on-the-effectiveness-of-adaptation-strategies-for-vlm-based-federated-learning-in-remote-sensing)  
    标签：评分：8.0/10、query:rs-fm
-   evidence：研究了联邦遥感学习中视觉语言基础模型的自适应策略
-4. [SLED: Scalable Location Encoding via Distillation](/202608/10/2608.06612v1-sled-scalable-location-encoding-via-distillation)  
+   evidence：遥感中基于视觉语言模型的联邦学习，并研究适配策略应对非独立同分布数据
+3. [Summarize First, Download Later: Onboard VLMs for Bandwidth-Efficient Earth Observation](/202608/11/2608.06959v1-summarize-first-download-later-onboard-vlms-for-bandwidth-efficient-earth-observation)  
    标签：评分：8.0/10、query:rs-fm
-   evidence：面向地球观测表示的蒸馏式位置编码器
-5. [Subtype Robustness Is Not Just Accuracy: Calibration Under Unseen Subtype Shift](/202608/10/2608.00928v1-subtype-robustness-is-not-just-accuracy-calibration-under-unseen-subtype-shift)  
-   标签：评分：7.0/10、query:cross-domain
-   evidence：未见子类型偏移下的校准（分布外泛化）
-6. [Mitigating Visual Degradation in MLLMs via Spatial-Spectral Visual Anchor Learning](/202608/10/2608.01635v1-mitigating-visual-degradation-in-mllms-via-spatial-spectral-visual-anchor-learning)  
-   标签：评分：7.0/10、query:world-models
-   evidence：利用视觉基础模型改善多模态大语言模型的视觉感知
-7. [CROSS: Cascaded Distillation and Dual-Constraint Grounding for Remote Sensing Referring Segmentation](/202608/10/2608.03147v2-cross-cascaded-distillation-and-dual-constraint-grounding-for-remote-sensing-referring-segmentation)  
+   evidence：视觉语言模型用于地球观测；星上处理；带宽高效下行
+4. [Understand Before Detect: Vision--Language Learning for Omni-Domain Infrared Small Target Detection](/202608/11/2608.07015v1-understand-before-detect-vision--language-learning-for-omni-domain-infrared-small-target-detection)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：通过视觉-语言理解解决红外小目标检测中的域偏移问题
+5. [UniEvo-RS: Omni-Prompt Unified Remote Sensing Segmentation with Representative Exemplar-Driven Prototype Evolution](/202608/11/2608.03911v1-unievo-rs-omni-prompt-unified-remote-sensing-segmentation-with-representative-exemplar-driven-prototype-evolution)  
    标签：评分：7.0/10、query:rs-fm
-   evidence：利用视觉语言模型和SAM基础模型进行遥感指代分割
-8. [SlimVLM: Sensitivity-aware Dynamic Structured Pruning with Adaptive Visual Token Selection for Efficient Vision-Language Models](/202608/10/2608.03580v1-slimvlm-sensitivity-aware-dynamic-structured-pruning-with-adaptive-visual-token-selection-for-efficient-vision-language-models)  
-   标签：评分：7.0/10、query:world-models
-   evidence：视觉语言模型高效压缩与剪枝
-9. [PixVL: Self-Supervised Training of Pixel-Level MLLMs via a Unified Mask--Text Consistency Cycle](/202608/10/2608.01354v1-pixvl-self-supervised-training-of-pixel-level-mllms-via-a-unified-mask--text-consistency-cycle)  
+   evidence：将提示驱动的视觉语言基础模型适配到统一遥感分割
+6. [Design Choices That Matter: A Functional ANOVA Analysis for Remote Sensing Multi-Label Classification](/202608/11/2608.04702v1-design-choices-that-matter-a-functional-anova-analysis-for-remote-sensing-multi-label-classification)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：系统分析遥感多标签分类模型中的微调策略与初始化选择，关于遥感任务中预训练模型的使用。
+7. [DARAD: Dual Adapters and Ranking-Aware Distillation for Continual Remote Sensing Image-Text Retrieval](/202608/11/2608.06059v1-darad-dual-adapters-and-ranking-aware-distillation-for-continual-remote-sensing-image-text-retrieval)  
+   标签：评分：7.0/10、query:rs-fm
+   evidence：面向遥感图文检索的连续学习与双适配器方法
+8. [LoRSA: Toward Generalizable Parameter-Efficient Fine-Tuning for Biomedical Downstream Tasks](/202608/11/2608.07749v1-lorsa-toward-generalizable-parameter-efficient-fine-tuning-for-biomedical-downstream-tasks)  
+   标签：评分：7.0/10、query:cross-domain
+   evidence：面向不可见成像域泛化的参数高效微调方法
+9. [Linear Multi-Timescale Retention as a Memory-Efficient Vision-Language Bridge](/202608/11/2608.01614v1-linear-multi-timescale-retention-as-a-memory-efficient-vision-language-bridge)  
    标签：评分：6.0/10、query:world-models
-   evidence：基于掩码-文本一致性的像素级多模态大模型自监督训练
-10. [SpatialQuery: Benchmarking Geometry-Grounded Multi-Instance Spatial Reasoning in Vision-Language Models](/202608/10/2608.01709v1-spatialquery-benchmarking-geometry-grounded-multi-instance-spatial-reasoning-in-vision-language-models)  
+   evidence：面向视觉-语言模型的高效跨模态桥接
+10. [HiResNets: Native Full-HD Video Recognition with Foveal Residual Streams](/202608/11/2608.02140v2-hiresnets-native-full-hd-video-recognition-with-foveal-residual-streams)  
+   标签：评分：6.0/10、query:stm
+   evidence：高分辨率视频识别架构中的时空建模，与时空模型主题相关
+11. [Adapting Vision Foundation Models with Cascaded Semantics](/202608/11/2608.05393v1-adapting-vision-foundation-models-with-cascaded-semantics)  
+   标签：评分：6.0/10、query:rs-fm
+   evidence：面向预训练ViT的视觉提示调优，注入语义先验，是适应视觉基础模型的通用方法。
+12. [RoRA: Role-Oriented Regional Allocation for Visual Token Pruning in MLLMs](/202608/11/2608.07088v1-rora-role-oriented-regional-allocation-for-visual-token-pruning-in-mllms)  
    标签：评分：6.0/10、query:world-models
-   evidence：视觉语言模型空间推理基准
-11. [Learning Where to Look and How to Judge: Resolution-agnostic Image Quality Assessment with Quality-aware Saliency](/202608/10/2608.01730v1-learning-where-to-look-and-how-to-judge-resolution-agnostic-image-quality-assessment-with-quality-aware-saliency)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：解决跨图像分辨率的泛化问题，是视觉任务中的一种域偏移
-12. [Hi-Token: Hierarchical Coordinate Tokenization for Generative Visual Grounding](/202608/10/2608.03471v1-hi-token-hierarchical-coordinate-tokenization-for-generative-visual-grounding)  
-   标签：评分：6.0/10、query:world-models
-   evidence：提出改进的生成式视觉语言模型坐标分词方法，推进多模态基础模型理解能力
+   evidence：面向多模态大语言模型的视觉Token剪枝方法，与多模态基础模型效率相关
 
 
 <div class="dpr-home-promo-card">

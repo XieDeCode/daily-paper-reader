@@ -1,0 +1,689 @@
+Title: EvBS: Event-guided Blur Synthesis for Domain-adaptive Motion Deblurring
+
+URL Source: https://arxiv.org/pdf/2608.08066v1
+
+Published Time: Tue, 11 Aug 2026 00:45:07 GMT
+
+Number of Pages: 11
+
+Markdown Content:
+# EvBS: Event-guided Blur Synthesis for Domain-adaptive Motion Deblurring 
+
+## Junsik Jung 
+
+junsik.jung@kaist.ac.kr Korea Advanced Institute of Science and Technology Daejeon, Republic of Korea 
+
+## Seokryun Choi 
+
+srchoi99@kaist.ac.kr Korea Advanced Institute of Science and Technology Daejeon, Republic of Korea 
+
+## Yoonki Cho 
+
+yoonki@kaist.ac.kr Korea Advanced Institute of Science and Technology Daejeon, Republic of Korea 
+
+## Woo Jae Kim 
+
+wkim97@kaist.ac.kr Korea Advanced Institute of Science and Technology Daejeon, Republic of Korea 
+
+## Andrew Jeong 
+
+andrew7447@kaist.ac.kr Korea Advanced Institute of Science and Technology Daejeon, Republic of Korea 
+
+## Sung-Eui Yoon ∗
+
+sungeui@kaist.edu Korea Advanced Institute of Science and Technology Daejeon, Republic of Korea 
+
+## Abstract 
+
+Motion deblurring has achieved remarkable progress with deep learning, yet pre-trained deblurring models often suffer from per-formance degradation in real-world scenarios due to the domain shift between training and testing distributions. To remedy this, we propose EvBS, an event-guided blur synthesis framework that generates diverse training pairs for calibrating pre-trained mod-els to the target domain. While existing methods are constrained by the inherent entanglement between motion and visual content, our method leverages the high temporal resolution of event cam-eras to effectively decouple them. This enables us to utilize not only the intrinsic motion that is inherent to the given content but also extrinsic motion transferred from different sources within the target domain, thereby facilitating effective adaptation via fine-tuning. Specifically, EvBS comprises two complementary strategies: Intrinsic-Blur Synthesis, which blurs sharp contents with their own motion patterns, and Extrinsic-Blur Synthesis, which transfers mo-tion from blurry patches to distinct sharp content. This approach generates a diverse set of training pairs that break the inherent constraints of naturally coupled motion and content, resulting in enhanced domain-adaptive deblurring performance. Extensive ex-periments on multiple benchmarks demonstrate that EvBS effec-tively enhances the robustness of existing deblurring models on unseen testing datasets. 
+
+## CCS Concepts 
+
+• Computing methodologies → Computational photography ;
+
+Transfer learning .
+
+## Keywords 
+
+Event camera, blur synthesis, domain adaptation, motion deblurring    
+
+> ∗Corresponding author.
+> This work is licensed under a Creative Commons Attribution 4.0 International License.
+> MM ’26, Rio de Janeiro, Brazil
+> © 2026 Copyright held by the owner/author(s). ACM ISBN 979-8-4007-2213-4/2026/11 https://doi.org/10.1145/3767308.3835301 Motion Source Extrinsic-blur Conditions
+> Content Source Intrinsic-blur Conditions
+> Blurring
+> Motion Field
+> Events
+> Events
+> Extrinsic
+> Motion
+> ⋰Intrinsic
+> Motion
+> Target Domain
+> Blurring
+
+Figure 1: Illustration of EvBS. In the target domain repre-sentation, shapes denote visual content and colors represent distinct motion patterns. By leveraging events to explicitly decouple motion from content, EvBS enables both intrinsic blur synthesis (applying a content source’s inherent motion) and extrinsic blur synthesis (transferring motion from a sep-arate motion source). This strategy generates a diverse set of synthesized training pairs within the target domain, facili-tating enhanced model calibration. 
+
+ACM Reference Format: 
+
+Junsik Jung, Seokryun Choi, Yoonki Cho, Woo Jae Kim, Andrew Jeong, and Sung-Eui Yoon. 2026. EvBS: Event-guided Blur Synthesis for Domain-adaptive Motion Deblurring. In Proceedings of the 34th ACM International Conference on Multimedia (MM ’26), November 10–14, 2026, Rio de Janeiro, Brazil. ACM, New York, NY, USA, 11 pages. https://doi.org/10.1145/3767308. 3835301 
+
+## 1 Introduction 
+
+Motion deblurring, the task of restoring a sharp image from a blurry input caused by camera or object movement, is a fundamen-tal challenge in computational photography. While learning-based methods have driven significant progress [4, 30, 44], their reliance on standard RGB frames inherently limits their performance in highly dynamic scenes. In conventional cameras, motion and vi-sual content are inextricably entangled within a single exposure, causing a significant loss of motion information that makes it diffi-cult to handle severe blur. To overcome this limitation, recent re-search has increasingly adopted event cameras [20]. Thanks to their microsecond-level temporal resolution and high dynamic range, event streams provide highly reliable motion cues, leading to a new paradigm of event-guided deblurring architectures [34, 40, 43]. arXiv:2608.08066v1 [cs.CV] 8 Aug 2026 MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Jung et al. 
+
+Despite these advances, a critical challenge persists: the domain shift. Pre-trained deblurring models often exhibit significant per-formance degradation when applied to real-world test scenes that differ from their training distribution [32]. This discrepancy, typi-cally arising from variations in camera environments and motion blur distributions, poses a significant risk to applications requiring reliable perception, such as autonomous driving and robotics [24]. To address this, several studies [3, 26] have introduced test-time adaptation approaches that derive supervision signals by recon-structing the input blurry image during inference. However, such indirect supervision often provides insufficient guidance for ro-bust adaptation, restricting the model to limited update steps and yielding only marginal performance gains. Moving a step further, recent domain-adaptive schemes [8, 21] synthesize training pairs for fine-tuning the pre-trained models by identifying pseudo-sharp patches in the test data and blurring them with their estimated motions. While promising, these meth-ods face the following limitations: (1) They are constrained by the inherent entanglement between motion and visual content in RGB frames — meaning motion trajectories are baked into cap-tured consecutive frames and are highly challenging to disentangle. Consequently, these methods can only re-apply a motion pattern back to its original pseudo-sharp counterpart. This inability to mix-and-match diverse motions with different contents restricts the diversity of the synthesized data, hindering robust adaptation to various real-world blurs. (2) They are designed exclusively for frame-based architectures, making them incompatible with recent event-based deblurring models [34, 36, 40, 43]. In light of the in-creasing adoption of events for robust multimedia perception [5], establishing adaptation frameworks for event-based architectures is highly necessary. To overcome these challenges, we propose EvBS , an Ev ent-guided Blur Synthesis framework that effectively generates diverse blurred patches within the target domain (See Fig. 1). By decoupling motion from content via the high temporal resolution of event cam-eras, our method not only performs intrinsic blur synthesis, which uses the native motion pattern of a content source, and extrinsic blur 
+
+synthesis, which transfers motion patterns from other patches to the given content. Specifically, EvBS comprises three main compo-nents: (1) A Dual Source Extractor that scans the target domain to locate sharp content sources and motion-consistent blur sources. (2) Operating directly on these detected sources, a Blur Conditioning Module generates blur conditions via two generators: Intrinsic-blur Condition Generator that extracts a sharp content source’s inherent motion, and Extrinsic-blur Condition Generator that applies motion pattern from the blur sources onto another sharp content. (3) These conditions guide a diffusion-based model [41] to synthesize diverse training pairs for fine-tuning. By utilizing diverse motion patterns inherent in the target domain, we enable a much broader spec-trum of training data synthesis. Moreover, our method is broadly applicable to both event-based and frame-based deblurring models. Our main contributions are summarized as follows: 
+
+• We propose EvBS, a novel event-guided blur synthesis frame-work for domain-adaptive motion deblurring. By leveraging events to explicitly decouple motion from visual content, EvBS generates a diverse set of training pairs, breaking the inherent constraints of naturally coupled motion and con-tent. 
+
+• We introduce a framework featuring a Dual Source Extractor and a Blur Conditioning Module to enable two complemen-tary strategies: Intrinsic-Blur Synthesis for applying inherent motion, and Extrinsic-Blur Synthesis for transferring motion across distinct sources. 
+
+• Extensive experiments demonstrate that EvBS effectively en-hances the robustness of both pre-trained image- and event-based deblurring models on unseen real-world datasets. 
+
+## 2 Related Work 2.1 Motion Deblurring 
+
+Early foundational works on motion deblurring have predominantly focused on CNN-based architectures [44]. These methods aim to learn a direct mapping from a blurry input to its corresponding sharp image. To enhance performance, the field has seen a vari-ety of innovations, including the integration of attention mech-anisms [33, 37, 38], coarse-to-fine strategies [4, 6], and diffusion-based approaches [2, 30]. These advancements have significantly improved the accuracy and robustness of deblurring models on established benchmarks. However, image-based approaches inher-ently face limitations when dealing with severe motion blur, as they struggle to leverage the rich temporal information embedded within the blur itself. To overcome the limitations of image-based methods, recent research has shifted towards using novel sensors, most notably the event camera [20], whose high temporal resolution is particu-larly advantageous for motion deblurring. These approaches are generally built upon event-based image formation models [27] and integrate them with deep learning techniques to achieve remarkable efficiency and accuracy. Seminal works in this area have introduced sophisticated event representation and attention mechanisms to effectively fuse image and event features [34, 36, 43]. Furthermore, the field has progressed towards addressing more realistic and challenging constraints, such as deblurring under blind exposure times [14, 40]. Despite these advancements in both image-based and event-based methods, a common challenge persists across the field: many of these methods exhibit a significant performance drop when applied to unseen domains, particularly on real-world blurry images that differ from their training distributions. This domain gap issue motivates the need for domain adaptation techniques in motion deblurring. 
+
+## 2.2 Blur-driven Domain Adaptation 
+
+While numerous domain adaptation works have been studied for other vision tasks [9, 11, 15, 16, 18, 19, 23, 46], their application to motion deblurring has been relatively underexplored. Among exist-ing domain-adaptive deblurring methods, generating self-supervision signals from the test data has emerged as a dominant strategy. These methods generally fall into two categories: reconstruction-based and synthesis-based approaches. Reconstruction-based approaches train models to reproduce the original blur during inference. Specifically, Chi et al. [3] and Nah et al. [26] proposed test-time adaptation schemes that derive supervi-sion signals by reconstructing the input blurry images. However, EvBS: Event-guided Blur Synthesis for Domain-adaptive Motion Deblurring MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil DSE  Blurring Model 
+
+> Extrinsic-blur Conditions
+> Intrinsic-blur Conditions
+> ⋰
+> Events
+> Test Frames
+> ⋰
+> InCG
+> ExCG
+> Synthesized Blurry Patches
+
+BCM          
+
+> Deblurring Model
+> Deblurred Patch
+> Content Source
+> Motion Source
+> Supervision
+> Fine-tuning
+> Events
+> Events
+> [𝑡𝑡 ][𝑡𝑡 − 2, 𝑡𝑡 − 1, 𝑡𝑡 ,𝑡𝑡 + 1, 𝑡𝑡 + 2]
+
+Figure 2: Overview of the proposed Event-guided Blur Synthesis (EvBS) framework. Given test frames and their corresponding event streams from the target domain, the Dual Source Extractor (DSE) extracts pseudo-sharp patches as content sources and blurred patches as motion sources. The Blur Conditioning Module (BCM) then generates diverse blur conditions via two pathways: the Intrinsic-blur Condition Generator (InCG) utilizes the inherent motion of the content sources, while the Extrinsic-blur Condition Generator (ExCG) transfers motions from the motion sources to different content sources. These conditions guide a blurring model to synthesize a diverse set of blurred patches. Finally, these synthesized patches are used to fine-tune a pre-trained deblurring model, with the original content sources serving as direct supervision (red dashed line). 
+
+this indirect supervision often provides insufficient guidance, re-stricting the model to a few update steps and yielding marginal per-formance gains. Synthesis-based approaches provide more direct su-pervision by generating pseudo-training pairs. Recent works [8, 21] identify pseudo-sharp patches within the target domain and syn-thesize training pairs by blurring them with their inherent motion patterns. While effective for fine-tuning, these methods face the following limitations. First, they are constrained by the inherent entanglement of motion and content. Because motion is naturally embedded within consecutive frames, these methods can only re-apply motion to its original pseudo-sharp counterpart, limiting the combinatorial diversity required for adapting to various blurs in the target domain. Second, relying on frame-based blurring makes them inapplicable to the well-developed event-based deblurring models [34, 36, 40, 43]. To overcome these bottlenecks, we propose leveraging the high temporal resolution of events to explicitly decouple motion from visual content. This decoupling enables both intrinsic motion syn-thesis (using inherent motion) and extrinsic motion transfer across different sources, generating a diverse set of training pairs beyond naturally coupled combinations, while natively supporting event-based deblurring models. 
+
+## 3 Method 
+
+Due to the inherent entanglement between motion and content, existing blur-synthesis methods are limited to generating training pairs using only the motion patterns inherent to the sharp patches themselves. To overcome this, we propose leveraging events to explicitly decouple motion from visual content. This strategy allows us to synthesize diverse training pairs by utilizing both intrinsic motion (a content’s own pattern) and extrinsic motion (patterns transferred from different sources). As illustrated in Fig. 2, our framework operates through two main components. First, the Dual Source Extractor (DSE) identifies and extracts pseudo-sharp content sources and distinct motion sources from the test data. Next, the Blur Conditioning Module (BCM) 
+
+constructs diverse synthesis conditions through two pathways: the 
+
+Intrinsic-blur Condition Generator (InCG) applies a content source’s own motion, whereas the Extrinsic-blur Condition Generator (ExCG) Frames         
+
+> Blur Magnitude Estimator
+> Events Count Map 𝒞𝒞 𝐸𝐸
+> Blur Magnitude Map ℳ
+> Compute
+> Blur Score Map ℬ
+> ℬ=𝛼𝛼 � 𝒞𝒞 𝐸𝐸 +𝛽𝛽 � ℳ
+> Sliding Window-based Patch Detection
+> Non-Maximum Suppression
+> Content Source
+> Motion Source
+> Events of Motion Source
+> MS Selector
+> Threshold
+> Events
+
+Figure 3: Illustration of the Dual Source Extractor. The blur score map B is computed from the event count map C𝐸 and the blur magnitude map M. Based on this map, sliding-window detection identifies content sources (low scores) and motion source candidates (high scores). Subsequent non-maximum suppression (NMS) and thresholding steps are utilized to eliminate overlapping patches and reduce redun-dancy. Motion sources are further filtered by the motion source selector based on motion consistency. 
+
+transfers motion patterns from the motion sources to different content sources. These conditioning signals then guide a diffusion-based reblurring model [41] to synthesize the diverse training pairs required to fine-tune the pre-trained deblurring network on the target domain. The following subsections detail each framework component. 
+
+## 3.1 Dual Source Extractor (DSE) 
+
+To synthesize diverse training pairs for target domain adaptation, we first extract suitable content sources (pseudo-sharp patches) and motion sources (patches with clear motion patterns) from the given test frames. As shown in Fig. 3, our DSE achieves this through a blur-aware patch detection approach. 
+
+Blur score estimation. We leverage the observation that regions with high event activity typically correspond to areas with signifi-cant motion. From the input event stream, we generate an event count map C𝐸 that accumulates the number of events at each pixel location. To complement this, we employ a Blur Magnitude Es-timator (BME) [8], which predicts the spatial distribution of blur MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Jung et al. Events Mask ℳ Flow Map ℱ Flow-enhanced Deviation Accumulation       
+
+> CS Events 𝚬𝚬 𝐶𝐶
+> {𝑡𝑡 − 2, ⋯,𝑡𝑡 + 2}
+> Content Source
+> (CS)
+> {𝑡𝑡 }
+> Event-based Flow Estimator
+> Intrinsic-blur Conditions  (ℱ𝐼𝐼 , ℰ𝐼𝐼 )
+> Bi-Flows of  𝚬𝚬 𝐶𝐶
+
+Figure 4: Intrinsic-blur Condition Generator. Given events 
+
+E𝐶 from the temporal window [𝑡 − 2, 𝑡 + 2] around a content source at frame 𝑡 , we first estimate bidirectional optical flows. These flows are aggregated into a flow map and then multi-plied by an event mask M to produce the final intrinsic flow map F𝐼 . Concurrently, E𝐶 is processed via Flow-Enhanced De-viation Accumulation (FEDA) to generate the intrinsic event representation E𝐼 . Together, the pair (F 𝐼 , E𝐼 ) serves as the intrinsic-blur conditions. 
+
+intensity and produces a blur magnitude map M. Unlike the original BME that uses only RGB images, we enhance its estimation capabil-ity by retraining it with both the input image and the corresponding 
+
+C𝐸 . This multi-modal integration allows the model to better capture motion-intensive regions. We then compute a comprehensive Blur Score Map B by combining these two complementary cues: 
+
+B = 𝛼 · C 𝐸 + 𝛽 · M , (1) where 𝛼 and 𝛽 are weighting parameters. Higher values in B indi-cate blurrier regions (motion source candidates), while lower values suggest sharper regions (content source candidates). 
+
+Patch detection and refinement. Using the blur score map B, we extract content and motion source candidates from regions where 
+
+B < 𝜏 and B > 1 − 𝜏 , respectively. The threshold 𝜏 is adaptively adjusted [8] so that each source type constitutes approximately 𝑟 %of the total frames (ablated in Sec. 4.3). Following sliding-window detection and non-maximum suppression to remove overlapping patches, we further refine the motion source candidates. To ensure reliable motion transfer, we introduce a Motion Source (MS) Selector that evaluates the directional coherence of candidate patches. It explicitly filters out patches with chaotic or conflicting trajectories, retaining only those with highly coherent motions as the final sources. 
+
+## 3.2 Blur Conditioning Module (BCM) 
+
+Once content and motion sources are extracted, the Blur Condi-tioning Module (BCM) generates multi-modal motion conditions to guide the subsequent blur synthesis. For the synthesis process, we build upon ID-Blau [41]. Let D𝜓 denote this conditional diffusion model parameterized by 𝜓 , which was originally designed to gen-erate a blurred image 𝐵 given a sharp content image 𝐶 and a flow map F = [ ˜𝑢 ; ˜ 𝑣 ; 𝑚 ] ∈ R3×𝐻 ×𝑊 (encoding unit orientation ( ˜𝑢, ˜𝑣 ) and magnitude 𝑚 ): 
+
+𝐵 = D𝜓 (F , 𝐶 ). (2) CS Events  𝚬𝚬 𝐶𝐶               
+
+> {𝑡𝑡 − 1, 𝑡𝑡 ,𝑡𝑡 + 1 }
+> Content Source
+> (CS)
+> {𝑡𝑡 }
+> Motion Source
+> (MS)
+> MS Events 𝚬𝚬 𝑀𝑀
+> Flow-enhanced Deviation Accumulation
+> Angular Difference
+> (Accept if inside  [𝜏𝜏 𝑙𝑙𝑙𝑙𝑙𝑙 , 𝜏𝜏 ℎ𝑖𝑖 𝐴𝐴ℎ  ])
+> Extrinsic-blur Conditions  (ℱ𝐸𝐸 , ℰ𝐸𝐸 )
+> Events Mask �ℳ
+> Warped Events �𝚬𝚬 𝐶𝐶
+> Flow Map �ℱ𝐶𝐶
+> Flow Map ℱ𝐶𝐶
+> Flow Map ℱ𝑀𝑀
+> Event-based Flow Estimator
+> {𝑡𝑡 − 1, 𝑡𝑡 ,𝑡𝑡 + 1 }
+> Avg
+> Orientation  𝜃𝜃𝑀𝑀
+> Avg
+> Orientation  𝜃𝜃𝐶𝐶
+> Motion Transfer via
+> Event Warping
+> (Algorithm 1)
+> 𝑠𝑠𝑝𝑝 𝑀𝑀 𝑝𝑝𝑝𝑝
+> Bi-Flows of  𝚬𝚬 𝐶𝐶
+> Bi-Flows of  �𝚬𝚬 𝐶𝐶
+> Bi-Flows of  𝚬𝚬 𝑀𝑀
+> Event-based Flow Estimator
+> Event-based Flow Estimator
+
+Figure 5: Extrinsic-blur Condition Generator. Flow maps 
+
+F𝐶 and F𝑀 are first extracted from content events E𝐶 and motion events E𝑀 . If their angular difference falls within 
+
+[𝜏 𝑙𝑜𝑤 , 𝜏 ℎ𝑖𝑔ℎ ], the motion pattern from E𝑀 is transferred to E𝐶 
+
+via Algorithm 1 to produce the warped events ˜E𝐶 . Finally, 
+
+˜E𝐶 is processed via FEDA to yield the extrinsic flow map F𝐸 
+
+and event representation E𝐸 . The resulting condition (F 𝐸 , E𝐸 )
+
+effectively integrates the content’s spatial structure with ex-ternal motion patterns. 
+
+While the flow map F effectively captures macro-level motion trajectories, it lacks the temporal granularity required to model local micro-motion dynamics. To overcome this, our BCM lever-ages event data as an auxiliary conditioning signal. Specifically, we introduce Flow-Enhanced Deviation Accumulation (FEDA) to supplement the macro motion of F with the fine-grained, high-frequency dynamics embedded in events The deviation accumulation representation [36] effectively cap-tures pure motion contours by aggregating the temporal variations of event streams. Building upon this, FEDA advances the represen-tation by weighting the events with the magnitude derived from the corresponding motion vector. This approach preserves the over-all motion trajectory while emphasizing regions with high motion intensity (detailed in the Supplementary Material). Given this event-guided FEDA representation E ∈ R𝐻 ×𝑊 , we train a modified D𝜓 
+
+from scratch to synthesize the final blurred image 𝐵 :
+
+𝐵 = D𝜓 (F , E, 𝐶 ). (3) This refined, event-guided conditioning improves the domain-specific blur synthesis, ultimately boosting the efficacy of the fine-tuning process (see Sec. 4.3). To formulate the synthesis conditions ( F and E), the BCM com-prises two complementary generators: the Intrinsic-blur Condi-tion Generator (InCG) and the Extrinsic-blur Condition Generator (ExCG). Both generators operate on the shared principle of explicitly decoupling motion from visual content by extracting motion cues EvBS: Event-guided Blur Synthesis for Domain-adaptive Motion Deblurring MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+exclusively from event streams. Building upon this decoupled cues, InCG constructs conditioning signals using the content source’s own motion patterns. In contrast, ExCG formulates conditions by transferring the motion patterns of an external motion source to a distinct content source. 
+
+Intrinsic-blur Condition Generator (InCG). InCG generates conditions for blurring each content source using its own motion pattern, as illustrated in Fig. 4. Given a content source from the 𝑡 -th frame, we utilize the corresponding events E𝐶 from the temporal window [𝑡 − 2, 𝑡 + 2] to capture the local motion dynamics. These events are fed into an event-based optical flow estimator [7] to extract forward flows {F𝑡 −2→𝑡 −1, . . . , F𝑡 +1→𝑡 +2 } and backward flows 
+
+{F𝑡 −1→𝑡 −2, . . . , F𝑡 +2→𝑡 +1 }.We then compute a flow map by aggregating these bidirectional flows [41]: 
+
+F =
+
+> 𝑡 +1
+
+∑︁  
+
+> 𝑛 =𝑡 −2
+
+F𝑛 →𝑛 +1 − F𝑛 +1→𝑛 
+
+2 ,
+
+where F = [𝑢 ; 𝑣 ] ∈ R2×𝐻 ×𝑊 represents the horizontal and vertical motion components. For conditioning, we reformulate this into a 3-channel tensor F = [ ˜𝑢 ; ˜ 𝑣 ; ˜ 𝑚 ] ∈ R3×𝐻 ×𝑊 , where ˜ 𝑢 and ˜ 𝑣 encode the normalized motion orientation, and ˜ 𝑚 encodes the normalized magnitude: ˜𝑢 = 𝑢 
+
+√𝑢 2 + 𝑣 2 , ˜𝑣 = 𝑣 
+
+√𝑢 2 + 𝑣 2 , ˜𝑚 =
+
+√𝑢 2 + 𝑣 2
+
+𝑀 , (4) where 𝑀 denotes the maximum magnitude within the current map. To focus exclusively on motion-active regions, we create a binary mask M ∈ { 0, 1}𝐻 ×𝑊 , where M ( 𝑥, 𝑦 ) = 1 if at least one event occurred at (𝑥, 𝑦 ), and 0 otherwise. We apply this mask to obtain the final intrinsic flow map F𝐼 = F ⊙M , where ⊙ denotes element-wise multiplication. Concurrently, we process E𝐶 via the FEDA algorithm to generate the intrinsic event representation E𝐼 ∈ R𝐻 ×𝑊 .Consequently, the pair (F 𝐼 , E𝐼 ) serves as the intrinsic-blur condi-tion, effectively guiding the blurring model to synthesize blur that is governed by the content source’s inherent motion. 
+
+Extrinsic-blur Condition Generator (ExCG). As illustrated in Fig. 5, the ExCG formulates conditioning signals by transferring extrinsic motion patterns from distinct motion sources to a target content source. Given a content source from the 𝑡 -th frame, we extract corresponding events from the narrower temporal window 
+
+[𝑡 − 1, 𝑡 + 1] to minimize misalignment during motion transfer. Using an event-based flow estimator [7], we compute the bidirec-tional flows and aggregate them into a content flow map F𝐶 =
+
+Í𝑡 𝑛 =𝑡 −1 (F𝑛 →𝑛 +1 − F𝑛 +1→𝑛 )/ 2. Concurrently, for a given motion source spanning the temporal interval [𝑡 𝑠 , 𝑡 𝑒 ], we divide its con-tinuous event stream into three consecutive temporal segments. We then extract the bidirectional flows between these sequential segments and aggregate them to construct a motion flow map 
+
+F𝑀 = Í2 
+
+> 𝑖 =1
+
+(F𝑖 →𝑖 +1 −F𝑖 +1→𝑖 )/ 2, where 𝑖 denotes the segment indices. Here, both flow maps F𝐶 , F𝑀 ∈ R2×𝐻 ×𝑊 encode the pixel-wise mo-tion vectors [𝑢 ; 𝑣 ].To identify motion sources that offer sufficient diversity while remaining transferable, we evaluate their orientation similarity with the target content source. First, we compute the average orientation vectors 𝜽 𝐶 , 𝜽 𝑀 ∈ R2 from F𝐶 and F𝑀 . For a given flow map, the 
+
+Algorithm 1 Motion Transfer via Event Warping  
+
+> 1:
+
+Input: 
+
+Content source events E𝐶 ,Bi-Flows of E𝐶 : {F𝑡 −1→𝑡 , F𝑡 →𝑡 +1 }, {F𝑡 →𝑡 −1, F𝑡 +1→𝑡 }.Bi-Flows of E𝑀 : {F𝑖 −1→𝑖 , F𝑖 →𝑖 +1 }, {F𝑖 →𝑖 −1, F𝑖 +1→𝑖 }.Similarity check result 𝑠 pass ∈ { true , false } 
+
+> 2:
+
+Output: Warped events ˜ E𝐶  
+
+> 3:
+
+if 𝑠 pass = false then  
+
+> 4:
+
+return ∅ 
+
+> 5:
+
+end if  
+
+> 6:
+
+Get median time 𝑡 med from E𝐶 at 𝑡  
+
+> 7:
+
+for each direction 𝑘 ∈ { 1, −1} do  
+
+> 8:
+
+// Get directional flows  
+
+> 9:
+
+F 𝑘 𝐶 ← ( F𝑡 →𝑡 +𝑘 − F𝑡 +𝑘 →𝑡 )/ 2 
+
+> 10:
+
+F 𝑘 𝑀 ← ( F𝑖 →𝑖 +𝑘 − F𝑖 +𝑘 →𝑖 )/ 2 
+
+> 11:
+
+// Extract local & global motion (Eq. 6)  
+
+> 12:
+
+F 𝑘 𝐶 → V𝑘 𝐶 , F 𝑘 𝑀 → v𝑘 𝑀  
+
+> 13:
+
+// Compute offset field  
+
+> 14:
+
+T𝑘 ← v𝑘 𝑀 − V𝑘 𝐶  
+
+> 15:
+
+// Split events E𝐶  
+
+> 16:
+
+E𝑘 ← E𝐶 in [𝑡 med , 𝑡 + 1] if 𝑘 = 1, else [𝑡 − 1, 𝑡 med ] 
+
+> 17:
+
+// Set bounds  
+
+> 18:
+
+[𝑡 min , 𝑡 max ] ← [ 𝑡 med , 𝑡 + 1] if 𝑘 = 1, else [𝑡 − 1, 𝑡 med ] 
+
+> 19:
+
+for each event (𝑥, 𝑦, 𝜏 ) ∈ E𝑘 do  
+
+> 20:
+
+𝑤 (𝜏 ) ← 1−𝑘  
+
+> 2
+
++ 𝑘 · 𝜏 −𝑡 min   
+
+> 𝑡 max −𝑡 min
+> 21:
+
+(𝑥 ′, 𝑦 ′) ← ( 𝑥, 𝑦 ) + 𝑤 (𝜏 ) · T𝑘 (𝑥, 𝑦 ) 
+
+> 22:
+
+Add (𝑥 ′, 𝑦 ′, 𝜏 ) to ˜ E𝐶  
+
+> 23:
+
+end for  
+
+> 24:
+
+end for  
+
+> 25:
+
+return Warped events ˜ E𝐶 
+
+average components are calculated as: ¯𝑢 = 1
+
+𝑁 ∑︁ 𝑢, ¯𝑣 = 1
+
+𝑁 ∑︁ 𝑣, 𝜽 = [ ¯𝑢 ; ¯ 𝑣 ]∥ [ ¯𝑢 ; ¯ 𝑣 ] ∥ , (5) where the summation is computed over all valid pixels in the flow map, and 𝑁 denotes the total number of such pixels. We then compute the angular difference 𝜙 = arccos (𝜽 𝐶 · 𝜽 𝑀 ) between the content orientation and motion orientation. We proceed with the motion transfer only if this angle falls within a specific range, 𝜏 𝑙𝑜𝑤 <
+
+𝜙 < 𝜏 ℎ𝑖𝑔ℎ (ablated in Sec. 4.3). This filtering excludes redundant motion sources that may limit diversity and highly disparate ones that cause unrealistic synthesized blur. Once a motion source passes the similarity check, we transfer its motion pattern to the content source via event warping, as detailed in Algorithm 1. The core idea is to compute an offset field T𝑘 (𝑥, 𝑦 )
+
+that represents the difference between the target motion source’s global motion and the original content source’s local motion. Specifically, for each temporal direction ( 𝑘 ∈ { 1, −1}), we first compute the bidirectionally aggregated flow maps F 𝑘 𝐶 = [𝑢 𝑐 ; 𝑣 𝑐 ]
+
+and F 𝑘 𝑀 = [𝑢 𝑚 ; 𝑣 𝑚 ] ∈ R2×𝐻 ×𝑊 . For the content source, we directly use the flow map F 𝑘 𝐶 as the local motion map V𝑘 𝐶 . To extract the global motion vector v𝑘 𝑀 from F 𝑘 𝑀 , we spatially average its com-ponents across 𝑁 valid pixels: ¯ 𝑢 𝑚 = 1
+
+> 𝑁
+
+Í 𝑢 𝑚 , ¯ 𝑣 𝑚 = 1
+
+> 𝑁
+
+Í 𝑣 𝑚 , and ¯𝑚 = 1
+
+> 𝑁
+
+Í 𝑚 , where 𝑚 =√︁ 𝑢 𝑚 2 + 𝑣 𝑚 2. Then, the local motion map MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Jung et al. 
+
+Table 1: Quantitative results across deblurring benchmarks. We compare baseline performance with results obtained after adaptation via our method (w/ Ours). * indicates event-based models.                                                                                                                                                                          
+
+> Models EVRB REVD HighREV-3 HighREV-7 HighREV-11 PSNR ↑SSIM ↑LPIPS ↓PSNR ↑SSIM ↑LPIPS ↓PSNR ↑SSIM ↑LPIPS ↓PSNR ↑SSIM ↑LPIPS ↓PSNR ↑SSIM ↑LPIPS ↓
+> MAENet ∗25.46 0.791 0.428 25.41 0.813 0.421 36.35 0.939 0.303 31.79 0.859 0.366 27.24 0.771 0.447 w/ Ours 27.93 0.851 0.386 28.64 0.858 0.372 39.66 0.965 0.245 33.91 0.929 0.309 29.92 0.832 0.391 EFNet ∗25.77 0.797 0.419 26.39 0.827 0.394 37.34 0.942 0.293 32.35 0.873 0.359 27.77 0.791 0.432 w/ Ours 28.17 0.859 0.375 28.96 0.865 0.363 40.23 0.977 0.212 34.51 0.942 0.305 30.01 0.844 0.379 EBFI ∗25.31 0.785 0.435 26.14 0.829 0.402 38.22 0.943 0.299 31.93 0.860 0.377 27.33 0.778 0.442 w/ Ours 27.51 0.845 0.389 28.46 0.862 0.357 40.67 0.970 0.242 34.65 0.941 0.309 29.85 0.835 0.397 NAFNet 24.13 0.746 0.473 24.74 0.794 0.452 36.16 0.917 0.322 29.76 0.828 0.415 25.57 0.738 0.486 w/ Ours 26.24 0.817 0.419 26.55 0.838 0.399 38.53 0.961 0.268 31.95 0.861 0.358 27.63 0.784 0.426 MIMO-UNet 23.97 0.732 0.487 24.34 0.789 0.459 36.69 0.922 0.326 29.79 0.835 0.406 25.01 0.727 0.491 w/ Ours 26.01 0.807 0.423 26.18 0.825 0.401 38.11 0.959 0.277 32.03 0.871 0.349 27.23 0.772 0.431
+
+Table 2: Comparison with recent domain-adaptive deblurring methods. Best results in bold.                                                                                                                   
+
+> Models EVRB REVD HighREV-3 HighREV-7 HighREV-11 PSNR SSIM PSNR SSIM PSNR SSIM PSNR SSIM PSNR SSIM NAFNet 24.13 .746 24.74 .794 36.16 .917 29.76 .828 25.57 .738 + MetaDeblur 24.22 .753 24.81 .797 36.54 .929 29.97 .832 25.60 .739 + Blur2Blur 24.72 .770 25.59 .809 37.28 .937 30.38 .838 26.25 .750 + DADeblur 25.23 .781 25.87 .819 37.71 .946 31.28 .849 27.19 .767 + Ours 26.24 .817 26.55 .838 38.53 .961 31.95 .861 27.63 .784
+> MIMO-UNet 23.97 .732 24.34 .789 36.69 .922 29.79 .835 25.01 .727 + MetaDeblur 24.05 .736 24.43 .795 36.87 .935 29.92 .842 25.02 .727 + Blur2Blur 24.49 .752 25.07 .802 37.52 .941 30.24 .846 25.71 .739 + DADeblur 25.18 .774 25.63 .811 37.77 .943 31.09 .856 26.87 .755 + Ours 26.01 .807 26.18 .825 38.11 .959 32.03 .871 27.23 .772
+
+V𝑘 𝐶 ∈ R2×𝐻 ×𝑊 and the global motion vector v𝑘 𝑀 ∈ R2 are formally defined as: 
+
+V𝑘 𝐶 = [𝑢 𝑐 ; 𝑣 𝑐 ], v𝑘 𝑀 = [ ¯𝑢 𝑚 ; ¯ 𝑣 𝑚 ]∥ [ ¯𝑢 𝑚 ; ¯ 𝑣 𝑚 ] ∥ · ¯𝑚. (6) We then compute the offset field T𝑘 ∈ R2×𝐻 ×𝑊 by subtracting the local motion map from the spatially broadcasted global motion vector: 
+
+T𝑘 = v𝑘 𝑀 − V𝑘 𝐶 . (7) Finally, each event in E𝐶 at timestamp 𝜏 is warped using T𝑘 , scaled by a temporal weight 𝑤 (𝜏 ) proportional to its distance from the 
+
+E𝐶 ’s median time 𝑡 med . This operation effectively neutralizes the original inherent motion pattern in E𝐶 while injecting the target extrinsic pattern, resulting in the warped events ˜ E𝐶 .Using the warped events ˜ E𝐶 , we extract new bidirectional flows ˜F and a corresponding event mask ˜M to compute the extrinsic flow map F𝐸 =   Í 𝑡 𝑛 =𝑡 −1 ( ˜F𝑛 →𝑛 +1 − ˜F𝑛 +1→𝑛 )/ 2 ⊙ ˜M. Concurrently, ˜ E𝐶 is processed via FEDA to yield the extrinsic event representation E𝐸 .Ultimately, the pair (F 𝐸 , E𝐸 ) serves as the extrinsic-blur condition, guiding the model to synthesize blur with the transferred motion pattern. 
+
+## 3.3 Blur Synthesis 
+
+The generated intrinsic and extrinsic conditions are fed into the modified ID-Blau D𝜓 to synthesize the final blurred images 𝐵 𝐼 𝑡 and 
+
+𝐵 𝐸 𝑡 for a given content source 𝐶 𝑡 :
+
+𝐵 𝐼 𝑡 = D𝜓 (F 𝐼 , E𝐼 , 𝐶 𝑡 ), 𝐵 𝐸 𝑡 = D𝜓 (F 𝐸 , E𝐸 , 𝐶 𝑡 ). (8) This process yields diverse blur-sharp training pairs tailored for target domain adaptation. Specifically, when fine-tuning an event-based deblurring model, it takes the synthesized blurred patch (either 𝐵 𝐼 𝑡 or 𝐵 𝐸 𝑡 ) alongside its corresponding events (either E𝐶 or ˜E𝐶 ) as inputs to restore the original pseudo-sharp content 𝐶 𝑡 .
+
+Extrinsic pair selection. When multiple motion sources satisfy the orientation criterion, we prioritize the top-𝑛 pairs that best preserve motion consistency. To quantify this, we compute a motion consistency score MCS = ( ˜𝜽 𝐶 · 𝜽 𝑀 + 1)/ 2 between the average orientation vectors ˜𝜽 𝐶 , 𝜽 𝑀 ∈ R2 derived from ˜F𝐶 and F𝑀 via Eq. 5. We then select the top-𝑛 motion sources with the highest MCS, where 𝑛 is determined through ablation studies (Sec. 4.3). 
+
+## 4 Experiments 4.1 Experimental Setups 
+
+Datasets. We retrain the Blur Magnitude Estimator (BME) [8] and ID-Blau [41] on the GoPro [25] training set with synthetic events [29] using hot-pixel noise and a Gaussian-distributed con-trast threshold. For evaluation, we employ benchmarks covering both real and synthesized event-based deblurring datasets. Real-world performance is assessed on EVRB [12] and REVD [13], which provide real motion blur and events from hybrid cameras. To over-come the limited availability of real-world event-based deblurring datasets, we utilize HighREV [35]. Using the realistic blur syn-thesis pipeline in [31], we generate three variants — HighREV-3, HighREV-7, and HighREV-11 — by aggregating 3, 7, and 11 consec-utive frames, respectively, to represent a comprehensive spectrum of blur intensities. 
+
+Implementation Details. We employ E-RAFT [7] for event-based flow estimation. For BME [8] and ID-Blau [41], we follow their original training settings while modifying their input spaces: BME is adapted to accept both RGB images and event count maps C𝐸 , and ID-Blau is updated to take the flow map F , FEDA representation 
+
+E, and content image 𝐶 as conditions. We evaluate our framework by fine-tuning five recent GoPro-pretrained deblurring models, including event-based (EFNet [34], MAENet [36], EBFI [40]) and frame-only (NAFNet [1], MIMO-UNet [4]) architectures. All models are fine-tuned for 10 epochs on our synthesized pairs using the Charbonnier loss [10] and Adam optimizer [17], with the learning rate cosine-annealed [22] from 10 −5 to 10 −7. We report PSNR, SSIM [39], and LPIPS [45]. Key hy-perparameters (ablated in Sec. 4.3) include the source selection ratio EvBS: Event-guided Blur Synthesis for Domain-adaptive Motion Deblurring MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil HighREV  EVRB REVD   
+
+> Blur Sharp Baseline Ours
+
+(a) MAENet HighREV  EVRB REVD    
+
+> Blur Sharp Baseline Ours
+
+(b) EFNet 
+
+Figure 6: Qualitative results across diverse models and datasets. We compare the blurry input (blur), pre-trained baseline (baseline), our adapted model (ours), and ground truth (sharp), with red boxes denoting zoomed-in regions. Our approach consistently restores finer details across both event-based deblurring models. Additional visual results for the other models (EBFI, NAFNet, MIMO-UNet) are shown in the supplementary material. Sharp Ours DADeblur MetaDeblur Blur 
+
+Figure 7: Visual comparison of deblurring results against recent domain-adaptive methods [8, 21] Our method con-sistently yields sharper and more visually pleasing results across diverse scenes. 
+
+𝑟 = 0.15, the number of extrinsic pairs 𝑛 = 2, and orientation angle thresholds [𝜏 low , 𝜏 high ] = [15 ◦, 30 ◦]. Empirical settings include: a patch size of 256 × 256 with a stride of 64 for sliding window-based patch detection, initial patch threshold 𝜏 = 0.05, NMS IoU threshold of 0.3, and blur score weights 𝛼 = 𝛽 = 0.5 (Eq. 1). 
+
+## 4.2 Experimental Results 
+
+Quantitative Results. Table 1 presents the quantitative evaluation on various deblurring benchmarks. Our method consistently boosts performance across diverse architectures, including event-based (MAENet, EFNet, EBFI) and frame-only models (NAFNet, MIMO-UNet). Specifically, we achieve substantial average gains of 2.24 dB on EVRB, 2.35 dB on REVD, and up to 2.63 dB on HighREV datasets. Table 2 compares our method with recent domain-adaptive de-blurring approaches [8, 21, 28]. In addition to synthesis-based meth-ods [8, 21], we include Blur2Blur [28], which adapts unseen target blur to blur patterns observed during training. As these methods cannot process event streams, we conduct the comparison using frame-only backbones (NAFNet and MIMO-UNet). EvBS consis-tently achieves the best performance, with gains of up to 1.01 dB on Content Sources  Motion Sources  Extrinsic Blur Intrinsic Blur 
+
+Figure 8: Qualitative examples of intrinsic and extrinsic blur synthesis. For each row, we display the content source and its flow map F𝐶 (left), followed by the intrinsic synthesized blur. To demonstrate motion transfer, we show a separate motion source and its flow map F𝑀 (middle), and the result-ing extrinsic synthesized blur with the transferred flow map 
+
+˜F𝐶 (right). All flow maps are masked by event masks to ex-plicitly highlight motion-intensive regions. 
+
+NAFNet and 0.94 dB on MIMO-UNet compared with the strongest baselines. 
+
+Qualtitative Results. Fig. 6 shows that EvBS consistently restores finer details across EVRB, REVD, and HighREV; additional back-bones are provided in the supplementary material. Compared to the pre-trained baselines, our adapted models consistently reconstruct sharper images with superior detail preservation. Fig. ?? further shows sharper results than recent domain-adaptive methods. Fig. 8 visualizes our dual-pathway synthesis. InCG uses the con-tent flow F𝐶 , whereas ExCG transfers a separate motion flow F𝑀 
+
+to produce ˜F𝐶 . The transferred flow follows F𝑀 rather than F𝐶 ,confirming effective motion transfer and increased blur diversity. 
+
+## 4.3 Ablation Studies 
+
+We conduct ablation studies on the REVD [13] using MAENet [36]. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Jung et al. 5 10 15 20 25 30    
+
+> Top Patches Ratio r(%)
+> 27.00 27.25 27.50 27.75 28.00 28.25 28.50 28.75 29.00
+> PSNR (dB)
+> 28.37 28.61 28.64
+> 28.35 27.98 27.51
+
+(a) 1 2 3 4 5 
+
+> Number of Extrinsic Pairs ( n)
+> 28.3 28.4 28.5 28.6 28.7 28.8
+> PSNR (dB)
+> 28.61
+> 28.64
+> 28.56 28.48 28.47
+
+(b) 0-15 15-30 30-45 45-60 60-75 75-90    
+
+> Orientation Threshold ( low high , degrees)
+> 27.4 27.6 27.8 28.0 28.2 28.4 28.6 28.8 29.0
+> PSNR (dB)
+> 28.52
+> 28.64
+> 28.45 28.29 27.98 27.87
+
+(c) 
+
+Figure 9: Ablation study on key hyperparameters. We analyze the impact of (a) the top patches ratio 𝑟 , (b) the number of extrinsic pairs 𝑛 , and (c) the orientation threshold ranges [𝜏 𝑙𝑜𝑤 , 𝜏 ℎ𝑖𝑔ℎ ]. The best values are marked with red stars. GT Blur w/o Events  w/ FEDA (Ours) w/ DA Sharp   
+
+> 32.16 dB 35.23 dB 36.82 dB Average PSNR (GoPro test set):
+
+Figure 10: Visual comparison of blur synthesis under differ-ent conditioning. While the baseline using only flow maps (w/o Events) only captures macro-motions, and DA [36] strug-gles in motion-intensive areas, our FEDA successfully syn-thesizes blur patterns with high fidelity. The average PSNR scores on the GoPro test set (top) quantitatively show its su-perior blur synthesis quality. Table 3: Effectiveness of motion components. Combining both intrinsic and extrinsic motion yields the highest PSNR. Conversely, applying random motion offsets severely de-grades performance, validating the necessity of our motion transfer algorithm. 
+
+Intrinsic Extrinsic Random PSNR (dB) 25.41 
+
+✓ 28.03 
+
+✓ 28.14 
+
+✓ 24.58 
+
+✓ ✓ 28.64 Effects of 𝑟 , 𝑛 , and [𝜏 𝑙𝑜𝑤 , 𝜏 ℎ𝑖𝑔ℎ ]. Fig. 9 analyzes the impact of key hyperparameters. First, the source selection ratio peaks at 𝑟 =
+
+0.15; lower values yield insufficient training pairs, while higher ratios introduce label noise by selecting patches with residual blur. Second, 𝑛 = 2 extrinsic pairs yields the best performance. Increasing 
+
+𝑛 incorporates lower-ranked (low MCS) candidates with weaker alignment to the target motion pattern, thereby compromising adaptation efficacy. Lastly, evaluating the orientation threshold reveals that the [𝜏 𝑙𝑜𝑤 , 𝜏 ℎ𝑖𝑔ℎ ] = [15 ◦, 30 ◦] range provides an effective balance between directional consistency and motion diversity. A narrower range may restrict diversity by filtering out valid motion sources, while a broader range introduces disparate motions that induce unrealistic transfer artifacts. 
+
+Effectiveness of Motion Components. Table 3 summarizes the contributions of our Blur Conditioning Module (BCM). Compared to the pre-trained baseline (25.41 dB), fine-tuning with solely InCG (intrinsic) or ExCG (extrinsic) pairs improves PSNR to 28.03 dB and 28.14 dB, respectively. Combining both yields the best performance of 28.64 dB, demonstrating the synergistic effect of utilizing diverse motion priors in the target domain. To validate the ExCG design, we test a random offset baseline by randomly sampling T𝑘 (Algorithm 1). This drops the PSNR to 24.58 dB, even underperforming the baseline. This degradation highlights that our motion-aware transfer is crucial for synthesizing pairs aligned with the target domain distribution. 
+
+Effectiveness of Event-guided Blurring. We validate our FEDA representation against two conditioning baselines: using only flow maps (w/o Events, as in ID-Blau [41]), and with original devia-tion accumulation (w/ DA [36]) on GoPro test set. As shown in Fig. 10, flow-only conditioning fails to accurately capture motion trajectories, whereas the DA captures motion trajectories but lacks capturing motion intensity. Conversely, our FEDA accurately mod-els both trajectory and intensity, yielding the best blur-synthesizing quality (36.82 dB in PSNR across GoPro test set) that closely matches the ground truth. Lastly, when these synthesized pairs are used for domain-adaptive motion deburring, our FEDA-guided model achieves the highest performance (28.64 dB), compared to the adapted models trained with DA (28.53 dB) and flow-only (28.16 dB) conditionings. This confirms that FEDA provides richer motion cues, producing more effective training pairs for fine-tuning. 
+
+## 5 Conclusion 
+
+In this paper, we propose EvBS, a novel event-guided diverse blur synthesis framework, to address the domain gap in motion deblur-ring. By leveraging events to decouple motion information from visual content, our framework synthesizes diverse training pairs through intrinsic and extrinsic motion synthesis strategies. These strategies produce richer training data that break the inherent con-straints of naturally coupled motion and content. Comprehensive experimental results demonstrate that EvBS effectively enhances adaptation performance, significantly improving the robustness of state-of-the-art deblurring models on unseen domains. EvBS: Event-guided Blur Synthesis for Domain-adaptive Motion Deblurring MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+## Acknowledgments 
+
+This work was supported in part by Samsung Electronics Co., Ltd., System LSI Division, and by the InnoCORE program of the Ministry of Science and ICT (AI Meta-Scientist, No. N10260110). 
+
+## References 
+
+[1] Liangyu Chen, Xiaojie Chu, Xiangyu Zhang, and Jian Sun. 2022. Simple baselines for image restoration. In European conference on computer vision (ECCV) . 17–33. [2] Zheng Chen, Yulun Zhang, Ding Liu, Jinjin Gu, Linghe Kong, Xin Yuan, et al. 2023. Hierarchical integration diffusion model for realistic image deblurring. 
+
+Advances in neural information processing systems (NeurIPS) (2023). [3] Zhixiang Chi, Yang Wang, Yuanhao Yu, and Jin Tang. 2021. Test-time fast adap-tation for dynamic scene deblurring via meta-auxiliary learning. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR) .[4] Sung-Jin Cho, Seo-Won Ji, Jun-Pyo Hong, Seung-Won Jung, and Sung-Jea Ko. 2021. Rethinking coarse-to-fine approach in single image deblurring. In IEEE/CVF International Conference on Computer Vision (ICCV) . 4641–4650. [5] Guillermo Gallego, Tobi Delbrück, Garrick Orchard, Chiara Bartolozzi, Brian Taba, Andrea Censi, Stefan Leutenegger, Andrew J Davison, Jörg Conradt, Kostas Daniilidis, et al. 2020. Event-based vision: A survey. IEEE Transactions on Pattern Analysis and Machine Intelligence (TPAMI) (2020). [6] Xin Gao, Tianheng Qiu, Xinyu Zhang, Hanlin Bai, Kang Liu, Xuan Huang, Hu Wei, Guoying Zhang, and Huaping Liu. 2024. Efficient multi-scale network with learnable discrete wavelet transform for blind motion deblurring. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[7] Mathias Gehrig, Mario Millhäusler, Daniel Gehrig, and Davide Scaramuzza. 2021. E-raft: Dense optical flow from event cameras. In 2021 International Conference on 3D Vision (3DV) .[8] Jin-Ting He, Fu-Jen Tsai, Jia-Hao Wu, Yan-Tsung Peng, Chung-Chi Tsai, Chia-Wen Lin, and Yen-Yu Lin. 2024. Domain-adaptive video deblurring via test-time blurring. In European Conference on Computer Vision (ECCV) .[9] Lukas Hoyer, Dengxin Dai, Haoran Wang, and Luc Van Gool. 2023. MIC: Masked image consistency for context-enhanced domain adaptation. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR) .[10] Justin Johnson, Alexandre Alahi, and Li Fei-Fei. 2016. Perceptual losses for real-time style transfer and super-resolution. In European Conference on Computer Vision (ECCV) .[11] Mikhail Kennerley, Jian-Gang Wang, Bharadwaj Veeravalli, and Robby T Tan. 2024. Cat: Exploiting inter-class dynamics for domain adaptive object detection. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[12] Taewoo Kim, Hoonhee Cho, and Kuk-Jin Yoon. 2024. Cmta: Cross-modal temporal alignment for event-guided video deblurring. In European Conference on Computer Vision (ECCV) .[13] Taewoo Kim, Hoonhee Cho, and Kuk-Jin Yoon. 2024. Frequency-aware event-based video deblurring for real-world motion blur. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[14] Taewoo Kim, Jeongmin Lee, Lin Wang, and Kuk-Jin Yoon. 2022. Event-guided de-blurring of unknown exposure time videos. In European Conference on Computer Vision (ECCV) .[15] Youngho Kim, Hoonhee Cho, and Kuk-Jin Yoon. 2025. From Sharp to Blur: Unsupervised Domain Adaptation for 2D Human Pose Estimation Under Extreme Motion Blur Using Event Cameras. In Proceedings of the IEEE/CVF International Conference on Computer Vision .[16] Ye-Chan Kim, SeungJu Cha, Si-Woo Kim, Taewhan Kim, and Dong-Jin Kim. 2025. Sida: Synthetic image driven zero-shot domain adaptation. In Proceedings of the 33rd ACM International Conference on Multimedia (ACM MM) .[17] Diederik Kinga, Jimmy Ba Adam, et al. 2015. A method for stochastic optimization. In International conference on learning representations (ICLR) .[18] Wuyang Li, Xinyu Liu, and Yixuan Yuan. 2022. Sigma: Semantic-complete graph matching for domain adaptive object detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR) .[19] Yu-Jhe Li, Xiaoliang Dai, Chih-Yao Ma, Yen-Cheng Liu, Kan Chen, Bichen Wu, Zijian He, Kris Kitani, and Peter Vajda. 2022. Cross-domain adaptive teacher for object detection. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR) .[20] Patrick Lichtsteiner, Christoph Posch, and Tobi Delbruck. 2008. A 128 × 128 120 dB 15 𝜇𝑠 latency asynchronous temporal contrast vision sensor. IEEE journal of solid-state circuits (2008). [21] Po Sheng Liu, Fu Jen Tsai, Yan Tsung Peng, Chung Chi Tsai, Chia Wen Lin, and Yen Yu Lin. 2022. Meta Transferring for Deblurring. In British Machine Vision Conference Proceedings (BMVC) .[22] Ilya Loshchilov and Frank Hutter. 2016. Sgdr: Stochastic gradient descent with warm restarts. arXiv preprint arXiv:1608.03983 (2016). [23] Yuwu Lu, Haoyu Huang, Biqing Zeng, Zhihui Lai, and Xuelong Li. 2024. Multi-source and multi-target domain adaptation based on dynamic generator with attention. IEEE Transactions on Multimedia (TMM) (2024). [24] Claudio Michaelis, Benjamin Mitzkus, Robert Geirhos, Evgenia Rusak, Oliver Bringmann, Alexander S Ecker, Matthias Bethge, and Wieland Brendel. 2019. Benchmarking robustness in object detection: Autonomous driving when winter is coming. arXiv preprint arXiv:1907.07484 (2019). [25] Seungjun Nah, Tae Hyun Kim, and Kyoung Mu Lee. 2017. Deep multi-scale convolutional neural network for dynamic scene deblurring. In IEEE Conference on Computer Vision and Pattern Recognition (CVPR) .[26] Seungjun Nah, Sanghyun Son, Jaerin Lee, and Kyoung Mu Lee. 2022. Clean images are hard to reblur: exploiting the ill-posed inverse task for dynamic scene deblurring. In International Conference on Learning Representations (ICLR) .[27] Liyuan Pan, Cedric Scheerlinck, Xin Yu, Richard Hartley, Miaomiao Liu, and Yuchao Dai. 2019. Bringing a blurry frame alive at high frame-rate with an event camera. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[28] Bang-Dang Pham, Phong Tran, Anh Tran, Cuong Pham, Rang Nguyen, and Minh Hoai. 2024. Blur2blur: Blur conversion for unsupervised image deblurring on unknown domains. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[29] Henri Rebecq, Daniel Gehrig, and Davide Scaramuzza. 2018. ESIM: an open event camera simulator. In Conference on Robot Learning (CoRL) .[30] Mengwei Ren, Mauricio Delbracio, Hossein Talebi, Guido Gerig, and Peyman Milanfar. 2023. Multiscale structure guided diffusion for image deblurring. In 
+
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) .[31] Jaesung Rim, Geonung Kim, Jungeon Kim, Junyong Lee, Seungyong Lee, and Sunghyun Cho. 2022. Realistic blur synthesis for learning image deblurring. In 
+
+European Conference on Computer Vision (ECCV) .[32] Jaesung Rim, Haeyun Lee, Jucheol Won, and Sunghyun Cho. 2020. Real-world blur dataset for learning and benchmarking deblurring algorithms. In European conference on computer vision (ECCV) . 184–201. [33] Maitreya Suin, Kuldeep Purohit, and AN Rajagopalan. 2020. Spatially-attentive patch-hierarchical network for adaptive motion deblurring. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition (CVPR) .[34] Lei Sun, Christos Sakaridis, Jingyun Liang, Qi Jiang, Kailun Yang, Peng Sun, Yaozu Ye, Kaiwei Wang, and Luc Van Gool. 2022. Event-based fusion for motion deblurring with cross-modal attention. In European Conference on Computer Vision (ECCV) .[35] Lei Sun, Christos Sakaridis, Jingyun Liang, Peng Sun, Jiezhang Cao, Kai Zhang, Qi Jiang, Kaiwei Wang, and Luc Van Gool. 2023. Event-Based Frame Interpolation with Ad-hoc Deblurring. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[36] Zhijing Sun, Xueyang Fu, Longzhuo Huang, Aiping Liu, and Zheng-Jun Zha. 2024. Motion aware event representation-driven image deblurring. In European Conference on Computer Vision (ECCV) . Springer. [37] Fu-Jen Tsai, Yan-Tsung Peng, Yen-Yu Lin, Chung-Chi Tsai, and Chia-Wen Lin. 2022. Stripformer: Strip transformer for fast image deblurring. In European conference on computer vision (ECCV) .[38] Fu-Jen Tsai, Yan-Tsung Peng, Chung-Chi Tsai, Yen-Yu Lin, and Chia-Wen Lin. 2022. BANet: A blur-aware attention network for dynamic scene deblurring. 
+
+IEEE Transactions on Image Processing (TIP) (2022). [39] Zhou Wang, Alan C Bovik, Hamid R Sheikh, and Eero P Simoncelli. 2004. Image quality assessment: from error visibility to structural similarity. IEEE Transactions on Image Processing (TIP) (2004). [40] Wenming Weng, Yueyi Zhang, and Zhiwei Xiong. 2023. Event-Based Blurry Frame Interpolation Under Blind Exposure. In IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[41] Jia-Hao Wu, Fu-Jen Tsai, Yan-Tsung Peng, Chung-Chi Tsai, Chia-Wen Lin, and Yen-Yu Lin. 2024. Id-blau: Image deblurring by implicit diffusion-based reblurring augmentation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[42] Xiangyu Xu, Li Siyao, Wenxiu Sun, Qian Yin, and Ming-Hsuan Yang. 2019. Qua-dratic video interpolation. Advances in Neural Information Processing Systems (NeurIPS) (2019). [43] Wen Yang, Jinjian Wu, Leida Li, Weisheng Dong, and Guangming Shi. 2023. Event-based motion deblurring with modality-aware decomposition and recomposition. In Proceedings of the 31st ACM International Conference on Multimedia (ACM MM) .[44] Kaihao Zhang, Wenqi Ren, Wenhan Luo, Wei-Sheng Lai, Björn Stenger, Ming-Hsuan Yang, and Hongdong Li. 2022. Deep image deblurring: A survey. Interna-tional Journal of Computer Vision (IJCV) (2022). [45] Richard Zhang, Phillip Isola, Alexei A Efros, Eli Shechtman, and Oliver Wang. 2018. The unreasonable effectiveness of deep features as a perceptual metric. In 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .[46] Jiankun Zhu, Sicheng Zhao, Lulu Tian, Jing Jiang, Xi Chen, and Hongxun Yao. 2025. Emotion in a Bottle: Information Bottleneck Guided Disentanglement for Emotion Domain Adaptation. In Proceedings of the 33rd ACM International Conference on Multimedia (ACM MM) .EvBS: Event-guided Blur Synthesis for Domain-adaptive Motion Deblurring MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil 
+
+## Supplementary Material 
+
+Algorithm S1 Flow-Enhanced Deviation Accumulation  
+
+> 0:
+
+Input: Taking a pixel at (𝑥, 𝑦 ) as a specific example, 
+
+𝑁 Events stream {E0, E1, · · · , E𝑁 −1 }, Bidirectional flows 
+
+{F0→1, F1→2, · · · , F𝑁 −1→𝑁 }, {F0→− 1, F1→0, · · · , F𝑁 −1→𝑁 −2 }. 
+
+> 0:
+
+Output: FEDA event representation 𝑉 . 
+
+> 1:
+
+𝑅 = 0, 𝐷 = 0, 𝐶 = 0 
+
+> 2:
+
+for 𝑖 = 0 to 𝑁 − 1 do  
+
+> 3:
+
+Counting the number of events 𝐶 𝑖 at (𝑥, 𝑦 ) 
+
+> 4:
+
+for 𝑘 = 0 to 𝐶 𝑖 − 1 do  
+
+> 5:
+
+Event 𝐸 𝑖 = (𝑥, 𝑦, 𝑡 𝑘 , 𝑝 𝑘 ) 
+
+> 6:
+
+Normalize timestamps: 𝑑𝑡 𝑘 = 𝑡 𝑘 −𝑡 0   
+
+> 𝑡 𝐶 𝑖 −1−𝑡 0
+> 7:
+
+Compute v0 = F𝑖 →𝑖 +1 −F𝑖 →𝑖 −1 
+
+> 2
+> 8:
+
+Compute a = F𝑖 →𝑖 +1 + F𝑖 →𝑖 −1 
+
+> 9:
+
+Quadratic flow: Q𝑖 →𝑡 𝑘 = v0 · 𝑑𝑡 𝑘 + 0.5 · a · 𝑑𝑡 2 
+
+> 𝑘
+> 10:
+
+Extract flow magnitude |𝑀 𝑡 𝑘 | from Q𝑖 →𝑡 𝑘  
+
+> 11:
+
+𝐷 = 𝑝 𝑘 · | 𝑀 𝑡 𝑘 | 
+
+> 12:
+
+𝑅 = 𝑅 + 𝐷  
+
+> 13:
+
+end for  
+
+> 14:
+
+𝐶 = 𝐶 + 𝐶 𝑖  
+
+> 15:
+
+end for  
+
+> 16:
+
+Compute final FEDA representation: 𝑉 = 𝑅 /𝐶 
+
+## A Flow-Enhanced Deviation Accumulation (FEDA) 
+
+Deviation Accumulation (DA) [36] effectively encodes motion tra-jectory but accumulates events uniformly, disregarding motion intensity. To generate richer event-based conditioning signals, we propose FEDA, which enhances DA with quadratic flow [42] mag-nitude information to better capture fine-grained motion dynamics. Algorithm S1 details the FEDA process. Unlike standard devia-tion accumulation, FEDA weights each event by its corresponding motion magnitude. Specifically, for each event at (𝑥, 𝑦 ), we estimate the motion vector using quadratic flow, which explicitly models acceleration. The event polarity is then scaled by this computed motion magnitude ( |𝑀 𝑡 𝑘 |) and accumulated. Finally, the sum is normalized by the total event count to yield a robust event repre-sentation 𝑉 . This magnitude-weighted accumulation emphasizes motion-intensive regions more effectively, producing discrimina-tive event representations. We use linear magnitude weighting to preserve the natural pro-portionality between physical displacement and motion blur. Non-linear or learned weighting remains an alternative design choice, but may alter this relationship or add complexity. 
+
+## B Motion Source Selector (MS Selector) 
+
+To ensure directional coherence in motion transfer, we introduce a Motion Source (MS) Selector (Fig. S1) that evaluates the consistency Selected    
+
+> Motion Source
+> Avg
+> Orientation 𝜃𝜃𝐴𝐴𝐴𝐴𝐴𝐴
+> Max
+> Orientation 𝜃𝜃𝑀𝑀𝑀𝑀𝑀𝑀
+> Cosine Similarity  𝑆𝑆
+> (Accept if  𝑆𝑆  > 𝜏𝜏 )
+> Motion Source
+> Events 𝚬𝚬 𝑀𝑀
+> Event-based Flow Estimator
+
+Figure S1: Illustration of the Motion Source Selector 
+
+of motion patterns present in the given motion source. Specifically, we partition the event stream into two consecutive temporal seg-ments and estimate the optical flow F = [𝑢 ; 𝑣 ] ∈ R2×𝐻 ×𝑊 using event-based flow estimator [7]. Using the horizontal and vertical components 𝑢, 𝑣 , we compute the average orientation 𝜽 avg ∈ R2 following the formulation in Eq. 5: ¯𝑢 = 1
+
+𝑁 ∑︁ 𝑢, ¯𝑣 = 1
+
+𝑁 ∑︁ 𝑣, 𝜽 avg = [ ¯𝑢 ; ¯ 𝑣 ]∥ [ ¯𝑢 ; ¯ 𝑣 ] ∥ , (9) where 𝑁 is the number of pixels. Concurrently, we identify the dominant orientation 𝜽 max = [𝑢 ; 𝑣 ]x∗ ∈ R2 at the location x∗ with the maximum flow magnitude ( ∥Fx ∥2). Finally, we calculate the cosine similarity 𝑆 = 𝜽 avg · 𝜽 max . We accept candidates only if 𝑆 > 𝜏 
+
+(with 𝜏 = 0.9), ensuring that the selected source exhibits a coherent trajectory suitable for transfer. 
+
+## C More Qualitative Results 
+
+We provide additional qualitative comparisons on EBFI [40], NAFNet [1], and MIMO-UNet [4] in Fig. S2. While the baseline model struggles with residual blur and artifacts due to domain shift, our adapted version consistently produces sharper images with better-preserved fine details. This visual evidence further validates the robustness of our event-guided domain adaptation framework across diverse real-world datasets. Furthermore, in Fig. S3, we present additional visual examples of our blur synthesis process. These results illustrate our framework’s ability to consistently generate diverse blurred patches across vari-ous scenes. As shown, our method successfully synthesizes both intrinsic blur, utilizing the content’s inherent motion, and extrinsic blur, driven by motion patterns transferred from separate motion sources. This further confirms that our motion decoupling mech-anism effectively expands the diversity of training pairs, which ultimately drives the enhanced adaptation performance. 
+
+## D Computational Cost 
+
+Table S1 details the computational cost of our framework on the EVRB dataset (894 images) using MAENet [36] with a single NVIDIA RTX 2080 Ti. The Dual Source Extractor takes 270.3s, while the Motion Conditioning Module requires 490.3s in total. Notably, the Extrinsic Condition Generator (ExCG) dominates the cost (428.8s) due to the computational complexity of motion pattern matching and transfer. The blurring and fine-tuning stages take 288.7s and 264.3s, respectively. Finally, it is worth noting that our adaptation process is conducted offline; thus, it does not affect the run-time efficiency of the deblurring model during inference. MM ’26, November 10–14, 2026, Rio de Janeiro, Brazil Jung et al. HighREV  EVRB REVD   
+
+> Blur Sharp Baseline Ours
+
+(a) EBFI HighREV  EVRB REVD   
+
+> Blur Sharp Baseline Ours
+
+(b) NAFNet HighREV  EVRB REVD   
+
+> Blur Sharp Baseline Ours
+
+(c) MIMO-UNet 
+
+Figure S2: Additional qualitative results on EBFI, NAFNet, MIMO-UNet. We compare the blurry input (blur), pre-trained baseline (baseline), our adapted model (ours), and ground truth (sharp), with red boxes denoting zoomed-in regions. Our approach consistently restores finer details across both event-based (a) and frame-only (b, c) models. 
+
+## E Limitations and Future Work 
+
+We highlight three practical limitations of our framework. First, the source selection ratio 𝑟 should be chosen conservatively, as a large 𝑟 may include residual blur and introduce noisy supervision; empirically, 𝑟 = 10–15% provides a good trade-off (Fig. 9a). Second, ExCG incurs additional computational cost (428.8 s vs. 61.5 s for InCG on EVRB) for sometimes modest gains (e.g., ∼0.5 dB on REVD); Content Sources  Motion Sources  Extrinsic Blur Intrinsic Blur 
+
+Figure S3: Additional qualitative examples of dual blur syn-thesis (intrinsic and extrinsic). Similar to Fig. 8 in the main manuscript, each row displays a content source (left), fol-lowed by the intrinsic synthesized blur (green box) which utilizes inherent motion. The middle columns show the mo-tion source, and lastly, the resulting extrinsic synthesized blur on the right (blue box). Table S1: Computational cost analysis (adapting on EVRB with MAENet, using RTX 2080 Ti). Component Time (s) 
+
+Dual Source Extractor 270.3 Blur Conditioning Module Intrinsic Condition Generator 61.5 Extrinsic Condition Generator 428.8 Blurring 288.7 Fine-tuning 264.3 thus, InCG-only offers a faster alternative when adaptation time is constrained. Finally, EvBS relies on well-aligned event–image pairs, and performance may degrade under sensor misalignment. Improv-ing robustness to such misalignment is an important direction for future work.
