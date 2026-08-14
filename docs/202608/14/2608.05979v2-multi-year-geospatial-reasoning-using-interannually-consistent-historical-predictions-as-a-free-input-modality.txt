@@ -1,0 +1,300 @@
+Title: Multi-Year Geospatial Reasoning using Interannually-Consistent Historical Predictions as a Free Input Modality
+
+URL Source: https://arxiv.org/pdf/2608.05979v2
+
+Published Time: Tue, 11 Aug 2026 02:02:07 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Multi-Year Geospatial Reasoning using Interannually-Consistent Historical Predictions as a Free Input Modality 
+
+Syed Roshaan Ali Shah , Kasper Bonte , David Bekaert, Kristof Van Tricht ,and Dieter Wens 
+
+VITO Remote Sensing, Mol, Belgium 
+
+Abstract. Machine learning, and deep networks in particular, are in-creasingly used to derive higher-level Earth observation (EO) products such as annual land-cover and crop-type maps. Many are generated op-erationally: each year a new acquisition is processed, typically with the same model, extending a multi-year archive. In the process these systems accumulate two kinds of useful signal that are almost never fed back into the model: the system’s own archive of past predictions, and ancillary layers produced by other partners in a processing consortium. Both are normally used outside the network, as rule-based post-processing or a fixed input mask. Using the Copernicus Land Monitoring Service High Resolution Layer (HRL) Croplands crop-type product [7] as a testbed, we show that bringing both signals inside the model turns a single-year, single-task pixel classifier into one that reasons across years. We intro-duce a Crop Type (CTY) embedding encoder that represents each past prediction as a confidence-scaled, time-ordered categorical token and at-tends over the year axis, and we study how the externally provided Base Vegetation Layer (BVL) mask should be represented in the model’s in-puts and outputs. To compare designs fairly when they relabel non-crop pixels, we evaluate on the 18 crop classes only and report precision and recall separately. On a pan-European dataset of about 5.4M labelled pix-els, adding the prediction history raises crop-only F1 by 1.6 percentage points (pp) and, more importantly, corrects a recall-skewed error profile, with the largest gains on perennial and tree crops (olives +4.6, fruits +3.7, nuts +3.2 pp). Representing the BVL mask consistently in both the history and the target year adds about 2.5 pp on the crop classes. The approach is a low-cost recipe for any recurring geospatial or foundation model that emits class maps. 
+
+Keywords: Geospatial reasoning · Crop-type mapping · Satellite image time series · Temporal context · Earth observation 
+
+1 Introduction 
+
+High-resolution maps of crop types support agricultural monitoring, food secu-rity assessment, and policy frameworks such as the European Common Agricul-tural Policy. Such maps are increasingly produced operationally at continental arXiv:2608.05979v2 [cs.CV] 10 Aug 2026 2 Shah S.R.A. et al. 
+
+scale and 10 m resolution using deep networks over Sentinel satellite image time series [4, 10, 26], with many products updated annually. One property of these systems is that they are recurring, re-running essentially the same or slightly updated model each production cycle. A common limitation follows: although the service accumulates a dense, per-pixel record of its own past predictions, that record is never fed back into the model. Despite this, the standard approach classifies each year on its own. The map for 2024 sees only the 2024 time series and has no access to the fact that the same pixel was olive from 2017 to 2023. Where multi-year consistency is enforced at all, it is added after inference as rule-based post-processing [21]. A second, related limitation appears in consortium-based production. An ancillary Base Vegetation Layer (BVL) mask, produced by one partner, is applied to the product outside the model to remove non-crop pixels during post-processing. The model never incorporates this signal, so when it later reads its own history, a pixel the BVL removed in some past years has no defined meaning to it: it is neither a crop class nor plain missing data. Our position is that a recurring EO model can use what it already produces. It should read its own prediction history as an input, and it should represent the ancillary layers it consumes consistently inside the model, instead of treating either only as an out-of-model step. This turns a narrow production question into a question about multi-year geospatial reasoning: can a model learn the temporal grammar of land use, such as rotations, perennial persistence, and gradual change, directly from its own outputs, and can it fold external context into a single self-contained predictor? We study this on the Copernicus HRL Croplands crop-type product [7], which has mapped crops annually since 2017. Our approach consists of the following: 1. We treat prediction history as an input. Two aligned sequences, the product’s own past class predictions and their winning-class probability, become an ex-tra input modality, fused with the existing optical, SAR, and meteorological encoders at no labelling cost (Sec. 4). 2. We introduce the CTY Embedding Encoder, which maps each past class code to a learnable token, scales it by the confidence of that prediction, adds a time ordering, and attends over years with a padding-aware Transformer (Sec. 6.1). 3. We study how the externally provided vegetation mask should be represented inside the model: how masked observations are treated in the target year, and whether they are remapped in the history. A consistent representation improves the crop classes, without altering the mask itself (Sec. 6.4). 4. We add cheap crop-rotation scalars and a soft self-supervised consistency loss, and check robustness (Sec. 6.6). The gains concentrate where multi-year reasoning should help most, on peren-nial and tree crops with stable histories. We argue the recipe applies to any annual or seasonal EO product that emits recurring class maps, potentially in-cluding geospatial foundation models. Historical Predictions as a Free Input Modality 3
+
+2 Related Work 
+
+Deep learning on satellite image time series. Crop mapping from Sentinel time series is now dominated by deep sequence models. Temporal convolutional net-works [20] and recurrent models gave way to attention-based methods. Self-attention was applied to raw optical sequences for crop classification by Rußwurm and Körner [22], formalised for multivariate series by Zerveas et al . [31] after the original Transformer [28], and made lightweight for satellite series by the tempo-ral attention encoders of Sainte Fare Garnot and Landrieu [12, 13]. Benchmarks such as BreizhCrops [23] standardised evaluation. Our backbone sits in this fam-ily; the contribution is orthogonal to the backbone and concerns what the model is allowed to read. 
+
+Self-supervision and foundation models for EO. Self-supervised pre-training re-duces the need for labels, from SITS-BERT [30] on time series to Presto [27], and to larger geospatial foundation models such as SatMAE [6], Prithvi [17], TerraFM [11] and AnySat [2], with crop-specific deployment now being studied operationally [5]. These learn transferable representations of imagery and are most valuable in label-scarce settings or for transfer to new tasks. We instead add a representation of the product’s own prediction history as an extra con-textual input channel [25], which is complementary and could be attached to a foundation backbone in the same way. 
+
+Multi-year and rotation-aware mapping. Most deployed systems treat each year independently. Several lines of work add multi-year context from reference labels: Quinton and Landrieu [21] model crop rotation explicitly and report large gains for rotational and perennial crops; Bailly et al . [3] structure prediction with a conditional random field over past LPIS vintages; and Giordano et al . [14] pe-nalise predicting the same crop as the previous year. Work on cross-year trans-fer [29] documents the domain shift between years. A separate line enforces temporal consistency after classification, most notably the hidden-Markov post-processing of Abercrombie and Friedl [1] used to stabilise the MODIS land-cover product. Our setting differs on both counts: the multi-year signal is the model’s 
+
+own past predictions rather than reference labels, and it is consumed as an input 
+
+rather than corrected afterwards. The closest conceptual analogue is knowledge distillation [16]: the model distils, then improves on, the output of a legacy rule-based stage. 
+
+Class imbalance. Crop datasets are class-imbalanced: a few common crops dom-inate while many crops are rare (a long-tailed distribution). Focal loss [18] and class-balanced weighting by effective number of samples [9] are standard. We handle the long tail with balanced batch sampling, and add a failure case showing that adding inverse-frequency loss weighting on top of that sampling is harmful at the imbalance ratios typical of continental crop maps. 
+
+Reference data. Pan-European training and evaluation usually rely on har-monised in-situ archives such as LUCAS-derived parcels [10], the EuroCrops taxonomy [24], and the WorldCereal reference system [26], which we follow. 4 Shah S.R.A. et al. 
+
+3 System and Two Sources of Free Signal 
+
+We build on an operational Copernicus Land Monitoring Service (CLMS) prod-uct in the High Resolution Layer (HRL) Croplands suite, which has produced annual 10 m crop-type (CTY) maps since 2017 [7, 8]. The wider product and its processing chain matter for our argument, so we describe both before naming the two signals it under-uses. 
+
+3.1 The HRL Croplands Product Suite 
+
+The suite is more than one map. The crop-type map assigns each cropland pixel one of about 17 classes in a hierarchical legend [24], used here at level 2 (the 18 crop classes plus a no-crop class), together with a per-pixel confidence layer (CTYCL). Alongside it, the service publishes cropping-pattern layers: main sea-son emergence, duration and harvest, bare-soil periods, secondary season emer-gence and duration along with fallow indicators, and multi-year summaries of cropping intensity and crop diversity computed over a rolling three-year win-dow. Multi-year reasoning therefore already exists in the product, but it lives in separate, hand-built derived layers and rolling-window rules, all computed down-stream of a model that only ever sees one year. We ask whether that reasoning belongs inside the model instead. The production model is a pixel-based multi-source Transformer. Per-pixel Sentinel-2 optical bands (9), Sentinel-1 terrain-corrected σ0 SAR backscatter (VV/VH), derived spectral indices, and AgERA5 meteorology (each a 24-step, 10-day composited series) are encoded by a shared Transformer, while static ter-rain scalars pass through a dense encoder. The two embeddings are concatenated and fed to an MLP head (Fig. 2). The class is the argmax, except that pixels whose top probability is below 35% are marked “unclassified”. 
+
+3.2 The Legacy Postprocessing Chain 
+
+The raw yearly map is not shipped as-is. A rule-based post-processor (Fig. 1) applies, in order: (1) the external Base Vegetation Layer (BVL) mask, which limits the map to vegetated cropland; (2) a smooth-and-reclassify step; (3) an interannual-consistency fix that compares each pixel across years and overrides anomalous years for stable, mostly permanent, crops; (4) a low-confidence “unde-cided” rule applied below a probability threshold; (5) removal of the grass/fodder class for the final product; and (6) a minimum-mapping-unit sieve that drops ob-jects below 0.25 ha. The chain works, but it is brittle. Its rules are deliberately conservative, the documentation notes that implausible sequences still remain in the final product, and rules cannot raise recall for rare classes or separate spectrally similar classes that history would distinguish. 
+
+3.3 Two Sources of Free Signal 
+
+The chain exposes the two signals we bring into the model. Historical Predictions as a Free Input Modality 5Figure 1 -Operational  
+
+> chain: legacy
+> (top) vs proposed (bottom) Legacy flow
+> Single-year
+> model
+> Rule-based
+> post-processing
+> Interannual
+> consistency fix
+> Product +
+> derived layers
+> EO inputs
+> (S2/S1/meteo)
+> Interannual-fixed history
+> BVL-masked observations
+> History-aware
+> model (learned reasoning)
+> Product
+> (simpler chain)
+> history sampled from the
+> interannual-fixed product
+
+Fig. 1: The operational chain. Top: the legacy flow, a single-year model followed by rule-based post-processing, with multi-year reasoning living in separate derived layers. 
+
+Bottom: our version folds the interannual-fixed history and the BVL signal back into the model, so temporal reasoning is learned rather than applied afterwards. 
+
+Signal 1: the product’s own interannual history. After eight cycles (2017–2024) every pixel carries two aligned yearly sequences (one slot per production year): the past predicted class codes and their associated confidences, where each con-fidence is the probability of the predicted (winning) class, i.e . the product’s CTYCL layer. We pad the sequence with no-data values out to 2029, so the same architecture serves future years and only needs retraining on newer inter-annual and BVL layers. We do not feed the model raw predictions. The history is sampled from the interannual-consistency-fixed product (the output of stage 3 above, keeping grass/fodder), so the model reads the legacy rule system’s own corrected history as a feature and can then learn to go further. A pixel that was olive for seven straight years is very different from one alternating wheat and barley, yet the baseline never sees this. 
+
+Signal 2: the external Base Vegetation Layer (BVL). The BVL is a single crop-land and vegetation mask shared across all HRL layers and produced within the consortium. It is a valid, authoritative input that we keep using. Because the BVL is applied when the historical product is generated, the history we sam-ple already contains BVL-masked observations: a pixel can appear as masked in some past years. This raises a representation question. When a sample’s own year or its history contains masked observations, how should the model read them? We study this, rather than discarding or replacing the mask. Both signals are free, in that they need no new labels. The rest of the paper brings them into the model: the history as an input modality, and the masked observations as a consistently represented signal. 
+
+4 Method 
+
+4.1 End-to-End Training instead of a Frozen Foundation Model 
+
+A natural question is why we train a compact, end-to-end Transformer rather than fine-tune a pre-trained geospatial foundation model. The answer is the data 6 Shah S.R.A. et al. Sentinel-1 SAR (2x24)    
+
+> Sentinel-2 optical (9x24)
+> Derived indices NDVI/NDWI/ratio
+> Meteo temp (1x24)
+> Static scalars altitude, slope
+> CTY history 13 class + 13 conf.
+> NEW
+> + crop-rotation scalars
+> NEW
+> Transformer encoder
+> 4 layers . 8 heads . dim 128
+> Dense Encoder CTY Embedding
+> Encoder
+> NEW
+> Embeddings (128) Embeddings (16) Embeddings (64)
+> Concatenated embeddings (208) -> MLP [512, 256, 128]
+> Linear head: softmax, focal CE
+> + soft CTY-consistency loss
+> NEW
+> Inputs Encoders Fusion
+
+Fig. 2: The multi-source architecture. The green, red, yellow, and purple boxes are the baseline operational model. The blue branch is our addition: two aligned 13-year se-quences (the product’s own past class predictions and their confidences) are encoded by the CTY Embedding Encoder and concatenated before the MLP head. Crop-rotation scalars enter the dense encoder, and a soft consistency loss is attached to the head. 
+
+regime. Foundation models help most when labels are scarce or when transferring to a new task; a recent deployment study on WorldCereal data reaches a similar conclusion [5]. Our setting is the opposite: our dataset has about 5.4M labelled pixels, with good if uneven coverage across countries and years (Fig. 3). With this many labels a 2.6M-parameter supervised model already reaches strong accuracy, while a much larger pre-trained backbone risks overfitting in our pixel-level set-ting, as the 12M-parameter variant in Sec. 6.1 confirms. End-to-end training also lets us learn the new history and BVL branches jointly with the optical backbone, so the model can weigh phenology against its own past predictions; a frozen backbone would make that harder. We therefore keep the operational backbone and add the new signals as trainable branches. 
+
+4.2 Baseline and Fusion 
+
+The baseline encodes the 24-step optical, SAR, index, and meteo streams with a 4-layer, 8-head Transformer (model dimension 128), and the static scalars with a dense encoder. We leave this backbone untouched and add history as a parallel encoder whose output is concatenated before the head (Fig. 2). The design is modular on purpose: the history branch can be added to or removed from a deployed model without retraining the optical encoder. 
+
+4.3 Three Ways to Encode Prediction History 
+
+Let a pixel’s history be {(ct, p t)}Tt=1 with T =13 slots (2017–2029, future slots zero-padded), where ct is a class code and pt ∈ [0 , 1] its winning-class confidence: two aligned sequences, 26 values per pixel. We compare three encoders. Historical Predictions as a Free Input Modality 7
+
+(A) Scalar statistics. The 26 raw values are fed as continuous scalars to the dense encoder. This is simple, but it treats nominal class codes as ordinal num-bers, as if class 5 were between classes 4 and 6, which has no meaning. 
+
+(B) Raw time series. The (ct, p t) pairs are treated as a 2-channel, 13-step series and passed to the optical Transformer. Attention can mix history with phenology, but it still works on raw integer codes. 
+
+(C) CTY Embedding Encoder. Each code is mapped to a learnable vector, an entity embedding [15], and scaled by its confidence, 
+
+et = Embed( ct) · pt, (1) so a reliable past prediction contributes strongly and an uncertain one con-tributes little. A sinusoidally initialised, learnable year-position embedding is added, because the order of years carries meaning (a wheat-barley sequence dif-fers from barley-wheat). A padding-aware Transformer attends over the valid years, followed by masked mean pooling and a projection. The embedding table reserves index 0 as a zero padding vector for missing or future years and, im-portantly for Sec. 6.4, index 1 as a learnable token for externally masked (BVL) areas. This gives a three-way distinction between no-data, masked, and real crop. Pixels with no valid history at all (for example 2017 samples) receive a learnable “no-info” token, so the absence of context is represented explicitly. 
+
+4.4 Crop-Rotation Scalars 
+
+We also compute two cheap scalars from the same history and route them through the dense encoder. Crop stability is the fraction of valid past years that match the most recent crop, and years since change is the length of the current same-crop run, normalised. They give the model a smooth, explicit summary of rotational persistence that complements the learned embedding. 
+
+4.5 Representing Masked Observations 
+
+Because the BVL mask is applied to the product, masked observations appear both in a sample’s own year and in its history, and we study how to represent them. For the target year, a masked observation can be left with its crop label, given a dedicated “masked” class, or folded into the existing no-crop class. For the history , the masked years can be left unchanged or remapped so the vector reflects that the pixel was masked. In the history branch, the learnable BVL token (index 1) gives past masked observations a representation that is distinct from missing data. None of this alters or replaces the BVL; it only decides how the model reads a signal it is already given. 
+
+4.6 Soft Self-Supervised Consistency Loss 
+
+To encourage the model to use a strong historical signal without leaning on it too hard, we add a soft auxiliary term. A small linear head maps the history embed-ding to class logits, with temperature scaling, and is trained to agree with the 8 Shah S.R.A. et al.      
+
+> Fig. 3: Reference-data availability across countries (rows) and years (columns). Cov-erage is uneven across space and time. However, the history input itself is dense as it comes from the prior years’ model predictions, is provided up to year T−1, while the target year Tand future years are masked.
+
+target at a low weight ( λ=0 .1). This rewards consistency where history is clearly informative but is too weak to override the main focal cross-entropy. Confidence scaling, masking of the current and future years, and the weak consistency loss together act as a soft, regularizing prior. 
+
+4.7 Training 
+
+All runs use AdamW [19], base learning rate 10 −3, focal cross-entropy, plateau learning-rate scheduling, and early stopping on validation macro-F1. We also ablate linear warmup and gradient clipping (norm 1.0), which stabilise the freshly initialised embedding table early in training. The full production model has about 2.6M parameters. Class imbalance is handled throughout by balanced batch sampling, drawing each batch to equalise class frequencies by target class; loss weights are uniform unless stated otherwise. 
+
+5 Data and Protocol 
+
+Reference data. Training uses a WorldCereal-harmonised [26] pan-European cor-pus of labelled pixels spanning 2018–2025 and 19 crop classes in the product’s hierarchical legend. The reference data is pooled from national and regional sources, mostly farmer declarations from parcel registration systems (LPIS/GSAA) plus LUCAS survey points, and its spatio-temporal coverage is uneven: some countries have most years, others only one or two (Fig. 3). Early experiments use 76 such sources; later experiments add more to reach 85. In total the corpus holds about 5.4M labelled pixels for the 85-source set (4.8M for 76 sources). Adding newer sources made the task harder, since it brings more geographic and label diversity, and it lowers scores for older configurations. A model that matches or beats earlier numbers on the larger set is therefore genuinely better, a point we return to in Sec. 6.6. 
+
+Splits. We split the corpus into roughly 72% train, 13% validation, and 15% test (the production run uses 3.87M train, 0.68M validation, and 0.80M test pixels). Historical Predictions as a Free Input Modality 9
+
+The split is not a random per-pixel partition: it is stratified by crop class and grouped by field, so all pixels from one parcel stay in the same split. This avoids the optimistic bias a random pixel split would introduce, where neighbouring pixels of the same field leak between train and test. 
+
+Inputs. Per pixel inputs over 24 ten-day (dekadal) windows for Sentinel-2 (9 bands), Sentinel-1 VH/VV, three derived indices (NDVI, NDWI, SAR ratio), AgERA5 temperature, along with terrain scalars, and the 13 historical CTY class codes with their 13 CTYCL confidences (26 values). All time-domain streams (optical, SAR, indices, meteorology) are composited to this common 24-step, 10-day grid, so they share the same temporal sampling. A (0 , 0) slot is no-data; a masked observation uses the dedicated BVL encoding. 
+
+Imbalance. The class distribution is strongly long-tailed. On the matched test split, Grass/fodder has 319,359 samples and Rice only 605, a ratio of about 528 to 1. During training this is handled by balanced batch sampling; a further attempt to rebalance through inverse-frequency loss weighting, applied on top of that sampling, backfires (Sec. 6.3). 
+
+Evaluation. We report overall accuracy, macro-F1 (the unweighted mean of per-class F1, where F1 is the harmonic mean of precision and recall), and weighted-F1 on held-out test splits. One caveat on comparability matters throughout. Because the treatment of masked pixels changes the size of the no-crop class, the test-set composition differs across configuration families; folding BVL into no-crop, for instance, greatly enlarges that easy class. We therefore draw all controlled encoding and optimisation comparisons (Secs. 6.1 and 6.3) from a single fixed split of 720,083 samples (the 76-source set), and we flag composition explicitly when discussing the production evolution (Sec. 6.6). 
+
+Crop-only macro score. To compare models whose treatment of masked pixels changes the no-crop class, in particular the BVL variants of Sec. 6.4, we also report a crop-only score: the unweighted mean of precision, recall, and F1 over the 18 crop classes, excluding the composition-sensitive no-crop class and any auxiliary BVL class. Because it averages per-class rates rather than samples, this score does not depend on how non-crop pixels are counted, and it answers the question that matters operationally: does a design help the classes that users care about? Reporting precision and recall separately, rather than F1 alone, shows whether a model errs by over- or under-predicting a class. 
+
+6 Results 
+
+6.1 Which History Encoding Wins? 
+
+Table 1 compares the three encoders of Sec. 4.3 on the fixed 720,083-sample split. The scalar (A) and raw time-series (B) encodings add essentially nothing over the no-history baseline, which is expected: raw integer crop codes carry 10 Shah S.R.A. et al. 
+
+Table 1: History-encoding comparison and training-optimisation ablation on the fixed test split (720,083 samples). Rows 1–8 compare history encodings; rows 9–12 (below the rule) ablate training choices on Strategy C. ∆ is the change in validation macro-F1 (percentage points) relative to the no-history baseline (row 2). All other settings are identical. # Configuration Encoder Params Val F1 Test macro-F1 ∆                                                                        
+
+> 12024 production (15 ts) n/a 2.55M 0.7746 0.77 −0.30
+> 2No-history baseline n/a 2.55M 0.7776 0.78 n/a 3(A) scalar stats Dense 2.57M 0.7773 0.78 −0.03
+> 4(B) raw time series Transf. 2.78M 0.7773 0.78 −0.03
+> 5(A+C) Dense+Embed 2.59M 0.7810 0.78 +0 .34
+> 6(A+C) big Dense+Embed 11.98M 0.7705 0.77 −0.71
+> 7(B+C) Transf.+Embed 2.80M 0.7861 0.78 +0 .85
+> 8(C) embedding Embed 2.57M 0.7908 0.79 +1 .32
+> 9(C) + warmup/clip Embed 2.57M 0.7916 0.79 +1.40
+> 10 (C) + warmup/clip + BVL-token Embed 2.57M 0.7815 0.78 +0 .39
+> 11 (C) + inverse-freq. loss weights Embed 2.57M 0.6439 0.64 −13 .37
+> 12 (C) + loss weights + BVL-token Embed 2.57M 0.6306 0.63 −14 .70
+
+no order for the model to use. The embedding encoder (C) gives a clear and consistent gain and is the only single change that does so. Adding the raw series on top (B+C) contributes a small extra signal but does not beat C alone, and naively scaling capacity to 12M parameters hurts, a sign that the pixel-level setting overfits easily. 
+
+6.2 Where History Helps? 
+
+We break the gain down by class, comparing the baseline with the Strategy-C model (no extra training tweaks) on the same split. The pattern is the one multi-year reasoning predicts. The largest gains are on perennial and tree crops with stable histories: olives +4.6, fruits +3.7, nuts +3.2, and dry pulses +2.9 points. Abundant, spectrally distinctive classes such as maize and sugar beet are already near their ceiling and barely move. A field that was olive for seven straight years is almost certainly olive again, and the embedding learns to use that. The one notable regression is the catch-all no-crop class at field boundaries, where the history is genuinely ambiguous. 
+
+6.3 Training Optimisations 
+
+On top of Strategy C we ablate the training choices (Tab. 1). Warmup with gradient clipping gives a small, consistent gain and more stable convergence. Adding the separate BVL token inside the history branch slightly hurts on this split, because most pixels masked in one year are also non-crop in neighbouring years, so the token is partly redundant with terrain features. The clear negative result concerns class rebalancing. Every run already ad-dresses the long tail through balanced batch sampling : batches are drawn to Historical Predictions as a Free Input Modality 11 BVL external (not modelled) BVL signal ablated BVL-as-class (20 classes) BVL-as-no-crop (merged)     
+
+> 0.70 0.72 0.74 0.76 0.78 0.80 0.82 0.84 0.86 Crop-only macro (18 classes)
+> 0.789 0.790 0.814 0.812
+> Precision Recall F1
+
+Fig. 4: Crop-only macro precision, recall, and F1 across BVL representations. A con-sistent representation of masked observations (right two groups) improves the crop classes over giving them no special representation (left), independent of the inflated no-crop class. 
+
+equalise class frequencies by target class, so rare crops are well represented, and this is our default. Adding inverse-frequency class weighting in the focal loss 
+
+on top of this sampling rebalances the same imbalance a second time: a rare class is then both oversampled in the batch and up-weighted in the loss. With raw weights proportional to N/n c (a ratio of about 528 to 1 between Rice and Grass/fodder), this double compensation drives the model to over-predict rare classes, and macro-F1 collapses from 0.79 to 0.64 (a 14.7-point drop in com-bination with the BVL token); Grass/fodder recall falls from 92.6% to 40.8%. The production model uses uniform loss weights, and where loss-level weighting is wanted a gentler square-root inverse-frequency scheme avoids the collapse, as does effective-number weighting [9]. 
+
+6.4 Representing Masked Observations 
+
+We now ask how the choice of representation for masked observations affects the crop classes. We always keep the BVL mask; the question is only how the model reads the masked observations it already sees. The aggregate macro-F1 is misleading here, because folding masked pixels into no-crop inflates that class (its F1 jumps to 0.92), so the headline number rises for reasons unrelated to crop discrimination. We therefore use the crop-only score of Sec. 5, which excludes the no-crop and any auxiliary masked class. Table 2 and Fig. 4 agree. Giving masked observations no special represen-tation leaves crop-only F1 at 0.789, about the no-history level. Representing them consistently, with a dedicated class (0.814) or by folding them into no-crop (0.812) and remapping the masked years in the history, raises crop-only F1 by about 2.5 points on the crop classes themselves. The two target representations are indistinguishable on the crops, so the choice can be made on operational grounds: folding into no-crop keeps the 19-class schema, while a dedicated class yields an explicit masked output. An ablation that leaves the masked years un-represented in the history drops crop-only F1 back to 0.790, which shows the gain comes from representing the signal, not from the relabelling alone. 12 Shah S.R.A. et al. 
+
+Table 2: BVL treatment compared on crop-only metrics . “Hist.” marks whether the masked years are also remapped in the history; the BVL mask is kept in every row. Representation of masked obs. Hist. Crop P Crop R Crop F1 no-crop F1 None (handled only by mask) no 0.785 0.796 0.789 0.55 Own-year masked dropped no 0.782 0.800 0.790 0.56 Dedicated masked class yes 0.812 0.819 0.814 0.46 †
+
+Folded into no-crop yes 0.810 0.817 0.812 0.92 †
+
+†no-crop F1 not comparable across rows. 
+
+Table 3: Crop-only macro metrics (18 classes). History improves F1 and corrects the baseline’s recall skew (P minus R). Model Crop P Crop R Crop F1 P−RBaseline (no history) 0.769 0.810 0.787 −0.041 
+
++ History (Strategy C) 0.806 0.803 0.803 +0 .003 
+
++ Crop-rotation + BVL-class 0.814 0.823 0.817 −0.009 
+
++ Consistency loss (production) 0.810 0.817 0.812 −0.007 0.4 0.5 0.6 0.7 0.8 0.9 1.0 Recall 0.4 0.5 0.6 0.7 0.8 0.9 1.0 Precision       
+
+> precision-limited (over-predicted) recall-limited (under-predicted)
+> Wheat Barley Maize Rice Other cereals Fresh veg. Dry pulses Potatoes Sugar beet Sunflower Soybean Rapeseed Flax Grass Grapes Olives Fruits Nuts
+> (a) Per-class precision/recall shift
+> no history + history
+> 012345F1 (history no history), points
+> Sugar beet Soybean Wheat Maize Rice Flax/cotton/hemp Grass/fodder Barley Other cereals Sunflower Rapeseed Grapes Potatoes Fresh vegetables Dry pulses Nuts Fruits Olives
+> -0.0 +0.1 +0.5 +0.6 +0.7 +0.7 +0.8 +0.8 +1.0 +1.3 +1.5 +1.9 +2.0 +2.4 +2.9 +3.2 +3.7 +4.6
+> (b) Per-class F1 change
+
+Fig. 5: Effect of adding prediction history, per crop class. (a) Precision/recall shift from the no-history model (open markers) to the history model (filled); arrows show the movement. Most classes move toward the precision-equals-recall diagonal while also moving outward to higher values; the baseline’s over-prediction (points below the diagonal) is corrected. (b) Per-class change in F1 (history vs no-history, in points), sorted. Every crop class improves or holds, with the largest gains on perennial and tree crops (olives +4 .6, fruits +3 .7, nuts +3 .2). 
+
+6.5 Precision and Recall Balance 
+
+Macro-F1 alone hides how a model errs, so we look at precision and recall along the model progression (Tab. 3). The no-history baseline is clearly recall-skewed (P 0.769 against R 0.810, a gap of −0.041 ): it over-predicts crops, trading pre-cision for coverage. Adding history raises crop-only F1 by 1.6 points and, just as usefully, rebalances the errors (P 0.806, R 0.803). The historical signal lets the model commit to a class with justified confidence instead of hedging. Crop-rotation scalars and the masked-observation representation keep this balance while lifting crop-only F1 to about 0.81. The question is whether history improves or worsens this balance relative to last year’s history-free model, so we trace the per-class shift directly (Fig. 5). Each class moves from its no-history position (open marker) to its history posi-tion (filled), along an arrow. The dominant motion is toward the precision-equals-Historical Predictions as a Free Input Modality 13 
+
+recall diagonal: 13 of the 18 crop classes become better balanced, and almost all move up and to the right, so both metrics improve. The baseline’s systematic over-prediction, the cluster below the diagonal, is pulled back without losing recall. The remaining structure is interpretable. Grass/fodder stays precision-limited, as a catch-all that absorbs ambiguous pixels, while nuts and dry pulses stay recall-limited, as rare classes the model is cautious about. The high-support staples (wheat, maize, rice, rapeseed) sit balanced near the top right. This points to specific remedies, such as gentle oversampling for the recall-limited tail, far more precisely than a single number, and it shows the gain is a real improvement in calibration rather than a precision-for-recall trade. 
+
+6.6 Production Model: Rotation, Consistency, and Scaling 
+
+The production candidate combines a deeper Strategy C encoder (embedding dimension 32, 2 layers, 64-d output) with the crop-rotation scalars (Sec. 4.4), the soft consistency loss (Sec. 4.6), and the masked-observation representation of Sec. 6.4. It reaches 0.86 accuracy, 0.82 aggregate macro-F1, and, the metric we trust for cross-design comparison, 0.81 crop-only macro-F1 at about 2.6M parameters, with a well-balanced precision and recall profile (Tab. 3). It holds or improves crop-class F1 even on the harder 85-source data that lowers older configurations, the robustness point from Sec. 5. Per class, perennials again ben-efit most, with olives and fruits above 0.85 and 0.73 F1. The confusion structure is well behaved: residual errors are concentrated among agronomically similar classes (cereals; row crops) rather than spread by the historical signal. 
+
+7 Discussion 
+
+Section 3 showed that the product already reasons across years, but only through rolling-window diversity layers and a rule-based interannual fix applied outside a single-year model. That post-processor is conservative by design and cannot reason about gradual transitions. Feeding the interannual-fixed history into the model lets it learn class-specific persistence, gradual change, and confidence-weighted evidence directly. Because the input is the rule-corrected product, the model in effect distils the legacy rules and then improves on them, and unlike the rules it can raise recall. Beyond the metrics, history-aware prediction gives visibly cleaner maps. Fig-ure 6 compares inference tiles from the 2024 production model, which has no in-terannual layer, with the new model. The new maps show fewer spurious year-to-year flips on perennial parcels and smoother field interiors, doing in one learned model what previously needed a separate rule-based stage. The BVL remains the authoritative mask, used as before; our only question is how the model should read the masked observations that already appear in its own history. As Sec. 6.4 shows, a consistent representation improves the crop classes (crop-only F1 from 0.79 to 0.81). A temporally consistent model also needs fewer interannual overrides and less sieving downstream, complementing the existing chain rather than competing with it. 14 Shah S.R.A. et al.  
+
+> Fig. 6: Inference tile sample from 2024 production model (no interannual layer) vs. from the proposed model: fewer spurious year-to-year flips and smoother field interiors.
+
+History is itself model output, so errors could in principle reinforce them-selves, and a model could learn a persistence shortcut that repeats the previous label. Several factors limit both: the current and future years are masked, so the current-year label is never an input; confidence scaling down-weights uncer-tain past predictions and the weak consistency loss keeps history a soft prior; and gains also appear on rotational, non-static crops, not only stable perenni-als. We see no runaway bias, though quantifying error accumulation over many operational cycles remains important future work. Our internal test metrics com-plement, rather than replace, the service’s official independent validation [7], and tile- and parcel-level validation across held-out regions is ongoing. 
+
+8 Conclusion 
+
+We show that a recurring crop-mapping system can be improved by feeding it signals it already produces: its interannual-fixed prediction history, encoded as confidence-scaled, time-ordered tokens, and a consistent representation of the externally provided vegetation mask. On a composition-robust crop-only score, history raises crop-only F1 by 1.6 pp, with the gains on perennial and tree crops, and rebalances a recall-skewed error profile. Representing the masked observa-tions consistently adds about 2.5 points, and the production model reaches 0.86 accuracy and 0.81 crop-only macro-F1. More broadly, the same approach should fit any recurring Earth-observation or geospatial foundation model that emits annual or seasonal class maps, or integrates external ancillary layers in post-processing, since each production cycle builds up a prediction history that can be fed back in as a free modality or auxiliary source. Historical Predictions as a Free Input Modality 15 
+
+Acknowledgements 
+
+This work was carried out within the Copernicus Land Monitoring Service (CLMS) High Resolution Layer Vegetated Land Cover Characteristics (HRL VLCC2) project, funded by the European Environment Agency (EEA). The au-thors thank the EEA and the HRL VLCC2 consortium partners for supporting this research. 
+
+References 
+
+1. Abercrombie, S.P., Friedl, M.A.: Improving the consistency of multitemporal land cover maps using a hidden Markov model. IEEE Trans. Geosci. Remote Sens. 
+
+54 (2), 703–713 (2016). https://doi.org/10.1109/TGRS.2015.2463689 
+
+2. Astruc, G., Gonthier, N., Mallet, C., Landrieu, L.: AnySat: One earth observation model for many resolutions, scales, and modalities. In: IEEE/CVF Conf. Comput. Vis. Pattern Recog. (CVPR) (2025) 3. Bailly, S., Giordano, S., Landrieu, L., Chehata, N.: Crop-rotation structured clas-sification using multi-source Sentinel images and LPIS for crop type mapping. In: IEEE Int. Geosci. Remote Sens. Symp. (IGARSS) (2018). https://doi.org/10. 1109/IGARSS.2018.8518427 
+
+4. Brown, C.F., Brumby, S.P., Guzder-Williams, B., Birch, T., Hyde, S.B., Maz-zariello, J., Czerwinski, W., Pasquarella, V.J., Haertel, R., Ilyushchenko, S., et al.: Dynamic world, near real-time global 10 m land use land cover mapping. Scientific Data 9, 251 (2022). https://doi.org/10.1038/s41597-022-01307-4 
+
+5. Butsko, C., Tricht, K.V., Tseng, G., Milli, G., Rolnick, D., Cartuyvels, R., Becker-Reshef, I., Szantoi, Z., Kerner, H.: Deploying geospatial foundation models in the real world: Lessons from WorldCereal. In: Proc. TerraBytes ICML Workshop: To-wards Global Datasets and Models for Earth Observation. Proc. Mach. Learn. Res. (PMLR), vol. 292, pp. 13–31 (2025) 6. Cong, Y., Khanna, S., Meng, C., Liu, P., Rozi, E., He, Y., Burke, M., Lobell, D.B., Ermon, S.: SatMAE: Pre-training transformers for temporal and multi-spectral satellite imagery. In: NeurIPS (2022) 7. Copernicus Land Monitoring Service: HRL croplands product user manual, version 2.3 (cty). Document Code D1.12, CLMS (2025) 8. Copernicus Land Monitoring Service: HRL VLCC algorithm theoretical basis doc-ument (atbd), version 2.2. Document Code D1.2, CLMS (2025) 9. Cui, Y., Jia, M., Lin, T.Y., Song, Y., Belongie, S.: Class-balanced loss based on effective number of samples. In: CVPR (2019) 10. d’Andrimont, R., Verhegghen, A., Meroni, M., Lemoine, G., Defourny, P., van der Velde, M.: From parcel to continental scale – a first european crop type map based on Sentinel-1 and LUCAS Copernicus in-situ observations. Remote Sensing of Environment 266 , 112416 (2021). https://doi.org/10.1016/j.rse.2021. 112416 
+
+11. Danish, M.S., Munir, M.A., Shah, S.R.A., Khan, M.H., Anwer, R.M., Laaksonen, J., Khan, F.S., Khan, S.: TerraFM: A scalable foundation model for unified multi-sensor earth observation. arXiv preprint arXiv:2506.06281 (2025) 12. Garnot, V.S.F., Landrieu, L.: Lightweight temporal self-attention for classifying satellite image time series. In: Advanced Analytics and Learning on Temporal Data (AALTD), ECML PKDD Workshop (2020) 16 Shah S.R.A. et al. 13. Garnot, V.S.F., Landrieu, L.: Panoptic segmentation of satellite image time series with convolutional temporal attention networks. In: ICCV (2021) 14. Giordano, S., Bailly, S., Landrieu, L., Chehata, N.: Improved crop classification with rotation knowledge using Sentinel-1 and -2 time series. Photogrammetric En-gineering & Remote Sensing 86 (7), 431–441 (2020). https://doi.org/10.14358/ PERS.86.7.431 
+
+15. Guo, C., Berkhahn, F.: Entity embeddings of categorical variables. arXiv preprint arXiv:1604.06737 (2016) 16. Hinton, G., Vinyals, O., Dean, J.: Distilling the knowledge in a neural network. In: NeurIPS Deep Learning Workshop (2015) 17. Jakubik, J., Roy, S., Phillips, C.E., Fraccaro, P., Godwin, D., et al.: Founda-tion models for generalist geospatial artificial intelligence. In: arXiv preprint arXiv:2310.18660 (2023) 18. Lin, T.Y., Goyal, P., Girshick, R., He, K., Dollár, P.: Focal loss for dense object detection. In: ICCV (2017) 19. Loshchilov, I., Hutter, F.: Decoupled weight decay regularization. In: Int. Conf. Learn. Represent. (ICLR) (2019) 20. Pelletier, C., Webb, G.I., Petitjean, F.: Temporal convolutional neural network for the classification of satellite image time series. Remote Sensing 11 (5), 523 (2019). 
+
+https://doi.org/10.3390/rs11050523 
+
+21. Quinton, F., Landrieu, L.: Crop rotation modeling for deep learning-based par-cel classification from satellite time series. Remote Sensing 13 (22), 4599 (2021). 
+
+https://doi.org/10.3390/rs13224599 
+
+22. Rußwurm, M., Körner, M.: Self-attention for raw optical satellite time series clas-sification. ISPRS Journal of Photogrammetry and Remote Sensing 169 , 421–435 (2020). https://doi.org/10.1016/j.isprsjprs.2020.06.006 
+
+23. Rußwurm, M., Pelletier, C., Zollner, M., Lefèvre, S., Körner, M.: BreizhCrops: A time series dataset for crop type mapping. In: ISPRS Congress (2020) 24. Schneider, M., Schelte, T., Schmitz, F., Körner, M.: EuroCrops: A pan-european dataset for time series crop type classification. Scientific Data 10 , 612 (2023). 
+
+https://doi.org/10.1038/s41597-023-02517-0 
+
+25. Shah, S.R.A., Obaid-Ur-Rehman, Shabbir, Y., Ishaq, R.A.: Contextual band ad-dition and multi-look inferencing to improve semantic segmentation model per-formance on satellite images. Journal of Spatial Science 69 (3), 849–872 (2024). 
+
+https://doi.org/10.1080/14498596.2024.2305124 
+
+26. Tricht, K.V., Degerickx, J., Gilliams, S., Zanaga, D., Battude, M., et al.: World-Cereal: a dynamic open-source system for global-scale, seasonal, and reproducible crop and irrigation mapping. Earth System Science Data 15 , 5491–5515 (2023). 
+
+https://doi.org/10.5194/essd-15-5491-2023 
+
+27. Tseng, G., Cartuyvels, R., Zvonkov, I., Purohit, M., Rolnick, D., Kerner, H.: Lightweight, pre-trained transformers for remote sensing timeseries. In: NeurIPS Workshop on Tackling Climate Change with Machine Learning (2023) 28. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A.N., Kaiser, L., Polosukhin, I.: Attention is all you need. In: NeurIPS (2017) 29. Wang, Y., Feng, L., Zhang, Z., Tian, F.: An unsupervised domain adaptation deep learning method for spatial and temporal transferable crop type mapping using Sentinel-2 imagery. ISPRS J. Photogramm. Remote Sens. 199 , 102–117 (2023) 30. Yuan, Y., Lin, L.: Self-supervised pretraining of transformers for satellite image time series classification. IEEE J. Sel. Top. Appl. Earth Obs. Remote Sens. 14 ,474–487 (2021). https://doi.org/10.1109/JSTARS.2020.3036602 Historical Predictions as a Free Input Modality 17 31. Zerveas, G., Jayaraman, S., Patel, D., Bhamidipaty, A., Eickhoff, C.: Atransformer-based framework for multivariate time series representation learning. In: Proc. 27th ACM SIGKDD Conf. Knowledge Discovery and Data Mining (KDD) (2021). https://doi.org/10.1145/3447548.3467401
