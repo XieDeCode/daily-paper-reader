@@ -1,0 +1,1508 @@
+LAD-COD: Language-Aligned Dense Perception
+for Camouflaged Object Detection
+Shangye Song1, Tianzhi Zhu2, Syed Ariff Syed Hesham3,4, Xin He5, Yun Liu2,6,7∗
+1School of Computer Science, The University of Auckland
+2VCIP, College of Computer Science, Nankai University
+3School of Electrical and Electronics Engineering, Nanyang Technological University, Singapore
+4A*STAR Institute of Advanced Intelligence and Computing, Singapore
+5School of Computer Science and Engineering, Tianjin University of Technology
+6Academy for Advanced Interdisciplinary Studies, Nankai University
+7Nankai International Advanced Research Institute, Shenzhen Futian
+Abstract
+Camouflaged object detection (COD) aims to segment ob-
+jects that exhibit high visual similarity to their surroundings,
+which reduces foreground-background discriminability and
+weakens boundary evidence across appearance, texture, and
+structure. Such limitations motivate the use of instruction-
+conditioned semantics as top-down guidance for identifying
+which weak visual cues are relevant to the target. Recent seg-
+mentation systems built on large multimodal models (LMMs)
+demonstrate this possibility through instruction-conditioned
+target embeddings that guide mask decoding. However, in this
+language-to-mask paradigm, the generated target embedding
+conditions mainly the mask decoder, leaving the dense vi-
+sual features that must preserve low-contrast boundaries and
+fine local structure without explicit guidance. We propose
+Language-Aligned Dense perception for COD (LAD-COD),
+a framework that aligns top-down semantic target guidance
+with bottom-up hierarchical visual features. Instead of fully
+adapting a large generic image encoder, LAD-COD learns a
+trainable hierarchical visual branch that captures camouflage-
+sensitive texture, boundary, and contextual information. To
+align these features with the target embedding, LAD-COD
+applies Language-Aligned Dual Visual Fusion (LADVF),
+which extends the embedding beyond sparse prompting to
+query patch-level language-aligned features and to gate their
+residual integration with the hierarchical features. This de-
+sign allows semantic information to guide localization while
+preserving the fine structural details needed for camouflage
+segmentation. Experiments on CAMO, COD10K, and NC4K
+show that LAD-COD obtains the best reported value in all 12
+dataset-metric comparisons.
+Introduction
+Camouflaged object detection (COD) aims to segment ob-
+jects that blend into their surroundings. When foreground
+and background appearances are similar, the color, texture,
+and boundary contrasts that normally support localization be-
+come weak, and the remaining evidence is fragmented and
+easily confused with background variations (Fan et al. 2020;
+Pang et al. 2022). Existing COD methods address this weak-
+ness by strengthening bottom-up structural evidence. Multi-
+scale aggregation and contextual reasoning help discover
+∗Corresponding author: Yun Liu (liuyun@nankai.edu.cn)
+Input
+GT
+Ours
+LISA
+Figure 1: Visual comparison on three COD samples. Both
+methods use the instruction “Please segment the camouflaged
+object in this image.” and are fine-tuned on the same COD
+data. LISA often misses weak boundaries, while LAD-COD
+(Ours) produces more complete masks.
+concealed regions, while texture modeling, boundary super-
+vision, and hierarchical features preserve the local variations
+for accurate delineation (Fan et al. 2020; Yan et al. 2021; Zhu
+et al. 2021; Sun et al. 2022; Ye et al. 2025). Some other ap-
+proaches further introduce structural cues such as depth (Wu
+et al. 2023; Wang et al. 2023). Together these developments
+have substantially improved camouflage-sensitive perception
+without changing how the target is selected. Selection is still
+inferred from low-contrast appearance, and visually simi-
+lar background structures can produce competing responses.
+The resulting representations preserve useful structure but
+provide no explicit instruction-conditioned target guidance.
+Goal-directed human search offers a useful analogy: with-
+out a specified target, a camouflaged region rarely stands
+out, yet once the task is to find it, the image itself is un-
+changed while subtle patterns that would otherwise be over-
+looked become relevant. Instruction-conditioned semantics
+arXiv:2608.07941v1  [cs.CV]  8 Aug 2026
+
+
+play the same role for a model, indicating which weak vi-
+sual cues belong to the target. Segmentation built on large
+multimodal models (LMMs) supplies this top-down target
+guidance. Recent multimodal COD methods introduce lan-
+guage conditioning or automatically generated prompts into
+foundation-model-based segmentation (Ren et al. 2025; Hu
+et al. 2024). Beyond COD, systems such as LISA (Lai et al.
+2024), GLaMM (Rasheed et al. 2024), and PixelLM (Ren
+et al. 2024b) connect instruction following with dense predic-
+tion. In such LMM-to-SAM systems, the image-instruction
+pair produces a target embedding that serves as a sparse
+prompt for mask decoding. The embedding gives the de-
+coder an explicit target-conditioned cue, but its role remains
+concentrated at the decoding stage, limiting its interaction
+with the dense visual representation for mask prediction.
+In existing LMM-to-SAM systems, however, target guid-
+ance remains only loosely coupled with dense structural fea-
+tures. A sparse target prompt can steer mask decoding, but
+it does not explicitly organize the dense visual features the
+decoder receives. This distinction matters in COD, where ac-
+curate masks depend on weak boundaries and local structure
+that must be retained throughout visual encoding. Figure 1
+provides a qualitative illustration. Under the same instruction
+and COD fine-tuning data, LISA often misses weak object
+boundaries. The central question is therefore how target guid-
+ance can shape camouflage-sensitive dense features without
+suppressing their structural detail.
+We propose Language-Aligned Dense perception for COD
+(LAD-COD) to connect the two. Its instruction-conditioned
+target embedding provides top-down guidance, while a train-
+able hierarchical visual branch preserves bottom-up evidence
+across multiple scales. Rather than fully adapting a large
+generic image encoder, this branch learns features tailored
+to weak camouflage boundaries and local texture variations.
+The target embedding guides mask decoding as a sparse
+prompt and is further used by Language-Aligned Dual Vi-
+sual Fusion (LADVF) to retrieve target-related information
+from patch-level language-aligned features. Gated residual
+fusion then injects the retrieved semantics into the hierarchi-
+cal representation without replacing its structural content.
+Experiments on CAMO (Le et al. 2019), COD10K (Fan
+et al. 2020), and NC4K (Lv et al. 2021) show that LAD-
+COD obtains the best reported value in all 12 dataset-metric
+comparisons, with the largest margins on objects embedded
+in closely matching texture, where top-down guidance con-
+tributes most. Controlled ablations further distinguish the
+contributions of target prompting, hierarchical dense fea-
+tures, and LADVF.
+The main contributions are summarized as follows:
+• We introduce LAD-COD, a language-guided COD frame-
+work that combines instruction-conditioned target guid-
+ance with hierarchical dense visual representations.
+• We develop LADVF, which extends the target embedding
+beyond mask prompting to retrieve target-related visual
+semantics and integrate them with hierarchical features
+through gated residual fusion.
+• LAD-COD obtains the best reported value in all 12
+dataset-metric comparisons across the three COD bench-
+marks, while controlled ablations distinguish the contri-
+butions of target prompting, four-stage hierarchical fea-
+tures, and LADVF.
+Related Work
+Camouflaged Object Detection
+Camouflaged object detection (COD) aims to segment ob-
+jects that blend into their surroundings and exhibit weak
+foreground-background contrast, making boundary localiza-
+tion difficult. SINet established a search-and-identification
+strategy, which SINet-V2 extended through neighbor con-
+nection and group-reversal attention (Fan et al. 2020, 2021).
+Subsequent methods strengthen localization through bio-
+inspired mirror-stream fusion (Yan et al. 2021), texture-aware
+interactive guidance (Zhu et al. 2021), context-aware cross-
+level fusion (Chen et al. 2022), mixed-scale reasoning (Pang
+et al. 2022), and multi-stage refinement (Zhang et al. 2022; Jia
+et al. 2022). Because contours provide important structural
+evidence under camouflage, recent methods exploit boundary
+supervision, boundary-and-texture enhancement, and edge-
+semantic collaboration to recover weak object structures (Sun
+et al. 2022; Li et al. 2022; Ye et al. 2025). Depth provides
+an additional source of structural information when RGB ap-
+pearance is ambiguous (Wu et al. 2023; Wang et al. 2023).
+Other COD studies further explore uncertainty-guided rea-
+soning (Yang et al. 2021), gradient and texture learning
+(Ji et al. 2023), joint salient-camouflaged object detection
+(Li et al. 2021), frequency-aware representations (Lin et al.
+2023), and distraction mining (Mei et al. 2021).
+With the rise of foundation segmentation models, COD
+research has begun to move beyond task-specific visual ar-
+chitectures. SAM-Adapter adapts SAM to COD through
+lightweight tuning (Chen et al. 2023), while GenSAM and
+adaptive prompt generation methods derive visual prompts
+from task-level or semantic information to reduce manual
+prompting (Hu et al. 2024; Chen et al. 2025). MM-SAM
+further incorporates language-guided multimodal informa-
+tion into a SAM-based system for camouflaged scene seg-
+mentation (Ren et al. 2025). Together, these methods ex-
+tend promptable segmentation and multimodal conditioning
+to COD, but leave unresolved how semantic conditioning
+should interact with visual representations that preserve weak
+boundaries and low-contrast structure. Vision-language seg-
+mentation examines this relationship more directly by con-
+necting textual conditioning to dense visual representations
+for mask prediction.
+Vision-Language Segmentation
+Vision-language segmentation predicts pixel-level masks for
+objects or regions specified through natural language. A com-
+mon route pairs language-aligned visual representations with
+a promptable mask decoder, roles typically filled by CLIP and
+SAM (Radford et al. 2021; Kirillov et al. 2023). Grounding
+DINO instead localizes text-matched regions, and Grounded
+SAM combines this grounding stage with SAM for open-
+world segmentation (Liu et al. 2023; Ren et al. 2024a).
+Recent segmentation methods based on large multimodal
+models (LMMs) connect instruction following more directly
+
+
+Target 
+Embedding
+Prompt 
+Encoder
+SAM 
+Decoder
+Target-Guided 
+CLIP Retrieval
+CLIP Features
+LADVF
+Gated Residual 
+Fusion
+Query
+Dense Prompt 
+Projection
+Fused 
+Feature
+  Ffused
+Dense Prompt
+Hierarchical 
+Dense Feature Fs
+Trainable
+Frozen
+Concatenate
+Instruction T
+Input Image
+Output
+Sparse Prompt
+Stage1
+Stage3
+Stage2
+Stage4
+1x1 Conv + 
+Resize
+1x1 Conv + 
+Resize
+1x1 Conv + 
+Resize
+1x1 Conv + 
+Resize
+Hierarchical Visual Branch
+   LLM     
+CLIP 
+Vision
+Tower
+LoRA
+LMM
+Figure 2: Overview of the proposed LAD-COD framework. The LMM produces an instruction-conditioned target embedding
+from the image-instruction pair, which guides sparse mask prompting and target-aware semantic retrieval in LADVF. A
+trainable hierarchical visual branch preserves camouflage-sensitive structural features, and gated residual fusion aligns the two
+representations before mask decoding.
+to mask prediction, building on the multimodal interac-
+tion enabled by visual instruction tuning in LLaVA (Liu
+et al. 2024). LISA realizes this connection through a spe-
+cial [SEG] token whose hidden state conditions a mask
+decoder (Lai et al. 2024), while GLaMM and PixelLM ex-
+tend LMM-based segmentation toward fine-grained ground-
+ing and pixel-level reasoning (Rasheed et al. 2024; Ren et al.
+2024b). This language-to-mask design provides the closest
+architectural basis for LAD-COD because it derives a tar-
+get embedding from the image-instruction pair to condition
+mask prediction.
+Transferring this language-to-mask design to COD re-
+quires target guidance to work together with dense visual
+features that retain weak boundaries and subtle local varia-
+tions. In representative LMM-to-SAM systems, however, the
+target embedding mainly serves as a sparse prompt for mask
+decoding, leaving top-down target guidance only loosely cou-
+pled with the bottom-up visual representation. LAD-COD
+addresses this disconnect through Language-Aligned Dual
+Visual Fusion (LADVF), which extends the target embedding
+beyond sparse prompting to retrieve patch-level language-
+aligned features and regulate their residual integration with
+the hierarchical representation.
+Methodology
+LAD-COD Framework
+We propose LAD-COD, a language-guided framework that
+aligns an instruction-conditioned target embedding with hi-
+erarchical dense visual evidence for camouflaged object de-
+tection. LAD-COD draws that embedding from the hidden
+state of a special [SEG] token and uses it to condition a
+SAM-based mask decoder, following language-to-mask de-
+sign (Lai et al. 2024). Given an image I and an instruction
+T, the LMM generates a textual response ˆy alongside the
+token, and LAD-COD predicts a binary mask ˆ
+M for the
+camouflaged target that the image-instruction pair specifies.
+Transferring the language-to-mask design to COD is non-
+trivial, as semantic conditioning must be combined with
+dense visual evidence that preserves weak boundaries, local
+texture variations, and low-contrast structures. LAD-COD
+addresses this requirement with a trainable hierarchical vi-
+sual branch that learns camouflage-sensitive features directly
+from COD data, without fully adapting a large foundation
+image encoder. Hierarchical features preserve fine structural
+evidence, yet they lack explicit alignment with the target em-
+bedding that conditions mask prediction. Language-Aligned
+Dual Visual Fusion (LADVF) establishes this missing align-
+ment by extending the target embedding beyond sparse
+prompting to query frozen patch-level language-aligned fea-
+tures and regulate their residual integration with the hierar-
+chical representation, as illustrated in Figure 2.
+Sparse Target Prompting
+From the image-instruction
+pair, the LMM produces the hidden state ht of the [SEG]
+token as the instruction-conditioned target representation. A
+lightweight projection maps ht into SAM’s prompt embed-
+
+
+ding space as
+z = ϕtp(ht),
+(1)
+where z is the projected target embedding. The SAM prompt
+encoder then maps z to
+Psparse, Pbase = PromptEncoder(z),
+(2)
+where Psparse conditions the mask decoder with the target
+representation and Pbase is SAM’s default dense prompt. Be-
+yond sparse prompting, z is subsequently reused by LADVF
+to retrieve language-aligned visual features for integration
+with the hierarchical representation.
+Hierarchical Visual Branch
+Reliable performance in
+COD depends on dense visual features that preserve weak
+boundaries and fine local structure while incorporating broad
+contextual information (Fan et al. 2020; Sun et al. 2022). We
+therefore adopt Swin Transformer (Liu et al. 2021) as a SAM-
+compatible trainable hierarchical visual branch. The branch
+produces four stage-wise features F1, F2, F3, F4, whose spa-
+tial resolution decreases as contextual information is progres-
+sively aggregated. Each Fi is bilinearly resized to the resolu-
+tion of F1 and mapped to 64 channels through a stage-specific
+1×1 convolution; the aligned features are then concatenated
+as
+Fs = Concat(ψ1(F1), ψ2(F2), ψ3(F3), ψ4(F4)),
+(3)
+yielding Fs ∈RB×Cs×Hs×Ws with Cs = 256. Although Fs
+retains the dense evidence required by COD, it is constructed
+independently of z and therefore lacks explicit target align-
+ment, which LADVF addresses.
+Mask Decoding
+After LADVF produces the fused feature
+Ffused (described in the following subsection), it is projected
+to the image embedding expected by the SAM mask decoder,
+Eimg = ϕimg(Ffused),
+(4)
+where ϕimg(·) resizes its input to 64 × 64 and maps it to
+256 channels. A learnable dense-prompt projection further
+derives
+Pdense = ϕdp(Eimg),
+(5)
+replacing the default Pbase. The final mask is then predicted
+as
+ˆ
+M = Decoder(Eimg, Psparse, Pdense).
+(6)
+Language-Aligned Dual Visual Fusion
+LADVF establishes this missing alignment by extending
+z beyond sparse prompting to query patch-level language-
+aligned features and regulate their residual integration with
+Fs through a learned gate.
+The frozen CLIP vision tower first extracts a patch-level
+feature map
+Fc = CLIP(I),
+(7)
+where Fc ∈RB×Cc×Hc×Wc. Within LADVF, Fc serves
+as the patch-level language-aligned representation queried
+by the target embedding, while the dense representation for
+mask decoding is formed by subsequently fusing the retrieved
+information with Fs.
+To make Fc compatible with both retrieval and spatial
+fusion, we project its channels and align its resolution with
+Fs using
+˜Fc = Resize(ϕc(Fc), Hs, Ws),
+(8)
+where ϕc(·) maps Cc channels to the retrieval width Cm.
+Cross-attention operates in this retrieval dimension, while
+ϕsem(·) maps the retrieved semantic feature to the dense
+feature dimension Cs before fusion. Following channel pro-
+jection and resizing, ˜Fc ∈RB×Cm×Hs×Ws shares the spatial
+dimensions of Fs. Flattening its spatial axes yields
+Xc = Flatten( ˜Fc),
+(9)
+where Xc ∈RB×HsWs×Cm forms the keys and values for
+cross-attention. The target embedding z is projected into the
+same retrieval space as a single query token,
+Q = Unsqueeze(ϕq(z), 1),
+(10)
+where ϕq(·) maps z to Cm channels and Q ∈RB×1×Cm.
+LADVF then applies multi-head cross-attention with Q as
+the query and Xc as the keys and values to obtain a target-
+related semantic representation and its corresponding patch-
+level attention weights,
+s0, ¯A = MHA(Q, Xc, Xc),
+s = Squeeze(LN(s0), 1),
+A = Reshape( ¯A, Hs, Ws).
+(11)
+Here, MHA(·) and LN(·) denote multi-head cross-attention
+and layer normalization, respectively. The tensor
+¯A ∈
+RB×1×HsWs contains the patch-level attention weights,
+which are reshaped into A ∈RB×1×Hs×Ws to restore their
+spatial correspondence. The normalized output s ∈RB×Cm
+summarizes the retrieved language-aligned information.
+To recover a dense semantic representation, A weights the
+aligned CLIP feature spatially, while s is broadcast across all
+spatial positions,
+Fsem = ρ
+
+˜Fc ⊙A + s
+
+,
+(12)
+where A is broadcast across channels, ⊙denotes element-
+wise multiplication, and ρ(·) is a convolutional refinement
+block. The resulting Fsem ∈RB×Cm×Hs×Ws combines the
+retrieved semantic summary s with the patch-weighted CLIP
+features in a spatially aligned representation.
+To integrate Fsem with Fs while preserving the weak struc-
+tural evidence carried by the hierarchical branch, LADVF
+uses gated residual fusion,
+G = σ(η([Fs, Fsem])),
+(13)
+Ffused = Fs + G ⊙ϕsem(Fsem),
+(14)
+Here, [·, ·] denotes channel-wise concatenation, allowing the
+convolutional network η(·) to predict a spatially varying gate
+from both Fs and Fsem. The sigmoid function σ(·) bounds G
+between 0 and 1, while ϕsem(·) maps Fsem from Cm to Cs
+to match the channel width of Fs before residual integration.
+The identity path leaves Fs unchanged, while G controls
+the spatial contribution of the retrieved semantics without
+overwriting fine local structure in Fs.
+
+
+Method
+CAMO
+COD10K
+NC4K
+Sm ↑
+Eϕ ↑
+F w
+β ↑
+MAE↓
+Sm ↑
+Eϕ ↑
+F w
+β ↑
+MAE↓
+Sm ↑
+Eϕ ↑
+F w
+β ↑
+MAE↓
+SINet (Fan et al. 2020)
+0.745
+0.804
+0.644
+0.092
+0.776
+0.864
+0.631
+0.043
+0.808
+0.871
+0.723
+0.058
+UGTR (Yang et al. 2021)
+0.785
+0.823
+0.686
+0.086
+0.818
+0.853
+0.667
+0.035
+0.839
+0.874
+0.747
+0.052
+C2FNet (Chen et al. 2022)
+0.796
+0.854
+0.719
+0.080
+0.813
+0.869
+0.686
+0.036
+0.837
+0.874
+0.762
+0.052
+PreyNet (Zhang et al. 2022)
+0.790
+0.842
+0.708
+0.077
+0.813
+0.881
+0.697
+0.034
+0.834
+0.887
+0.763
+0.050
+SegMaR (Jia et al. 2022)
+0.815
+0.874
+0.753
+0.071
+0.833
+0.899
+0.724
+0.034
+0.841
+0.896
+0.781
+0.046
+BGNet (Sun et al. 2022)
+0.816
+0.871
+0.751
+0.069
+0.831
+0.901
+0.722
+0.033
+0.851
+0.907
+0.788
+0.044
+ZoomNet (Pang et al. 2022)
+0.820
+0.877
+0.752
+0.066
+0.838
+0.888
+0.729
+0.029
+0.853
+0.896
+0.784
+0.043
+SAM-Adapter (Chen et al. 2023)
+0.847
+0.873
+0.765
+0.070
+0.883
+0.918
+0.801
+0.025
+0.884
+0.904
+0.813
+0.042
+HitNet (Hu et al. 2023)
+0.849
+0.906
+0.809
+0.055
+0.871
+0.935
+0.806
+0.023
+0.875
+0.926
+0.834
+0.037
+FEDER (He et al. 2023)
+0.802
+0.867
+0.738
+0.071
+0.822
+0.900
+0.716
+0.032
+0.846
+0.905
+0.789
+0.045
+Camouflageator (He et al. 2024)
+0.829
+0.891
+0.805
+0.066
+0.843
+0.920
+0.763
+0.028
+0.869
+0.922
+0.835
+0.041
+CamoFormer (Yin et al. 2024)
+0.872
+0.929
+0.831
+0.046
+0.869
+0.930
+0.786
+0.023
+0.892
+0.938
+0.847
+0.030
+ESCNet (Ye et al. 2025)
+0.871
+0.934
+0.843
+0.044
+0.873
+0.939
+0.804
+0.021
+0.892
+0.941
+0.859
+0.028
+MM-SAM (Ren et al. 2025)
+0.863
+0.901
+0.782
+0.059
+0.896
+0.907
+0.808
+0.023
+0.898
+0.911
+0.820
+0.038
+LAD-COD
+0.899
+0.941
+0.875
+0.034
+0.898
+0.955
+0.854
+0.017
+0.907
+0.947
+0.879
+0.026
+Table 1: Quantitative comparison on CAMO, COD10K, and NC4K datasets. Methods are ordered by publication year. The best
+results are highlighted in bold, and the second-best results are underlined.
+Training Objective
+Training jointly supervises the textual response and predicted
+mask through language generation and segmentation objec-
+tives. The language modeling applies standard autoregressive
+cross-entropy to the response tokens as
+Ltext = −
+X
+t
+log p(yt | y<t, I, T).
+(15)
+Here, yt is the ground-truth response token at step t, while
+y<t contains the preceding response tokens. The probability
+p(·) is conditioned on the input image I, instruction T, and
+preceding tokens.
+Mask supervision combines binary cross-entropy and Dice
+losses to penalize pixelwise errors and region mismatch,
+Lmask = λbceLbce(M, ˆ
+M) + λdiceLdice(M, ˆ
+M).
+(16)
+Here, M and
+ˆ
+M denote the ground-truth and predicted
+masks, respectively. The coefficients λbce and λdice weight
+the two mask losses.
+The complete training objective combines the language-
+generation and mask-supervision terms as
+L = λtextLtext + Lmask.
+(17)
+The coefficient λtext balances language generation against
+mask supervision during joint optimization. Following
+LISA (Lai et al. 2024), we use λtext = 1.0, λbce = 2.0,
+and λdice = 0.5 in all experiments.
+Experiments
+Experimental Setup
+Datasets.
+We conduct experiments on three standard COD
+benchmarks, namely CAMO (Le et al. 2019), COD10K (Fan
+et al. 2020), and NC4K (Lv et al. 2021). CAMO contains
+1,000 training and 250 test images, COD10K contains 3,040
+training and 2,026 test images, and NC4K provides 4,121
+test images. Following the established COD protocol (Fan
+et al. 2020; Ren et al. 2025; Ye et al. 2025), we train on the
+combined CAMO and COD10K training sets and evaluate
+on all three test sets.
+Evaluation
+Metrics.
+We
+report
+structure-measure
+Sm (Fan et al. 2017), mean E-measure Eϕ (Fan et al.
+2018), weighted F-measure F w
+β (Margolin, Zelnik-Manor,
+and Tal 2014), and mean absolute error (MAE). The Sm
+score measures structural agreement with the ground truth,
+whereas Eϕ combines local pixel agreement with global
+foreground statistics. F w
+β weights precision-recall errors by
+spatial context, while MAE records the mean pixel-wise
+difference between the prediction and ground truth.
+Implementation Details.
+LAD-COD uses LISA-7B as the
+LMM backbone, the SAM mask decoder, and Swin-L (Liu
+et al. 2021) as its trainable hierarchical visual branch. Swin-
+L is initialized from the window-12, 384 × 384 checkpoint,
+and input images are resized to 1024 × 1024 and paired
+with a fixed instruction. Training uses four NVIDIA RTX
+3090 GPUs with DeepSpeed, a per-GPU batch size of 1 and
+a gradient accumulation over 10 steps, giving an effective
+batch size of 40. We use AdamW with an initial learning
+rate of 1 × 10−4, while the Swin branch uses 0.1× this
+rate. The model is trained for 10 epochs under the joint
+language-generation and mask-supervision objective defined
+in the Method section. Following LISA (Lai et al. 2024), we
+apply LoRA mainly to the language model’s query and value
+projections while keeping most LMM parameters frozen.
+
+
+Image
+GT
+Ours
+ESCNet
+MM-SAM
+UGTR
+HitNet
+CamoFormer
+Figure 3: Qualitative comparison of different methods on challenging COD samples.
+Comparison with State-of-the-Art Methods
+Quantitative Comparison.
+Table 1 compares LAD-COD
+with representative conventional, Transformer-based, and
+foundation-model approaches on the three common COD test
+sets. LAD-COD achieves the best performance on all eval-
+uation metrics, reflecting improved foreground complete-
+ness and reduced pixel-level errors. Its consistent superiority
+across all three datasets demonstrates strong generalization
+across varying scene complexities, object appearances, and
+levels of background distractions.
+Qualitative Comparison.
+Figure 3 compares LAD-COD
+with representative methods under clutter, weak boundaries,
+small targets, and similar foreground-background textures.
+Competing predictions omit thin structures, fragment tar-
+gets, or respond to similar backgrounds, whereas LAD-COD
+recovers more complete masks with fewer background re-
+sponses around narrow appendages and low-contrast con-
+tours, better preserving the fine structures that are most easily
+lost in camouflage scenes.
+Ablation Study
+We assess the contributions of the target embedding, four-
+stage features, and LADVF through cumulative ablations.
+All variants share the same visual backbone, mask decoder,
+768×768 input resolution, optimization settings, and training
+duration, with results reported in Table 2.
+Swin-SAM Baseline.
+To establish the reference configu-
+ration, Swin-SAM uses only Swin’s final-stage feature in the
+dense image pathway and omits the instruction-conditioned
+target embedding and LADVF. Its lower performance across
+all three datasets indicates the limitations of the final-stage
+representation when target conditioning, multi-stage struc-
+ture, and alignment-based fusion are absent.
+Target Embedding.
+To evaluate instruction-conditioned
+localization, we add the target embedding as a sparse prompt
+while retaining the final-stage dense feature. This yields the
+largest improvement across all three datasets. Because the
+dense pathway remains unchanged, the result isolates top-
+down target guidance as the main localization gain and helps
+distinguish the target from similar backgrounds. The im-
+provement therefore reflects better target selection rather than
+a change in visual encoding.
+Four-Stage Features.
+With target conditioning fixed, we
+replace the final-stage representation with four-stage features
+to evaluate the contribution of multi-level structure. The re-
+sulting gains indicate that combining early-stage features
+with later-stage representations complements target guid-
+
+
+Variant
+CAMO
+COD10K
+NC4K
+Sm ↑
+Eϕ ↑
+F w
+β ↑
+MAE↓
+Sm ↑
+Eϕ ↑
+F w
+β ↑
+MAE↓
+Sm ↑
+Eϕ ↑
+F w
+β ↑
+MAE↓
+Swin-SAM
+0.816
+0.871
+0.681
+0.080
+0.778
+0.828
+0.577
+0.048
+0.814
+0.872
+0.670
+0.065
++ target embedding
+0.889
+0.937
+0.857
+0.039
+0.879
+0.946
+0.815
+0.020
+0.898
+0.945
+0.865
+0.028
++ four-stage features
+0.895
+0.937
+0.864
+0.036
+0.890
+0.948
+0.835
+0.018
+0.904
+0.944
+0.872
+0.026
++ LADVF (LAD-COD)
+0.897
+0.942
+0.869
+0.035
+0.891
+0.952
+0.840
+0.018
+0.905
+0.948
+0.876
+0.026
+Table 2: Cumulative ablation of the target embedding, four-stage features, and LADVF at 768 × 768 resolution.
+Image
+GT
+Swin-SAM
++ target emb.
++ four-stage
++ LADVF
+Figure 4: Qualitative ablation results on challenging camouflaged scenes.
+ance, recovering weak boundaries and thin structures under
+low foreground-background contrast.
+LADVF.
+With target conditioning and hierarchical features
+in place, the final variant adds LADVF to evaluate their ex-
+plicit alignment. Its smaller but consistent gains show that
+feature-level alignment complements the preceding localiza-
+tion and structural improvements.
+Figure 4 shows the target embedding expanding coarse
+masks, four-stage features restoring weak structures, and
+LADVF refining residual gaps, consistent with Table 2.
+Conclusion
+This work presents LAD-COD, a Language-Aligned Dense
+perception framework for COD, which integrates a train-
+able hierarchical visual branch with Language-Aligned Dual
+Visual Fusion (LADVF). The instruction-conditioned tar-
+get embedding provides top-down target guidance for mask
+decoding, while the hierarchical branch provides bottom-
+up visual features that retain low-contrast boundaries, fine
+textures, and multi-scale structure. LADVF connects these
+two by querying language-aligned visual semantics with
+the target embedding, then injecting the retrieved semantics
+through gated residual fusion. This design improves localiza-
+
+
+tion while retaining the visual details needed for camouflage
+segmentation. Experiments on CAMO, COD10K, and NC4K
+demonstrate its effectiveness, and controlled ablations clar-
+ify the roles of target prompting, multi-stage features, and
+LADVF. More broadly, our results suggest that language is
+useful for COD not as a substitute for visual detail, but as a
+means of organizing weak visual cues around the target. Fu-
+ture work will explore efficient fusion under diverse referring
+expressions and multi-object scenes.
+Acknowledgements
+This work is supported by the National Natural Science
+Foundation of China (No. 62576176). The computational
+resources are supported by the Supercomputing Center of
+Nankai University (NKSC).
+References
+Chen, G.; Liu, S.-J.; Sun, Y.-J.; Ji, G.-P.; Wu, Y.-F.; and
+Zhou, T. 2022. Camouflaged object detection via context-
+aware cross-level fusion. IEEE Transactions on Circuits and
+Systems for Video Technology, 32(10): 6981–6993.
+Chen, T.; Zhu, L.; Deng, C.; Cao, R.; Wang, Y.; Zhang, S.;
+Li, Z.; Sun, L.; Zang, Y.; and Mao, P. 2023. SAM-Adapter:
+Adapting segment anything in underperformed scenes. In
+Proceedings of the IEEE/CVF International Conference on
+Computer Vision, 3367–3375.
+Chen, X.; Ren, G.; Dai, T.; Stathaki, T.; and Liu, H. 2025.
+Enhancing Prompt Generation with Adaptive Refinement
+for Camouflaged Object Detection. In Proceedings of the
+IEEE/CVF International Conference on Computer Vision,
+20672–20682.
+Fan, D.-P.; Cheng, M.-M.; Liu, Y.; Li, T.; and Borji, A.
+2017. Structure-measure: A new way to evaluate foreground
+maps. In Proceedings of the IEEE International Conference
+on Computer Vision, 4548–4557.
+Fan, D.-P.; Gong, C.; Cao, Y.; Ren, B.; Cheng, M.-M.; and
+Borji, A. 2018. Enhanced-alignment measure for binary fore-
+ground map evaluation. In Proceedings of the International
+Joint Conference on Artificial Intelligence, 698–704.
+Fan, D.-P.; Ji, G.-P.; Cheng, M.-M.; and Shao, L. 2021. Con-
+cealed object detection. IEEE Transactions on Pattern Anal-
+ysis and Machine Intelligence, 44(10): 6024–6042.
+Fan, D.-P.; Ji, G.-P.; Sun, G.; Cheng, M.-M.; Shen, J.; and
+Shao, L. 2020. Camouflaged object detection. In Proceed-
+ings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, 2777–2787.
+He, C.; Li, K.; Zhang, Y.; Tang, L.; Zhang, Y.; Guo, Z.;
+and Li, X. 2023. Camouflaged object detection with feature
+decomposition and edge reconstruction. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, 22046–22055.
+He, C.; Li, K.; Zhang, Y.; Zhang, Y.; You, C.; Guo, Z.; Li,
+X.; Danelljan, M.; and Yu, F. 2024. Strategic preys make
+acute predators: Enhancing camouflaged object detectors by
+generating camouflaged objects. In Proceedings of the Inter-
+national Conference on Learning Representations.
+Hu, J.; Lin, J.; Gong, S.; and Cai, W. 2024. Relax image-
+specific prompt requirement in SAM: A single generic
+prompt for segmenting camouflaged objects. In Proceedings
+of the AAAI Conference on Artificial Intelligence, 12511–
+12518.
+Hu, X.; Wang, S.; Qin, X.; Dai, H.; Ren, W.; Luo, D.; Tai,
+Y.; and Shao, L. 2023. High-resolution iterative feedback
+network for camouflaged object detection. In Proceedings of
+the AAAI Conference on Artificial Intelligence, 881–889.
+Ji, G.-P.; Fan, D.-P.; Chou, Y.-C.; Dai, D.; Liniger, A.; and
+Van Gool, L. 2023. Deep gradient learning for efficient cam-
+ouflaged object detection. Machine Intelligence Research,
+20(1): 92–108.
+Jia, Q.; Yao, S.; Liu, Y.; Fan, X.; Liu, R.; and Luo, Z. 2022.
+Segment, magnify and reiterate: Detecting camouflaged ob-
+jects the hard way. In Proceedings of the IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition, 4713–
+4722.
+Kirillov, A.; Mintun, E.; Ravi, N.; Mao, H.; Rolland, C.;
+Gustafson, L.; Xiao, T.; Whitehead, S.; Berg, A. C.; Lo, W.-
+Y.; Dollár, P.; and Girshick, R. 2023. Segment Anything. In
+Proceedings of the IEEE/CVF International Conference on
+Computer Vision, 4015–4026.
+Lai, X.; Tian, Z.; Chen, Y.; Li, Y.; Yuan, Y.; Liu, S.; and Jia,
+J. 2024. LISA: Reasoning segmentation via large language
+model.
+In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, 9579–9589.
+Le, T.-N.; Nguyen, T. V.; Nie, Z.; Tran, M.-T.; and Sugi-
+moto, A. 2019. Anabranch network for camouflaged object
+segmentation. Computer Vision and Image Understanding,
+184: 45–56.
+Li, A.; Zhang, J.; Lv, Y.; Liu, B.; Zhang, T.; and Dai, Y. 2021.
+Uncertainty-aware joint salient object and camouflaged ob-
+ject detection. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, 10071–10081.
+Li, P.; Yan, X.; Zhu, H.; Wei, M.; Zhang, X.-P.; and Qin, J.
+2022. FindNet: Can you find me? Boundary-and-texture en-
+hancement network for camouflaged object detection. IEEE
+Transactions on Image Processing, 31: 6396–6411.
+Lin, J.; Tan, X.; Xu, K.; Ma, L.; and Lau, R. W. H. 2023.
+Frequency-aware camouflaged object detection. ACM Trans-
+actions on Multimedia Computing, Communications, and
+Applications, 19(2): 1–16.
+Liu, H.; Li, C.; Wu, Q.; and Lee, Y. J. 2024. Visual instruc-
+tion tuning. In Advances in Neural Information Processing
+Systems, volume 36.
+Liu, S.; Zeng, Z.; Ren, T.; Li, F.; Zhang, H.; Yang, J.;
+Jiang, Q.; Li, C.; Yang, J.; Su, H.; Zhu, J.; and Zhang, L.
+2023. Grounding DINO: Marrying DINO with grounded
+pre-training for open-set object detection. arXiv preprint
+arXiv:2303.05499.
+Liu, Z.; Lin, Y.; Cao, Y.; Hu, H.; Wei, Y.; Zhang, Z.; Lin, S.;
+and Guo, B. 2021. Swin Transformer: Hierarchical vision
+transformer using shifted windows. In Proceedings of the
+IEEE/CVF International Conference on Computer Vision,
+10012–10022.
+
+
+Lv, Y.; Zhang, J.; Dai, Y.; Li, A.; Liu, B.; Barnes, N.; and
+Fan, D.-P. 2021. Simultaneously localize, segment and rank
+the camouflaged objects. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+11591–11601.
+Margolin, R.; Zelnik-Manor, L.; and Tal, A. 2014.
+How
+to evaluate foreground maps? In Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition,
+248–255.
+Mei, H.; Ji, G.-P.; Wei, Z.; Yang, X.; Wei, X.; and Fan, D.-
+P. 2021. Camouflaged object segmentation with distraction
+mining. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, 8772–8781.
+Pang, Y.; Zhao, X.; Xiang, T.-Z.; Zhang, L.; and Lu, H. 2022.
+Zoom in and out: A mixed-scale triplet network for camou-
+flaged object detection. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+2160–2170.
+Radford, A.; Kim, J. W.; Hallacy, C.; Ramesh, A.; Goh, G.;
+Agarwal, S.; Sastry, G.; Askell, A.; Mishkin, P.; Clark, J.;
+et al. 2021. Learning transferable visual models from natural
+language supervision. In Proceedings of the International
+Conference on Machine Learning, 8748–8763.
+Rasheed, H.; Maaz, M.; Shaji, S.; Shaker, A.; Khan, S.;
+Cholakkal, H.; Anwer, R. M.; Xing, E.; Yang, M.-H.; and
+Khan, F. S. 2024. GLaMM: Pixel grounding large multi-
+modal model. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, 13009–13018.
+Ren, G.; Liu, H.; Lazarou, M.; and Stathaki, T. 2025. Multi-
+modal Segment Anything Model for Camouflaged Scene
+Segmentation. In Proceedings of the IEEE/CVF Interna-
+tional Conference on Computer Vision, 19882–19892.
+Ren, T.; Liu, S.; Zeng, A.; Lin, J.; Li, K.; Cao, H.; Chen,
+J.; Huang, X.; Chen, Y.; Yan, F.; et al. 2024a. Grounded
+SAM: Assembling open-world models for diverse visual
+tasks. arXiv preprint arXiv:2401.14159.
+Ren, Z.; Huang, Z.; Wei, Y.; Zhao, Y.; Fu, D.; Feng, J.; and
+Jin, X. 2024b. PixelLM: Pixel reasoning with large multi-
+modal model. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, 26374–26383.
+Sun, Y.; Wang, S.; Chen, C.; and Xiang, T.-Z. 2022.
+Boundary-Guided Camouflaged Object Detection. In Pro-
+ceedings of the International Joint Conference on Artificial
+Intelligence, 1335–1341.
+Wang, Q.; Yang, J.; Yu, X.; Wang, F.; Chen, P.; and Zheng,
+F. 2023. Depth-aided camouflaged object detection. In Pro-
+ceedings of the ACM International Conference on Multime-
+dia, 3297–3306.
+Wu, Z.; Paudel, D. P.; Fan, D.-P.; Wang, J.; Wang, S.; Demon-
+ceaux, C.; Timofte, R.; and Van Gool, L. 2023. Source-free
+depth for object pop-out. In Proceedings of the IEEE/CVF
+International Conference on Computer Vision, 1032–1042.
+Yan, J.; Le, T.-N.; Nguyen, K.-D.; Tran, M.-T.; Do, T.-T.; and
+Nguyen, T. V. 2021. MirrorNet: Bio-inspired camouflaged
+object segmentation. IEEE Access, 9: 43290–43300.
+Yang, F.; Zhai, Q.; Li, X.; Huang, R.; Luo, A.; Cheng, H.; and
+Fan, D.-P. 2021. Uncertainty-guided transformer reasoning
+for camouflaged object detection.
+In Proceedings of the
+IEEE/CVF International Conference on Computer Vision,
+4146–4155.
+Ye, S.; Chen, X.; Zhang, Y.; Lin, X.; and Cao, L. 2025. ESC-
+Net: Edge-Semantic Collaborative Network for Camouflaged
+Object Detection. In Proceedings of the IEEE/CVF Interna-
+tional Conference on Computer Vision, 20053–20063.
+Yin, B.; Zhang, X.; Fan, D.-P.; Jiao, S.; Cheng, M.-M.;
+Van Gool, L.; and Hou, Q. 2024. CamoFormer: Masked
+separable attention for camouflaged object detection. IEEE
+Transactions on Pattern Analysis and Machine Intelligence.
+Zhang, M.; Xu, S.; Piao, Y.; Shi, D.; Lin, S.; and Lu, H. 2022.
+PreyNet: Preying on camouflaged objects. In Proceedings
+of the 30th ACM International Conference on Multimedia,
+5323–5332.
+Zhu, J.; Zhang, X.; Zhang, S.; and Liu, J. 2021. Inferring
+camouflaged objects by texture-aware interactive guidance
+network. In Proceedings of the AAAI Conference on Artificial
+Intelligence, 3599–3607.
+
+
+Appendix
+1. Additional Implementation Details.
+Table 3 summarizes the main training configuration of
+LAD-COD. The CLIP (Radford et al. 2021) vision tower, the
+LLaVA (Liu et al. 2024) multimodal projector, the SAM (Kir-
+illov et al. 2023) prompt encoder, and most LLM weights
+remain frozen; trainable modules include LoRA adapters,
+embed_tokens, lm_head, text_hidden_fcs, the
+SAM mask decoder, and the hierarchical Swin (Liu et al.
+2021) encoder with LADVF, following the LISA (Lai et al.
+2024) training paradigm.
+Component
+Value
+LMM backbone
+LISA-7B
+Hierarchical branch
+Swin-L (window-12, 384 pretrain)
+Mask decoder
+SAM
+CLIP tower
+ViT-L/14 (frozen)
+Input resolution
+1024 × 1024
+Optimizer
+AdamW
+Base learning rate
+1 × 10−4
+Swin/LADVF learning rate
+0.1× base
+LoRA rank / α / dropout
+8 / 16 / 0.05
+LoRA targets
+q_proj, v_proj
+GPUs
+4× RTX 3090
+DeepSpeed
+Yes
+Batch size (per GPU)
+1
+Gradient accumulation
+10
+Effective batch size
+40
+Training epochs
+10
+Loss λtext
+1.0
+Loss λbce
+2.0
+Loss λdice
+0.5
+LADVF width Cm
+128
+LADVF attention heads
+8
+Concatenated Swin width Cs
+256 (64 per stage)
+Gate bias init
+−2
+Table 3: Training configuration for LAD-COD.
+Instruction Templates. Training and evaluation randomly
+sample one of three equivalent instructions:
+• Can you segment the camouflaged
+object in this image?
+• Please segment the camouflaged object
+in this image.
+• What is the camouflaged object in
+this image? Please respond with
+segmentation mask.
+Response Templates. Following LISA (Lai et al. 2024), the
+supervised textual response is randomly sampled from five
+short templates that all contain the [SEG] token:
+• It is [SEG].
+• Sure, [SEG].
+• Sure, it is [SEG].
+• Sure, the segmentation result is
+[SEG].
+• [SEG].
+The corresponding [SEG] hidden state is used as the target
+embedding for mask decoding.
+2. Additional Experiments.
+We further study the sensitivity of LAD-COD to the learn-
+ing rate, input resolution, and Swin backbone capacity. Un-
+less otherwise stated, all variants follow the same LAD-COD
+training protocol as in the main paper, and are evaluated on
+CAMO (Le et al. 2019), COD10K (Fan et al. 2020), and
+NC4K (Lv et al. 2021) with Sm (Fan et al. 2017), Eϕ (Fan
+et al. 2018), F w
+β (Margolin, Zelnik-Manor, and Tal 2014),
+and MAE.
+Learning-Rate Sensitivity. We study learning-rate sensitiv-
+ity under a compact setting: the full LAD-COD framework is
+retained, but the hierarchical branch is replaced with Swin-T.
+All runs use 768 × 768 inputs and differ only in the base
+learning rate, chosen from {3×10−4, 1×10−4, 3×10−5}.
+Table 4 shows that 1 × 10−4 performs best across datasets,
+whereas 3×10−4 is clearly worse. The smaller rate 3×10−5
+collapses in late training and yields much lower final metrics.
+Learning rate
+Dataset
+Sm ↑
+Eϕ ↑
+F w
+β ↑
+MAE↓
+3 × 10−4
+CAMO
+0.772
+0.800
+0.665
+0.119
+COD10K
+0.803
+0.865
+0.665
+0.051
+NC4K
+0.793
+0.831
+0.672
+0.093
+1 × 10−4
+CAMO
+0.836
+0.869
+0.765
+0.075
+COD10K
+0.853
+0.918
+0.764
+0.029
+NC4K
+0.864
+0.908
+0.801
+0.047
+3 × 10−5
+CAMO
+0.496
+0.550
+0.385
+0.285
+COD10K
+0.587
+0.686
+0.391
+0.132
+NC4K
+0.549
+0.627
+0.433
+0.227
+Table 4: Learning-rate sensitivity of LAD-COD with Swin-T
+at 768 × 768 resolution.
+Input-Resolution Sensitivity. With Swin-L under the full
+LAD-COD protocol, we vary the input resolution over
+{384, 512, 768, 1024}. Table 5 shows steady gains from
+384 × 384 to 768 × 768, with a smaller further gain at
+1024 × 1024, which remains best on most metrics.
+
+
+Resolution
+Dataset
+Sm ↑
+Eϕ ↑
+F w
+β ↑
+MAE↓
+384 × 384
+CAMO
+0.869
+0.928
+0.827
+0.045
+COD10K
+0.842
+0.925
+0.753
+0.026
+NC4K
+0.873
+0.932
+0.828
+0.034
+512 × 512
+CAMO
+0.882
+0.937
+0.850
+0.039
+COD10K
+0.868
+0.943
+0.806
+0.021
+NC4K
+0.888
+0.941
+0.855
+0.030
+768 × 768
+CAMO
+0.897
+0.942
+0.869
+0.035
+COD10K
+0.891
+0.952
+0.840
+0.018
+NC4K
+0.905
+0.948
+0.876
+0.026
+1024 × 1024
+CAMO
+0.900
+0.941
+0.875
+0.034
+COD10K
+0.898
+0.955
+0.854
+0.017
+NC4K
+0.907
+0.947
+0.879
+0.026
+Table 5: Input-resolution sensitivity of LAD-COD (Swin-L).
+Swin Backbone Variants. We compare Swin-T/S/B/L (Liu
+et al. 2021) under the same LAD-COD protocol at 768×768.
+Table 6 shows a clear capacity trend—Swin-T is weakest,
+Swin-S and Swin-B are close, and Swin-L is best on all
+metrics—supporting Swin-L as the default backbone.
+Backbone
+Dataset
+Sm ↑
+Eϕ ↑
+F w
+β ↑
+MAE↓
+Swin-T
+CAMO
+0.836
+0.869
+0.765
+0.075
+COD10K
+0.853
+0.918
+0.764
+0.029
+NC4K
+0.864
+0.908
+0.801
+0.047
+Swin-S
+CAMO
+0.858
+0.902
+0.807
+0.055
+COD10K
+0.863
+0.929
+0.786
+0.025
+NC4K
+0.879
+0.928
+0.832
+0.036
+Swin-B
+CAMO
+0.859
+0.907
+0.808
+0.056
+COD10K
+0.868
+0.936
+0.799
+0.023
+NC4K
+0.880
+0.928
+0.835
+0.036
+Swin-L
+CAMO
+0.897
+0.942
+0.869
+0.035
+COD10K
+0.891
+0.952
+0.840
+0.018
+NC4K
+0.905
+0.948
+0.876
+0.026
+Table 6: Comparison of Swin backbone variants in LAD-
+COD at 768 × 768 resolution.
+3. Target Embedding Visualization.
+Figure 5 visualizes the spatial focus induced by the tar-
+get embedding on an NC4K (Lv et al. 2021) sample and a
+COD10K (Fan et al. 2020) sample (Image / GT / focus map).
+Part of the response lands on the camouflaged object, while
+other high responses appear on background regions with
+similar material and texture. This suggests that the target em-
+bedding provides a coarse, target-related prior that helps pull
+attention toward the camouflaged region, but is not sufficient
+alone for precise segmentation—motivating the hierarchical
+visual branch, LADVF, and the mask decoder in LAD-COD.
+4. More Visualization Results.
+This section provides additional qualitative examples be-
+yond those in the main paper. The samples are drawn from
+the CAMO (Le et al. 2019), COD10K (Fan et al. 2020),
+and NC4K (Lv et al. 2021) test sets, covering aquatic, ter-
+restrial, and flying camouflaged scenes under clutter, weak
+boundaries, and look-alike textures.
+Image
+GT
+Target embedding
+Figure 5: Target-embedding focus on NC4K and COD10K
+samples. Brighterregions indicate strongertarget-embedding
+response.
+Figure 6 shows more comparisons with ESCNet (Ye et al.
+2025), MM-SAM (Ren et al. 2025), UGTR (Yang et al. 2021),
+HitNet (Hu et al. 2023), and CamoFormer (Yin et al. 2024)
+(Image / GT / Ours / baselines). These extra samples are
+consistent with the main-paper comparisons: LAD-COD is
+usually closer to the ground truth, whereas competing meth-
+ods more often miss the target, return fragmented masks, or
+respond to look-alike backgrounds.
+Figure 7 presents further cumulative ablation examples
+under the same protocol as the main paper. Swin-SAM uses
+only the final-stage Swin feature with a SAM decoder; each
+“+” column then cumulatively adds the target embedding,
+four-stage features, and LADVF. The added cases again show
+progressive gains from localization to structural recovery and
+residual refinement.
+Figure 8 reports more Image / GT / LAD-COD masks.
+Overall, LAD-COD can localize camouflaged targets and
+produce coherent object-level segmentations, often preserv-
+ing the main body shape with a moderate amount of bound-
+ary detail. Challenges remain when the object surface is
+partly occluded or the structure is highly fine-grained (e.g.,
+thin branches and delicate appendages), where the predicted
+masks become coarser and miss fine parts. In some cases, lo-
+calization is also imperfect: similarly textured background re-
+gions are included, leading to over-segmentation beyond the
+true object extent. For thin or occluded structures, stronger
+boundary-aware supervision may help recover missing fine
+parts; for look-alike background responses, harder negative
+mining on similarly textured regions may tighten target–
+background discrimination and reduce over-segmentation.
+
+
+Image
+GT
+Ours
+ESCNet
+MM-SAM
+UGTR
+HitNet
+CamoFormer
+
+
+Image
+GT
+Ours
+ESCNet
+MM-SAM
+UGTR
+HitNet
+CamoFormer
+Figure 6: Additional qualitative comparisons with representative COD methods.
+
+
+Image
+GT
+Swin-SAM
++ target emb.
++ four-stage
++ LADVF
+
+
+Image
+GT
+Swin-SAM
++ target emb.
++ four-stage
++ LADVF
+Figure 7: Additional qualitative ablation results on challenging camouflaged scenes. Swin-SAM denotes the baseline that uses
+only the final-stage Swin feature with a SAM mask decoder (no target embedding or LADVF). Each “+” column cumulatively
+adds the corresponding module to the previous variant: target embedding, four-stage features, and LADVF.
+
+
+Image
+GT
+Ours
+Image
+GT
+Ours
+
+
+Image
+GT
+Ours
+Image
+GT
+Ours
+Figure 8: Additional Image / GT / LAD-COD mask visualizations.

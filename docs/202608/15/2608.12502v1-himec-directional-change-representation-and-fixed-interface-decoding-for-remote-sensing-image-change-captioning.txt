@@ -1,0 +1,2208 @@
+IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING
+1
+HIMEC: Directional Change Representation and
+Fixed-Interface Decoding for Remote Sensing
+Image Change Captioning
+Aysha Ashraf, Shaina Ashraf, Wafaa I. M. Hussin, Ali Haider, Zhi Lu, and Zhenming Peng, Senior Member, IEEE
+Abstract—Remote sensing image change captioning (RSICC)
+converts bitemporal imagery into a sentence describing se-
+mantic changes. Most RSICC methods condition caption de-
+coders directly on fused visual features, leaving intermediate
+change structure and decoder-interface consistency less studied.
+We present HIMEC, a framework that combines Directional
+Change Representation (DCR) with fixed-interface decoding.
+DCR separates signed differences into appearance-oriented,
+disappearance-oriented, and shared-context streams before fu-
+sion. A learned-query encoder converts the fused representation
+into visually conditioned change-query tokens that form the
+scene decoder’s only sample-dependent memory. A training-only
+auxiliary phrase decoder supplies caption-derived supervision.
+With a fixed zero input, the scene decoder maintains the same
+interface during training and inference. Separately, we evaluate
+a local-to-scene cascade conditioned on teacher-forced local
+states during training and autoregressive states at inference.
+On changed LEVIR-CC validation pairs, these states have a
+mean cosine distance of 0.69. Regime-matched conditioning
+recovers most of the associated deficit, whereas permuting state
+correspondence causes no detectable penalty. These findings are
+limited to the evaluated cascade. In a matched three-seed com-
+parison, HIMEC reaches a Consensus-based Image Description
+Evaluation (CIDEr) score of 142.81±0.60 on LEVIR-CC, versus
+139.51 ± 3.40 for direct fused-feature memory. On SECOND-
+CC, fixed-zero and regime-matched diagnostic conditioning
+reach 75.67 and 76.99 CIDEr, respectively, versus 60.77 for the
+mismatched cascade. The source code will be made publicly
+available at https://github.com/ayshaashra/HIMEC upon publi-
+cation.
+Index Terms—Bitemporal representation, change-query mod-
+eling, decoder conditioning, multitemporal image analysis, re-
+mote sensing image change captioning.
+I. INTRODUCTION
+R
+EMOTE
+sensing
+change
+analysis
+compares
+co-
+registered
+images
+acquired
+at
+different
+times
+to
+This work was supported by the Natural Science Foundation of Sichuan
+Province of China (Grant No. 2025ZNSFSC0522) and the National Natural
+Science Foundation of China (Grant No. 61571096). (Corresponding authors:
+Zhi Lu and Zhenming Peng.)
+A. Ashraf, W. I. M. Hussin, A. Haider, and Z. Peng are with
+the
+School
+of
+Information
+and
+Communication
+Engineering,
+Labo-
+ratory
+of
+Imaging
+Detection
+and
+Intelligent
+Perception,
+University
+of
+Electronic
+Science
+and
+Technology
+of
+China,
+Chengdu
+611731,
+China (e-mail: aysha.ashraf92@gmail.com; wafaaibrahim20@gmail.com; al-
+ihaider681@hotmail.com; zmpeng@uestc.edu.cn).
+S. Ashraf is with the Bonn-Aachen International Center for Information
+Technology (B-IT), University of Bonn, Bonn, Germany (e-mail: shainam-
+scs@gmail.com).
+Z. Lu is with the Laboratory of Intelligent Collaborative Computing,
+University of Electronic Science and Technology of China, Chengdu 611731,
+China (e-mail: zhilu@uestc.edu.cn).
+support urban monitoring, disaster assessment, agricultural
+management, and environmental surveillance. Most methods
+produce binary or semantic maps that localize changed
+regions.
+Deep
+learning
+has
+advanced
+these
+methods
+from
+convolutional
+Siamese
+networks
+to
+Transformer
+architectures [1], [2] and difference-aware or edge-guided
+refinement strategies [3], [4]. Although change maps localize
+and categorize changes, they do not express scene-level
+change semantics in open-vocabulary language.
+Remote sensing image change captioning (RSICC) ad-
+dresses this limitation by generating a natural-language de-
+scription from a bitemporal image pair [5]. LEVIR-CC es-
+tablished the first large-scale RSICC benchmark [6], and
+subsequent work has improved change encoding, language
+decoding, auxiliary semantic guidance, and computational
+efficiency [7]–[9]. Despite these variations, most methods
+encode the two images, form a visual representation of their
+differences, and condition a single autoregressive decoder on
+that representation.
+Prior work uses change-specific attention [10], pixel-level
+supervision, and semantic auxiliary guidance [8], [11] to
+structure visual evidence. However, most models still pass
+a single fused visual memory directly to the caption decoder.
+This design makes temporal direction implicit and leaves
+the organization of distinct change cues to the decoder. We
+therefore examine whether directional features and a compact
+learned-query interface can structure change evidence before
+sentence generation. The interface is evaluated as a whole;
+individual tokens are not interpreted as annotated objects or
+regions.
+We propose HIMEC, which combines Directional Change
+Representation (DCR) with a learned-query interface. DCR
+separates appearance-oriented, disappearance-oriented, and
+shared-context evidence before fusion. Learned queries orga-
+nize the fused evidence as visually conditioned change-query
+tokens. A training-only auxiliary decoder predicts caption-
+derived change phrases, while the scene decoder generates
+the caption through a fixed zero interface. Auxiliary-decoder
+states are not transferred to the scene decoder.
+Separately, we analyze a local-to-scene cascade whose
+downstream decoder receives teacher-forced local states dur-
+ing training and autoregressive states at inference. Regime-
+matched and content-permuted controls test whether its per-
+formance is associated with conditioning inconsistency or
+image-specific local-state content. This diagnostic cascade is
+not part of the HIMEC inference path.
+arXiv:2608.12502v1  [cs.CV]  12 Aug 2026
+
+
+2
+IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING
+The main contributions are summarized as follows.
+1) We introduce and directly test a structured change-query
+interface for RSICC. With matched DCR and training,
+change-query memory obtains 142.81 ± 0.60 CIDEr
+versus 139.51 ± 3.40 for direct fused-feature memory,
+without transferring autoregressive local-decoder states
+at inference.
+2) We organize signed temporal evidence with DCR and
+use caption-derived change phrases only as training-
+time auxiliary targets. Configuration-matched ablations
+show score reductions after removing the difference
+interaction, appearance stream, or shared-context stream;
+the other tested removals do not lower the observed
+score.
+3) In a separate diagnostic study, we quantify the training-
+to-inference discrepancy in the evaluated local-to-scene
+cascades and test regime-matched and content-permuted
+controls. We evaluate these controls on LEVIR-CC,
+SECOND-CC, DUBAI-CC, an independent encoder-
+decoder implementation, and a 300-pair LEVIR-CC sub-
+set.
+The remainder of this paper is organized as follows. Sec-
+tion II reviews related work, Section III presents the proposed
+method, Section IV describes the experiments, and Section V
+concludes the paper.
+II. RELATED WORK
+A. Remote Sensing Change Detection
+Recent methods improve localization through spatiotem-
+poral
+attention
+[3],
+edge-guided
+refinement
+[4],
+[12],
+uncertainty-aware learning [13], and optimization strate-
+gies [14]. These map-producing approaches are complemen-
+tary to change captioning, which describes scene changes in
+open-vocabulary language.
+B. Common RSICC Paradigm
+The common RSICC pipeline contains three stages. First,
+a shared or bilateral encoder extracts ordered feature maps
+from the pre-change and post-change images. Second, a
+change-representation module combines these maps through
+concatenation, differencing, attention, or semantic guidance
+to form a visual memory. Third, an autoregressive language
+decoder conditions on that memory and predicts a scene-level
+caption. In compact form, the prevailing design is
+(I1, I2)
+E−→(F1, F2)
+C−→Mchg
+D
+−→Y,
+(1)
+where E, C, and D denote image encoding, change repre-
+sentation, and caption decoding, respectively. Early methods
+used globally pooled convolutional features with recurrent de-
+coders [15]–[17]. RSICCformer combines bitemporal and dif-
+ference features with Transformer encoding and decoding [6];
+Chg2Cap uses attentive change features with a Transformer
+caption decoder [7]; SAT-Cap refines symmetric differences
+through spatial attention [18]; and RSCaMa replaces conven-
+tional sequence modeling with state-space blocks [9].
+Subsequent studies enrich one or more stages of this
+pipeline. MCCFormer models and localizes multiple changes
+through change-specific attention [10]; other methods add
+joint detection-captioning objectives [8], semantic or pixel-
+level guidance [11], [19], [20], concept interaction [21],
+semantic-spatial modeling [22], retrieval augmentation [23],
+or instruction tuning [24]. Large vision-language models
+provide another route [25], [26], while lightweight and state-
+space variants target computational cost [27]–[30].
+These methods share the direct visual-memory-to-caption
+design in (1).
+C. Learned Visual Queries and Operational Terminology
+Learned queries provide a fixed set of latent slots that can
+attend to visual memory, as demonstrated by DETR [31].
+Their meaning nevertheless depends on the supervision and
+evaluation used in a given task. Visual grounding convention-
+ally requires an explicit or evaluated correspondence between
+language and image regions. For example, MDETR uses
+phrase–object alignment supervision and evaluates grounding
+tasks [32], whereas Align2Ground learns latent phrase–region
+correspondences and evaluates phrase localization [33].
+D. Bitemporal Difference Representation
+RSICC methods construct bitemporal features through
+ordered concatenation, absolute differences, or attention-
+enhanced
+change
+maps.
+RSICCformer
+[6]
+combines
+pre-change, post-change, and absolute-difference features.
+Chg2Cap [7] integrates change-attention maps into decoding,
+whereas SAT-Cap [18] refines symmetric difference features
+with spatial attention.
+E. Train–Inference Consistency in Cascaded Decoders
+Exposure bias arises when a decoder is trained with
+ground-truth histories but conditions on its own predictions
+at inference. Common remedies include scheduled sam-
+pling [34], sequence-level reinforcement learning [35], and
+professor forcing [36]. A cascaded dual-decoder architec-
+ture introduces an additional interface discrepancy when the
+downstream decoder receives teacher-forced local states dur-
+ing training and autoregressive states during inference. This
+problem is related to the covariate shift studied in cascaded
+prediction and imitation learning [37]. The RSICC studies
+reviewed above do not report paired local-state measurements
+or controls that vary both the conditioning regime and image-
+state correspondence.
+F. Self-Critical Sequence Training
+Self-Critical Sequence Training (SCST) [38] applies a RE-
+INFORCE policy gradient with a greedy-decoding baseline to
+optimize sequence-level metrics such as CIDEr [39]. SCST
+has been used as a second training stage in RSICC [6], [7],
+[18].
+HIMEC retains the encoder-representation-decoder orga-
+nization in (1) but inserts a fixed learned-query interface
+between Mchg and the scene decoder. Its DCR module
+
+
+3
+preserves the direction of signed feature differences together
+with shared context. HIMEC does not use bounding boxes,
+masks, region proposals, object identities, or phrase–region
+annotations. We therefore refer to its latent representations
+as visually conditioned change-query tokens. The resulting
+cross-attention weights are visualized only as diagnostic at-
+tention maps and are not evaluated as spatial or semantic
+alignments. HIMEC applies SCST after cross-entropy training
+as a caption-level optimization stage; SCST does not address
+the inter-decoder conditioning discrepancy. The local-to-scene
+cascade analyzed later is a separate diagnostic architecture
+and is not part of the HIMEC inference path.
+III. METHOD
+A. Problem Formulation and Framework Overview
+Given two co-registered remote sensing images I1 and
+I2 of the same area acquired at different times, the task
+is to generate a caption Y
+= (y1, . . . , yL) that describes
+their semantic changes. A caption-derived change phrase is
+a parser-produced fragment containing a change-related verb,
+or the complete reference caption used as a fallback when
+no such fragment is found. It is a linguistic auxiliary target
+and supplies neither object identity nor a spatial boundary.
+A change-query token is a latent vector produced when a
+learned query attends to fused bitemporal features. It is not
+assumed to correspond one-to-one with an annotated object,
+region, or discrete semantic change. HIMEC maps the image
+pair to a matrix of N visually conditioned change-query
+tokens and composes a scene-level caption from their joint
+representation:
+Z = [z1, . . . , zN]⊤= ϕθ(I1, I2) ∈RN×d,
+(2)
+eY = gψ(Z).
+(3)
+where eY denotes the candidate scene caption before the final
+change/no-change decision. A shared-weight Siamese Swin
+Transformer Tiny (Swin-T) encoder followed by a learned
+feature projection produces F1, F2 ∈Rd×16×16, with the
+batch dimension omitted. Directional Change Representation
+(DCR) fuses these maps into FA, and learned-query cross-
+attention summarizes FA as Z. During cross-entropy training,
+Z supports an auxiliary caption-derived phrase objective and
+the primary scene-caption objective. Fig. 1 summarizes the
+resulting data flow and component schedule.
+B. Change Representation and Query-Based Change Encod-
+ing
+1) Directional Change Representation: DCR separates the
+two directions of the signed feature difference before fusion.
+Given F1 and F2, it retains the positive part of each direction
+together with the temporal mean:
+FApp = ReLU(F2 −F1),
+(4)
+FVan = ReLU(F1 −F2),
+(5)
+FCtx = F1 + F2
+2
+.
+(6)
+FApp and FVan retain the two positive directions of the
+feature difference, whereas FCtx is a symmetric temporal
+average rather than a supervised unchanged-region map. Be-
+fore learned reweighting and fusion, the three streams form
+a deterministic reparameterization of (F1, F2).
+Each stream is processed by an independent squeeze-
+and-excitation (SE) block [40]. The reweighted maps are
+concatenated and fused by a depthwise-separable residual
+bottleneck [41]:
+eFs = SEs(Fs),
+s ∈{App, Van, Ctx},
+(7)
+X = Pin
+
+[ eFApp; eFVan; eFCtx]
+
+,
+(8)
+FA = ReLU (Pout(D(X)) + X) .
+(9)
+Here [ ; ] denotes channel concatenation. Pin is a 1×1 con-
+volution followed by batch normalization and ReLU; D is a
+3×3 depthwise convolution followed by batch normalization
+and ReLU; and Pout is a 1×1 convolution followed by batch
+normalization. Only the signed-direction decomposition in
+(4)–(6) is parameter-free; the SE blocks and residual fusion
+are learned. The output is FA ∈Rd×16×16 with d = 512.
+A separate change head applies global average pooling
+(GAP) and a linear layer to FA:
+schg = w⊤
+c GAP(FA) + bc,
+(10)
+where schg is the change logit. This logit is used directly
+by the binary change-classification loss. At inference, pchg =
+σ(schg) is compared with the applicable threshold specified
+in Section IV-B.
+2) Change-Query Encoding: Let Q(0) = [q1, . . . , qN]⊤∈
+RN×d denote the learned query embeddings. The visual
+memory is
+MA = Flattenhw(FA) + P ∈R256×d,
+(11)
+where Flattenhw converts the 16×16 grid into a channel-
+last token sequence and P ∈R256×d is a learned positional
+embedding. The reported model uses N = 4, two Transformer
+query-encoding layers, and eight attention heads:
+Q(ℓ) = DecLayerℓ
+
+Q(ℓ−1), MA
+
+,
+ℓ∈{1, 2},
+¯Z = LN
+
+Q(2)
+.
+(12)
+Here LN denotes layer normalization. Each layer contains
+query self-attention, standard multihead cross-attention over
+MA, and a feed-forward network. The fixed-cardinality
+learned query set provides a compact interface whose slots
+can attend to different portions of the visual memory while
+being optimized jointly for scene captioning. The head-
+averaged final-layer cross-attention weights yield one soft
+16×16 response map per query. We visualize these weights
+only as diagnostic attention maps; without spatial supervision
+or localization evaluation, they are not interpreted as phrase–
+region alignments.
+The reported checkpoints retain the following detached
+residual adapter:
+A = MLPtype( ¯Z) ∈RN×K,
+Z = ¯Z + sg(A)W ⊤
+type,
+Wtype ∈Rd×K.
+(13)
+
+
+4
+IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING
+Input + Shared
+Siamese Encoder
+Directional Change
+ Representation (DCR)
+Change-Query Encoding + Adapter
+ECSD-Zero Scene Decoding
+Change-Gated Output
+I1 pre-change
+I2 post-change
+shared
+weights
+F1 tokens
+F2 tokens
+Appearance-oriented
+Fapp 
+Disappearance-oriented
+Fvan 
+Shared context stream
+Fctx 
+Three
+independent
+SE modules
+Concatenate
+FA
+Q(0) N=4
+Z̄ = LN(Q(2))
+ECSD-Zero
+Z
+C0 = 0
+MZ = Fgate(Z, C0)
+fixed zero 
+input
+Three-layer
+ autoregressive
+scene Transformer
+y<t
+Ỹ candidate
+Ỹ
+candidate
+caption
+ fixed no-change
+caption
+Caption gate
+Final caption Ŷ
+Binary change head
+GAP
+Linear
+pchg
+Auxiliary phrase decoder (CE only)
+Two-layer local
+Transformer
+caption-derived
+phrases
+pchg 
+(F1, F2)
+1/2
+         PW 
+          DW 
+          PW + skip 
+Feature Fusion
+ Swin-T 
+residual
+fusion
+Query
+encoder 
+FA
+MZ 
+Proj.
+Detached residual
+adapter
+Z̄
+A
+sg
+Z
+Sigmoid
+fused scene
+memory MZ
+Fig. 1. Architecture of HIMEC. The shared Siamese encoder, DCR, and learned-query encoder transform the image pair into change-query tokens Z. The
+scene decoder uses MZ = Fgate(Z, C0), with C0 = 0, during CE training, SCST, and inference. The dashed green branch is a CE-only auxiliary phrase
+decoder; during SCST, only the scene-generation path is active. The binary change head is optimized during CE and controls the caption gate only at inference.
+Local-decoder hidden states are never supplied to the scene decoder.
+where sg(·) stops gradients through A and K = 5 is the
+checkpoint classifier width. The semantic change-type loss
+is disabled in all reported experiments (λtype = 0); there-
+fore, the MLPtype parameters remain fixed at initialization,
+whereas Wtype is optimized by the captioning objectives. We
+retain the adapter for checkpoint fidelity and do not treat it
+as a semantic predictor or claimed contribution. Its effect is
+not isolated by the current ablations. During cross-entropy
+training, the queries receive gradients from the scene, local,
+and diversity losses; during SCST, only the scene-generation
+path updates them.
+C. Auxiliary Phrase Supervision and Scene Decoding
+1) Auxiliary Change-Phrase Supervision:
+The change-
+query tokens Z provide the shared representation for the
+phrase and scene objectives during cross-entropy training.
+The local Transformer decoder predicts an auxiliary caption-
+derived change phrase Ek = (ek,1, . . . , ek,Tk) from each
+token zk. Under teacher forcing, it models
+plocal(Ek | zk) =
+Tk
+Y
+t=1
+p(ek,t | ek,<t, zk).
+(14)
+The scene-caption target and its auxiliary phrase targets are
+derived from the same selected reference. After lowercasing,
+the rule-based parser splits the caption at “and,” “while,”
+commas, and semicolons. It retains fragments containing an
+entry in a fixed change-verb lexicon; if none remains, it uses
+the complete caption as a fallback target. The parser returns at
+most N phrases in extraction order. Unfilled slots receive all-
+padding targets and are excluded from the local loss. During
+training, the first reference yielding the maximum number of
+extracted phrases is used with probability 0.8; otherwise, a
+reference is sampled uniformly. The parser maps unchanged
+samples to “no change,” but the implemented local loss
+includes only valid phrase slots from changed samples. The
+local objective provides slot-indexed linguistic supervision,
+but the configuration-matched no_local comparison does
+not establish a captioning gain from retaining this auxiliary
+decoder.
+2) Scene Decoder With a Fixed Interface: The scene
+decoder contains a two-input gated fusion block. For change-
+query tokens Z and a second input C of the same shape, the
+block computes
+G(Z, C) = σ
+ [Z; C]W ⊤
+g + 1Nb⊤
+g
+
+,
+Fgate(Z, C) = LN
+
+Drop
+
+G(Z, C)⊙
+tanh
+ ZW ⊤
+e + 1Nb⊤
+e
+
++ (1N×d −G(Z, C))⊙
+tanh
+ CW ⊤
+h + 1Nb⊤
+h
+ 
+,
+(15)
+where [Z; C] ∈RN×2d denotes feature-wise concatenation,
+Wg ∈Rd×2d, We, Wh ∈Rd×d, and bg, be, bh ∈Rd. All
+affine maps act row-wise; ⊙and Drop denote elementwise
+multiplication and dropout, respectively.
+In HIMEC, the second input is fixed to zero during both
+training and inference:
+C0 = 0N×d,
+MZ = Fgate(Z, C0).
+(16)
+With C = C0, the second transformed branch reduces to
+tanh(1Nb⊤
+h ). Hence, Wh and the C-dependent columns of
+Wg do not affect the forward map, whereas bh and the Z-
+dependent fusion parameters remain trainable. Thus, Z is
+the sole sample-dependent input used to construct MZ. We
+call this fixed-interface configuration ECSD-Zero; C0 is a
+parameter-free compatibility input, not a learned alignment
+mechanism or an independent contribution.
+The scene Transformer attends to MZ and models
+pscene(Y | MZ) =
+L
+Y
+t=1
+pscene(yt | y<t, MZ),
+(17)
+
+
+5
+TABLE I
+USE OF HIMEC COMPONENTS DURING CE TRAINING, SCST, AND
+INFERENCE.
+Component
+CE train SCST train Inference
+Encoder, DCR, and change-query
+encoder
+Yes
+Yes
+Yes
+Scene decoder
+Yes
+Yes
+Yes
+Binary change head
+Yes
+No
+Yes
+Caption gate
+No
+No
+Yes
+Auxiliary local phrase decoder
+Yes
+No
+No
+Local
+hidden
+states
+supplied
+to
+scene decoder
+No
+No
+No
+Fixed zero second input
+Yes
+Yes
+Yes
+where y<t denotes the preceding scene-caption tokens. Dur-
+ing CE training, both decoders use teacher forcing: Z supplies
+the auxiliary phrase and diversity losses, MZ supplies the pri-
+mary scene-caption loss, and FA supplies the binary change
+loss. At inference, the local path is omitted:
+(I1, I2) →(F1, F2) →FA,
+FA →Z →Fgate(Z, 0) →MZ,
+MZ →Dscene →eY ,
+FA →schg →pchg,
+(pchg, eY )
+caption gate
+−−−−−−→bY .
+(18)
+Table I summarizes the component schedule. The auxiliary
+phrase decoder is a cross-entropy (CE) training head only;
+local hidden states are never supplied to the scene decoder.
+The final returned caption is
+bY =
+(
+Ync,
+pchg < τ,
+eY ,
+pchg ≥τ,
+(19)
+where Ync is the fixed no-change sentence and τ is the
+applicable threshold specified in Section IV-B.
+D. Training Objective
+1) Stage 1: Cross-Entropy Training: During Stage 1, the
+model minimizes
+LCE = λgLscene + λlLlocal + λdLdiv + λcLchg.
+(20)
+The scene and local terms use token-level cross-entropy with
+label smoothing ϵ = 0.1. Let Ωscene denote the nonpadding
+next-token positions in the selected reference captions. Lscene
+is CEϵ(ℓscene
+bt
+, ybt) averaged over (b, t) ∈Ωscene, where ℓscene
+bt
+is the scene-decoder logit vector. For the local loss, let V be
+the set of valid phrase slots from changed samples and let
+Ωbk contain the nonpadding next-token positions for slot k
+of sample b. The implemented slot-balanced loss is
+Llocal = 1
+|V|
+X
+(b,k)∈V
+1
+|Ωbk|
+X
+t∈Ωbk
+CEϵ (ℓbkt, ebkt) ,
+(21)
+where ℓbkt is the local-decoder logit vector. The loss is set to
+zero when a batch contains no valid phrase slots. It propagates
+through zk to the query encoder, DCR, and unfrozen encoder
+parameters.
+Let B+ = {b : cb = 1} and bzbk = zbk/ max(∥zbk∥2, δ),
+where δ = 10−12. For B+̸ = ∅, the diversity term is
+Ldiv =
+1
+|B+|
+X
+b∈B+
+2
+N(N −1)
+X
+1≤i<j≤N
+bz⊤
+bibzbj.
+(22)
+It is set to zero when B+ is empty and otherwise discourages
+the change-query tokens from collapsing to similar represen-
+tations. The change loss is
+Lchg = BCEw+ (schg, c) ,
+(23)
+where BCEw+ is binary cross-entropy averaged over the
+batch, c contains the image-level change labels, and positive
+samples are weighted by the negative-to-positive ratio w+ of
+the training split.
+We use λg = 1.0, λl = 0.3, λd = 0.05, and λc = 0.5
+for LEVIR-CC and SECOND-CC. Lscene updates the scene
+decoder, gated fusion block, query encoder, DCR, and un-
+frozen encoder parameters. Llocal updates the local-specific
+decoder parameters, the token embedding shared with the
+scene decoder, and the upstream representation path through
+Z. Ldiv acts on Z and its upstream modules. Lchg updates the
+change head and the shared visual path before query-based
+change encoding. Under ECSD-Zero, no scene-loss gradient
+or feature path passes through local-decoder hidden states.
+2) Stage 2: Self-Critical Sequence Training: The scene-
+generation path is subsequently fine-tuned with SCST [38].
+Let Θ collect its trainable parameters, let Y s ∼pΘ(· | I1, I2),
+and let Y g be the greedily decoded caption. The SCST
+objective is
+LSCST(Θ) = −EY s∼pΘ [rB(Y s)] ,
+(24)
+with the sampled policy gradient
+∇ΘLSCST ≈−sg[rB(Y s) −rB(Y g)] ∇Θ log pΘ(Y s). (25)
+The greedy reward is the self-critical baseline. In the im-
+plementation, rB is a mini-batch, CIDEr-D-inspired n-gram-
+overlap reward on model-vocabulary tokens. It uses all ref-
+erences for each image and estimates document frequencies
+from the current mini-batch; it is distinct from the corpus-
+level CIDEr-D evaluator used for reporting.
+The scene decoder is updated with the main SCST learning
+rate, while the encoder, DCR, and query-encoding modules
+participating in scene generation use a lower learning rate.
+The SCST forward pass omits the local phrase branch and
+the change head. Consequently, the local-specific decoder
+parameters and change head receive no SCST gradients; the
+shared token embedding is updated only through the scene-
+generation path, and no auxiliary phrase loss is applied.
+IV. EXPERIMENTS
+A. Datasets
+We evaluate HIMEC on three public RSICC datasets
+summarized in Table II. LEVIR-CC [6] contains 10,077 co-
+registered bitemporal pairs with five captions per pair and
+is the primary benchmark. SECOND-CC [19], [42] contains
+6041 unique pairs split into 4219 training, 595 validation, and
+1227 test pairs. We use its official augmented JSON release,
+
+
+6
+IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING
+TABLE II
+STATISTICS OF THE THREE RSICC BENCHMARKS USED IN THE
+EXPERIMENTS.
+Property
+LEVIR-CC
+SECOND-CC
+DUBAI-CC
+Pairs (train/val/test)
+6815/1333/1929
+4219/595/1227
+300/50/150
+Captions per pair
+5
+2 to 5†
+5
+Changed pairs (%)
+50.0
+71.7
+65.0
+Mean length (tokens)
+11.0 ± 3.7
+12.6 ± 3.7
+8.8 ± 3.0
+Maximum length
+39
+21
+25
+Vocabulary size
+860
+956
+298
+†SECOND-CC’s official augmented release adds one offline transformed
+view for each training and validation pair, producing 8438/1190/1227
+indexed samples in our loader. It is designed for five captions per unique
+pair; in the supplied JSON, 31 pairs contain two to four captions.
+DUBAI-CC tiles (50×50 pixels) are resized to 256×256 for training.
+which provides one offline transformed view for each training
+and validation pair; these views increase the corresponding
+loader sample counts without increasing the number of unique
+pairs. SECOND-CC differs in scene distribution, annotation
+style, and change characteristics and supports replication
+on a second benchmark after separate training. DUBAI-
+CC [17] contains 500 low-resolution pairs, including 300
+training pairs, and is used to assess path removal under data
+scarcity (Section IV-F). Because its public caption JSON does
+not provide binary change flags, we derive them from the
+reference captions: a pair is marked unchanged when at least
+one reference contains a predefined no-change marker. These
+automatically derived labels are used only for the DUBAI-CC
+change-head diagnostic.
+The datasets provide no human-audited phrase counts. We
+therefore omit parser-derived counts from Table II and report
+them only as a post-hoc diagnostic in Section IV-H3. The N-
+query interface represents capacity for several latent change
+summaries; individual queries are not assumed to correspond
+to distinct semantic changes.
+B. Evaluation Protocol
+Caption quality is measured with BLEU-4 [43], ME-
+TEOR [44], ROUGE-L [45], and CIDEr-D [39]. CIDEr-D
+is the primary captioning metric and is abbreviated as CIDEr
+in prose and compact tables. Change-F1 (CF1) evaluates the
+binary change head by thresholding its sigmoid probability
+with the threshold specified below and comparing the result-
+ing change/no-change decision with the dataset label.
+Scoring.
+Unless
+a
+table
+is
+explicitly
+marked
+as
+a
+legacy-scorer analysis, experiments use pycocoevalcap
+v1.2 [46] with Penn Treebank (PTB) tokenization through
+PTBTokenizer for candidate and reference captions.
+CIDEr-D uses four-gram matching (n = 4) and σ = 6.0;
+METEOR uses the Java METEOR 1.5 implementation.
+Inference. Beam search uses width 3, a length-penalty
+exponent of 0.7, trigram blocking, and a repetition penalty
+of 1.2. LEVIR-CC uses maximum and minimum changed-
+caption lengths of 40 and 8 tokens. SECOND-CC uses 40 and
+5 tokens, and DUBAI-CC uses 25 and 3 tokens. For cross-
+entropy and diagnostic checkpoints, the change threshold
+is selected on the validation split from 0.30 to 0.70 at
+intervals of 0.05 on LEVIR-CC and SECOND-CC and 0.10
+on DUBAI-CC. The final SCST checkpoints use τ = 0.50
+because the validation-selected cross-entropy threshold was
+not propagated through SCST checkpointing. Samples below
+the applicable threshold receive the fixed caption “there is no
+difference.”
+Seeds and statistics. Three-seed aggregates identified in
+the tables use seeds 42, 123, and 2024; all other rows state
+their seed or run count explicitly. Statistical comparisons
+use a two-sided paired bootstrap over test pairs with 10,000
+resamples. For three-seed comparisons, per-image CIDEr-
+D contributions are averaged across seeds before resam-
+pling. These image-level tests are conditional on the trained
+checkpoints and do not incorporate training-seed uncertainty.
+A small conditional p-value cannot correct differences in
+training configuration or checkpoint provenance. We report p-
+values and 95% confidence intervals where appropriate, and a
+nonsignificant result is not treated as evidence of equivalence.
+Unless stated otherwise, this protocol is used for all
+datasets. The legacy-scorer results in Tables XI and XII are
+explicitly marked exceptions.
+C. Implementation Details
+Experiments are implemented in PyTorch and run on one
+NVIDIA RTX 4070 Laptop GPU with 8 GB memory. Images
+are resized to 256×256, normalized with ImageNet statistics,
+and synchronously flipped horizontally and vertically during
+cross-entropy training. The vocabulary includes tokens occur-
+ring at least once. Scene/local maximum lengths are 40/16
+tokens on LEVIR-CC, 40/22 on SECOND-CC, and 25/16 on
+DUBAI-CC.
+Training comprises 40 cross-entropy epochs with batch size
+16 and 10 SCST epochs with batch size 8. Cross-entropy
+training uses AdamW, weight decay 10−4, five epochs of
+linear warmup, cosine decay, and gradient clipping at 0.5.
+Cross-entropy checkpoints are selected with the configured
+validation composite, 0.7 CIDEr-D plus 0.3 Change-F1,
+whereas SCST checkpoints are selected by validation CIDEr-
+D. For the final Swin-T DCR model, the nonencoder and
+encoder learning rates are 10−4 and 3×10−5; diagnostic
+models without DCR use 2×10−4 and 5×10−5. During
+SCST, the scene decoder learning rate is 5×10−5, and the
+remaining participating modules use 5×10−6. The ECSD-
+Zero SCST seeds were initialized from a common cross-
+entropy checkpoint, whereas DCR-SCST used seed-specific
+cross-entropy checkpoints; the two groups also inherit the
+different cross-entropy learning rates above. Their comparison
+is therefore not a one-factor DCR ablation.
+Swin-T [47] is the default backbone, and ResNet-50 [48] is
+evaluated as an alternative. Both are initialized with ImageNet
+weights. The local and scene decoders contain two and three
+Transformer layers [49], respectively. Both use eight attention
+heads, a hidden dimension of 512, and dropout 0.1.
+D. Diagnostic Cascaded Baseline
+This subsection defines the local-to-scene cascade used
+only for the conditioning diagnosis. It shares the visual and
+
+
+7
+Slot 1
+Slot 2
+Slot 3
+Slot 4
+Decoder slot
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Cosine distance
+0.20
+0.72
+0.90
+0.94
+Mean 0.69 ± 0.34
+Fig. 2. Slotwise cosine distance between paired teacher-forced and autore-
+gressive local states on changed LEVIR-CC validation pairs with valid phrase
+targets (Swin-T). The dashed line marks the overall mean of 0.69.
+query representations with the experimental implementation
+but differs from adopted HIMEC by supplying local-decoder
+states to the scene decoder. It is therefore a comparison
+architecture, not a component of the adopted inference graph
+in (18).
+Let ur
+k,t be the final-layer local-decoder state at valid
+position t for phrase slot k, where r ∈{TF, AR} denotes
+teacher-forced or autoregressive local decoding. The local
+representation is the projected mean of the valid token states:
+hr
+k = Wp
+
+1
+T r
+k
+T r
+k
+X
+t=1
+ur
+k,t
+
++ bp,
+Hr = {hr
+k}N
+k=1.
+(26)
+The diagnostic baseline supplies HTF to the scene decoder
+during training and HAR during inference; we denote this
+teacher-forced/autoregressive schedule as TF/AR. Its scene
+memories are
+M train
+base = Fgate(Z, HTF),
+M test
+base = Fgate(Z, HAR).
+(27)
+The different local-decoding regimes create the discrepancy
+quantified below. By contrast, adopted HIMEC always sup-
+plies the fixed C0 in (16) and never transfers Hr.
+E. Quantifying the Inter-Decoder Hidden-State Discrepancy
+For the cascaded baseline in Section IV-D, the slotwise
+discrepancy between the pooled states hTF
+k
+and hAR
+k
+is
+dk = 1 −cos
+ hTF
+k , hAR
+k
+
+,
+(28)
+where larger values indicate greater disagreement. The states
+and their use by the scene decoder are defined in (26)
+and (27). We compute dk with Swin-T on changed LEVIR-
+CC validation pairs with valid local supervision; Fig. 2 reports
+the result. This diagnostic is not part of the adopted HIMEC
+inference graph.
+The mean distance is 0.69 ± 0.34, with (d1, . . . , d4) =
+(0.20, 0.72, 0.90, 0.94). Distances increase in the later, less
+frequently supervised slots. ResNet-50 gives a similar mean
+of 0.69 ± 0.30.
+1) Replication Across Decoder Families: Replacing the
+local Transformer with a comparably sized long short-
+term memory (LSTM) decoder and retraining from scratch
+yields 134.4 CIDEr and a mean distance of 0.69 ± 0.25,
+with (d1, . . . , d4) = (0.34, 0.70, 0.85, 0.88). The discrepancy
+therefore persists across the evaluated local-decoder families.
+2) Reproduction in an Independent Architecture: We also
+construct an independent cascaded local-to-scene model with
+a ResNet-50 bilateral encoder, a local LSTM decoder, and
+an attention-based LSTM scene decoder, without DCR or
+query-based change encoding. On LEVIR-CC, teacher-forced
+conditioning yields a cosine distance of 0.73 and a test CIDEr
+of 39.7. After retraining with the downstream local-state path
+zeroed, the unused local representations have a distance of
+0.33, while the actual scene-decoder input discrepancy is zero
+by construction; CIDEr rises to 115.5. On SECOND-CC,
+the corresponding teacher-forced local-state distance is 0.95,
+and CIDEr increases from 27.8 to 78.6 after path zeroing.
+These results are mechanism checks and are not used for
+performance comparison with HIMEC.
+F. Controlled Analysis of the Inter-Decoder Mismatch
+The controls separate conditioning consistency from image-
+specific local-state content. LEVIR-CC is the primary test,
+with replication on SECOND-CC and a data-scarce test on
+DUBAI-CC.
+1) Controlled Comparison Protocols: The regime-matched
+control, reported as Matched-Path, supplies detached au-
+toregressive local states to the scene decoder during both
+training and inference. The content-permuted control, re-
+ported as Content-Scrambled, additionally permutes these
+states across samples within each mini-batch, preserving
+their marginal distribution while removing image-state cor-
+respondence. The no_local control removes the local de-
+coder and its auxiliary loss. Greedy-Aligned uses autore-
+gressive states during training while retaining the scene-
+loss gradient path. ECSD-Gate learns to suppress the sec-
+ond input, whereas ECSD-Consistency adds a teacher-
+forced/autoregressive representation-alignment loss. Fig. 3
+summarizes the principal conditioning regimes.
+2) Comparison with Exposure-Bias Remedies: The legacy
+within-scorer values are moved to Appendix Table XI to
+prevent comparison with the standard PTBTokenizer results.
+In that diagnostic table, annealed scheduled sampling and
+professor forcing score below the cascaded baseline. Fixed-
+rate scheduled sampling reaches 131.03 CIDEr at p = 0.75
+but remains 5.56 points below ECSD-Zero. Matched-Path,
+Content-Scrambled, and ECSD-Zero have higher observed
+scores than the interpolation methods under the same legacy
+scorer.
+3) Regime-Matched Control: Under the three-seed PTB
+evaluation, Matched-Path reaches 135.25 ± 0.28 CIDEr. In
+the same-seed legacy comparison in Table XI, it gains 12.65
+points over the cascaded baseline and recovers 85.5% of the
+ECSD-Zero improvement. Retaining the path while matching
+its autoregressive regime therefore recovers most of the lost
+performance. Greedy-Aligned reaches 133.36 CIDEr under
+the same legacy scorer but remains below the detached
+control.
+4) Content-Permuted Control: Content-Scrambled reaches
+a three-seed PTB mean of 134.97 ± 0.98 CIDEr, compared
+
+
+8
+IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING
+Regime
+Local hidden states
+Train--test relationship
+Interpretation
+Outcome
+Mismatch
+train
+test
+separated distributions
+inconsistent conditioning
+poor performance
+CosDist: high
+CIDEr: low
+Matched-Path
+overlapping distributions
+consistent conditioning
+good performance
+CosDist: low
+CIDEr: high
+Content-Scrambled
+same marginal support
+distribution retained;
+content correspondence removed;
+still good performance
+CosDist: high
+CIDEr: high
+ECSD-Zero
+collapsed fixed input
+fixed input in both modes
+best performance
+Input discrepancy: 0
+CIDEr: high
+Fig. 3. Diagnostic conditioning regimes. TF/AR supplies teacher-forced local states during training and autoregressive states at inference. Matched-Path uses
+autoregressive states in both modes; Content-Scrambled permutes those states across samples. ECSD-Zero supplies a constant zero input and is HIMEC’s
+adopted interface. CosDist denotes cosine distance for nonzero local states; the zero-input regime has zero train–inference input discrepancy.
+with 135.25±0.28 for Matched-Path. The paired image boot-
+strap detects no difference (p = 0.63, 95% confidence interval
+[−1.39, 0.85]), so this experiment identifies no penalty from
+removing image-state correspondence but does not establish
+equivalence. In the corrected same-backbone comparison,
+Swin-T ECSD-Zero and complete local-branch removal ob-
+tain three-seed means of 135.62 ± 1.08 and 136.34 ± 0.14,
+respectively. This descriptive difference does not establish a
+captioning benefit from auxiliary local supervision. Within the
+evaluated interfaces, these controls provide no evidence that
+sample-dependent local states are useful; they do not imply
+that ECSD-Zero learns an alignment transformation.
+5) Replication on SECOND-CC: On SECOND-CC, the
+cascaded baseline obtains 60.77 CIDEr, ECSD-Zero obtains
+75.67 ± 1.46, and Matched-Path obtains 76.99 ± 0.78. The
+Matched-Path difference relative to ECSD-Zero is +1.32,
+with a 95% confidence interval of [−0.36, +2.96] and
+p = 0.117. Both consistent-interface variants outperform the
+mismatched baseline. The interval for Matched-Path minus
+ECSD-Zero includes zero, so their difference is not resolved.
+6) Stress Test on DUBAI-CC: On DUBAI-CC, under the
+explicitly legacy scorer, the three-seed CIDEr means are
+45.53 ± 3.78 for the cascaded baseline, 48.03 ± 2.42 for
+Matched-Path, and 62.61 ± 7.67 for ECSD-Zero. The cor-
+responding Change-F1 means are 0.87 ± 0.02, 0.89 ± 0.02,
+and 0.87±0.03. This 300-pair training set does not reproduce
+the matched-path recovery.
+To test whether sample count alone explains that result, we
+draw a fixed 300-pair subset from the LEVIR-CC training
+split (subset seed 777) and retrain the three interfaces with
+seed 42, identical optimization, and the standard PTBTo-
+kenizer evaluation. TF/AR, Matched-Path, and ECSD-Zero
+obtain 110.22, 121.45, and 123.77 CIDEr, respectively; their
+BLEU-4 scores are 25.75, 37.39, and 38.33. Under the same
+nominal training-set size, regime matching recovers 11.23
+CIDEr, and ECSD-Zero gains 13.55 CIDEr over TF/AR.
+This single-subset, single-seed control does not reproduce
+the DUBAI-CC failure, so that failure cannot be attributed
+to sample count alone within the evaluated settings. The
+experiment does not isolate whether the remaining difference
+arises from spatial resolution, change distribution, annotation
+style, or optimization variance.
+G. Overall Performance
+HIMEC obtains 142.81 ± 0.60 CIDEr over seeds 42, 123,
+and 2024, with individual scores of 143.40, 143.03, and
+141.99. The matched direct-memory control reaches 139.51±
+3.40 CIDEr. The 3.30-point mean difference favors the struc-
+tured query interface under the evaluated training protocol;
+across these three runs, its standard deviation is 0.60 rather
+than 3.40. Change-F1 also increases from 0.9393±0.0053 for
+direct memory to 0.9450±0.0021 for change-query memory.
+Both modes contain 46.23 million parameters, so the score
+difference is not accompanied by a parameter-count advan-
+tage. For external context, published CIDEr values include
+143.34 for DSPG, 143.32 for CCExpert-7B, and 140.23 for
+SAT-Cap. Because the evaluation pipelines differ, we make
+no ranking or significance claim.
+1) Comparison with Recent Methods: DSPG uses a CNN–
+Transformer architecture, whereas CCExpert-7B is a 7-
+billion-parameter MLLM. MModalCC reports 144.89 CIDEr
+on the separate LEVIR-MCI benchmark with segmentation
+maps at inference; this value is excluded from Table III
+because its inputs and benchmark differ.
+HIMEC has a lower BLEU-4 score than several recent
+methods (49.01 versus 62.8 to 66.7). Under the same PTBTo-
+
+
+9
+TABLE III
+REPORTED RESULTS ON THE LEVIR-CC TEST SET. EVALUATION PROTOCOLS AND AUXILIARY INPUTS DIFFER; CROSS-METHOD VALUES ARE
+DESCRIPTIVE.
+Method
+Architecture
+BLEU-4
+METEOR
+ROUGE-L
+CIDEr-D
+CF1
+DUDA [15]
+CNN+LSTM
+57.79
+34.21
+69.18
+124.32
+0.9120
+MCCFormer-D [10]
+CNN+Transformer
+56.38
+32.91
+68.56
+124.44
+0.9135
+RSICCformer [6]
+CNN+Transformer
+62.77
+37.84
+73.45
+134.12
+0.9245
+Chg2Cap [7]
+CNN+Transformer
+64.39
+38.75
+74.92
+136.61
+0.9305
+SAT-Cap [18]
+CNN+Transformer
+65.82
+39.45
+75.82
+140.23
+0.9365
+DSPG [50]
+CNN+Transformer
+66.71
+41.61
+76.81
+143.34
+NR
+Semantic-CC [11]
+SAM+LLM
+64.51
+40.58
+77.76
+138.51
+NR
+RSCaMa [9]
+State space
+65.24
+39.91
+75.24
+136.56
+NR
+CCExpert-7B [25]
+MLLM (7B)
+65.49
+41.82
+76.55
+143.32
+NR
+HIMEC (ours)
+RGB-only change-query Transformer
+49.01
+35.10
+74.32
+142.81
+0.9450
+HIMEC uses the protocol in Section IV-B; its three-seed means are 142.81 ± 0.60 CIDEr-D and 0.9450 ± 0.0021 CF1. Other entries are published values.
+Published CF1 values are included when available and marked NR otherwise; because the external models were not re-evaluated under our change-label
+pipeline, this comparison is descriptive. Bold marks HIMEC’s highest reported CF1; competing values are left unformatted. SAM: Segment Anything
+Model; LLM: large language model; MLLM: multimodal large language model; NR: not reported.
+kenizer pipeline, RSICCformer and Chg2Cap obtain CIDEr
+scores of 134.19 and 136.63, within 0.1 of their published
+values, and BLEU-4 scores of 64.88 and 64.39. The BLEU-4
+gap therefore remains under a common scorer and cannot be
+dismissed as a scoring-pipeline artifact.
+We decompose the seed-42 output with a lowercase word
+tokenizer. On the 964 changed pairs, candidate and mean-
+reference lengths are 9.54 and 10.93 words, but the corpus
+brevity penalty is 0.993; length alone therefore accounts for
+little of the observed reduction. Clipped 1–4-gram precisions
+decline from 0.758 to 0.501, 0.294, and 0.158. Only 11.5%
+of changed captions are unique, and the three most frequent
+changed-caption templates cover 38.3% of the subset. The
+lower BLEU-4 is thus associated primarily with limited high-
+order phrase overlap and template concentration, in addi-
+tion to modest underlength. The five references also show
+substantial wording variation (mean pairwise 4-gram Jaccard
+0.009 under this diagnostic tokenizer). CIDEr can still reward
+agreement on relatively informative content n-grams through
+consensus-weighted TF–IDF, which is consistent with the
+smaller CIDEr gap. This analysis characterizes the output
+but does not establish that ECSD-Zero causes the linguistic
+pattern; public predictions for the recent comparison methods
+are unavailable for the same decomposition.
+Rescoring
+the
+released
+MModalCC
+checkpoint
+on
+SECOND-CC
+reproduces
+its
+reported
+CIDEr
+score
+in
+Table
+VIII.
+The
+released
+RSICCformer
+and
+Chg2Cap
+predictions
+are
+also
+rescored
+under
+our
+PTBTokenizer
+pipeline; the remaining cross-method entries use published
+values.
+H. Controlled and Exploratory Component Analysis
+1) Configuration-Matched Component Ablations: These
+ablations change one factor at a time. Removing the difference
+interaction causes the largest reduction (−16.16 CIDEr),
+while removing appearance and shared context reduces CIDEr
+by 2.99 and 1.12 points. These three interventions lower
+the observed score under this seed. Removing the diversity
+objective, phrase supervision, two-layer query encoder, or
+TABLE IV
+SINGLE-SEED, CONFIGURATION-MATCHED CROSS-ENTROPY COMPONENT
+ABLATIONS ON LEVIR-CC.
+Variant
+B-4
+CIDEr
+∆C
+CF1
+Full HIMEC (CE)
+41.57
+137.65
+0.00
+0.9435
+−Ldiv
+42.55
+138.28
++0.63
+0.9471
+Repeated pooled FA
+44.51
+140.82
++3.17
+0.9467
+−difference interaction
+35.29
+121.49
+-16.16
+0.8825
+−phrase supervision
+42.76
+138.79
++1.14
+0.9481
+−appearance stream
+40.84
+134.66
+-2.99
+0.9328
+−disappearance stream
+42.42
+138.69
++1.04
+0.9459
+−shared context
+41.70
+136.53
+-1.12
+0.9446
+All rows use Swin-T, ECSD-Zero, seed 42, 40 CE epochs, identical
+optimizer and learning rates, beam width 3, and PTBTokenizer. ∆C is the
+CIDEr change relative to the full row; positive values mean that removal
+increased the observed score. “Repeated pooled FA” replaces the two-layer
+query encoder and does not remove spatial supervision, which HIMEC
+does not use. Bold and underline mark the highest and second-highest
+observed values per metric; formatting does not imply significance.
+TABLE V
+SINGLE-SEED QUERY-COUNT SENSITIVITY ON LEVIR-CC USING
+SWIN-T.
+N
+CIDEr
+B-4
+M
+R-L
+CF1
+2
+137.76
+40.93
+34.17
+72.44
+0.9452
+4 (default)
+134.27
+43.65
+33.74
+71.67
+0.9266
+8
+137.61
+41.84
+34.09
+71.99
+0.9511
+disappearance stream does not reduce the observed CE score,
+so we do not attribute an isolated gain to those components.
+The three-seed query-versus-direct comparison in Table VI
+evaluates the complete query-memory interface after SCST;
+it does not establish an independent contribution from the
+specific two-layer query encoder, whose replacement did not
+lower the single-seed CE score.
+2) Query-Count Sensitivity: Table V shows that, with
+backbone and seed matched, N = 2 and N = 8 exceed
+the default N = 4 run by 3.49 and 3.34 CIDEr points,
+respectively. Because each setting is represented by one
+training run, the experiment does not identify an optimal
+
+
+10
+IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING
+TABLE VI
+CONFIGURATION-MATCHED SCENE-MEMORY COMPARISON ON
+LEVIR-CC.
+Scene memory
+B-4
+CIDEr
+CF1
+Direct fused features FA
+46.80 ± 2.70
+139.51 ± 3.40
+0.9393 ± 0.0053
+Change-query tokens Z
+49.01 ± 0.62 142.81 ± 0.60 0.9450 ± 0.0021
+Means ± population standard deviations over seeds 42, 123, and 2024.
+Both rows use the same Swin-T encoder, DCR, ECSD-Zero input, CE and
+SCST schedules, decoding settings, and standard PTBTokenizer scoring;
+only the scene memory is changed. Bold and underline mark the higher
+and lower matched means. B-4: BLEU-4.
+query count. Four queries remain the pre-established capacity
+of the reported system; this comparison neither identifies
+N = 4 as optimal nor demonstrates improved coverage of
+descriptions containing several changes.
+3) Exploratory Parser-Derived Phrase Subsets: We con-
+duct a post-hoc diagnostic using the same rule-based phrase
+extractor employed for auxiliary targets. Each changed
+LEVIR-CC test pair is assigned the maximum number of
+nonpadding phrases extracted from its five references, yield-
+ing 411 one-phrase and 553 two-or-more-phrase pairs; the
+remaining 965 pairs are unchanged. Across the three final
+HIMEC checkpoints, the one-phrase subset obtains 36.03 ±
+2.89 BLEU-4, 49.16 ± 1.68 ROUGE-L, and 68.94 ± 3.24
+mean per-image CIDEr-D contribution. The corresponding
+two-or-more-phrase values are 35.51±0.26, 50.41±0.87, and
+72.96 ± 2.41. CIDEr-D is scored once with full-test-corpus
+document frequencies before its per-image contributions are
+grouped.
+These subset scores are descriptive and are not difficulty-
+normalized evidence of a multi-phrase benefit. Phrase counts
+disagree among the five references for 548 of 964 changed
+pairs (56.8%), the parser-derived bins have not been human-
+audited, and the available runs do not provide a fully matched
+direct-caption or component-removal comparison for these
+subsets. We therefore use this analysis only to characterize the
+final model and make no claim of phrase–region grounding
+or causal superiority on multi-change scenes.
+I. Sensitivity and Evaluation on SECOND-CC
+1) Sensitivity to Image Degradation: We test brightness,
+contrast, Gaussian blur, and spatial translation by applying
+the same deterministic perturbation to both images. This
+experiment measures sensitivity to these conditions and is not
+a claim of general corruption robustness.
+Brightness and translation change CIDEr by at most 0.5
+points and leave Change-F1 stable (Appendix Table XII).
+High contrast reduces CIDEr by 4.5 points with little change
+in Change-F1. Gaussian blur has the largest effect: at severity
+3.0, CIDEr falls from 135.18 to 111.29 and Change-F1
+from 0.9374 to 0.2457. Targeted augmentation raises the
+corresponding values to 130.72 and 0.8012, reducing but not
+eliminating the blur sensitivity. The table is placed in the
+appendix because this perturbation harness uses the legacy
+scorer.
+Table VII shows a same-seed ECSD-Zero CE difference
+of 0.84 CIDEr in favor of Swin-T. DCR CE differs by 2.25
+TABLE VII
+DESCRIPTIVE LEVIR-CC RESULTS FROM AVAILABLE CHECKPOINTS,
+GROUPED BY BACKBONE.
+Variant
+Backbone
+CIDEr
+ECSD-Zero CE
+ResNet-50
+136.07†
+Swin-T
+136.91†
+DCR CE
+ResNet-50
+135.40 ± 0.89
+Swin-T
+137.65†
+DCR-SCST
+ResNet-50
+139.40 ± 1.09
+Swin-T
+142.81 ± 0.60
+Unmarked entries are three-seed means ± population standard deviations
+over seeds 42, 123, and 2024. †Single run with seed 42. Training and
+checkpoint provenance is not fully matched across all rows; the table is
+descriptive.
+points, although its Swin-T entry is a single run. For DCR-
+SCST, the PTB-consistent three-seed means differ by 3.41
+points. These comparisons describe the saved runs but do not
+constitute a controlled statistical backbone study.
+2) SECOND-CC Evaluation: The ECSD diagnostic ar-
+chitecture is trained from scratch on SECOND-CC without
+dataset-specific architectural changes. These experiments use
+ECSD-Zero without DCR, so they replicate the interface com-
+parison on a second dataset rather than evaluate the complete
+DCR-SCST system. Its rows in Table VIII use the standard
+protocol in Section IV-B. The published reference rows use
+different scoring or additional inputs and are included only
+for context.
+SECOND-CC
+emphasizes
+agricultural
+and
+land-cover
+changes
+and
+has
+predominantly
+single-clause
+captions.
+ECSD-Zero obtains 76.88 CIDEr with seed 42, and the
+corresponding single-seed SCST checkpoint scores 81.47. In
+the seed-42 comparison in Table IX, removing the difference
+interaction changes CIDEr by −2.67 points, replacing learned
+query encoding with repeated pooled features changes it by
++1.51, and removing local supervision changes it by +0.28.
+These single-seed results do not establish general component
+effects.
+Fig. 4 compares the ECSD-Zero diagnostic model with
+the released MModalCC checkpoint under our qualitative
+harness. ECSD-Zero describes the building disappearance in
+Scene 2 and identifies Scene 4 as unchanged; MModalCC
+predicts a new building in Scene 4. These selected examples
+illustrate caption behavior but do not isolate a component
+effect.
+J. Efficiency Analysis
+HIMEC ECSD-Zero uses 42.8 million parameters, com-
+pared with 201.5 million for RSICCformer and 329.0 million
+for Chg2Cap, and has lower encoder GFLOPs (Table X).
+Its measured latency is much higher, but the non-equivalent
+decoding implementations make this an implementation rather
+than an architecture comparison. ECSD-Zero adds no separate
+inference step.
+
+
+11
+Scene 1
+Scene 2
+Scene 3
+Scene 4 (no change)
+↓
+GT: the bareland is replaced by a huge
+industrial area
+ECSD-Zero: many buildings are
+constructed in place of the barren area
+MModalCC: the bareland is replaced
+by a residential area
+↓
+GT: rectangular buildings at the corner
+are disappeared
+ECSD-Zero: many buildings are
+disappeared at the corner of the scene
+MModalCC: many buildings near the
+road are disappeared
+↓
+GT: tree vegetation is increased along
+the wide asphalt road
+ECSD-Zero: more trees are grown in
+a green area near the road
+MModalCC: the number of trees is
+increased
+↓
+GT: almost nothing is changed
+ECSD-Zero: there is no difference
+MModalCC: a big building with blue
+roof is built in the bottom left
+Fig. 4. Selected SECOND-CC captions from the ECSD-Zero diagnostic model and MModalCC. Phrases judged visually supported are shown in bold green;
+errors or unsupported details are shown in italic red. Ground-truth captions are reproduced verbatim from the dataset.
+TABLE VIII
+SECOND-CC CAPTIONING RESULTS FOR THE DIAGNOSTIC
+FIXED-INTERFACE ARCHITECTURE, WITH PUBLISHED METHODS SHOWN
+FOR CONTEXT.
+Method
+B-4
+M
+R-L
+C
+CF1
+RSICCformer† [6]
+34.00
+26.20
+54.70
+81.00
+NE
+MModalCC† [19]
+38.60
+28.00
+58.40
+93.30
+NE
+Cascaded TF/AR‡
+13.75
+37.76
+41.20
+60.77
+0.9660
+ECSD-Zero (CE)‡
+20.02
+20.24
+50.59
+76.88
+0.9671
+ECSD-Zero (SCST)‡
+25.72
+20.74
+53.23
+81.47
+0.9460
+†Published results using beam width 4 and a custom scorer; MModalCC
+also uses semantic maps. Their CF1 values were not reported. ‡Single run;
+the three-seed ECSD-Zero mean is 75.67 ± 1.46. Bold and underline rank
+only the three diagnostic rows; published context rows use a different
+protocol. The high TF/AR METEOR reflects exact matches on unchanged
+examples despite weak changed-caption scores. B-4: BLEU-4; M:
+METEOR; R-L: ROUGE-L; C: CIDEr-D; CF1: Change-F1; NE: not
+evaluated.
+TABLE IX
+SINGLE-SEED, CONFIGURATION-MATCHED COMPONENT COMPARISON ON
+SECOND-CC.
+Variant
+CIDEr
+∆
+CF1
+ECSD-Zero (reference)
+76.88
+Ref.
+0.9671
+no diff. interaction
+74.21
+−2.67
+0.9605
+repeated pooled FA
+78.39
++1.51
+0.9654
+no local supv.
+77.16
++0.28
+0.9672
+Results use ResNet-50, seed 42, and the PTBTokenizer pipeline. “Repeated
+pooled FA” is the saved checkpoint named no_grounding; no spatial
+grounding is removed. Only within-table changes are interpreted.
+TABLE X
+EFFICIENCY MEASUREMENTS FOR THE EVALUATED CHECKPOINTS ON
+ONE RTX 4070 GPU.
+Model
+Params Enc. GFLOPs Latency CIDEr-D
+(M)
+(ms)
+HIMEC ECSD-Zero (R50)
+42.8
+17.9
+298
+136.07
+HIMEC DCR-SCST (SwT)
+46.2
+13.0
+333
+142.81
+RSICCformer
+201.5
+46.2
+32
+134.19
+Chg2Cap
+329.0
+70.1
+24
+136.63
+Batch size 1 and beam width 3; latency is averaged over 100 passes. R50:
+ResNet-50; SwT: Swin-T. RSICCformer and Chg2Cap are rescored under
+our harness. HIMEC uses uncached, unbatched beam search; the baselines
+use cached, batched decoding. Bold and underline mark first and second
+for parameters and encoder GFLOPs (lower) and CIDEr-D (higher); latency
+is unranked because implementations differ.
+K. Qualitative Results
+Fig. 5 shows five LEVIR-CC examples. HIMEC describes
+the parking-lot structure in Scene 1, the houses and roads in
+Scenes 2 and 3, and the road with nearby buildings in Scene
+4. All three methods handle the unchanged pair in Scene 5.
+The errors shown for the baselines include omitted changes
+and unsupported locations or objects.
+Fig. 6 shows strong appearance-oriented responses on new
+construction and weaker disappearance-oriented responses in
+the selected examples. The selected failures involve subtle or
+small-area changes with weak difference signals. For the final
+seed-42 HIMEC checkpoint, the change head produces 85
+false negatives and 15 false positives. Relative to its matched
+CE checkpoint, SCST reduces the mean changed-caption
+length from 11.49 to 9.54 words; the dataset-level mean
+length of changed references is 10.89. These visualizations
+are used for illustration and do not provide separate causal
+
+
+12
+IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING
+evidence.
+L. Limitations
+The matched-regime recovery appears on LEVIR-CC and
+SECOND-CC but not on DUBAI-CC. The matched 300-
+pair LEVIR-CC control does not reproduce the DUBAI-CC
+failure, so sample count alone does not account for the dif-
+ference within these settings; one subset and one seed cannot
+identify the relevant dataset or optimization factor. Although
+the discrepancy recurs across backbones, local decoders, and
+an independent implementation, the study remains limited to
+local-to-scene cascades and does not test a published third-
+party dual-decoder system.
+The three-seed comparison isolates query memory from
+direct fused-feature memory at the complete-system level,
+and the CE ablations isolate individual components under one
+seed. They do not isolate DCR as a whole, and the single-
+seed ablations do not quantify training variance. In particular,
+the evaluated removals provide no positive evidence for
+the diversity objective, phrase supervision, two-layer query
+encoder, or disappearance stream. The complete DCR-SCST
+system has not been evaluated on a second dataset, and
+the fixed random type adapter in (13) is retained only for
+checkpoint reproduction and has not been ablated.
+Bootstrap tests are conditional on the trained checkpoints,
+and cross-method comparisons use nonidentical evaluation
+pipelines. Automatic metrics do not replace human evalu-
+ation of caption factuality and fluency. The parser-derived
+phrase subsets are post hoc and show substantial disagreement
+among references. They characterize model behavior under
+the implemented parser but do not provide human-audited
+evidence of improved coverage on multi-change scenes.
+V. CONCLUSION
+HIMEC is a structured change-query framework for remote
+sensing image change captioning. DCR organizes signed
+bitemporal evidence into appearance-oriented, disappearance-
+oriented, and shared-context streams before learned fusion.
+The resulting query tokens form the only sample-dependent
+semantic memory supplied to the adopted scene decoder. A
+caption-derived phrase objective is used only as auxiliary
+supervision during cross-entropy training; the local phrase
+decoder is omitted from self-critical training and inference.
+The local-to-scene cascade was evaluated separately as a
+diagnostic baseline. Regime-matched conditioning recovered
+most of the observed loss on LEVIR-CC and SECOND-CC;
+content permutation, which removes image-state correspon-
+dence, produced no detectable penalty. These controls are
+consistent with a contribution from conditioning inconsis-
+tency in the evaluated cascades, but they do not establish
+a field-wide RSICC limitation or equivalence among the
+interventions. The fixed zero input disables rather than aligns
+the local-state pathway.
+With SCST, HIMEC achieves 142.81 ± 0.60 CIDEr on
+LEVIR-CC, compared with 139.51±3.40 for matched direct
+fused-feature memory. In the configuration-matched single-
+seed CE ablations, scores decrease when the difference in-
+teraction, appearance stream, or shared context is removed,
+whereas removing several other retained components does not
+reduce the observed score. Cross-method differences remain
+descriptive because published results use different evalua-
+tion pipelines. Remaining evidence gaps include multi-seed
+component ablations, removal of DCR as a complete block,
+evaluation of the complete model on another dataset, human-
+audited phrase counts, third-party cascaded architectures, and
+human assessment of caption factuality and coverage.
+
+
+13
+Scene 1
+Scene 2
+Scene 3
+Scene 4
+Scene 5 (no change)
+Before (t1)
+↓
+↓
+↓
+↓
+↓
+After (t2)
+GT: a building is built on the
+bareland with a parking lot
+HIMEC: a large building with
+a parking lot is built on the
+bareland
+RSICCformer: some
+buildings with a parking lot
+appear in the open space
+Chg2Cap: a large building
+with a parking lot is built
+GT: many houses scattered on
+bareland and roads are built
+HIMEC: some roads and
+many houses are built on the
+bareland
+RSICCformer: many houses
+are built along the road
+Chg2Cap: massive houses on
+bareland and many villas
+GT: residential area with
+houses and roads are built
+HIMEC: some roads and
+many houses are built on
+bareland
+RSICCformer: many houses
+are built along the road
+Chg2Cap: many houses are
+built along the roads
+GT: many plants replaced by
+a road with rows of buildings
+HIMEC: plants are removed
+and a road is built with villas
+RSICCformer: many houses
+are built along the road
+Chg2Cap: a road with houses
+in the bottom right
+GT: the scene is the same as
+before
+HIMEC: there is no difference
+RSICCformer: the scene is
+the same as before
+Chg2Cap: the scene is the
+same as before
+Fig. 5.
+Selected LEVIR-CC captions from HIMEC, RSICCformer, and Chg2Cap. Phrases judged visually supported are shown in bold green; errors or
+unsupported details are shown in italic red. Ground-truth captions are reproduced verbatim from the dataset.
+TABLE XI
+DIAGNOSTIC COMPARISON OF LOCAL-STATE CONDITIONING
+INTERVENTIONS ON THE LEVIR-CC TEST SET USING RESNET-50, SEED
+42, AND THE LEGACY SCORER. TF/AR DENOTES TEACHER-FORCED
+TRAINING AND AUTOREGRESSIVE INFERENCE; SS AND PF DENOTE
+SCHEDULED SAMPLING AND PROFESSOR FORCING, RESPECTIVELY.
+Variant
+CIDEr
+∆vs. baseline
+Cascaded TF/AR baseline
+121.79
+N/A
+SS annealed (linear)
+115.46
+-6.33
+Professor Forcing
+120.29
+-1.50
+SS (p=0.25)
+128.00
++6.21
+SS (p=0.5)
+128.91
++7.12
+SS (p=0.75)
+131.03
++9.24
+Greedy-Aligned
+133.36
++11.57
+Matched-Path
+134.44
++12.65
+Content-Scrambled
+135.36
++13.57
+ECSD-Zero⋆
+136.59
++14.80
+All rows use the same legacy scorer without PTBTokenizer, so only
+within-table differences are compared. ⋆Adopted interface. Bold and
+underline mark the top two values within this diagnostic.
+APPENDIX A
+LEGACY-SCORER DIAGNOSTIC TABLES
+The following tables are retained for within-harness diag-
+nostic comparisons only. They are separated from the standard
+PTBTokenizer results in the main text to prevent cross-table
+metric comparisons.
+TABLE XII
+SENSITIVITY TO IMAGE PERTURBATIONS ON THE LEVIR-CC TEST SET
+USING RESNET-50 AND THE LEGACY SCORER.
+Perturbation
+Sev.
+ECSD-Zero
+ECSD-Aug
+CIDEr
+CF1
+∆CIDEr CIDEr
+CF1
+Clean
+N/A 135.18 0.9374
+Ref.
+136.29 0.9389
+Brightness (low)
+0.5
+135.28 0.9360
++0.1
+135.74 0.9370
+Brightness (high) 1.0
+135.25 0.9328
++0.1
+135.85 0.9370
+Contrast (high)
+1.0
+130.73 0.9353
+-4.5
+136.16 0.9392
+Blur (low)
+1.0
+131.44 0.7913
+-3.7
+136.20 0.9378
+Blur (medium)
+2.0
+116.19 0.3960
+-19.0
+134.98 0.8978
+Blur (high)
+3.0
+111.29 0.2457
+-23.9
+130.72 0.8012
+Translation (sm.)
+1.0
+135.71 0.9410
++0.5
+136.56 0.9380
+Only within-table changes are comparable. ECSD-Aug uses independent
+Gaussian blur for the training pair and shared brightness/contrast jitter.
+Each test perturbation is shared by both images.
+
+
+14
+IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING
+Pre-change (A)
+Post-change (B)
+Appearance stream Disappearance stream
+Shared context
+Directional overlay
+Prediction: a house is built in the corner of the scene
+Reference: a bungalow appears in the woods on the left.
+Prediction: some houses are built at the road corner of
+the scene
+Reference: a row of buildings appear by the road at the
+bottom.
+Prediction: plants are removed and a road is built with
+villas built along
+Reference: many trees are replaced by a road and two rows
+of houses.
+Pre-change image
+Post-change image
+Appearance
+Disappearance
+Shared context
+Directional overlay
+950
+True Negative
+15
+False Positive
+85
+False Negative
+879
+True Positive
+Predicted:
+No Change
+Predicted:
+Change
+Ground Truth:
+No Change
+Ground Truth:
+Change
+F1 = 0.9462
+Precision = 0.9832
+Recall = 0.9118
+(a)
+Changed
+Unchanged
+0
+3
+6
+9
+12
+15
+Ref. 10.89
+11.49
+4.23
+9.54
+4.09
+Mean caption length (words)
+CE training
+SCST fine-tuning
+(b)
+Fig. 6. DCR visualizations and test-set analyses on LEVIR-CC. The upper rows show the image pair, three DCR responses, their overlay, and captions from
+the final seed-42 HIMEC checkpoint; references are dataset captions. The bottom panels show (a) its change/no-change confusion matrix over 1,929 pairs
+and (b) mean word counts for matched seed-42 DCR checkpoints after CE and SCST; the dashed line is the reference mean.
+REFERENCES
+[1] H. Chen, Z. Qi, and Z. Shi, “Remote sensing image change detection
+with transformers,” IEEE Trans. Geosci. Remote Sens., vol. 60, 2022,
+Art. no. 5607514, doi: 10.1109/TGRS.2021.3095166.
+[2] W. G. C. Bandara and V. M. Patel, “A transformer-based Siamese
+network for change detection,” in Proc. IEEE IGARSS, 2022, pp. 207–
+210.
+[3] Z. Li, S. Cao, J. Deng et al., “STADE-CDNet: Spatial–temporal at-
+tention with difference enhancement-based network for remote sensing
+image change detection,” IEEE Trans. Geosci. Remote Sens., vol. 62,
+2024, Art. no. 5611617, doi: 10.1109/TGRS.2024.3367948.
+[4] W. I. M. Hussin, Z. Lu, A. Ashraf et al., “EdgeRefNet: An edge-
+guided refinement network for building change detection in remote
+sensing images,” IEEE Trans. Geosci. Remote Sens., vol. 64, 2026,
+Art. no. 4409610, doi: 10.1109/TGRS.2026.3689397.
+[5] C. Liu, D. Lin, P. Tian, and N. Yang, “Remote sensing image caption-
+ing: A survey from encoder–decoder model to large vision-language
+model,” in Proc. Int. Conf. Comput. Vis. Image Comput. (CVIC),
+vol. 14070. SPIE, 2025, pp. 318–325.
+[6] C. Liu, R. Zhao, H. Chen, Z. Zou, and Z. Shi, “Remote sensing image
+change captioning with dual-branch transformers: A new method and a
+large scale dataset,” IEEE Trans. Geosci. Remote Sens., vol. 60, 2022,
+Art. no. 5633520, doi: 10.1109/TGRS.2022.3218921.
+
+
+15
+[7] S. Chang and P. Ghamisi, “Changes to captions: An attentive network
+for remote sensing change captioning,” IEEE Trans. Image Process.,
+vol. 32, pp. 6047–6060, 2023, doi: 10.1109/TIP.2023.3328224.
+[8] C. Liu, K. Chen, H. Zhang, Z. Qi, Z. Zou, and Z. Shi, “Change-Agent:
+Toward interactive comprehensive remote sensing change interpretation
+and analysis,” IEEE Trans. Geosci. Remote Sens., vol. 62, 2024, Art.
+no. 5635616, doi: 10.1109/TGRS.2024.3425815.
+[9] C. Liu, K. Chen, B. Chen, H. Zhang, Z. Zou, and Z. Shi, “RSCaMa:
+Remote sensing image change captioning with state space model,”
+IEEE Geosci. Remote Sens. Lett., vol. 21, 2024, Art. no. 6010405,
+doi: 10.1109/LGRS.2024.3404604.
+[10] Y. Qiu et al., “Describing and localizing multiple changes with trans-
+formers,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV), 2021,
+pp. 1971–1980.
+[11] Y. Zhu et al., “Semantic-CC: Boosting remote sensing image change
+captioning via foundational knowledge and semantic guidance,” IEEE
+Trans. Geosci. Remote Sens., vol. 62, 2024, Art. no. 5648916, doi:
+10.1109/TGRS.2024.3497338.
+[12] S. Li, Z. Qu, Y. Qin, S. Zhang, and Q. Li, “Global–local feature
+collaborative fusion and edge refinement network for remote sensing
+change detection,” IEEE Trans. Geosci. Remote Sens., vol. 63, 2025,
+doi: 10.1109/TGRS.2025.3584115.
+[13] B. Yang, J. Li, S. Yu, L. Liu, and X. Liu, “Uncertainty-aware noisy label
+learning for remote sensing change detection,” IEEE Trans. Geosci. Re-
+mote Sens., vol. 63, pp. 1–16, 2025, doi: 10.1109/TGRS.2025.3600105.
+[14] B. Rolih, M. Fuˇcka, F. Wolf, and L. ˇCehovin Zajc, “Be the change
+you want to see: Revisiting remote sensing change detection practices,”
+IEEE Trans. Geosci. Remote Sens., vol. 63, pp. 1–11, 2025, doi:
+10.1109/TGRS.2025.3585342.
+[15] D. H. Park, T. Darrell, and A. Rohrbach, “Robust change captioning,” in
+Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV), 2019, pp. 4624–4633.
+[16] S. Chouaf, G. Hoxha, Y. Smara, and F. Melgani, “Captioning changes in
+bi-temporal remote sensing images,” in Proc. IEEE Int. Geosci. Remote
+Sens. Symp. (IGARSS), 2021, pp. 2891–2894.
+[17] G. Hoxha, S. Chouaf, F. Melgani, and Y. Smara, “Change captioning:
+A new paradigm for multitemporal remote sensing image analysis,”
+IEEE Trans. Geosci. Remote Sens., vol. 60, 2022, Art. no. 5627414,
+doi: 10.1109/TGRS.2022.3195692.
+[18] Y. Wang, W. Yu, and P. Ghamisi, “Change captioning in remote sensing:
+Evolution to SAT-Cap: A single-stage transformer approach,” arXiv
+preprint arXiv:2501.08114, 2025.
+[19] A. C. Karaca et al., “Robust change captioning in remote sensing:
+SECOND-CC dataset and MModalCC framework,” IEEE J. Sel. Topics
+Appl. Earth Observ. Remote Sens., vol. 18, pp. 21494–21513, 2025, doi:
+10.1109/JSTARS.2025.3600613.
+[20] F. Wang, M. Wang, X. Wang, H. Wang, and J. Tang, “SAM guided
+semantic and motion changed region mining for remote sensing change
+captioning,” arXiv preprint arXiv:2511.21420, 2025.
+[21] C. Zhang, Z. Ren, B. Hou, J. Meng, W. Li, and L. Jiao, “Interactive
+concept network enhanced Transformer for remote sensing image
+captioning,” IEEE Trans. Geosci. Remote Sens., vol. 63, 2025, Art.
+no. 4401416, doi: 10.1109/TGRS.2024.3523305.
+[22] Q. Wang, Z. Yang, W. Ni, J. Wu, and Q. Li, “Semantic-spatial
+collaborative perception network for remote sensing image captioning,”
+IEEE Trans. Geosci. Remote Sens., vol. 62, pp. 1–12, 2024, doi:
+10.1109/TGRS.2024.3502805.
+[23] K. Wang, J. Cui, C. Yang et al., “RAGCC: Remote sensing image
+change captioning based on RAG,” in Proc. IEEE Int. Geosci. Remote
+Sens. Symp. (IGARSS), 2025, pp. 6384–6387.
+[24] C. Yang, Z. Li, H. Jiao, Z. Gao, and L. Zhang, “Enhancing per-
+ception of key changes in remote sensing image change captioning,”
+IEEE Trans. Image Process., vol. 34, pp. 7378–7390, 2025, doi:
+10.1109/TIP.2025.3589096.
+[25] Z. Wang, M. Wang, S. Xu, Y. Li, and B. Zhang, “CCExpert: Ad-
+vancing MLLM capability in remote sensing change captioning with
+difference-aware integration and a foundational dataset,” arXiv preprint
+arXiv:2411.11360, 2024.
+[26] P. Deng, W. Zhou, and H. Wu, “DeltaVLM: Interactive remote
+sensing image change analysis via instruction-guided difference per-
+ception,” Remote Sens., vol. 18, no. 4, Art. no. 541, 2026, doi:
+10.3390/rs18040541.
+[27] X. Wang, X. Xie, and Z. Zhai, “Lightweight remote sensing image
+change caption with hierarchical distillation and dual-constrained atten-
+tion,” Electronics, vol. 15, no. 1, Art. no. 17, 2026, doi: 10.3390/elec-
+tronics15010017.
+[28] R. Wu, H. Ye, X. Liu, Z. Li, C. Sun, and J. Wu, “A cross-
+spatial differential localization network for remote sensing change
+captioning,” Remote Sens., vol. 17, no. 13, Art. no. 2285, 2025, doi:
+10.3390/rs17132285.
+[29] Y. Qu and H. Zhang, “A mask-guided multigranular Mamba network
+for remote sensing change captioning,” Remote Sens., vol. 18, no. 7,
+Art. no. 1048, 2026, doi: 10.3390/rs18071048.
+[30] C. Ma, X. Lv, H. Zhong, Q. Xie, and Z. Luo, “MTH-Net: A
+Mamba–Transformer hybrid network for remote sensing image change
+captioning,” Symmetry, vol. 17, no. 12, Art. no. 2060, 2025, doi:
+10.3390/sym17122060.
+[31] N. Carion, F. Massa, G. Synnaeve, N. Usunier, A. Kirillov, and
+S. Zagoruyko, “End-to-end object detection with transformers,” in Proc.
+Eur. Conf. Comput. Vis. (ECCV), 2020, pp. 213–229.
+[32] A. Kamath, M. Singh, Y. LeCun, G. Synnaeve, I. Misra, and N. Carion,
+“MDETR—Modulated detection for end-to-end multi-modal under-
+standing,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV), 2021,
+pp. 1780–1790.
+[33] S. Datta, K. Sikka, A. Roy, K. Ahuja, D. Parikh, and A. Divakaran,
+“Align2Ground: Weakly supervised phrase grounding guided by image–
+caption alignment,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV),
+2019, pp. 2601–2610.
+[34] S. Bengio, O. Vinyals, N. Jaitly, and N. Shazeer, “Scheduled sampling
+for sequence prediction with recurrent neural networks,” in Adv. Neural
+Inf. Process. Syst., vol. 28, 2015.
+[35] M. Ranzato, S. Chopra, M. Auli, and W. Zaremba, “Sequence level
+training with recurrent neural networks,” in Proc. ICLR, 2016.
+[36] A. Goyal et al., “Professor forcing: A new algorithm for training
+recurrent networks,” in Adv. Neural Inf. Process. Syst., vol. 29, 2016.
+[37] S. Ross, G. Gordon, and D. Bagnell, “A reduction of imitation learning
+and structured prediction to no-regret online learning,” in Proc. 14th
+Int. Conf. Artif. Intell. Statist. (AISTATS), 2011, pp. 627–635.
+[38] S. J. Rennie, E. Marcheret, Y. Mroueh, J. Ross, and V. Goel, “Self-
+critical sequence training for image captioning,” in Proc. IEEE CVPR,
+2017, pp. 7008–7024.
+[39] R. Vedantam, C. L. Zitnick, and D. Parikh, “CIDEr: Consensus-based
+image description evaluation,” in Proc. IEEE CVPR, 2015, pp. 4566–
+4575.
+[40] J. Hu, L. Shen, and G. Sun, “Squeeze-and-excitation networks,” in Proc.
+IEEE CVPR, 2018, pp. 7132–7141.
+[41] F. Chollet, “Xception: Deep learning with depthwise separable convo-
+lutions,” in Proc. IEEE CVPR, 2017, pp. 1800–1807.
+[42] K. Yang, G.-S. Xia, Z. Liu, B. Du, W. Yang, M. Pelillo, and L. Zhang,
+“Asymmetric Siamese networks for semantic change detection in aerial
+images,” IEEE Trans. Geosci. Remote Sens., vol. 60, 2022, Art.
+no. 5609818, doi: 10.1109/TGRS.2021.3113912.
+[43] K. Papineni, S. Roukos, T. Ward, and W.-J. Zhu, “BLEU: A method
+for automatic evaluation of machine translation,” in Proc. ACL, 2002,
+pp. 311–318.
+[44] S. Banerjee and A. Lavie, “METEOR: An automatic metric for MT
+evaluation with improved correlation with human judgments,” in Proc.
+ACL Workshop, 2005, pp. 65–72.
+[45] C.-Y. Lin, “ROUGE: A package for automatic evaluation of sum-
+maries,” in Proc. ACL Workshop Text Summarization, 2004, pp. 74–81.
+[46] X. Chen, H. Fang, T.-Y. Lin, R. Vedantam, S. Gupta, P. Doll´ar,
+and C. L. Zitnick, “Microsoft COCO captions: Data collection and
+evaluation server,” arXiv preprint arXiv:1504.00325, 2015.
+[47] Z. Liu et al., “Swin transformer: Hierarchical vision transformer using
+shifted windows,” in Proc. IEEE ICCV, 2021, pp. 10012–10022.
+[48] K. He, X. Zhang, S. Ren, and J. Sun, “Deep residual learning for image
+recognition,” in Proc. IEEE CVPR, 2016, pp. 770–778.
+[49] A. Vaswani et al., “Attention is all you need,” in Adv. Neural Inf.
+Process. Syst., vol. 30, 2017.
+[50] Y. Li, X. Zhang, G. Wang, and T. Zhang, “Exploring difference seman-
+tic prior guidance for remote sensing image change captioning,” Remote
+Sens., vol. 18, no. 2, Art. no. 232, 2026, doi: 10.3390/rs18020232.
+
+
+16
+IEEE TRANSACTIONS ON GEOSCIENCE AND REMOTE SENSING
+Aysha Ashraf received the M.S. degree in com-
+puter science and is currently pursuing the Ph.D.
+degree with the University of Electronic Science
+and Technology of China (UESTC), Chengdu,
+China.
+Her research interests include remote sensing,
+computer vision, and change detection in satellite
+imagery.
+Shaina Ashraf received the M.S. degree and is
+currently pursuing the Ph.D. degree with the Bonn-
+Aachen International Center for Information Tech-
+nology (B-IT), University of Bonn, Bonn, Ger-
+many.
+Her research interests include large language
+models, machine learning, and natural language
+processing.
+Wafaa I. M. Hussin received the M.S. degree
+in computer architecture and networking from the
+Faculty of Engineering, University of Khartoum,
+Sudan, in 2019. She is currently pursuing the Ph.D.
+degree in information and communication engineer-
+ing with UESTC, Chengdu, China.
+Her research interests include image processing,
+computer vision, and change detection.
+Ali Haider received the M.S. degree in information
+and communication engineering and plans to pursue
+the Ph.D. degree in information and communication
+engineering with UESTC, Chengdu, China.
+His research interests include remote sensing
+image analysis, deep learning, and environmental
+change detection.
+Zhi Lu received the B.S., M.S., and Ph.D. de-
+grees from the University of Electronic Science and
+Technology of China, Chengdu, China, in 2015,
+2018, and 2022, respectively. He was a Postdoctoral
+Researcher and then an Associate Research Fellow
+at the University of Science and Technology of
+China from 2023 to 2026. He is currently an As-
+sociate Professor with the Laboratory of Intelligent
+Collaborative Computing, University of Electronic
+Science and Technology of China.
+His research interests include computer vision,
+multimedia content understanding, and remote sensing image analysis.
+Zhenming Peng (Senior Member, IEEE) received
+the Ph.D. degree in geodetection and information
+technology from Chengdu University of Technol-
+ogy, China, in 2001.
+He
+is
+currently
+a
+Professor
+with
+UESTC,
+Chengdu. His research interests include image and
+signal processing and target recognition in remote
+sensing.

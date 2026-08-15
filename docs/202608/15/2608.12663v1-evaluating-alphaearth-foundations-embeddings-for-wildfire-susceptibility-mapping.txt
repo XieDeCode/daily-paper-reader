@@ -1,0 +1,2256 @@
+Evaluating AlphaEarth Foundations Embeddings for Wildfire
+Susceptibility Mapping
+Yuan Zhuang1,
+Sanaa Hobeichi2,3,4,
+Peng Shi5,
+Fei Huang1,*
+1UNSW Sydney, School of Risk and Actuarial Studies, New South Wales, Australia
+2ARC Centre of Excellence for the Weather of the 21st Century, Australia
+3Climate Change Research Centre, University of New South Wales, Sydney, New South Wales, Australia
+4UNSW AI Institute, New South Wales, Australia
+5Department of Risk and Insurance, Wisconsin School of Business, University of Wisconsin–Madison, Madison, Wisconsin
+53706, USA
+*Corresponding author: feihuang@unsw.edu.au
+ABSTRACT
+Wildfire susceptibility mapping typically relies on physical variables assembled from multiple remote-
+sensing, climate, and geospatial products. AlphaEarth Foundations (AEF) provides analysis-ready
+geospatial embeddings that may reduce this dependence on heavy harmonisation and task-specific
+feature engineering, but their value for wildfire susceptibility mapping has not been systematically
+evaluated. Using Victoria, Australia (2017–2025), as a case study, we show that AEF embeddings
+can reconstruct commonly used variables in wildfire susceptibility analysis with high accuracy. In
+downstream susceptibility models trained on satellite-derived fire occurrence data, embedding-based
+susceptibility models achieve ROC-AUC values above 0.92 and consistently identify high wildfire
+susceptibility across eastern Victoria, particularly Gippsland and the north-eastern uplands, with
+additional localized hotspots in central and northwestern Victoria. A key feature of AEF embeddings
+is their strong near-region transferability within climatically similar regions. When embedding-based
+models trained in Victoria are applied to Canberra and Western Sydney–Blue Mountains, ROC-AUC
+improves by around 4% at Canberra and declines by around 2% at Western Sydney–Blue Mountains,
+compared with a mean decrease of approximately 25% for physical-variable models. These findings
+provide practical guidance for using AEF embeddings and lay a foundation for scalable wildfire
+susceptibility mapping workflows for downstream users such as government agencies and (re)insurers.
+Keywords Wildfire susceptibility · AlphaEarth Foundations · Spatial transferability · Convolutional neural network ·
+Tabular foundation models
+1
+Introduction
+Extreme wildfires are increasing in frequency and severity globally (Cunningham et al., 2024; Richardson et al.,
+2022). These trends place growing pressure on ecosystems (Bowman et al., 2009), communities (Filkov et al.,
+2020; Grant and Runkle, 2022), and insurance markets (Swiss Re, 2026). Therefore, identifying which locations are
+inherently susceptible to wildfire has become an increasingly central concern for governments, emergency planners,
+and (re)insurers.
+In wildfire risk analysis, susceptibility mapping provides a spatially explicit framework for identifying landscapes that
+are more prone to fire occurrence. It is typically based on the premise that areas where wildfires have occurred in the
+past, together with areas sharing similar environmental and physical characteristics, provide useful indications of where
+fire events may be more likely to occur (Leuenberger et al., 2018). The resulting maps usually assign each pixel or
+spatial unit a relative susceptibility score. Such scores can help individuals, insurers, and public agencies understand
+spatial exposure to wildfire and support targeted mitigation policies.
+Over the past two decades, the proliferation of remote sensing data and Geographic Information Systems (GIS) has
+enabled machine learning to become a major branch of wildfire susceptibility mapping. These approaches typically
+assemble fire occurrence records and construct predictor variables that describe environmental conditions conducive
+arXiv:2608.12663v1  [stat.AP]  12 Aug 2026
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+to ignition (Ejaz and Choudhury, 2025). A model is then trained to learn a mapping from the covariates to observed
+fire occurrences and applied across all pixels or patches in the study region to produce a continuous susceptibility
+surface (Jain et al., 2020). Existing studies have used a wide range of machine learning algorithms, including MaxEnt
+(Moritz et al., 2012), support vector machines (Benzougagh et al., 2026), tree-based ensemble methods (Haydar et al.,
+2025; Luu et al., 2024; Zerouali et al., 2025), and shallow neural networks (Singha et al., 2024; Tien Bui et al., 2017),
+with more recent work increasingly adopting deep learning approaches (Xu et al., 2025) such as convolutional neural
+networks (CNNs) (Bjånes et al., 2021; Hakim et al., 2025; Jiang et al., 2024; Zhang et al., 2019, 2021) that leverage
+spatially structured inputs to capture neighbourhood-level patterns.
+Despite these methodological advances, assembling and harmonising suitable prediction datasets remains a major
+practical bottleneck in wildfire susceptibility mapping (Jain et al., 2020; Chicas and Østergaard Nielsen, 2022; Ejaz
+and Choudhury, 2025). Most current data-driven approaches rely on physical variables derived from Earth observation
+products, climate reanalysis, and other geospatial sources (Ejaz and Choudhury, 2025). Although many of these
+products are publicly available, their use in susceptibility mapping is not trivial. First, predictor selection requires both
+scientific judgement about which variables are relevant to fire occurrence and whether those variables are available at
+appropriate spatial resolutions. Even commonly used predictors may be too coarse, derived from discontinued products,
+or restricted to particular regions. Second, predictors are often produced by different sensors or systems, and some
+require additional processing or derivation before they can be used as modelling inputs (Chicas and Østergaard Nielsen,
+2022). As a result, substantial harmonisation and feature engineering are typically required before any modelling can
+proceed (Ma et al., 2026). Finally, susceptibility models may not transfer reliably beyond the regions in which they
+were developed (Bekar et al., 2020), so applying them elsewhere may require a tailored data pipeline and a newly
+trained model. This repeated redevelopment raises the entry barrier, particularly for stakeholders who could benefit
+from spatial risk information but lack the necessary technical capacity.
+Earth foundation models have recently emerged as a promising source of alternative geospatial feature representations
+that may help address these data-related barriers. Trained on large-scale Earth observation archives, these models learn
+rich representations of the physical landscape (Zhu et al., 2026), and the resulting embeddings can then be extracted as
+off-the-shelf features for a wide range of downstream tasks (Ye et al., 2026). Among existing embedding products,
+AlphaEarth Foundations (AEF) is a publicly available and analysis-ready example (Brown et al., 2025). AEF was
+trained using over 3 billion observations from nine gridded data sources and two unstructured text sources, including
+optical imagery, climate variables, topography, and land cover information. The resulting product is distributed through
+Google Earth Engine as annual embedding layers for 2017–2025, covering terrestrial land surfaces and shallow waters
+globally. Each annual layer provides 64-dimensional vectors at 10 m resolution that summarise multi-sensor information
+for the corresponding year.
+Since its release, AEF embeddings have been applied across a range of domains, including agriculture, socio-economics,
+environmental monitoring, ecology, and hydrology (Hou et al., 2026). Because the training sources of AEF closely
+overlap with those commonly used to derive wildfire susceptibility predictors, the resulting embeddings may provide
+off-the-shelf features for downstream fire occurrence models. However, it remains unclear whether AEF embeddings
+encode the environmental conditions associated with wildfire susceptibility, how such information should be extracted
+by downstream susceptibility models, and whether the resulting models can transfer beyond the original study region.
+This study therefore proposes three research questions:
+1. To what extent do general-purpose AEF embeddings encode wildfire-relevant environmental information?
+2. How do different downstream modelling strategies compare when trained on AEF embeddings and satellite-
+derived fire occurrence data for wildfire susceptibility mapping?
+3. To what extent do AEF-based susceptibility models transfer to new regions, and how does their transferability
+compare with models trained on conventional physical variables?
+This study addresses these questions using Victoria, Australia, as a case study. We first evaluated AEF embeddings
+under a time-aggregated susceptibility modelling setting, using both cell-level tabular models and neighbourhood-based
+CNNs. By comparing their predictive performance with that of physical variables and conducting a reconstruction
+analysis of traditional predictors from the embeddings, we examined both what wildfire-relevant information is encoded
+in the embeddings and whether this information is sufficient for susceptibility mapping. We then introduced sequence-
+informed modelling strategies using annual feature layers to assess whether interannual information could further
+improve the use of AEF embeddings. Finally, we evaluated transferability by applying models trained in Victoria to
+multiple regions across Australia, including areas from different climate zones. Collectively, our analyses provide the
+first systematic evaluation of Earth foundation model embeddings for wildfire susceptibility mapping and demonstrate
+their potential value as reusable geospatial data assets for supporting more scalable wildfire risk mapping workflows in
+hazard assessment, exposure mapping, and climate adaptation planning.
+2
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+The remainder of this paper is structured as follows. Section 2 describes the study area and the data used in this study.
+Section 3 presents the modelling settings and evaluation framework. Section 4 reports the susceptibility modelling,
+reconstruction, and transferability results. Section 5 discusses the main findings and their limitations, and Section 6
+concludes the paper.
+2
+Data
+2.1
+Study area and Transfer Sites
+Victoria is located in southeastern Australia (34°–39°S, 141°–150°E) and covers approximately 227,000 km2 (Fig. 1a,
+b). The state spans a wide environmental gradient, from the highly urbanised Melbourne region to the sparsely populated
+alpine and forested landscapes of the Great Dividing Range and the Victorian Alps. Its climate also varies substantially.
+The southern coastal region is broadly temperate, with cool, wet winters and warm, dry summers, while northwestern
+Victoria is drier and semi-arid. Together, this landscape and climatic diversity provides a suitable setting for evaluating
+whether embedding-based susceptibility models perform consistently across heterogeneous environments within a
+single source region. Victoria is also historically fire-prone, with severe bushfire events including Ash Wednesday in
+1983, Black Saturday in 2009, the 2019–2020 Black Summer, and the January 2026 bushfires (Forest Fire Management
+Victoria, 2021; Victorian Government, 2026). Their repeated impacts, including extensive burned areas, loss of life, and
+major damage to settlements and ecosystems, have motivated recent research on wildfire susceptibility mapping in the
+region (Abdollahi and Pradhan, 2023; Hosseini and Lim, 2021; Zheng et al., 2025). These characteristics make Victoria
+a suitable source domain for developing and evaluating the wildfire susceptibility models in this study.
+A further consideration is whether susceptibility models trained in one region can transfer reliably to ecologically
+distinct environments. Beyond Victoria, eight transfer sites were selected across Australia (Fig. 1c–j). The sites
+were arranged along a gradient of increasing geographic and climatic distance from the source domain: beginning
+with climatically similar and proximate locations in Canberra and Western Sydney, progressing to more distant but
+still temperate settings in South Australia, Tasmania, and Western Australia, and extending to climatically distinct
+out-of-domain environments in subtropical-to-tropical Queensland and the semi-arid interior of the Northern Territory.
+This gradient design enables a systematic characterisation of the transferability limits of AEF embeddings in wildfire
+susceptibility mapping.
+2.2
+Physical Wildfire Driving Factors
+To provide a task-specific reference for evaluating the wildfire-relevant information encoded in AEF embeddings, we
+constructed a comprehensive set of physical driving factors commonly used in wildfire susceptibility mapping literature
+(Marjani et al., 2026; Xu et al., 2025). The initial variable pool included 35 predictors across ten thematic categories
+(Table 1). All predictors were harmonised to a common 1 km reference grid under Australian Albers (EPSG:9473).
+Detailed variable quantification and visualization are provided in Supplementary Material S1.
+From a wildfire-susceptibility perspective, these factors characterise complementary dimensions of fire-conducive
+conditions. Topographic variables describe terrain structure and exposure, which can influence local fuel conditions and
+potential fire spread. Land-cover classes, vegetation indices, atmospheric variables, and soil-moisture variables jointly
+describe fuel type, fuel availability, and moisture stress. Temperature, precipitation, wind speed, and fire-weather indices
+capture meteorological conditions related to fuel dryness, ignition likelihood, and potential fire behaviour. Proximity
+variables approximate human accessibility and spatial separation from water bodies. In addition, five variables are
+marked as fire-season summaries (F.S.), which are designed to capture extreme conditions using the counts of high-risk
+days.
+These variables were organised into two datasets to support different modelling objectives. First, for each grid cell
+𝑖and calendar year 𝑡∈{2017, . . . , 2025}, we constructed a yearly dataset Xyr = {x𝑖,𝑡}. Here, x𝑖,𝑡∈R𝑉denotes the
+physical feature vector for grid cell 𝑖in year 𝑡, where 𝑉is the number of physical variables and 𝑥(𝑣)
+𝑖,𝑡denotes the value
+of variable 𝑣. In compiling the yearly dataset, dynamic variables were summarised at the annual scale (e.g. annual
+mean temperature 𝑇𝑖,𝑡, annual total precipitation 𝑃𝑖,𝑡), while static variables remain unchanged across years. We then
+derived a cross-sectional dataset Xcs = {x𝑖} by aggregating the yearly variables over the full study period or, where
+appropriate, by applying custom cross-year computation as detailed in Supplementary Material S1. This produced a
+single feature vector for each grid cell, following the standard cross-sectional structure commonly used in wildfire
+susceptibility mapping (Jain et al., 2020). In the analyses later in this paper, Xyr was used for reconstruction study
+(Section 3.4) and sequence-informed modelling (Section 3.3), whereas Xcs provided the main input for time-aggregated
+susceptibility modelling (Sections 3.2 and 3.5.1) and transferability evaluation (Section 3.5.2).
+3
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. 1: Study area (Victoria, Australia) and transfer sites across diverse climate zones. Climate zone classification
+sourced from Bureau of Meteorology (2024b), based on the 1991–2020 climatological reference period.
+4
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+To address multicollinearity among the initial candidate features, variance inflation factor (VIF) screening was applied
+to Xcs. Predictors with VIF exceeding 10 (Xu et al., 2025) were iteratively removed, yielding a final set of 22 retained
+predictors for both datasets, as indicated in Table 1.
+Table 1: Candidate physical wildfire driving factors, with data sources, native resolutions, and VIF screening outcomes.
+Variables with VIF < 10 were retained.
+Category
+Variable
+Code
+Source
+Resolution Retained
+Topography
+Elevation
+ELEV
+Australia 3 arc-sec SRTM DEM
+(Gallant et al., 2009)
+3 arc-sec
+N
+Slope
+SLOPE
+3 arc-sec
+Y
+Northness
+NORTH
+3 arc-sec
+Y
+Eastness
+EAST
+3 arc-sec
+Y
+Land cover
+Cropland
+LC_CRP
+MODIS MCD12Q1
+(Friedl and Sulla-Menashe, 2022)
+500 m
+Y
+Forest
+LC_FRS
+500 m
+N
+Grassland
+LC_GRS
+500 m
+Y
+Savanna
+LC_SVN
+500 m
+Y
+Shrubland
+LC_SHR
+500 m
+Y
+Precipitation
+Total annual precipitation
+PREC
+SILO (Jeffrey et al., 2001)
+0.05◦
+Y
+Max consecutive dry days (F.S.)
+CDD
+0.05◦
+Y
+Precipitation seasonality
+PRECS
+0.05◦
+Y
+Temperature
+and radiation
+Mean temperature
+TMEAN
+SILO (Jeffrey et al., 2001)
+0.05◦
+Y
+Max temperature
+TMAX
+0.05◦
+N
+Mean monthly temperature range
+MTR
+0.05◦
+N
+Temperature annual range
+TAR
+0.05◦
+Y
+Temperature seasonality
+TS
+0.05◦
+N
+Max consecutive hot days (F.S.)
+CHD
+0.05◦
+Y
+Isothermality
+ISO
+0.05◦
+N
+Mean solar radiation
+SR
+0.05◦
+Y
+Wind
+Mean wind speed
+WIND
+TerraClimate (Abatzoglou et al., 2018)
+(1/24)◦
+Y
+Vegetation
+Mean NDVI
+NDVI
+MODIS MOD13Q1 (Didan, 2021)
+250 m
+N
+Max NDVI
+NDVIMAX
+250 m
+Y
+Mean LAI
+LAI
+VIIRS VNP15A2H (Myneni, 2023)
+500 m
+N
+Max LAI
+LAIMAX
+500 m
+N
+Fire weather
+Mean FFDI
+FFDI
+Copernicus Emergency Management
+Service (2019)
+0.25◦
+N
+Max consecutive FFDI > P90 (F.S.)
+CFFDI
+0.25◦
+Y
+Days FFDI > 50 (F.S.)
+FFDI50
+0.25◦
+Y
+Atmospheric
+demand
+Mean VPD deficit
+VPD
+SILO (Jeffrey et al., 2001)
+0.05◦
+N
+Mean water deficit (Morton)
+WD
+0.05◦
+N
+Soil moisture
+Mean soil moisture
+SM
+Bureau of Meteorology (2024a)
+0.05◦
+N
+Minimum soil moisture
+SMMIN
+0.05◦
+Y
+Max consecutive dry soil days (F.S.)
+CDSD
+0.05◦
+Y
+Proximity
+Distance to major road
+DROAD
+OpenStreetMap (2026)
+—
+Y
+Distance to waterbody
+DWATER
+Bureau of Meteorology (2024c)
+—
+Y
+Note: F.S. indicates fire-season summaries, computed for the Australian fire season (Jan–Apr and Oct–Dec). Y = retained after VIF
+screening; N = removed.
+2.3
+AlphaEarth Foundations (AEF) Embeddings
+AlphaEarth Foundations (AEF) embeddings (Brown et al., 2025) are a geospatial data product developed by Google
+and Google DeepMind. The dataset provides annual 64-dimensional embedding vectors at a native 10 m resolution,
+encoding multi-spectral, multi-modal Earth observation information for a full calendar year. The collection is accessible
+as an image collection in Google Earth Engine (GEE) and as Cloud-Optimised GeoTIFFs (COGs) via a public Google
+Cloud Storage (GCS) bucket (Google Earth Engine, 2026).
+For storage efficiency, embedding values are provided as signed 8-bit integer vectors q𝑗,𝑡∈{−128, . . . , 127}64, where 𝑗
+indexes each 10 m pixel and 𝑡∈{2017, . . . , 2025}. To recover the original embedding values, raw int8 tiles covering
+5
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Victoria were de-quantised to [−1, 1]64 via
+˜𝑒𝑗,𝑡,𝑘=
+ 𝑞𝑗,𝑡,𝑘
+127.5
+2
+· sign(𝑞𝑗,𝑡,𝑘),
+𝑘= 1, . . . , 64,
+(1)
+where 𝑞𝑗,𝑡,𝑘denotes the 𝑘-th element of q𝑗,𝑡. The de-quantised 10 m vectors ˜e 𝑗,𝑡∈R64 were then aggregated to the
+1 km reference grid defined in Section 2.2, by summing over all contributing 10 m pixels within each 1 km grid cell and
+L2-normalising the resulting vector, following the pyramid downsampling convention (Google for Developers, 2026):
+e𝑖,𝑡=
+∑︁
+𝑗∈N(𝑖)
+˜e 𝑗,𝑡
+
+∑︁
+𝑗∈N(𝑖)
+˜e𝑗,𝑡
+
+2
+,
+(2)
+where N (𝑖) denotes the set of 10 m pixels falling within 1 km grid 𝑖.
+Beyond the yearly dataset Eyr = {e𝑖,𝑡}, a cross-sectional embedding dataset Ecs = {e𝑖} was derived by averaging each
+grid cell’s annual embedding vectors across all available years:
+e𝑖= 1
+𝑇
+𝑇
+∑︁
+𝑡=1
+e𝑖,𝑡,
+(3)
+where 𝑇denotes the number of years. In both datasets, all 64 embedding dimensions were retained as features. Eyr and
+Ecs served as embedding-based counterparts to Xyr and Xcs, respectively, and were used in exactly the same analytical
+roles throughout this paper.
+2.4
+Wildfire Inventory and Sampling Strategy
+Fire occurrence records for Victoria were obtained from the MODIS Active Fire product (MCD14ML) distributed
+by NASA’s Fire Information for Resource Management System (FIRMS) (Giglio et al., 2016). The retrieved dataset
+consists of point locations (hotspots) detected by the MODIS sensors aboard the Terra and Aqua satellites over the period
+2017–2025. Each hotspot record includes geographic coordinates, acquisition date, and confidence level (0–100%).
+To reduce commission errors, only detections with confidence ≥80% were retained. The filtered point records were
+rasterised to the 1 km reference grid by assigning a value of 1 to any grid cell containing at least one qualified hotspot
+during 2017–2025. This yielded 18,140 fire-occurrence cells, corresponding to approximately 8% of the 1 km reference
+grid cells covering Victoria.
+An equal number of non-fire cells were selected as pseudo-absence samples and assigned a label of 0. The choice
+of pseudo-absence samples is important because poorly selected non-fire cells can make it harder for the model to
+distinguish fire-prone from less fire-prone areas. Two spatial constraints are commonly imposed when drawing negative
+samples in wildfire susceptibility mapping. First, a minimum separation distance between positive and negative samples
+prevents the model from receiving contradictory supervision signals at environmentally similar locations (Hakim et al.,
+2025; Jiang et al., 2024). A threshold of 3 km was enforced here, consistent with empirical evidence in the literature
+(He et al., 2026) and also supported by the spatial autocorrelation structure of AEF embeddings characterised in the
+semivariogram analysis (Supplementary Material S2). Second, spatial dispersion among pseudo-absence samples
+reduces excessive clustering and improves their coverage of the study area (He et al., 2026; Jiang et al., 2024). Eligible
+pseudo-absence cells were sampled using an auxiliary 3 km uniform grid, with at most one 1 km candidate cell selected
+from each auxiliary cell. The resulting sample was then randomly trimmed to match the number of fire-occurrence cells.
+3
+Methods
+3.1
+Overview of Victoria Experimental Design
+The labelled dataset was partitioned into a training set (70%) and a held-out test set (30%) using a stratified random
+split, preserving the 1:1 positive-to-negative ratio in both subsets. This procedure was repeated across 10 independent
+splits to obtain stable performance estimates. All reported metrics represent the mean test-set performance across
+these runs, with variability reported in Supplementary Material S4. For all tunable models, hyperparameters were
+tuned on the training set using Optuna (Akiba et al., 2019) with a Tree-structured Parzen Estimator (TPE) sampler and
+5-fold cross-validation, where the mean ROC-AUC across validation folds served as the optimisation objective. As the
+within-Victoria evaluation targets interpolation over a spatially exhaustive grid, random stratified splits are appropriate
+for map accuracy assessment (Wadoux et al., 2021). Spatial generalisation is evaluated through the transferability
+analysis in Section 3.5.2.
+6
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+3.2
+Time-Aggregated Susceptibility Modelling
+The first modelling setting considered time-aggregated susceptibility prediction. For physical variables and AEF
+embeddings, we use cross-sectional datasets Xcs and Ecs here. Across all models in this time-aggregated setting,
+the physical representation contained 22 input features, whereas the AEF representation contained 64 embedding
+dimensions. These representations were evaluated under two complementary input structures: cell-level models, which
+treated each grid cell as an independent observation, and spatial neighbourhood models, which incorporated surrounding
+grid cells through local image patches.
+Cell-level models
+Three tabular model families were evaluated to compare these feature representations across
+different modelling classes: tree-based ensemble models, a multi-layer perceptron (MLP), and TabPFN, which was
+included as a tabular foundation-model baseline. The tree-based ensemble family comprises Random Forest (Breiman,
+2001), XGBoost (Chen and Guestrin, 2016), and LightGBM (Ke et al., 2017), all operating directly on raw feature
+values without standardisation. Random Forest aggregates predictions from an ensemble of decision trees, whereas
+XGBoost and LightGBM build boosted ensembles by sequentially correcting residual errors. These models represent
+widely adopted off-the-shelf baselines in wildfire susceptibility mapping (Marjani et al., 2026) and in downstream
+applications of AEF embeddings (Hou et al., 2026).
+The neural-network baseline was an MLP implemented with a fixed two-hidden-layer architecture (128 and 64 hidden
+units, ReLU activations), producing a single output logit trained with binary cross-entropy and optimised with AdamW
+(Loshchilov and Hutter, 2019). Finally, TabPFN (Hollmann et al., 2025) is a transformer-based in-context learner that
+requires no feature scaling or hyperparameter tuning. We used the TabPFN-3 variant (Grinsztajn et al., 2026) as a strong
+baseline representative of the current state of the art in tabular modelling. The hyperparameter configurations for all
+tuned models are reported in Table S1.
+Spatial neighbourhood models
+To evaluate whether the two feature representations benefited from explicit spatial
+context, we additionally trained Convolutional Neural Networks (CNNs) using local neighbourhoods centred on each
+target grid cell. Three patch sizes were considered, 𝑃∈{9, 17, 25}, corresponding to spatial extents of 9 × 9, 17 × 17,
+and 25 × 25 km2 at the 1 km grid resolution.
+Each input patch contained 𝐶feature channels, where 𝐶= 22 for physical variables and 𝐶= 64 for AEF embeddings.
+The CNN followed a standard encoder–classifier design, consisting of three convolutional blocks followed by an MLP
+classifier head (Fig. 2). Similar CNN-based architectures have been used in previous wildfire susceptibility studies
+(Zhang et al., 2019; Bjånes et al., 2021). All convolutional layers used 3 × 3 kernels with stride 1 and padding 1.
+Batch normalisation was applied after the first convolutional layer. The first two convolutional layers were followed by
+2 × 2 max-pooling layers with stride 2, progressively reducing the spatial dimensions of the feature maps. After the
+final convolutional layer, the resulting feature map was flattened and passed to an MLP classifier head with the same
+architecture as the MLP described in Section 3.2. The hyperparameter search space and selected configurations are
+reported in Table S2 .
+Fig. 2: CNN architecture for spatial susceptibility modelling. The convolutional stage extracts spatial features from the
+𝑃× 𝑃input patch, and the flattened representation is passed to an MLP classifier head with the same structure as the
+MLP described in Section 3.2.
+3.3
+Sequence-Informed Susceptibility Modelling
+AEF embeddings are natively provided as annual feature vectors, and the physical variables were likewise organised
+into yearly datasets. In the temporal setting, each grid cell was represented by a sequence of annual feature vectors
+7
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+from Xyr and Eyr, rather than by the aggregated representations used in the cross-sectional and spatial settings. The
+response variable, i.e., fire occurrence label, remained cross-sectional, indicating whether the grid cell contained at least
+one qualified hotspot during 2017–2025. Thus, the temporal models used annual feature sequences to predict the same
+susceptibility outcome as the other modelling settings.
+To incorporate this yearly structure, we modified the MLP and CNN introduced in Section 3.2 by inserting a lightweight
+yearly weighting mechanism between the 128-unit representation and the remainder of the classifier head, while keeping
+all other architectural components unchanged. In the modified MLP, each annual feature vector z𝑖,𝑡was first projected
+to a 128-dimensional representation through a shared linear layer with ReLU activation:
+h𝑖,𝑡= ReLU Wz𝑖,𝑡+ b ,
+𝑡= 1, . . . ,𝑇,
+(4)
+where z𝑖,𝑡denotes either x𝑖,𝑡or e𝑖,𝑡, W ∈R128×𝐶and b ∈R128 are shared across years, and 𝐶is the number of input
+features. The nine yearly representations were then combined through a learnable weighting mechanism. A scalar
+weight 𝑤𝑡was assigned to each year via softmax over learnable parameters 𝜶∈R𝑇:
+𝑤𝑡=
+exp(𝛼𝑡)
+Í𝑇
+𝑘=1 exp(𝛼𝑘)
+,
+¯h𝑖=
+𝑇
+∑︁
+𝑡=1
+𝑤𝑡h𝑖,𝑡.
+(5)
+The pooled representation ¯h𝑖∈R128 was then passed to the remainder of the classifier head (128 →64 →1). The
+learned weights {𝑤𝑡} were retained for interpretation, indicating the relative contribution of each year to the final
+susceptibility prediction.
+The modified CNN applied the same weighting mechanism at the same position in the architecture. Each year’s 𝑃× 𝑃
+patch was processed by the shared convolutional backbone, flattened, and projected to a 128-dimensional spatial feature
+vector. The nine yearly spatial vectors were then aggregated using the learned year weights before being passed to the
+remaining classifier head.
+Both modified architectures were evaluated under the physical and AEF embedding settings. For the CNN-based models,
+the same three patch sizes 𝑃∈{9, 17, 25} were used. The hyperparameter search spaces and selected configurations
+are reported in Table S3 .
+3.4
+Reconstruction of Physical Variables
+Previous modelling evaluated whether AEF embeddings contain wildfire-relevant information, but did not identify
+which environmental signals were encoded. To address this, we conducted a reconstruction analysis that probed
+the extent to which individual physical variables could be recovered from the embeddings. For each calendar year
+𝑡∈{2017, . . . , 2025} and each continuous variable 𝑣∈Vcont1, a separate year-specific regression model was trained to
+predict the observed value of variable 𝑣from the 64-dimensional AEF embedding of the same year:
+ˆ𝑥(𝑣)
+𝑖,𝑡= 𝑓𝑣,𝑡
+ e𝑖,𝑡
+,
+(6)
+where 𝑓𝑣,𝑡is a single-hidden-layer MLP with 32 hidden units trained to minimise mean squared error using the Adam
+optimiser, with a learning rate of 10−2, dropout rate of 0.1, and 800 training epochs, determined via a preliminary
+search. The same training and test split defined in Section 3.1 was used. Reconstruction quality is reported as the
+distribution of test-set 𝑅2 values across the nine years for each variable.
+3.5
+Evaluation Framework
+3.5.1
+Within-Victoria Performance Evaluation
+Model performance was evaluated on the test set within Victoria. Five binary classification metrics (James et al.,
+2021) are reported at a decision threshold of 0.5: Accuracy, Recall, Specificity, F1-score, and ROC-AUC. Accuracy
+measures overall correctness, while recall and specificity evaluate the ability to identify positive and negative samples,
+respectively. F1-score balances precision and recall, which is particularly relevant in wildfire susceptibility modelling
+where both false negatives and false positives carry risks. Let TP, FP, TN, and FN denote true positives, false positives,
+1For the reconstruction of land-cover variables, readers are referred to Benavides-Martinez et al. (2026).
+8
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+true negatives, and false negatives, respectively. The threshold-dependent metrics are defined as:
+Accuracy =
+TP + TN
+TP + TN + FP + FN,
+(7)
+Recall =
+TP
+TP + FN,
+(8)
+Specificity =
+TN
+TN + FP,
+(9)
+F1-score = 2 × Precision × Recall
+Precision + Recall
+,
+(10)
+where precision is used only to compute F1-score and is defined as
+Precision =
+TP
+TP + FP.
+(11)
+ROC-AUC measures the model’s overall discriminative capacity across thresholds. Its computation follows Huang and
+Ling (2005).
+3.5.2
+Transferability Assessment
+To assess whether the learned relationships generalised beyond the training region, the model trained under each of
+the 10 independent Victoria train/test splits was applied, without modification, to eight transfer sites across Australia
+(Section 2.1). At each transfer site, a balanced dataset was constructed at a spatial resolution of 1 km following the
+same procedure described in Sections 2.2–2.4, and the sample counts and study area extents for each transfer site are
+summarised in Table S5.
+The relative transfer performance change is quantified as
+Δ 𝑠
+𝑚= 𝑀𝑠
+𝑚−𝑀VIC
+𝑚
+𝑀VIC
+𝑚
+,
+(12)
+where 𝑀𝑠
+𝑚denotes the mean value of metric 𝑚evaluated at transfer site 𝑠across the models trained under the 10
+independent Victoria train/test splits, and 𝑀VIC
+𝑚
+denotes the mean value of the corresponding metric on the Victoria test
+sets across the same 10 runs. Negative values of Δ 𝑠
+𝑚denote performance degradation at the transfer site relative to the
+source region.
+For conciseness, transfer results are reported using aggregated metrics. Models were grouped into four families:
+tree-based ensembles, MLP, TabPFN, and CNN. For each transfer site and metric, Δ 𝑠
+𝑚was first averaged within each
+model family and then averaged across the four families, yielding the final cross-family mean performance change.
+4
+Results
+4.1
+Susceptibility Modelling
+Both AEF embeddings and hand-engineered physical variables achieve strong within-Victoria classification performance
+on the test set, with ROC-AUC values generally above 0.92 across the time-aggregated settings (Fig. 3), with standard
+deviations in ROC-AUC below 0.005 across all models, while accuracy, F1 score, recall and specificity are all above
+0.80 and reach approximately 0.90 at their upper end (Fig. 3, Table S6). The relative performance of the two feature
+representations varies by model family. Tree-based ensemble models favour physical variables over AEF embeddings,
+and their feature-importance profiles assign higher ranks to structurally stable predictors (e.g., solar radiation, wind
+speed, precipitation and grass land cover) than to fire-season persistence and extreme-condition variables, denoted by
+F.S. in Table 1 (Fig. S12). In the embedding-based tree models, the most important predictors are concentrated in a
+stable subset of embedding dimensions (Table S4). By contrast, the MLP, CNN, and TabPFN results are positioned
+closer to the 𝑦= 𝑥line, indicating more comparable performance between the two feature representations under flexible
+susceptibility models.
+CNN-based models that use local neighbourhood patches inprove performance over the cell-wise MLP baseline for
+both feature representations, although the additional gain decreases as the neighbourhood size increases. Moving from
+a 9 × 9 to a 17 × 17 input patch produces clearer improvements than moving from 17 × 17 to 25 × 25. With AEF
+embeddings, CNN with 17 × 17 and 25 × 25 patch inputs outperforms the tabular foundation-model baseline TabPFN
+across all five reported metrics. With physical variables, CNN models do not exceed the strongest tabular baselines.
+9
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. 3: Comparison of time-aggregated model performance between physical variables and AEF embeddings in Victoria
+test set. Points above the dashed 𝑦= 𝑥line correspond to higher performance for AEF embeddings, while points below
+the line correspond to higher performance for physical variables.
+The marginal gain from explicit spatial modelling is larger for AEF embeddings than for hand-engineered physical
+variables.
+Sequence-informed modelling produces only modest performance changes relative to the corresponding non-temporal
+counterparts (Fig. 4). The largest positive changes are observed for the MLP models, but most improvements are
+below 1.5%. Most CNN-based temporal models show small negative or near-zero changes, particularly under the
+physical-variable representation. Despite the limited performance gains, the learned temporal weights are not uniformly
+distributed across years. Several models assign unusually high weights to 2020 relative to other years (Fig. S13).
+4.2
+Reconstruction Analysis
+The reconstruction analysis indicates which physical variables can be recovered from AEF embeddings (Fig. 5). Overall,
+many variables are reconstructed with median 𝑅2 values above 0.8, with several predictors achieving 𝑅2 values close
+to or above 0.9 across years. Slope, solar radiation, maximum NDVI, mean temperature, temperature annual range,
+total precipitation, and mean wind speed show particularly strong and stable reconstruction performance. These well-
+reconstructed variables largely overlap with the physical predictors assigned high feature importance in the tree-based
+models (Fig. S12) and correspond to commonly used predictors in wildfire susceptibility mapping (Xu et al., 2025).
+By comparison, derived directional and proximity variables, including northness, eastness, and distance to road,
+had consistently lower 𝑅2 values across years. Reconstruction was also less temporally stable for persistence and
+extreme-condition summaries computed over the fire season, including days with FFDI above 50, consecutive hot days,
+consecutive dry days, and consecutive dry-soil days, whose 𝑅2 values varied substantially among years.
+10
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. 4: Performance change of temporal models relative to their corresponding non-temporal counterparts. Values are
+expressed as percentage-point changes.
+Fig. 5: Reconstruction performance of selected physical variables from annual AEF embeddings. Boxplots summarise
+yearly 𝑅2 values across 2017–2025.
+4.3
+Wildfire Susceptibility Mapping in Victoria
+After model training, the fitted models were applied to all 1 km grid cells across Victoria. For each cell, the model output
+for the positive fire-occurrence class was used as a continuous susceptibility score2. For map comparison, the scores
+were converted into five percentile-based 3 susceptibility classes, with the top 20% classified as very high susceptibility,
+the 20–40% percentile range as high susceptibility, and the remaining ranges classified accordingly. To provide an
+out-of-period qualitative reference, the susceptibility maps were overlaid with the burned perimeter derived from the
+NASA MCD64A1 product (Giglio et al., 2021) for the January 2026 Victorian bushfires (Victorian Government, 2026).
+2Although bounded between 0 and 1, these scores should not be interpreted as absolute ignition probabilities. Because training
+used a 1:1 positive-to-negative ratio, the scores reflect relative spatial propensity for ignition rather than true occurrence rates.
+Converting them to absolute probabilities requires calibration against the observed ignition base rate (Depicker et al., 2020).
+3Jenks natural breaks (Jenks, 1967) were not used because the method optimises class boundaries according to the score
+distribution of each model independently, which can produce inconsistent class area proportions across models. Percentile-based
+thresholds enforce identical area proportions for each class across all models, enabling direct comparison of spatial agreement in
+high-susceptibility classifications.
+11
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. 6 presents the representative maps, using LightGBM for the tree-based models and the 17 × 17 CNN for the spatial
+models. The full set of tree-based and CNN maps is provided in Figs. S14 and S15, respectively.
+The susceptibility maps show broadly consistent spatial structure across model families and feature representations
+(Fig. 6). High and very high susceptibility classes are repeatedly concentrated across inland Victoria, including parts of
+southwestern and central Victoria as well as the forested and mountainous landscapes of eastern Victoria associated
+with the Great Dividing Range, the Victorian Alps, and Gippsland. Lower susceptibility is assigned more consistently
+to the Port Phillip Bay surrounds, parts of the southern coastal plain, and highly urbanised areas. The January 2026
+burned perimeter is overlaid in Fig. 6 as an out-of-period qualitative reference.
+One clear divergence in model behaviour occurs in northwestern Victoria, which has a distinctly different climate
+from the southern regions (Fig. 1a) and where fire occurrences are spatially isolated. Most models capture this pattern
+of isolated high-susceptibility patches, with the exception of the MLP (Fig. 6c, d). Differences are also evident in
+spatial texture. Tree-based and TabPFN maps are relatively fine-grained, with high and very high susceptibility pixels
+interspersed among moderate and lower-susceptibility areas (Fig. 6a, b, e, f). By contrast, the CNN maps produce a
+more spatially aggregated pattern, where high and moderate susceptibility classes form contiguous zones (Figs. 6g, h
+and S15).
+In addition to binary classification, the predicted susceptibility scores from the cell-level and spatial neighbourhood
+models also reflect fire-recurrence patterns, showing a monotonic relationship with the number of months in which
+MODIS fire occurrences were recorded during 2017–2025 (Figs. S16 and S17). This pattern is observed for both
+physical-variable and embedding-based models, with cells experiencing more fire-occurrence months receiving higher
+mean susceptibility scores.
+4.4
+Transferability across Australia
+Transferability declines as target regions become more climatically distant from Victoria and less similar in fire regime,
+but the form of this decline differs markedly between physical-variable and embedding-based models (Figs. 7 and S18).
+Physical-variable models exhibit abrupt degradation in accuracy and ROC-AUC once applied outside Victoria: even at
+climatically related temperate sites such as Canberra and Western Sydney–Blue Mountains, their ROC-AUC drops
+by an average of approximately 25%. Embedding-based models, by contrast, show a much more gradual decline. At
+Canberra, ROC-AUC improves by around 4% on average, and recall increases substantially (by around 13% on average).
+At Western Sydney–Blue Mountains, their mean ROC-AUC decline is only around 2%. This advantage remains highly
+stable across the 10 independent runs (Table S7). Performance losses increase at more distant temperate sites such as
+Kangaroo Island, Leeuwin–Boranup, and Forcett–Dunalley. Larger degradation appears in the subtropical–tropical sites
+in Queensland and is more pronounced in the arid inland setting around Alice Springs. To summarise, AEF embeddings
+show stronger and more gradual cross-regional transfer than physical variables, particularly in climatically similar
+regions. However, their performance still declines in more distant and climatically distinct environments, indicating that
+transferability remains conditional rather than universal.
+As transfer distance and climatic dissimilarity increase, recall degrades more rapidly than specificity (Fig. 7c, d;
+Fig. S18). Correspondingly, the relative advantage of embedding-based models at near temperate sites is mainly
+reflected in their better retention of the ability to identify positive (fire-occurrence) pixels.
+5
+Discussion
+5.1
+Wildfire-Relevant Information in AEF Embeddings
+AEF embeddings are increasingly used as analysis-ready geospatial representations to substitute for physical variables
+when such variables are unavailable, difficult to harmonise, or costly to engineer. As a commonly used risk-assessment
+mapping task traditionally requiring a substantial set of multi-source physical variables, wildfire susceptibility mapping
+may also benefit from such representations. However, their applicability to this task, and the extent to which they
+contain wildfire-relevant information, remain insufficiently evaluated.
+Our experiments in Victoria, Australia demonstrate AEF embeddings contain substantial wildfire-relevant information.
+In the cell-wise setting, where each grid cell is represented by its own feature vector, embedding-based models achieve
+ROC-AUC values close to those of carefully engineered physical-variable models, indicating much of the discriminative
+signal required for susceptibility mapping is already present in the embedding space. When local neighbourhood
+information is incorporated through CNN-based patch models, the two representations become fully comparable. The
+architecture-specific explanation for this improvement is discussed separately in Section 5.2.
+12
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. 6: Wildfire susceptibility maps for representative physical-variable and embedding-based models in Victoria.
+13
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. 7: Mean transfer performance change relative to Victoria. Negative values denote performance degradation at the
+transfer site. Values are averaged across model families within each feature representation.
+The resulting embedding-based maps successfully identify the high-susceptibility regions of eastern and southwest-
+ern Victoria documented in prior literature (Hosseini and Lim, 2021), and most models also capture isolated high-
+susceptibility patches in the climatically distinct northwestern part of the state. Their visual overlap with the January
+2026 burned perimeter, derived from MODIS burned-area data, provides an out-of-period plausibility check. This
+overlap should not be interpreted as formal temporal validation, but it suggests that the learned susceptibility patterns
+are not merely artefacts of the 2017–2025 fire-occurrence inventory.
+Furthermore, our reconstruction analysis clarifies why embedding-based susceptibility models perform competitively.
+Many variables assigned high feature-importance scores by the tree-based susceptibility models, including vegetation
+condition, solar radiation, temperature, precipitation, and wind, can be recovered from the 64-dimensional AEF
+representation with high accuracy. This extends the findings of Rahman (2026) from US data to an Australian, fire-
+specific setting, and confirms AEF embeddings preserve environmental structure relevant to wildfire occurrence despite
+not being specially trained for this task. The same logic may extend to other natural hazards whose susceptibility is
+shaped by persistent land-surface conditions, such as flood and landslide susceptibility (Islam et al., 2025; Luu et al.,
+2024; Reichenbach et al., 2018). Whether this potential extends beyond wildfire susceptibility remains an important
+direction for future research.
+The strong performance of AEF embeddings also suggests a practical use as a meaningful performance baseline, even
+for researchers who ultimately adopt physical-variable models for interpretability. Wildfire susceptibility mapping is
+14
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+not a fully standardised machine learning task, and no established benchmark currently accounts for the diversity of
+study regions, spatial resolutions, and data processing choices found across the literature. Because AEF embeddings are
+analysis-ready, researchers can construct a study-specific baseline and evaluate it quickly, without first committing to a
+full physical-variable pipeline. When a physical-variable model fails to exceed this baseline, the gap signals a need
+to revisit variable selection, refine data processing, or incorporate additional predictors. Further guidance on which
+predictors to prioritise may come from ongoing research into AEF’s training data and the information content of its
+representations (Benavides-Martinez et al., 2026; Rahman, 2026).
+5.2
+Architecture Matters for Extracting AEF Susceptibility Signal
+Beyond evaluating whether AEF embeddings can be a useful alternative for hand-engineered physical variables, this
+study also contributes an architecture-level comparison of how wildfire-relevant information is extracted from the
+embedding field. The results show that cell-wise tabular models already access substantial signal from AEF embeddings,
+but CNN-based patch models extract additional predictive information by using local neighbourhood context. This
+distinction is important because evaluations based only on off-the-shelf tabular learners may understate the practical
+value of gridded geospatial embeddings. More generally, our findings suggest that foundation-model embeddings
+should be evaluated not only as tabular covariates, but also as spatially structured fields that can be used by computer-
+vision-style architectures. This implication should be interpreted cautiously, however, because the result is task- and
+scale-dependent and should be tested across additional regions and hazard-mapping applications.
+This pattern is consistent with the structure of the embedding field itself. In the Space-Time-Precision (STP) encoder of
+AlphaEarth Foundations, the space operator uses a Vision-Transformer-like spatial self-attention mechanism to capture
+broader spatial dependencies, while the precision operator uses 3 × 3 convolutional operations to maintain local spatial
+detail (Brown et al., 2025). These design features suggest that AEF embeddings are not simply independent cell-wise
+vectors, but part of a spatially structured embedding field containing both neighbourhood-level and broader contextual
+information. The stronger performance of CNN-based patch models therefore suggests that some wildfire-relevant
+signal is expressed through local spatial structure in the embedding field, which cell-wise tabular models cannot directly
+use. This helps explain why larger patches, particularly the 17 × 17 and 25 × 25 patches, were especially effective for
+AEF embeddings in our task.
+The use of neighbourhood context also explains why the CNN maps form smoother and more spatially contiguous
+susceptibility zones than the cell-level maps. Such spatial coherence may be useful for susceptibility zoning and regional
+planning, where contiguous zones can provide more actionable management units than isolated high-susceptibility
+pixels. However, this smoothing may also obscure small localised hotspots, so its practical value depends on the
+intended use of the susceptibility map.
+By contrast, annual-sequence modelling added limited predictive benefit. This likely reflects the structure of the
+prediction task as much as the data resolution. Although the models receive annual feature vectors, the response variable
+remains a single 2017–2025 fire-occurrence label, so the model is still estimating overall susceptibility rather than year-
+specific fire occurrence. If susceptibility is dominated by persistent land-surface, vegetation, topographic, and climatic
+gradients, the time-aggregated representation may already contain most of the relevant predictive signal. Aggregating
+10 m AEF embeddings to the 1 km modelling grid may further reduce fine-scale annual variation, particularly where
+year-to-year changes occur at sub-grid scales. This contrasts with change-detection applications, which often operate at
+the native 10 m resolution to use annual embedding layers for characterising changes over time (Chaiyana et al., 2026).
+The limited gain from annual-sequence modelling therefore does not imply annual AEF embedding layers lack temporal
+information. Rather, it suggests that such information is difficult to exploit when the embeddings are aggregated to
+1 km and used to predict a cross-sectional outcome.
+The elevated weight assigned to 2020 should be interpreted cautiously as a predictive association, rather than evidence
+that 2020 conditions were causally more important for fire susceptibility. One likely explanation is the concentration of
+fire-occurrence labels associated with the 2019–2020 Black Summer fires (Abram et al., 2021) with approximately
+28% of fire occurrence grid cells in our inventory originating from 2020. In addition, the environmental conditions of
+2019–2020 were anomalous across multiple climate indicators (Devanand et al., 2024; Van Oldenborgh et al., 2021),
+and these signals may be partly encoded in AEF embeddings through their use of ERA5-derived information. Therefore,
+the high 2020 weight suggests that this annual layer was especially informative for distinguishing burned from unburned
+cells in this study period. A sensitivity analysis excluding 2020, or separating pre-fire from post-fire information, would
+be needed to test this interpretation further, but this was beyond the scope of the present study.
+15
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+5.3
+Spatial Transferability and Scalable Susceptibility Mapping
+In wildfire susceptibility mapping, model generalisation is typically assessed using randomly held-out test samples
+from the same study region, whereas spatial transferability across distinct regions has received comparatively little
+attention. At Canberra, the transfer site geographically closest to Victoria (Fig. 1a), models trained on physical variables
+in Victoria exhibit a substantial decline in recall and ROC-AUC. This result aligns with Bekar et al. (2020), who
+found that most cross-regional transfers of regional fire-occurrence models in the Alps and the Mediterranean Basin
+were unsuccessful, with southern Switzerland to Carinthia, Austria, as the main exception. In our study, AEF model
+performance also declined outside Victoria, but less sharply than physical-variable model performance in nearby regions
+within similar climate zones. One possible explanation is that AEF was trained on a global, multi-billion-observation
+corpus spanning diverse climates and land-surface conditions and produces a unified embedding field over the global
+land surface, within which environmentally similar regions may be represented in a more comparable form. This
+advantage may diminish as source–target distance and environmental dissimilarity increase, because the relationships
+between embedding features and downstream labels can vary across regions (Yang et al., 2026). Consistent with this
+possibility, agricultural studies involving transfers from the United States to Argentina and from China to the United
+States have reported limited AEF transferability (Ma et al., 2026; Yang et al., 2026). Future research could determine
+how this transfer advantage varies with source–target distance, environmental similarity, and downstream task, and
+identify the conditions under which it disappears.
+The conditional transfer pattern observed here suggests practical implications for large-area susceptibility mapping
+across diverse climate zones, which is relevant to public agencies managing wildfire exposure across broad jurisdictions
+and to insurers and reinsurers whose portfolios span multiple regions or entire countries. Where physical-variable
+models transfer poorly, reliable large-area mapping may require labelled samples across much of the target domain
+to adequately represent local environmental relationships, resulting in large and spatially extensive training datasets,
+particularly in countries with diverse climate zones and fire regimes. Embedding-based modelling may offer a more
+scalable alternative: representative areas could be sampled within major climate or fire-regime zones, and models
+trained in these areas could then be transferred to environmentally similar regions with more controlled degradation.
+5.4
+Annual Geospatial Embeddings as Susceptibility Predictors
+AEF annual layers are better understood as reusable representations of yearly land-surface and environmental condi-
+tions than as substitutes for long multi-decadal climate records. This design is well suited to wildfire susceptibility
+mapping, where the objective is to estimate relative spatial propensity for fire occurrence from vegetation, land-surface,
+topographic, and climatic context rather than to forecast short-term ignition events. By summarising conditions over a
+full year, AEF embeddings can capture persistent and seasonal landscape characteristics that are directly relevant to
+susceptibility assessment. At the same time, the scientific community would benefit from continued annual extension of
+the AEF product, and where feasible, longer retrospective archives. Related remote-sensing foundation-model products
+such as TESSERA (Feng et al., 2025) and Prithvi-EO-2.0 (Szwarcman et al., 2025) similarly provide archives covering
+roughly the last 10–15 years. A longer archive would support stronger retrospective evaluation (Sun et al., 2026),
+improve separation between persistent susceptibility patterns and short-period climatic anomalies, and enable more
+robust fire-climate analyses.
+The reconstruction of variables defined by fire-season persistence or short-term extremes, including days with FFDI
+above 50, consecutive hot days, consecutive dry days, and consecutive dry-soil days, are more variable across years.
+Therefore, for near-real-time ignition prediction or next-day fire-risk forecasting, AEF embeddings are best used as
+environmental context alongside dynamic meteorological forcings, rather than as standalone predictors (Zlydenko et al.,
+2026).
+6
+Conclusion
+This study systematically evaluates AlphaEarth Foundations (AEF) embeddings for wildfire susceptibility mapping.
+Using Victoria, Australia, as the source region, we show that AEF embeddings contain substantial wildfire-relevant
+information and can support susceptibility models with performance comparable to physical-variable models, particu-
+larly when downstream models use neighbouring information through patch-based input. Transfer experiments further
+show embedding-based Victorian models retain stronger performance in nearby temperate regions, especially Canberra
+and Western Sydney–Blue Mountains, than models based on physical variables. Overall, our findings highlight the
+potential of AEF embeddings for wildfire susceptibility mapping tasks dominated by structurally stable environmental
+information. Future research could extend this evaluation to larger spatial domains and to other hazards, such as
+floods and landslides, to assess whether geospatial embeddings can serve as reusable data infrastructure for scalable
+multi-hazard susceptibility assessment.
+16
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Acknowledgements
+This work was supported by Australian Research Council’s Discovery Projects funding scheme (DP250104816). Y.Z.,
+S.H., and F.H. acknowledge the support of the Australian Research Council Centre of Excellence for the Weather
+of the 21st Century (CE230100012). The work was undertaken using resources from the National Computational
+Infrastructure (NCI), which is supported by the Australian Government. The authors acknowledge Patrick Laub,
+Bernard Wong, Len Patrick Garces, Gregory Taylor, Jinxia Zhu and Gerry (Zherui) Li for their helpful suggestions.
+Data availability
+In our research, the data used are publicly available, and the corresponding references to the datasets are provided in the
+manuscript.
+References
+John T. Abatzoglou, Solomon Z. Dobrowski, Sean A. Parks, and Katherine C. Hegewisch. TerraClimate, a High-
+Resolution Global Dataset of Monthly Climate and Climatic Water Balance from 1958–2015. Scientific Data, 5:
+170191, 2018. doi:10.1038/sdata.2017.191.
+Arnick Abdollahi and Biswajeet Pradhan. Explainable Artificial Intelligence (XAI) for Interpreting the Contributing
+Factors Feed into the Wildfire Susceptibility Prediction Model. Science of The Total Environment, 879:163004, 2023.
+doi:10.1016/j.scitotenv.2023.163004.
+Nerilie J. Abram, Benjamin J. Henley, Alex Sen Gupta, Tanya J. R. Lippmann, Hamish Clarke, Andrew J. Dowdy,
+Jason J. Sharples, Rachael H. Nolan, Tianran Zhang, Martin J. Wooster, Jennifer B. Wurtzel, Katrin J. Meissner,
+Andrew J. Pitman, Anna M. Ukkola, Brett P. Murphy, Nigel J. Tapper, and Matthias M. Boer. Connections of
+Climate Change and Variability to Large and Extreme Forest Fires in Southeast Australia. Communications Earth &
+Environment, 2(1):8, 2021. doi:10.1038/s43247-020-00065-8.
+Takuya Akiba, Shotaro Sano, Toshihiko Yanase, Takeru Ohta, and Masanori Koyama. Optuna: A Next-Generation
+Hyperparameter Optimization Framework, 2019.
+˙Ismail Bekar, Ça˘gatay Tav¸sano˘glu, G. Boris Pezzatti, Harald Vacik, Juli G. Pausas, Harald Bugmann, and Gunnar Petter.
+Cross-Regional Modelling of Fire Occurrence in the Alps and the Mediterranean Basin. International Journal of
+Wildland Fire, 29(8):712–722, 2020. doi:10.1071/WF19158.
+Ivan Felipe Benavides-Martinez, Justin Guthrie, Jhon Edwin Arias, Yeison Alberto Garces-Gomez, Angela Ines
+Guzman-Alvis, Cristiam Victoriano Portilla-Cabrera, Somnath Mondal, Andrew J. Allyn, and Auroop R. Ganguly.
+What on Earth Is AlphaEarth? Hierarchical Structure and Functional Interpretability for Global Land Cover, March
+2026.
+Brahim Benzougagh, Youssef Bammou, Halah Kadhim Tayyeh, Ahmed Mageed Hussein, Mohammed El Brahimi,
+Tarik Amraoui, Driss Sadkaoui, Khaled Mohamed Khedher, Salma Abdullah Hassan Alghurabi, Khadeijah Yahya
+Faqeih, Lizny Jaufer, and Shuraik Kader. Hybrid SVM–XGBoost Framework for Wildfire Susceptibility Mapping
+in Palm Oasis Ecosystems to Enhance Risk Assessment in Arid and Semi-Arid Regions. Natural Hazards, 122(1):
+41–69, 2026. doi:10.1007/s11069-025-07735-w.
+Alexandra Bjånes, Rodrigo De La Fuente, and Pablo Mena. A Deep Learning Ensemble Model for Wildfire Susceptibility
+Mapping. Ecological Informatics, 65:101397, 2021. doi:10.1016/j.ecoinf.2021.101397.
+David M. J. S. Bowman, Jennifer K. Balch, Paulo Artaxo, William J. Bond, Jean M. Carlson, Mark A. Cochrane,
+Carla M. D’Antonio, Ruth S. DeFries, John C. Doyle, Sandy P. Harrison, Fay H. Johnston, Jon E. Keeley, Meg A.
+Krawchuk, Christian A. Kull, J. Brad Marston, Max A. Moritz, I. Colin Prentice, Christopher I. Roos, Andrew C.
+Scott, Thomas W. Swetnam, Guido R. Van Der Werf, and Stephen J. Pyne. Fire in the Earth System. Science, 324
+(5926):481–484, 2009. doi:10.1126/science.1163886.
+Leo Breiman. Random forests. Machine Learning, 45(1):5–32, 2001. doi:10.1023/A:1010933404324.
+Christopher F. Brown, Michal R. Kazmierski, Valerie J. Pasquarella, William J. Rucklidge, Masha Samsikova, Chenhui
+Zhang, Evan Shelhamer, Estefania Lahera, Olivia Wiles, Simon Ilyushchenko, Noel Gorelick, Lihui Lydia Zhang,
+Sophia Alj, Emily Schechter, Sean Askay, Oliver Guinan, Rebecca Moore, Alexis Boukouvalas, and Pushmeet Kohli.
+AlphaEarth Foundations: An Embedding Field Model for Accurate and Efficient Global Mapping from Sparse Label
+Data, 2025.
+Bureau of Meteorology. Australian Water Outlook. https://awo.bom.gov.au, 2024a.
+17
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Bureau of Meteorology. Climate Classification Maps. https://www.bom.gov.au/climate/maps/averages/
+climate-classification/, 2024b.
+Bureau of Meteorology. Australian Hydrological Geospatial Fabric (Geofabric). https://www.bom.gov.au/water/
+geofabric/, 2024c.
+Akkarapon Chaiyana, Filippo Sarvia, Narissara Nuthammachot, and Jaturong Som-ard. A Scalable Potential of Alpha
+Earth and Multisensor Datasets for Assessing Mangrove Intactness and Degradation Using Deep and Machine
+Learning Algorithms. IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing, 19:
+8346–8358, 2026. doi:10.1109/JSTARS.2026.3664013.
+Tianqi Chen and Carlos Guestrin.
+XGBoost: A Scalable Tree Boosting System.
+In Proceedings of the 22nd
+ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, pages 785–794. ACM, 2016.
+doi:10.1145/2939672.2939785.
+Santos Daniel Chicas and Jonas Østergaard Nielsen. Who Are the Actors and What Are the Factors That Are Used
+in Models to Map Forest Fire Susceptibility? A Systematic Review. Natural Hazards, 114(3):2417–2434, 2022.
+doi:10.1007/s11069-022-05495-5.
+Copernicus Emergency Management Service. Fire Danger Indices Historical Data, 2019.
+Calum X. Cunningham, Grant J. Williamson, and David M. J. S. Bowman. Increasing Frequency and Intensity of the
+Most Extreme Wildfires on Earth. Nature Ecology & Evolution, 8(8):1420–1425, 2024. doi:10.1038/s41559-024-
+02452-2.
+Arthur Depicker, Bernard De Baets, and Jan Marcel Baetens. Wildfire Ignition Probability in Belgium. Natural Hazards
+and Earth System Sciences, 20(2):363–376, 2020. doi:10.5194/nhess-20-363-2020.
+Anjana Devanand, Georgina M. Falster, Zoe E. Gillett, Sanaa Hobeichi, Chiara M. Holgate, Chenhui Jin, Mengyuan Mu,
+Tess Parker, Sami W. Rifai, Kathleen S. Rome, Milica Stojanovic, Elisabeth Vogel, Nerilie J. Abram, Gab Abramowitz,
+Sloan Coats, Jason P. Evans, Ailie J. E. Gallant, Andy J. Pitman, Scott B. Power, Surendra P. Rauniyar, Andréa S.
+Taschetto, and Anna M. Ukkola. Australia’s Tinderbox Drought: An Extreme Natural Event Likely Worsened by
+Human-Caused Climate Change. Science Advances, 10(10):eadj3460, 2024. doi:10.1126/sciadv.adj3460.
+Kamel Didan. MODIS/Terra Vegetation Indices 16-Day L3 Global 250m SIN Grid V061, 2021.
+Naveed Ejaz and Salimur Choudhury. A Comprehensive Survey of the Machine Learning Pipeline for Wildfire Risk
+Prediction and Assessment. Ecological Informatics, 90:103325, 2025. doi:10.1016/j.ecoinf.2025.103325.
+Zhengpeng Feng, Clement Atzberger, Sadiq Jaffer, Jovana Knezevic, Silja Sormunen, Robin Young, Madeline C.
+Lisaius, Markus Immitzer, Toby Jackson, James Ball, David A. Coomes, Anil Madhavapeddy, Andrew Blake, and
+Srinivasan Keshav. TESSERA: Temporal Embeddings of Surface Spectra for Earth Representation and Analysis,
+2025.
+Alexander I. Filkov, Tuan Ngo, Stuart Matthews, Simeon Telfer, and Trent D. Penman. Impact of Australia’s Catastrophic
+2019/20 Bushfire Season on Communities and Environment. Retrospective Analysis and Current Trends. Journal of
+Safety Science and Resilience, 1(1):44–56, 2020. doi:10.1016/j.jnlssr.2020.06.009.
+Forest Fire Management Victoria. Past bushfires. https://www.ffm.vic.gov.au/history-and-incidents/
+past-bushfires, 2021.
+Mark Friedl and Damien Sulla-Menashe. MODIS/Terra+Aqua Land Cover Type Yearly L3 Global 500m SIN Grid
+V061, 2022.
+J. Gallant, N. Wilson, P.K. Tickle, T. Dowling, and A. Read. 3 Second SRTM Derived Digital Elevation Model (DEM)
+Version 1.0. https://pid.geoscience.gov.au/dataset/ga/69888, 2009.
+Louis Giglio, Wilfrid Schroeder, and Christopher O. Justice. The collection 6 modis active fire detection algorithm and
+fire products. Remote Sensing of Environment, 178:31–41, 2016. doi:10.1016/j.rse.2016.02.054. Data available at
+https://firms.modaps.eosdis.nasa.gov/active_fire/.
+Louis Giglio, Christopher Justice, Luigi Boschetti, and David Roy. MODIS/Terra+Aqua Burned Area Monthly L3
+Global 500m SIN Grid V061, 2021.
+Google Earth Engine. Satellite Embedding V1. https://developers.google.com/earth-engine/datasets/
+catalog/GOOGLE_SATELLITE_EMBEDDING_V1_ANNUAL, 2026.
+Google for Developers. AlphaEarth Foundations GCS Data. https://developers.google.com/earth-engine/
+guides/aef_on_gcs_readme, 2026.
+Emily Grant and Jennifer D. Runkle. Long-Term Health Effects of Wildfire Exposure: A Scoping Review. The Journal
+of Climate Change and Health, 6:100110, 2022. doi:10.1016/j.joclim.2021.100110.
+18
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Léo Grinsztajn, Klemens Flöge, Oscar Key, Felix Birkel, Philipp Jund, Brendan Roof, Mihir Manium, Shi Bin Hoo,
+Magnus Bühler, Anurag Garg, Dominik Safaric, Jake Robertson, Benjamin Jäger, Simone Alessi, Adrian Hayler,
+Vladyslav Moroshan, Lennart Purucker, Philipp Singer, Alan Arazi, Julien Siems, Jan Hendrik Metzen, Georg Grab,
+Nick Erickson, Siyuan Guo, Eliott Kalfon, Simon Bing, David Salinas, Clara Cornu, Lilly Charlotte Wehrhahn, Diana
+Kriuchkova, Kursat Kaya, Lydia Sidhoum, Marie Salmon, Jerry Chen, Madelon Hulsebos, Yann LeCun, Samuel
+Müller, Bernhard Schölkopf, Sauraj Gambhir, Noah Hollmann, and Frank Hutter. TabPFN-3: Technical Report,
+2026.
+Wahyu Luqmanul Hakim, Muhammad Fulki Fadhillah, Sungjae Park, and Chang-Wook Lee. Dual-Stage Wildfire Risk
+Analysis in South Korea: Susceptibility Mapping from a Decade of FIRMS Data and 2025 Burn Area Detection with
+Multi-Sensor Classification. International Journal of Applied Earth Observation and Geoinformation, 144:104890,
+2025. doi:10.1016/j.jag.2025.104890.
+Mafrid Haydar, Al Hossain Rafi, Md.Kamran Hasan Khan, Sakib Hosan, and Halima Sadia. Mapping Climate Change
+Induced Forest Fire Susceptibility Using Tree-Based Machine Learning Algorithms in Bangladesh. Ecological
+Indicators, 176:113657, 2025. doi:10.1016/j.ecolind.2025.113657.
+Junye He, Rui Zhang, Guobing Wang, Yue Wang, Yuxin Tang, Jichao Lv, Age Shama, Jinjin Cao, Xiaoying Ouyang, and
+Guoxiang Liu. Application of a Burned Area Spatio-Temporal Stratification–Based Positive Sample Augmentation
+Strategy in Fine-Scale Wildfire Susceptibility Mapping. International Journal of Applied Earth Observation and
+Geoinformation, 148:105210, 2026. doi:10.1016/j.jag.2026.105210.
+Noah Hollmann, Samuel Müller, Lennart Purucker, Arjun Krishnakumar, Max Körfer, Shi Bin Hoo, Robin Tibor
+Schirrmeister, and Frank Hutter. Accurate Predictions on Small Data with a Tabular Foundation Model. Nature, 637
+(8045):319–326, 2025. doi:10.1038/s41586-024-08328-6.
+Maryamsadat Hosseini and Samsung Lim. Gene Expression Programming and Ensemble Methods for Bushfire
+Susceptibility Mapping: A Case Study of Victoria, Australia. Geomatics, Natural Hazards and Risk, 12(1):2367–
+2386, 2021. doi:10.1080/19475705.2021.1964618.
+Shuyang Hou, Haoyue Jiao, Ziqi Liu, Lutong Xie, Guanyu Chen, Shaowen Wu, Zhangyan Xu, Zengjie Wang, Shaoqing
+Tang, Yaxian Qing, Jianyuan Liang, Xuefeng Guan, and Huayi Wu. AlphaEarth Foundations (AEF) in Earth
+Observation: A Systematic Review of Applications and Practices, 2026.
+Jin Huang and Charles X. Ling. Using AUC and Accuracy in Evaluating Learning Algorithms. IEEE Transactions on
+Knowledge and Data Engineering, 17(3):299–310, 2005. doi:10.1109/TKDE.2005.50.
+Tania Islam, Ethiopia B. Zeleke, Mahmud Afroz, et al. A Systematic Review of Urban Flood Susceptibility Map-
+ping: Remote Sensing, Machine Learning, and Other Modeling Approaches. Remote Sensing, 17(3):524, 2025.
+doi:10.3390/rs17030524.
+Piyush Jain, Sean C.P. Coogan, Sriram Ganapathi Subramanian, Mark Crowley, Steve Taylor, and Mike D. Flannigan.
+A Review of Machine Learning Applications in Wildfire Science and Management. Environmental Reviews, 28(4):
+478–505, December 2020. doi:10.1139/er-2020-0019.
+Gareth James, Daniela Witten, Trevor Hastie, and Robert Tibshirani. An Introduction to Statistical Learning: With
+Applications in R. Springer, New York, 2nd edition, 2021.
+S.J. Jeffrey, J.O. Carter, K.B. Moodie, and A.R. Beswick.
+Using Spatial Interpolation to Construct a Compre-
+hensive Archive of Australian Climate Data.
+Environmental Modelling and Software, 16(4):309–330, 2001.
+doi:10.1016/S1364-8152(01)00008-1. Data available at https://www.longpaddock.qld.gov.au/silo/.
+George F. Jenks. The Data Model Concept in Statistical Mapping. International Yearbook of Cartography, 7:186–190,
+1967.
+Wenyu Jiang, Yuming Qiao, Xinxin Zheng, Jiahao Zhou, Juncai Jiang, Qingxiang Meng, Guofeng Su, Shaobo Zhong,
+and Fei Wang. Wildfire Risk Assessment Using Deep Learning in Guangdong Province, China. International Journal
+of Applied Earth Observation and Geoinformation, 128:103750, April 2024.
+Guolin Ke, Qi Meng, Thomas Finley, Taifeng Wang, Wei Chen, Weidong Ma, Qiwei Ye, and Tie-Yan Liu. LightGBM:
+A Highly Efficient Gradient Boosting Decision Tree. In Advances in Neural Information Processing Systems 30
+(NeurIPS), pages 3146–3154, 2017. https://proceedings.neurips.cc/paper_files/paper/2017/file/
+6449f44a102fde848669bdd9eb6b76fa-Paper.pdf.
+Michael Leuenberger, Joana Parente, Marj Tonini, Mário Gonzalez Pereira, and Mikhail Kanevski. Wildfire Susceptibil-
+ity Mapping: Deterministic vs. Stochastic Approaches. Environmental Modelling & Software, 101:194–203, 2018.
+doi:10.1016/j.envsoft.2017.12.019.
+Ilya Loshchilov and Frank Hutter. Decoupled Weight Decay Regularization, 2019.
+19
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Chinh Luu, Giuseppe Forino, Lynda Yorke, Hang Ha, Quynh Duy Bui, Hanh Hong Tran, Dinh Quoc Nguyen,
+Hieu Cong Duong, and Matthieu Kervyn. Integrating Susceptibility Maps of Multiple Hazards and Building
+Exposure Distribution: A Case Study of Wildfires and Floods for the Province of Quang Nam, Vietnam. Natural
+Hazards and Earth System Sciences, 24(12):4385–4408, 2024. doi:10.5194/nhess-24-4385-2024.
+Yuchi Ma, Yawen Shen, Anu Swatantran, and David B. Lobell. Harvesting AlphaEarth: Benchmarking the Geospatial
+Foundation Model for Agricultural Downstream Tasks. International Journal of Applied Earth Observation and
+Geoinformation, 149:105258, 2026. doi:10.1016/j.jag.2026.105258.
+Mohammad Marjani, Masoud Mahdianpari, Seyed Ehsan Khankeshizadeh, Sahand Tahermanesh, Amin Mohsenifar,
+and Ali Mohammadzadeh. Three Decades of GeoAI for Wildfire Science: A Systematic and Meta-Analysis Review.
+Remote Sensing, 18(12):1874, 2026. doi:10.3390/rs18121874.
+Max A. Moritz, Marc-André Parisien, Enric Batllori, Meg A. Krawchuk, Jeff Van Dorn, David J. Ganz, and Katharine
+Hayhoe. Climate Change and Disruptions to Global Fire Activity. Ecosphere, 3(6):1–22, 2012. doi:10.1890/ES11-
+00345.1.
+Ranga Myneni. VIIRS/NPP Leaf Area Index/FPAR 8-Day L4 Global 500m SIN Grid V002, 2023.
+OpenStreetMap. OpenStreetMap. https://www.openstreetmap.org, 2026.
+Mashrekur Rahman.
+Physically Interpretable AlphaEarth Foundation Model Embeddings Enable LLM-Based
+Land Surface Intelligence.
+Remote Sensing Applications:
+Society and Environment, 42:102045, 2026.
+doi:10.1016/j.rsase.2026.102045.
+P. Reichenbach, M. Rossi, Bruce D. Malamud, M. Mihir, and Fausto Guzzetti. A Review of Statistically-Based
+Landslide Susceptibility Models. Earth-Science Reviews, 180:60–91, 2018. doi:10.1016/j.earscirev.2018.03.001.
+Doug Richardson, Amanda S. Black, Damien Irving, Richard J. Matear, Didier P. Monselesan, James S. Risbey,
+Dougal T. Squire, and Carly R. Tozer. Global Increase in Wildfire Potential from Compound Fire Weather and
+Drought. npj Climate and Atmospheric Science, 5:23, 2022. doi:10.1038/s41612-022-00248-4.
+Chiranjit Singha, Kishore Chandra Swain, Armin Moghimi, Fatemeh Foroughnia, and Sanjay Kumar Swain. Integrating
+Geospatial, Remote Sensing, and Machine Learning for Climate-Induced Forest Fire Susceptibility Mapping in Sim-
+ilipal Tiger Reserve, India. Forest Ecology and Management, 555:121729, 2024. doi:10.1016/j.foreco.2024.121729.
+Yuxuan Sun, Zhaohui Xue, Hao Wu, and Xiangyu Nie. The First Map of Planted Mangrove Forests in China Derived
+from Time-Series Landsat and Google Satellite Embeddings. Remote Sensing of Environment, 344:115541, 2026.
+doi:10.1016/j.rse.2026.115541.
+Swiss
+Re.
+Natural
+Catastrophes
+in
+2025:
+The
+Persistent
+Rise
+of
+Wildfire,
+Storm
+and
+Flood
+Risk.
+https://www.swissre.com/institute/research/sigma-research/
+sigma-2026-01-natcat-2025-wildfire-storm-risk.html, 2026.
+Daniela Szwarcman, Sujit Roy, Paolo Fraccaro, Þorsteinn Elí Gíslason, Benedikt Blumenstiel, Rinki Ghosal, Pedro Hen-
+rique de Oliveira, Joao Lucas de Sousa Almeida, Rocco Sedona, Yanghui Kang, Srija Chakraborty, Sizhe Wang,
+Carlos Gomes, Ankur Kumar, Myscon Truong, Denys Godwin, Hyunho Lee, Chia-Yu Hsu, Ata Akbari Asanjan,
+Besart Mujeci, Disha Shidham, Trevor Keenan, Paulo Arevalo, Wenwen Li, Hamed Alemohammad, Pontus Olofsson,
+Christopher Hain, Robert Kennedy, Bianca Zadrozny, David Bell, Gabriele Cavallaro, Campbell Watson, Manil
+Maskey, Rahul Ramachandran, and Juan Bernabe Moreno. Prithvi-EO-2.0: A Versatile Multi-Temporal Foundation
+Model for Earth Observation Applications, 2025.
+Dieu Tien Bui, Quang-Thanh Bui, Quoc-Phi Nguyen, Biswajeet Pradhan, Haleh Nampak, and Phan Trong Trinh.
+A Hybrid Artificial Intelligence Approach Using GIS-Based Neural-Fuzzy Inference System and Particle Swarm
+Optimization for Forest Fire Susceptibility Modeling at a Tropical Area. Agricultural and Forest Meteorology, 233:
+32–44, 2017. doi:10.1016/j.agrformet.2016.11.002.
+Geert Jan Van Oldenborgh, Folmer Krikken, Sophie Lewis, Nicholas J. Leach, Flavio Lehner, Kate R. Saunders,
+Michiel Van Weele, Karsten Haustein, Sihan Li, David Wallom, Sarah Sparrow, Julie Arrighi, Roop K. Singh,
+Maarten K. Van Aalst, Sjoukje Y. Philip, Robert Vautard, and Friederike E. L. Otto. Attribution of the Australian
+Bushfire Risk to Anthropogenic Climate Change. Natural Hazards and Earth System Sciences, 21(3):941–960, 2021.
+doi:10.5194/nhess-21-941-2021.
+Victorian
+Government.
+January
+2026
+Victorian
+Bushfires.
+https://www.vic.gov.au/
+january-2026-victorian-bushfires, 2026.
+Alexandre M.J.-C. Wadoux, Gerard B.M. Heuvelink, Sytze De Bruin, and Dick J. Brus.
+Spatial Cross-
+Validation Is Not the Right Way to Evaluate Map Accuracy.
+Ecological Modelling, 457:109692, 2021.
+doi:10.1016/j.ecolmodel.2021.109692.
+20
+
+
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Zhengsen Xu, Jonathan Li, Sibo Cheng, Xue Rui, Yu Zhao, Hongjie He, Haiyan Guan, Aryan Sharma, Matthew
+Erxleben, Ryan Chang, and Lincoln Linlin Xu. Deep Learning for Wildfire Risk Prediction: Integrating Remote
+Sensing and Environmental Data. ISPRS Journal of Photogrammetry and Remote Sensing, 227:632–677, 2025.
+doi:10.1016/j.isprsjprs.2025.06.002.
+Lulu Yang, Yuan Gao, Xiangyang Zhao, Nannan Liang, Ru Ma, Shixiang Xi, Xiao Zhang, and Rui Wang. Evaluating
+the Performance of AlphaEarth Foundation Embeddings for Irrigated Cropland Mapping Across Regions and Years.
+Remote Sensing, 18(7):1065, 2026. doi:10.3390/rs18071065.
+Dingqi Ye, Daniel Kiv, Wei Hu, Jimeng Shi, and Shaowen Wang. Any Model, Any Place, Any Time: Get Remote
+Sensing Foundation Model Embeddings On Demand, February 2026.
+Bilel Zerouali, Celso Augusto Guimarães Santos, Saleh Qaysi, Richarde Marques Da Silva, Nassir Alarifi, Nadjem
+Bailek, Manoranjan Mishra, Paolo Porto, and Youssef M. Youssef. Advanced Forest Fire Risk Mapping: Combining
+Sentinel-2 MSI Data with Hybrid Machine Learning in Similipal Biosphere Reserve. Forest Ecology and Management,
+594:122931, 2025. doi:10.1016/j.foreco.2025.122931.
+Guoli Zhang, Ming Wang, and Kai Liu. Forest Fire Susceptibility Modeling Using a Convolutional Neural Network for
+Yunnan Province of China. International Journal of Disaster Risk Science, 10(3):386–403, 2019. doi:10.1007/s13753-
+019-00233-1.
+Guoli Zhang, Ming Wang, and Kai Liu. Deep Neural Networks for Global Wildfire Susceptibility Modelling. Ecological
+Indicators, 127:107735, 2021. doi:10.1016/j.ecolind.2021.107735.
+Qian Zheng, Annan Zhou, and Shui-Long Shen. Mapping Bushfire Risk Based on Scale Division and Factor Analysis:
+A Case Study from Victoria, Australia. International Journal of Disaster Risk Reduction, 118:105222, 2025.
+doi:10.1016/j.ijdrr.2025.105222.
+Xiao Xiang Zhu, Zhitong Xiong, Yi Wang, Adam J. Stewart, Konrad Heidler, Yuanyuan Wang, Zhenghang Yuan,
+Thomas Dujardin, Qingsong Xu, and Yilei Shi. On the Foundations of Earth Foundation Models. Communications
+Earth & Environment, 7(1):103–118, 2026. doi:10.1038/s43247-025-03127-x.
+Oleg Zlydenko, Hadas Fester, Shmuel Fronman, Martin Gauch, Oren Gilon, Avinatan Hassidim, Gila Loike, Yossi
+Matias, Rotem Mayo, Grey Nearing, Aviel Niego, Reuven Sayag, Shruti Verma, Ido Zemach, and Deborah Cohen.
+AI Expands High-Quality Urban Flash Flood Forecasts Globally, 2026.
+21
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Supplementary Material
+Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+S1
+Variable Quantification and Visualization
+This Supplementary Material documents the computational definitions of all 35 candidate predictor variables listed in
+main text Table 1, as well as the visualization of the cross-sectional dataset.
+S1.1
+Topographic Variables (Fig. S1)
+All topographic variables are static (time-invariant).
+1 – Elevation (ELEV):
+• Unit: m
+• Calculation: Mean elevation within each 1 km cell.
+2 – Slope (SLOPE):
+• Unit: ◦
+• Calculation: Computed using central-difference gradients via numpy.gradient():
+SLOPE = arctan
+√︃
+𝑔2𝑥+ 𝑔2𝑦,
+(𝑔𝑥, 𝑔𝑦) = ∇𝑧
+(S1)
+Averaged to 1 km grid.
+3–4 – Northness (NORTH) and Eastness (EAST):
+• Unit: NA
+• Calculation: Slope aspect (the compass direction a slope face points towards) influences wildfire susceptibility
+through its control on solar radiation receipt and vegetation structure. In the Southern Hemisphere, north-facing
+slopes receive more direct insolation, leading to drier and more fire-prone conditions (Lindenmayer et al.,
+2021). Aspect is represented by northness and eastness to avoid treating 0◦and 360◦as numerically distant
+values:
+NORTH = cos
+
+𝛼·
+𝜋
+180
+
+,
+EAST = sin
+
+𝛼·
+𝜋
+180
+
+(S2)
+Both components range [−1, +1]. NORTH = +1 indicates a due-north-facing slope, NORTH = −1 a due-
+south-facing slope, and NORTH = 0 for an east- or west-facing slope. EAST is interpreted analogously. Both
+NORTH and EAST are computed at the native DEM resolution and subsequently averaged to 1 km grid.
+S1.2
+Land Cover (Fig. S2)
+5–9 – Land Cover Type ([LC_CRP, LC_FRS, LC_GRS, LC_SVN, LC_SHR]):
+• Unit: NA, binary variables
+• Calculation: The mode IGBP land cover class (Loveland and Belward, 1997) within each 1 km cell was
+identified. We merged some of the original classes: Cropland (classes 12 & 14), Forest (classes 1–5),
+Grassland (class 10), Savanna (classes 8–9), and Shrubland (classes 6–7). Remaining classes (urban areas,
+snow, waterbody, etc.) were merged into a single category to avoid high cardinality. The resulting grouped class
+was then converted into five binary indicators, with the remaining land-cover types serving as the reference
+category.
+Zhuang et al., 2026: Supplementary Material
+Page 1 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S1: Spatial distribution of topographic variables: elevation (ELEV), slope (SLOPE), northness (NORTH), and
+eastness (EAST).
+• Temporal aggregation: Mode class across 2017–2025. As 2025 data were not yet available at the time of
+writing, the 2024 land cover map was used in place of 2025.
+Fig. S2: Land cover classes used in this study (merged from IGBP classification)
+S1.3
+Precipitation (Fig. S3)
+10 – Total Annual Precipitation (PREC):
+• Unit: mm
+• Calculation: Sum of daily rainfall within each calendar year 𝑡:
+PREC𝑡=
+∑︁𝑁𝑡
+𝑑=1 𝑟𝑑
+(S3)
+Zhuang et al., 2026: Supplementary Material
+Page 2 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+where 𝑟𝑑is daily rainfall (mm) on day 𝑑and 𝑁𝑡is the number of days in year 𝑡.
+• Temporal aggregation: Mean of annual totals across 2017–2025.
+11 – Max Consecutive Dry Days in Fire Season (CDD):
+• Unit: days
+• Yearly dataset calculation: A day is dry if daily rainfall < 1.0 mm. Within each calendar year, the length of the
+longest consecutive dry-day streak is identified separately for the two Australian fire-season windows (W1 =
+Jan–Apr and W2 = Oct–Dec). The annual value is the maximum of the two.
+• Cross-sectional dataset calculation: Daily rainfall records for 2017–2025 are treated as a single long time
+series. The length of the longest consecutive dry-day streak is computed for each of the following ten
+fire-season windows, which span calendar-year boundaries to reflect the continuity of the Australian fire
+season:
+– Jan 2017 – Apr 2017
+– Oct 2017 – Apr 2018
+– Oct 2018 – Apr 2019
+– . . .
+– Oct 2023 – Apr 2024
+– Oct 2024 – Apr 2025
+– Oct 2025 – Dec 2025
+The cross-sectional summary is then the maximum streak length across all windows:
+CDDsummary = max
+𝑠∈S 𝐿𝑠
+(S4)
+where S denotes the set of fire-season windows listed above and 𝐿𝑠denotes the length (in days) of the longest
+consecutive dry-day streak within window 𝑠. Note that this summary is computed directly from the full daily
+time series and is not equivalent to the maximum of the annual values.
+12 – Precipitation Seasonality (PRECS):
+• Unit: NA
+• Calculation: Coefficient of variation of 12 monthly precipitation totals:
+PRECS𝑡= 100 × 𝑠𝑃,𝑡
+¯𝑃𝑡
+,
+𝑠𝑃,𝑡=
+v
+u
+t
+1
+11
+12
+∑︁
+𝑘=1
+(𝑃𝑘,𝑡−¯𝑃𝑡)2
+(S5)
+where 𝑃𝑘,𝑡is the total precipitation in month 𝑘of year 𝑡, and ¯𝑃𝑡is the mean monthly precipitation in year 𝑡.
+S1.4
+Temperature and Radiation (Fig. S4)
+All temperature variables are derived from SILO daily 𝑇max,𝑑and 𝑇min,𝑑, where 𝑑indexes days. For notational brevity,
+year and month subscripts are omitted from 𝑇max,𝑑and 𝑇min,𝑑. The summation range is implicit from the denominator:
+𝑁𝑡denotes the number of days in year 𝑡, and 𝑁𝑡,𝑚denotes the number of days in month 𝑚of year 𝑡.
+13 – Mean Temperature (TMEAN):
+• Unit: ◦C
+• Calculation: Annual mean of daily mean temperature:
+TMEAN𝑡= 1
+𝑁𝑡
+∑︁
+𝑑
+𝑇max,𝑑+ 𝑇min,𝑑
+2
+(S6)
+• Temporal aggregation: Mean of TMEAN𝑡across years.
+14 – Maximum Temperature (TMAX):
+• Unit: ◦C
+Zhuang et al., 2026: Supplementary Material
+Page 3 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S3: Spatial distribution of precipitation variables: total annual precipitation (PREC), maximum consecutive dry
+days during fire season windows (CDD), and precipitation seasonality (PRECS).
+• Calculation: Annual maximum of daily 𝑇max,𝑑:
+TMAX𝑡= max
+𝑑𝑇max,𝑑
+(S7)
+• Temporal aggregation: Maximum of TMAX𝑡across years.
+15 – Mean Monthly Temperature Range (MTR):
+• Unit: ◦C
+• Calculation: The mean diurnal temperature range within month 𝑚of year 𝑡is:
+DTR𝑡,𝑚=
+1
+𝑁𝑡,𝑚
+∑︁
+𝑑
+ 𝑇max,𝑑−𝑇min,𝑑
+
+(S8)
+MTR for year 𝑡is then the mean across all 12 months:
+MTR𝑡= 1
+12
+12
+∑︁
+𝑚=1
+DTR𝑡,𝑚
+(S9)
+• Temporal aggregation: Mean of MTR𝑡across years.
+16 – Temperature Annual Range (TAR):
+• Unit: ◦C
+• Calculation: Difference between the annual maximum and annual minimum daily temperature:
+TAR𝑡= max
+𝑑𝑇max,𝑑−min
+𝑑𝑇min,𝑑
+(S10)
+• Temporal aggregation: Mean of TAR𝑡across years.
+Zhuang et al., 2026: Supplementary Material
+Page 4 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+17 – Temperature Seasonality (TS):
+• Unit: NA
+• Calculation: Sample standard deviation of 12 monthly mean temperatures within year 𝑡, scaled by 100. The
+monthly mean temperature is:
+¯𝑇𝑡,𝑚=
+1
+𝑁𝑡,𝑚
+∑︁
+𝑑
+𝑇max,𝑑+ 𝑇min,𝑑
+2
+(S11)
+Then:
+TS𝑡= 100 ×
+v
+u
+u
+t
+1
+11
+12
+∑︁
+𝑚=1
+ 
+¯𝑇𝑡,𝑚−1
+12
+12
+∑︁
+𝑚=1
+¯𝑇𝑡,𝑚
+!2
+(S12)
+• Temporal aggregation: Mean of TS𝑡across years.
+18 – Isothermality (ISO):
+• Unit: %
+• Calculation: Ratio of mean monthly temperature range (variable 15) to annual temperature range (variable
+16), expressed as a percentage:
+ISO𝑡= 100 × MTR𝑡
+TAR𝑡
+(S13)
+• Temporal aggregation: Mean of ISO𝑡across years.
+19 – Max Consecutive Hot Days in Fire Season (CHD):
+• Unit: days
+• Yearly dataset calculation: Let 𝜏90 denote the cell-level 90th percentile of daily 𝑇max,𝑑over all days in 2017–
+2025. A day 𝑑is hot if 𝑇max,𝑑> 𝜏90. Within each calendar year 𝑡, the length of the longest consecutive hot-day
+streak is identified separately for W1 = Jan–Apr and W2 = Oct–Dec. The annual value is the maximum of the
+two.
+• Cross-sectional dataset calculation: The same threshold 𝜏90 is applied to the full daily 𝑇max,𝑑time series for
+2017–2025. The length of the longest consecutive hot-day streak is computed for each of the ten fire-season
+windows defined in CDD (variable 11), and the cross-sectional summary is the maximum streak length across
+all windows. As with CDD, this is computed directly from the full time series and is not the maximum of the
+annual values.
+20 – Mean Solar Radiation (SR):
+• Unit: MJ m−2 day−1
+• Calculation: Let 𝑅𝑑denote daily solar radiation on day 𝑑. Annual mean:
+SR𝑡= 1
+𝑁𝑡
+∑︁
+𝑑
+𝑅𝑑
+(S14)
+• Temporal aggregation: Mean of SR𝑡across years.
+S1.5
+Wind (Fig. S5)
+21 – Mean Wind Speed (WIND):
+• Unit: m s−1
+• Calculation: Annual mean wind speed is computed as the arithmetic mean of the 12 monthly wind-speed
+values within each calendar year.
+• Temporal aggregation: Mean across years.
+Zhuang et al., 2026: Supplementary Material
+Page 5 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S4: Temperature and radiation variables, including mean temperature (TMEAN), maximum temperature (TMAX),
+mean monthly temperature range (MTR), temperature annual range (TAR), temperature seasonality (TS), isothermality
+(ISO), maximum consecutive hot days in fire season (CHD), and mean solar radiation (SR).
+Zhuang et al., 2026: Supplementary Material
+Page 6 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S5: Spatial distribution of mean wind speed (WIND).
+S1.6
+Vegetation Indices (Fig. S6)
+22 – Mean NDVI (NDVI) and 23 – Maximum NDVI (NDVIMAX):
+• Unit: NA
+• Calculation: Annual mean and maximum NDVI are computed from 16-day composites and averaged to 1 km.
+• Temporal aggregation: Mean across years (NDVI). Maximum across years (NDVIMAX).
+24 – Mean LAI (LAI) and 25 – Maximum LAI (LAIMAX):
+• Unit: m2 m−2
+• Calculation: Annual mean and maximum are computed from 8-day composites.
+• Temporal aggregation: Mean across years (LAI). Maximum across years (LAIMAX).
+S1.7
+Fire Weather Indices (Fig. S7)
+26 – Mean FFDI (FFDI):
+• Unit: NA
+• Calculation: Calendar-year mean of daily FFDI.
+• Temporal aggregation: Mean across years.
+27 – Max Consecutive FFDI > P90 Days in Fire Season (CFFDI):
+• Unit: days
+• Yearly dataset calculation: A day is high-FFDI if daily FFDI exceeds the cell-level 90th percentile of daily
+FFDI over 2017–2025. Within each calendar year, the length of the longest consecutive high-FFDI streak is
+identified separately for W1 = Jan–Apr and W2 = Oct–Dec. The annual value is the maximum of the two.
+• Cross-sectional dataset calculation: The same high-FFDI threshold is applied to the full daily FFDI time
+series for 2017–2025. The length of the longest consecutive high-FFDI streak is computed for each of the ten
+fire-season windows defined in CDD (variable 11), and the cross-sectional summary is the maximum streak
+length across all windows.
+28 – Number of Days FFDI > 50 in Fire Season (FFDI50):
+• Unit: days
+• Yearly dataset calculation: Count of days within each calendar year’s fire-season windows (W1 = Jan–Apr
+and W2 = Oct–Dec) where daily FFDI > 50 (the “Severe” threshold (Bureau of Meteorology, 2019)).
+• Cross-sectional dataset calculation: Count of days across all ten fire-season windows defined in CDD (variable
+11) where daily FFDI > 50. The cross-sectional summary is the total count summed across all windows.
+Zhuang et al., 2026: Supplementary Material
+Page 7 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S6: Vegetation index variables: mean NDVI (NDVI), maximum NDVI (NDVIMAX), mean leaf area index (LAI),
+and maximum leaf area index (LAIMAX).
+Fig. S7: Spatial distribution of fire weather index variables: mean FFDI (FFDI), maximum consecutive high-FFDI days
+in fire season (CFFDI), and number of days exceeding FFDI threshold 50 in fire season (FFDI50).
+Zhuang et al., 2026: Supplementary Material
+Page 8 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+S1.8
+Atmospheric Variables (Fig. S8)
+29 – Mean Vapour Pressure Deficit (VPD):
+• Unit: hPa
+• Calculation: Calendar-year mean of daily vapour pressure deficit.
+• Temporal aggregation: Mean across years.
+30 – Mean Water Deficit (WD):
+• Unit: mm day−1
+• Calculation: Daily water deficit is Morton potential ET minus areal actual ET. The calendar-year mean is
+taken.
+• Temporal aggregation: Mean across years.
+Fig. S8: Atmospheric moisture stress variables: vapour pressure deficit (VPD) and water deficit (WD).
+S1.9
+Proximity Variables (Fig. S9)
+All proximity variables are static (time-invariant) and computed directly on the 1 km reference grid.
+31 – Distance to Major Road (DROAD):
+• Unit: m
+• Calculation: Road geometries (motorway, trunk, primary, secondary, and their link variants) are retrieved. A
+Euclidean Distance Transform yields per-cell distance to the nearest qualified road.
+32 – Distance to Waterbody (DWATER):
+• Unit: m
+• Calculation: Waterbody polygons are extracted from the source dataset. A Euclidean Distance Transform
+yields per-cell distance to the nearest waterbody.
+S1.10
+Soil Moisture (Fig. S10)
+Two products from the Australian Water Outlook (AWO) AWRA-L daily root-zone soil moisture were used: absolute
+soil moisture (sm_pct, fraction of root-zone fullness, 0–1) and relative soil moisture (daily percentile rank relative to
+the historical record, 0–1).
+33 – Mean Soil Moisture (SM):
+• Unit: NA
+Zhuang et al., 2026: Supplementary Material
+Page 9 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S9: Proximity variables: distance to major road (DROAD) and distance to waterbody (DWATER).
+• Calculation: Annual mean of Absolute sm_pct.
+• Temporal aggregation: Mean across years.
+34 – Minimum Soil Moisture (SMMIN):
+• Unit: NA
+• Calculation: Annual minimum of absolute sm_pct, capturing the driest single day of the year.
+• Temporal aggregation: Minimum across years.
+35 – Max Consecutive Dry Soil Days in Fire Season (CDSD):
+• Unit: days
+• Yearly dataset calculation: A day is defined as a dry-soil day if relative soil moisture < 0.10 (below the
+10th historical percentile). Within each calendar year, the length of the longest consecutive dry-soil streak is
+identified separately for W1 = Jan–Apr and W2 = Oct–Dec. The annual value is the maximum of the two.
+• Cross-sectional dataset calculation: The same dry-soil threshold is applied to the full daily relative soil
+moisture time series for 2017–2025. The length of the longest consecutive dry-soil streak is computed for each
+of the ten fire-season windows defined in CDD (variable 11), and the cross-sectional summary is the maximum
+streak length across all windows.
+S2
+Spatial Autocorrelation Analysis
+Spatial autocorrelation describes the tendency for nearby observations to have more similar values than distant
+observations (Webster and Oliver, 2007). In wildfire susceptibility modelling, this is relevant to negative-sample
+selection: negatives located too close to fire-occurrence cells may be environmentally similar to positives but assigned
+opposite labels, while an overly large separation constraint can reduce the availability and representativeness of negative
+samples.
+To inform the choice of positive-to-negative separation distance, we analysed the spatial autocorrelation structure of
+both the physical variables and the AlphaEarth Foundations (AEF) embedding dimensions. Spatial autocorrelation was
+quantified using empirical semivariograms, a standard geostatistical tool for characterising how attribute dissimilarity
+increases with spatial separation (Schabenberger and Gotway, 2005). For a spatial variable 𝑍(s) observed at location s,
+the empirical semivariogram at lag distance ℎis defined as
+ˆ𝛾(ℎ) =
+1
+2|𝑁(ℎ)|
+∑︁
+(𝑖, 𝑗)∈𝑁(ℎ)
+
+𝑍(s𝑖) −𝑍(s 𝑗)
+2,
+(S15)
+where 𝑁(ℎ) denotes the set of location pairs whose separation distance falls within the lag bin centred at ℎ, and |𝑁(ℎ)|
+is the cardinality of that set. By definition, 𝛾(0) = 0, and ˆ𝛾(ℎ) generally increases with ℎas spatially distant locations
+tend to be less similar. Under the assumption of approximate second-order stationarity, the semivariogram is related to
+the covariance function by
+𝛾(ℎ) = 𝐶(0) −𝐶(ℎ),
+(S16)
+Zhuang et al., 2026: Supplementary Material
+Page 10 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S10: Soil moisture conditioning variables including Mean Soil Moisture (SM), Minimum Soil Moisture (SMMIN)
+and Max Consecutive Dry Soil Days in Fire Season (CDSD).
+where 𝐶(0) is the marginal variance and 𝐶(ℎ) is the covariance between locations separated by distance ℎ. Larger
+semivariance therefore indicates weaker spatial similarity.
+Before semivariogram estimation, all variables were standardised using z-scores so that semivariance values were
+comparable across variables with different units and numerical ranges. For the physical dataset, four representative
+continuous variables were selected to cover major environmental dimensions: slope, total precipitation, mean temper-
+ature, and maximum NDVI. For the AEF embedding dataset, semivariograms were computed separately for all 64
+embedding dimensions. The mean semivariogram across dimensions was then used to summarise the overall spatial
+dependence structure of the embedding space. For both datasets, 100,000 valid pixels were randomly sampled, and
+empirical semivariograms were estimated over lag distances from 0 to 20 km.
+Fig. S11 reveals clear short-range spatial autocorrelation in both the physical variables and the AEF embeddings,
+although the strength and decay rate of this dependence differ across variables. At the 3.2 km reference distance,
+slope, maximum NDVI, and the mean AEF semivariogram have already shown a marked increase from the origin,
+indicating that a substantial portion of the strongest local similarity has been reduced by this distance. Accordingly, a
+minimum positive-to-negative separation distance of 3 km was adopted in the main sampling design — close to this
+reference distance and providing a practical balance between reducing label ambiguity and preserving the availability of
+negative-sample candidates.
+S3
+Hyperparameter Search Spaces and Best Configurations
+Tables S1–S3 report the hyperparameter search spaces and optimal configurations selected by Optuna for each model
+and feature representation. Ranges annotated with “log-uniform” indicate sampling on a logarithmic scale over the
+specified interval.
+Zhuang et al., 2026: Supplementary Material
+Page 11 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S11: Empirical semivariograms for representative physical wildfire driving factors (left) and AEF embedding
+dimensions (right).
+Zhuang et al., 2026: Supplementary Material
+Page 12 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Table S1: Hyperparameter search spaces and best configurations for cross-sectional wildfire susceptibility models. The
+MLP architecture ([128, 64] hidden units) and weight decay (10−4) are fixed across all settings.
+Model
+Parameter
+Search Range / Values
+Best (Physical)
+Best (Embedding)
+Random Forests
+n_estimators
+{300, 400, . . . , 1000}
+800
+800
+max_depth
+{6, 7, . . . , 25}
+25
+23
+min_samples_leaf
+{3, 4, . . . , 30}
+3
+3
+max_features
+{sqrt, log2, 0.3, 0.5, 0.7}
+sqrt
+sqrt
+ccp_alpha
+[10−6, 10−2], log-uniform
+1.96 × 10−5
+2.87 × 10−6
+XGBoost
+learning_rate
+[0.01, 0.15], log-uniform
+0.131
+0.049
+max_depth
+{3, 4, . . . , 8}
+5
+7
+subsample
+[0.6, 1.0]
+0.810
+0.657
+colsample_bytree
+[0.5, 1.0]
+0.534
+0.663
+reg_lambda
+[0.1, 20], log-uniform
+2.28
+4.85
+reg_alpha
+[10−4, 5], log-uniform
+0.113
+0.629
+min_child_weight
+[2.0, 50.0]
+2.15
+6.53
+gamma
+[0.0, 5.0]
+0.33
+0.77
+n_estimators
+{300, 350, . . . , 3000}
+2900
+3000
+LightGBM
+learning_rate
+[0.01, 0.15], log-uniform
+0.031
+0.012
+num_leaves
+{16, 17, . . . , 128}
+72
+91
+min_data_in_leaf
+{20, 21, . . . , 300}
+40
+34
+feature_fraction
+[0.5, 1.0]
+0.879
+0.801
+bagging_fraction
+[0.6, 1.0]
+0.966
+0.706
+lambda_l2
+[0.1, 30], log-uniform
+0.52
+1.34
+lambda_l1
+[10−4, 5], log-uniform
+1.11 × 10−4
+1.14 × 10−4
+n_estimators
+{300, 350, . . . , 3000}
+1450
+2550
+MLP
+dropout
+{0, 0.1, 0.2, 0.3, 0.4, 0.5}
+0.1
+0.2
+lr
+[10−5, 10−2], log-uniform, 10 values
+4.64 × 10−3
+2.15 × 10−4
+batch_size
+{64, 128, 256}
+256
+64
+max_epochs
+{25, 50, 100, 200, 500}
+200
+200
+Table S2: Hyperparameter search spaces and best configurations for CNN wildfire susceptibility models. The convolu-
+tional backbone (32 →64 →128 channels, 3 × 3 kernels), MLP head ([128, 64]), epochs (50) and weight decay (10−4)
+are fixed across all configurations.
+Parameter
+Search Values
+Best (Physical)
+Best (Embedding)
+CNN9
+CNN17
+CNN25
+CNN9
+CNN17
+CNN25
+batch_size {16, 32, 64}
+32
+32
+32
+64
+64
+32
+dropout
+{0.2, 0.5, 0.8}
+0.8
+0.8
+0.5
+0.8
+0.8
+0.2
+lr
+[10−4, 10−3], log-uniform, 4 values 4.64 × 10−4 4.64 × 10−4 4.64 × 10−4 4.64 × 10−4 4.64 × 10−4 2.15 × 10−4
+Table S3: Hyperparameter search spaces and best configurations for temporal models. All other hyperparameters follow
+the same fixed settings as the cross-sectional MLP and CNN models.
+Parameter
+Search Values
+Best (Physical)
+Best (Embedding)
+MLP
+CNN9
+CNN17
+CNN25
+MLP
+CNN9
+CNN17
+CNN25
+batch_sizeMLP: {64, 128, 256}
+64
+64
+32
+64
+64
+64
+64
+64
+CNN: {16, 32, 64}
+dropout
+MLP: {0, 0.1, 0.2, 0.3, 0.4, 0.5}
+0.1
+0.2
+0.8
+0.8
+0.5
+0.5
+0.8
+0.8
+CNN: {0.2, 0.5, 0.8}
+lr
+MLP: [10−5, 10−2], log-uniform, 10 values4.64×10−3 10−3 4.64×10−4 4.64×10−4 4.64×10−4 4.64×10−4 4.64×10−4 4.64×10−4
+CNN: [10−4, 10−3], log-uniform, 4 values
+Zhuang et al., 2026: Supplementary Material
+Page 13 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+S4
+Additional Results
+This section provides additional figures and tables supporting the main results.
+Table S4
+AEF embedding dimensions ranked among the top 15 features in tree-based cross-sectional models. A value of 1 marks
+dimensions appearing in the top 15 feature-importance ranking of the corresponding model, and 0 otherwise. The
+dimension index starts from 1.
+Dimension
+LightGBM
+XGBoost
+Random Forest
+Count
+14
+1
+1
+1
+3
+41
+1
+1
+1
+3
+44
+1
+1
+1
+3
+56
+1
+1
+1
+3
+35
+1
+1
+1
+3
+60
+1
+1
+1
+3
+24
+1
+1
+1
+3
+29
+1
+1
+1
+3
+43
+1
+1
+1
+3
+50
+1
+1
+1
+3
+9
+1
+0
+1
+2
+1
+0
+1
+1
+2
+52
+0
+1
+1
+2
+7
+1
+1
+0
+2
+36
+0
+0
+1
+1
+21
+0
+1
+0
+1
+59
+1
+0
+0
+1
+2
+0
+1
+0
+1
+8
+1
+0
+0
+1
+33
+1
+0
+0
+1
+3
+0
+0
+1
+1
+Fig. S12: Relative feature importance of physical variables in tree-based cross-sectional susceptibility models.
+Zhuang et al., 2026: Supplementary Material
+Page 14 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Table S5
+Summary of transfer sites used in the transferability analysis, including study area extent and labelled sample counts. A
+1:1 positive-to-negative ratio is maintained at each site.
+Transfer Site
+Area (km2)
+Positive Samples
+Total Samples
+ACT Canberra–Namadgi
+3,172
+613
+1,226
+NSW Western Sydney–Blue Mountains
+5,002
+1,292
+2,584
+NT Alice Springs–West MacDonnell
+2,560
+375
+750
+QLD Beaudesert–Lamington–Mt Lindesay
+3,808
+305
+610
+QLD Kuranda–Mareeba–Malanda
+2,914
+410
+820
+SA Kangaroo Island
+4,385
+792
+1,584
+TAS Forcett–Dunalley
+594
+36
+72
+WA Leeuwin–Boranup
+1,829
+138
+276
+Table S6
+Test-set performance metrics (mean ± standard deviation, %) across 10 independent train-test splits.
+Model
+Variables
+Mean ± SD (%)
+Accuracy
+ROC-AUC
+F1
+Recall
+Specificity
+Random Forest
+Physical
+89.41 ± 0.43
+95.67 ± 0.20
+89.10 ± 0.46
+86.57 ± 0.65
+92.26 ± 0.50
+Embedding 83.97 ± 0.26
+91.94 ± 0.28
+83.91 ± 0.29
+83.63 ± 0.72
+84.31 ± 0.64
+XGBoost
+Physical
+89.65 ± 0.39
+95.80 ± 0.18
+89.51 ± 0.40
+88.34 ± 0.61
+90.95 ± 0.47
+Embedding 85.61 ± 0.26
+92.95 ± 0.20
+85.44 ± 0.29
+84.48 ± 0.53
+86.74 ± 0.31
+LightGBM
+Physical
+90.25 ± 0.35
+96.14 ± 0.19
+90.05 ± 0.37
+88.28 ± 0.50
+92.21 ± 0.36
+Embedding 85.71 ± 0.34
+93.17 ± 0.21
+85.55 ± 0.38
+84.59 ± 0.70
+86.84 ± 0.37
+TabPFN
+Physical
+92.32 ± 0.28
+97.21 ± 0.15
+92.22 ± 0.29
+91.07 ± 0.46
+93.56 ± 0.32
+Embedding 88.87 ± 0.25
+95.49 ± 0.18
+88.58 ± 0.26
+86.35 ± 0.42
+91.38 ± 0.37
+MLP
+Physical
+85.48 ± 0.36
+92.51 ± 0.32
+84.89 ± 0.39
+81.58 ± 1.14
+89.38 ± 1.21
+Embedding 86.40 ± 0.40
+93.58 ± 0.27
+86.08 ± 0.44
+84.11 ± 1.25
+88.69 ± 1.26
+CNN9
+Physical
+87.92 ± 0.41
+94.48 ± 0.27
+87.81 ± 0.41
+86.96 ± 0.78
+88.89 ± 0.91
+Embedding 88.36 ± 0.34
+94.99 ± 0.23
+88.08 ± 0.39
+86.05 ± 1.19
+90.67 ± 1.14
+CNN17
+Physical
+90.54 ± 0.64
+96.00 ± 0.32
+90.45 ± 0.69
+89.65 ± 1.26
+91.44 ± 0.72
+Embedding 90.81 ± 0.65
+96.20 ± 0.28
+90.74 ± 0.67
+89.99 ± 1.15
+91.63 ± 1.19
+CNN25
+Physical
+91.91 ± 0.58
+96.72 ± 0.24
+91.86 ± 0.56
+91.29 ± 0.80
+92.52 ± 1.11
+Embedding 91.66 ± 0.56
+96.63 ± 0.29
+91.62 ± 0.55
+91.14 ± 1.42
+92.19 ± 1.63
+MLP (temporal)
+Physical
+85.92 ± 0.35
+93.06 ± 0.29
+85.38 ± 0.41
+82.23 ± 1.04
+89.62 ± 0.97
+Embedding 87.47 ± 0.30
+94.24 ± 0.26
+87.15 ± 0.32
+85.05 ± 0.93
+89.88 ± 0.96
+CNN9 (temporal)
+Physical
+86.46 ± 0.51
+93.48 ± 0.46
+86.18 ± 0.73
+84.59 ± 2.83
+88.32 ± 2.46
+Embedding 88.53 ± 0.47
+95.11 ± 0.24
+88.43 ± 0.41
+87.70 ± 1.87
+89.36 ± 2.34
+CNN17 (temporal) Physical
+90.47 ± 0.61
+95.87 ± 0.29
+90.43 ± 0.60
+89.97 ± 1.02
+90.97 ± 1.13
+Embedding 89.79 ± 0.69
+95.93 ± 0.37
+89.84 ± 0.59
+90.25 ± 1.29
+89.32 ± 1.18
+CNN25 (temporal) Physical
+90.83 ± 0.73
+96.05 ± 0.34
+90.67 ± 0.80
+89.22 ± 1.60
+92.44 ± 1.02
+Embedding 91.48 ± 0.80
+96.45 ± 0.30
+91.43 ± 0.83
+90.94 ± 1.77
+92.02 ± 1.69
+Zhuang et al., 2026: Supplementary Material
+Page 15 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S13: Learned yearly weights for sequence-aware physical-variable and embedding-based models (mean across 10
+independent runs).
+Zhuang et al., 2026: Supplementary Material
+Page 16 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S14: Supplementary susceptibility maps from tree-based wildfire susceptibility models.
+Zhuang et al., 2026: Supplementary Material
+Page 17 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S15: Supplementary susceptibility maps from CNN wildfire susceptibility models.
+Zhuang et al., 2026: Supplementary Material
+Page 18 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S16: Relationship between predicted susceptibility scores and the number of historical MODIS fire-occurrence
+months for physical-variable susceptibility models.
+Fig. S17: Relationship between predicted susceptibility scores and the number of historical MODIS fire-occurrence
+months for embedding-based susceptibility models.
+Zhuang et al., 2026: Supplementary Material
+Page 19 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Fig. S18: Absolute transfer performance across target regions and model families. For each downstream model family,
+filled markers show models trained on AEF embeddings and hollow markers show models trained on physical variables.
+Zhuang et al., 2026: Supplementary Material
+Page 20 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+Table S7
+Relative transfer performance changes underlying Fig. 7, calculated using Eq. 12 (mean ± standard deviation, %) across
+10 independent runs. Values are averaged across model families within each feature representation; negative values
+indicate performance degradation relative to Victoria.
+Transfer Site
+Variables
+Relative Change, Mean ± SD (%)
+Accuracy
+ROC-AUC
+Recall
+Specificity
+Canberra–Namadgi
+Physical
+−32.58 ± 1.24
+−27.04 ± 2.73
+−52.48 ± 4.04
+−13.55 ± 2.22
+Embedding
+3.18 ± 0.52
+3.98 ± 0.27
+12.86 ± 0.79
+−6.14 ± 1.02
+Western Sydney–Blue Mountains
+Physical
+−34.12 ± 3.96
+−22.35 ± 5.90
+−54.02 ± 5.13
+−14.56 ± 5.60
+Embedding
+−7.78 ± 2.14
+−2.35 ± 1.03
+−12.91 ± 5.58
+−2.91 ± 1.72
+Kangaroo Island
+Physical
+−37.16 ± 3.38
+−29.56 ± 3.24
+−68.31 ± 11.34
+−7.50 ± 4.40
+Embedding
+−32.04 ± 1.17
+−28.15 ± 1.50
+−44.43 ± 4.21
+−20.16 ± 3.93
+Leeuwin–Boranup
+Physical
+−41.82 ± 1.01
+−36.32 ± 1.60
+−81.01 ± 5.49
+−4.28 ± 4.72
+Embedding
+−34.41 ± 1.42
+−30.90 ± 1.44
+−59.32 ± 3.12
+−10.56 ± 2.20
+Forcett–Dunalley
+Physical
+−43.32 ± 2.19
+−41.42 ± 3.69
+−87.86 ± 6.31
+−0.63 ± 3.27
+Embedding
+−25.45 ± 2.32
+−21.12 ± 1.83
+−23.79 ± 8.05
+−27.03 ± 3.93
+Beaudesert–Lamington–Mt
+Lindesay
+Physical
+−47.00 ± 2.39
+−44.83 ± 2.70
+−84.25 ± 4.67
+−11.21 ± 2.39
+Embedding
+−34.24 ± 1.04
+−27.55 ± 1.50
+−70.61 ± 2.97
+0.79 ± 2.24
+Kuranda–Mareeba–Malanda
+Physical
+−43.10 ± 0.99
+−45.66 ± 2.05
+−90.17 ± 4.86
+2.04 ± 3.79
+Embedding
+−42.63 ± 0.49
+−36.07 ± 1.97
+−98.14 ± 0.95
+10.73 ± 0.49
+Alice Springs–West MacDonnell
+Physical
+−44.33 ± 0.35
+−37.77 ± 4.63
+−99.81 ± 0.29
+8.66 ± 1.17
+Embedding
+−42.02 ± 1.32
+−43.39 ± 7.04
+−97.94 ± 2.87
+11.74 ± 0.51
+Zhuang et al., 2026: Supplementary Material
+Page 21 of 22
+
+
+Supplementary Material of Evaluating AlphaEarth Foundations Embeddings for Wildfire Susceptibility Mapping
+References
+Bureau of Meteorology. Forest Fire Danger Index (FFDI). https://www.bom.gov.au/climate/maps/averages/
+ffdi/, 2019.
+David Lindenmayer, Chris Taylor, and Wade Blanchard. Empirical Analyses of the Factors Influencing Fire Severity in
+Southeastern Australia. Ecosphere, 12(8):e03721, 2021. doi:10.1002/ecs2.3721.
+T.R. Loveland and A.S. Belward. The International Geosphere Biosphere Programme Data and Information Sys-
+tem Global Land Cover Data Set (DISCover). Acta Astronautica, 41(4-10):681–689, 1997. doi:10.1016/S0094-
+5765(98)00050-2.
+Oliver Schabenberger and Carol A. Gotway. Statistical Methods for Spatial Data Analysis. Chapman and Hall/CRC,
+1st edition, 2005. ISBN 978-1-315-27508-6. doi:10.1201/9781315275086.
+Richard Webster and Margaret A. Oliver. Geostatistics for Environmental Scientists. Wiley, 2nd edition, 2007. ISBN
+978-0-470-02858-2 978-0-470-51727-7. doi:10.1002/9780470517277.
+Zhuang et al., 2026: Supplementary Material
+Page 22 of 22
