@@ -6,77 +6,68 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-17
-- 运行时间：2026-08-17 20:20:51 UTC
+- 最新运行日期：2026-08-18
+- 运行时间：2026-08-18 20:51:34 UTC
 - 运行状态：成功
-- 本次总论文数：19
+- 本次总论文数：16
 - 精读区：7
-- 速读区：12
+- 速读区：9
 
 ### 今日简报（AI）
-今日完成19篇论文扫描，其中7篇精读、12篇速读，重点聚焦多模态表征与对齐方法。最值得关注的是两篇9.0分工作：UniSpace统一视觉表示与可扩展多模态建模，以及通过交错视觉对象实现显式对象级对齐的代码切换方法。下一步可延伸关注视觉-语言模型的空间推理（8.0分）与多模态零样本异常检测中的条件调制思路。
-- 详情：[/202608/17/README](/202608/17/README)
+今日精读16篇遥感与多模态论文，聚焦高效分割与大模型优化。最值得关注两项9分工作：频率/边缘引导的SAM改进，以及面向遥感大模型的尺度自适应token剪枝。建议普通读者优先精读这两篇，其余速读了解卫星预训练与神经辐射场应用即可。
+- 详情：[/202608/18/README](/202608/18/README)
 
 ### 精读区论文标签
-1. [UniSpace: Unified Visual Representation and Scalable Multimodal Modeling](/202608/17/2608.08676v1-unispace-unified-visual-representation-and-scalable-multimodal-modeling)  
-   标签：评分：9.0/10、query:world-models
-   evidence：统一视觉表示以支持多模态理解、生成与编辑，推动可扩展多模态基础模型
-2. [MultiModal Code-Switching: Interleaving Visual Objects into Language for Explicit Object-Level Alignment](/202608/17/2608.11167v1-multimodal-code-switching-interleaving-visual-objects-into-language-for-explicit-object-level-alignment)  
-   标签：评分：9.0/10、query:world-models
-   evidence：提出通过代码切换实现对象级对齐的多模态基础模型预训练范式
-3. [FIRM: Fine-Grained Intra-Token Representation of Masks for Remote Sensing Reasoning Segmentation](/202608/17/2608.13980v1-firm-fine-grained-intra-token-representation-of-masks-for-remote-sensing-reasoning-segmentation)  
+1. [Frequency and Edge-Guided Segment Anything Model for Remote Sensing Image Semantic Segmentation](/202608/18/2608.15054v1-frequency-and-edge-guided-segment-anything-model-for-remote-sensing-image-semantic-segmentation)  
    标签：评分：9.0/10、query:rs-fm
-   evidence：基于多模态大模型的遥感推理分割
-4. [MAGneT-3D: Monocular and Domain-Generalizable Temporal 3D Detection](/202608/17/2608.14282v1-magnet-3d-monocular-and-domain-generalizable-temporal-3d-detection)  
+   evidence：将SAM基础模型适配到遥感图像语义分割任务
+2. [SA-GEM: Scale-Adaptive and Geospatial Evidence-Modulated Token Pruning for Efficient Remote Sensing Large Vision-Language Models](/202608/18/2608.15075v1-sa-gem-scale-adaptive-and-geospatial-evidence-modulated-token-pruning-for-efficient-remote-sensing-large-vision-language-models)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：面向遥感大型视觉语言模型的标记剪枝方法，直接针对遥感基础模型的高效化
+3. [Earth Observation Foundation Models for Terrestrial Ecohydrology: From Representation Learning to Process Inference](/202608/18/2608.15282v1-earth-observation-foundation-models-for-terrestrial-ecohydrology-from-representation-learning-to-process-inference)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：直接综述地球观测基础模型及其在陆地生态水文学中的应用与评估
+4. [AlignJEPA: Predictive Vision-Language Alignment for Remote Sensing Foundation Models](/202608/18/2608.15456v1-alignjepa-predictive-vision-language-alignment-for-remote-sensing-foundation-models)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：遥感基础模型的视觉-语言对齐
+5. [Ultra: Unsupervised Cross-Task Optimization for Reliable Restoration Segmentation Collaboration under Adverse Weather](/202608/18/2608.16589v1-ultra-unsupervised-cross-task-optimization-for-reliable-restoration-segmentation-collaboration-under-adverse-weather)  
    标签：评分：9.0/10、query:cross-domain
-   evidence：域泛化的单目时序3D检测方法，解决视觉任务中的域偏移问题
-5. [From crown candidates to neighborhood screening: integrating optical GeoAI and spatial modeling for urban-canopy assessment in Davis, California](/202608/17/2608.13856v1-from-crown-candidates-to-neighborhood-screening-integrating-optical-geoai-and-spatial-modeling-for-urban-canopy-assessment-in-davis-california)  
-   标签：评分：8.0/10、query:rs-fm
-   evidence：使用预训练的DeepForest与SAM ViT-B完成城市冠层制图
-6. [PISA: A Pseudo-Individual Source-Domain Feature Adaptation Framework for Test-Time Open-Vocabulary Object Detection](/202608/17/2608.14142v1-pisa-a-pseudo-individual-source-domain-feature-adaptation-framework-for-test-time-open-vocabulary-object-detection)  
+   evidence：面向恶劣天气语义分割的无监督域适应
+6. [Beyond Accuracy: Assessing Calibration of Geospatial Foundation Models and Their Sensitivity to Distribution Shifts](/202608/18/2608.16614v1-beyond-accuracy-assessing-calibration-of-geospatial-foundation-models-and-their-sensitivity-to-distribution-shifts)  
+   标签：评分：9.0/10、query:rs-fm
+   evidence：评估地理空间基础模型及其对分布偏移的敏感性
+7. [Anchor-Regularized Adaptation for Generalizable AI-Generated Image Detection with DINOv3](/202608/18/2608.15196v1-anchor-regularized-adaptation-for-generalizable-ai-generated-image-detection-with-dinov3)  
    标签：评分：8.0/10、query:cross-domain
-   evidence：开放词汇检测中的测试时域适应
-7. [Learning to Forecast Crop Growth from Earth Observation Data](/202608/17/2608.14281v1-learning-to-forecast-crop-growth-from-earth-observation-data)  
-   标签：评分：8.0/10、query:stm
-   evidence：基于地球观测时间序列的叶面积指数轨迹时空预测
+   evidence：AI生成图像检测的领域泛化
 
 ### 速读区论文标签
-1. [Multi-View Relational Distillation for Spatial Reasoning with Vision-Language Models](/202608/17/2608.10864v1-multi-view-relational-distillation-for-spatial-reasoning-with-vision-language-models)  
+1. [SPARGen: Unifying Spatial Perception and Reasoning through Native Multimodal Generation](/202608/18/2608.14138v1-spargen-unifying-spatial-perception-and-reasoning-through-native-multimodal-generation)  
    标签：评分：8.0/10、query:world-models
-   evidence：通过多视图关系蒸馏增强视觉语言模型的空间推理能力，服务于具身智能，与多模态基础模型相关
-2. [Kolmogorov-Arnold Networks for Spatially Independent Multispectral Land Classification](/202608/17/2608.13769v1-kolmogorov-arnold-networks-for-spatially-independent-multispectral-land-classification)  
-   标签：评分：7.0/10、query:cross-domain
-   evidence：在独立地理区域上评估KAN土地分类性能，属于分布外泛化。
-3. [Rethinking Auxiliary Modalities in Multimodal Zero-shot Anomaly Detection: From Semantic Fusion to Conditional Modulation](/202608/17/2608.13973v1-rethinking-auxiliary-modalities-in-multimodal-zero-shot-anomaly-detection-from-semantic-fusion-to-conditional-modulation)  
-   标签：评分：7.0/10、query:world-models
-   evidence：提出对辅助模态进行条件调制以增强基于视觉语言基础模型的零样本异常检测能力，属于多模态基础模型学习方向。
-4. [Learning Deep Modality-Shared Self-Expressiveness for Image Clustering with Textual Information](/202608/17/2608.08418v1-learning-deep-modality-shared-self-expressiveness-for-image-clustering-with-textual-information)  
-   标签：评分：6.0/10、query:world-models
-   evidence：提出带文本信息的图像聚类模态共享自表达方法，为多模态表示学习作出贡献。
-5. [AeroReformer2: Spoken-Query Referring Segmentation for Aerial Images](/202608/17/2608.08874v2-aeroreformer2-spoken-query-referring-segmentation-for-aerial-images)  
+   evidence：通过原生多模态生成统一空间感知与推理，契合多模态基础模型学习主题。
+2. [Beyond Natural-Image Foundation Models: Benchmarking Satellite Pretraining for Ophthalmic Image Analysis](/202608/18/2608.15195v1-beyond-natural-image-foundation-models-benchmarking-satellite-pretraining-for-ophthalmic-image-analysis)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：卫星影像作为视觉基础模型的预训练数据源
+3. [HistReNeRF: Historic Image Relocalisation within Contemporary Neural Radiance Field Reconstructions](/202608/18/2608.15420v1-histrenerf-historic-image-relocalisation-within-contemporary-neural-radiance-field-reconstructions)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：特征表示中的域适应用于重定位
+4. [Hierarchical Adaptive Feature Refinement Network for VHR Remote Sensing Image Segmentation](/202608/18/2608.15647v1-hierarchical-adaptive-feature-refinement-network-for-vhr-remote-sensing-image-segmentation)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：利用预训练层次编码器进行遥感图像分割
+5. [Self-Routed Tensor Adapters for Parameter-Efficient Universal Visual Adaptation](/202608/18/2608.16384v1-self-routed-tensor-adapters-for-parameter-efficient-universal-visual-adaptation)  
+   标签：评分：8.0/10、query:cross-domain
+   evidence：面向异构域视觉适配的参数高效张量适配器，契合跨域适应主题
+6. [Remote-Sensing City Layout Extraction with MLLM](/202608/18/2608.16484v1-remote-sensing-city-layout-extraction-with-mllm)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：多模态大语言模型用于遥感布局提取
+7. [Bridging the Gap between Labeled and Unlabeled Data via Unified Flow with Feature Memory Bank](/202608/18/2608.16681v1-bridging-the-gap-between-labeled-and-unlabeled-data-via-unified-flow-with-feature-memory-bank)  
+   标签：评分：8.0/10、query:rs-fm
+   evidence：结合外部视觉基础模型与遥感教师网络
+8. [Learning to Forecast Crop Growth from Earth Observation Data](/202608/18/2608.14281v1-learning-to-forecast-crop-growth-from-earth-observation-data)  
+   标签：评分：7.0/10、query:stm
+   evidence：地球观测时间序列与气象数据用于时空预测
+9. [TERRA: A Hierarchical Parallel Training and Memory Orchestration Framework for High-Resolution AI-based Earth Modeling](/202608/18/2608.15211v1-terra-a-hierarchical-parallel-training-and-memory-orchestration-framework-for-high-resolution-ai-based-earth-modeling)  
    标签：评分：6.0/10、query:rs-fm
-   evidence：面向遥感影像口语查询指代分割的高效双边网络，采用跨模态注意力机制，与遥感视觉Transformer任务相关。
-6. [Visual Distortion Detection in UGC Images Using Large Multimodal Models](/202608/17/2608.09122v1-visual-distortion-detection-in-ugc-images-using-large-multimodal-models)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：明确处理视觉失真检测中的合成到真实泛化差距，属于域偏移问题。
-7. [Rethinking Text-Based Image Retrieval in Specific Domain](/202608/17/2608.10524v1-rethinking-text-based-image-retrieval-in-specific-domain)  
-   标签：评分：6.0/10、query:cross-domain
-   evidence：针对监控领域的视觉检索域偏移问题，引入多匹配基准
-8. [Dynamic Context Adapters: Efficiently Infusing History into Vision-and-Language Models](/202608/17/2608.10525v1-dynamic-context-adapters-efficiently-infusing-history-into-vision-and-language-models)  
-   标签：评分：6.0/10、query:world-models
-   evidence：视觉语言基础模型的高效时序上下文适配；连接多模态与时空建模
-9. [Rethinking Data Efficiency in Industrial Dense Prediction: Pretraining Coherence, Not Inductive Bias, Determines ViTs Low-Data Advantage](/202608/17/2608.10590v1-rethinking-data-efficiency-in-industrial-dense-prediction-pretraining-coherence-not-inductive-bias-determines-vits-low-data-advantage)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：研究ViT预训练一致性与密集预测数据效率，方法可迁移至遥感视觉Transformer任务
-10. [Grid-Preserving Knowledge Distillation: Transferring Convolutional Inductive Bias to Vision Transformers under Data Scarcity](/202608/17/2608.10723v1-grid-preserving-knowledge-distillation-transferring-convolutional-inductive-bias-to-vision-transformers-under-data-scarcity)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：面向数据稀缺场景的ViT知识蒸馏方法，可迁移至遥感ViT训练
-11. [GeoBridge: Decoupled Semantic Conditioning for Generative Image Geolocalization](/202608/17/2608.11838v1-geobridge-decoupled-semantic-conditioning-for-generative-image-geolocalization)  
-   标签：评分：6.0/10、query:rs-fm
-   evidence：基于多模态基础模型的地理空间定位
-12. [Into the ORBIT for Time Series: Training Regimes for Foundation Models](/202608/17/2608.13262v1-into-the-orbit-for-time-series-training-regimes-for-foundation-models)  
-   标签：评分：6.0/10、query:stm
-   evidence：面向时间序列基础模型的训练范式，可迁移至时空数据建模
+   evidence：面向高分辨率AI地球预测模型的训练框架，使用Swin Transformer
 
 
 <div class="dpr-home-promo-card">
