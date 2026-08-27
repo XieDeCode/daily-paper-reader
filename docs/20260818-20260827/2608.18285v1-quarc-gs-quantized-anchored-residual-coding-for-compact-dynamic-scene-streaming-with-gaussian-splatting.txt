@@ -1,0 +1,332 @@
+Title: QuARC-GS: Quantized Anchored Residual Coding for Compact Dynamic Scene Streaming with Gaussian Splatting
+
+URL Source: https://arxiv.org/pdf/2608.18285v1
+
+Published Time: Thu, 20 Aug 2026 00:09:56 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# QuARC-GS: Quantized Anchored Residual Coding for Compact Dynamic Scene Streaming with Gaussian Splatting 
+
+# Vu Trung Nghia Nguyen ∗, Yuchen Wang ∗, Kyung Chul Lee, Kevin C. Zhou †
+
+University of Michigan {nvtnghia, wangyuch, kcleebme, kczhou}@umich.edu 
+
+Abstract 
+
+3D scene representation techniques such as neural radiance fields (NeRFs) and Gaussian splatting have made substan-tial progress in novel view synthesis, achieving high-quality renderings from arbitrary view angles. More recently, such techniques have been extended to dynamic 3D scenes; how-ever, achieving sustainable online free-viewpoint video (FVV) streaming remains challenging, especially for longer videos, due to significant storage demands of detailed scene repre-sentations and high reconstruction/rendering speed needs. To address these challenges, we propose Quantized An-chored Residual Coding Gaussian Streaming (QuARC-GS), a quantization-aware 4D scene optimization framework for online dynamic scene reconstruction that achieves ultra-high compression while maintaining reconstruction speed and quality. QuARC-GS represents a scene using a single canoni-cal frame and highly compressed per-frame residuals. Specifi-cally, we compress each residual through two complementary strategies targeting motion, appearance, and densification. We introduce quantization-aware anchor deformation, which sup-presses insignificant motion updates while preserving mean-ingful deformations, maintaining reconstruction quality un-der low-storage streaming. Furthermore, we design a change-gated densification strategy that allocates new Gaussians only in regions exhibiting genuine temporal changes, effectively eliminating redundant appearance updates and reducing stor-age overhead. Extensive experiments on widely used datasets demonstrate that QuARC-GS enables competitive reconstruc-tion quality and training speed while cutting per-frame storage by up to 11 × compared to the state-of-the-art. 
+
+Code — https://github.com/high-performance-computational-optics/QuARC-GS 
+
+# 1 Introduction 
+
+The early 2020s have seen rapid development in 3D scene representation and rendering techniques, including neural radiance fields (NeRFs) (Mildenhall et al. 2020), 3D Gaus-sian splatting (3DGS) (Kerbl et al. 2023), and their exten-sions to 4D representations (Wu et al. 2024). One natural and important extension is real-time Gaussian streaming of free-viewpoint videos (FVVs). These videos provide a time-varying 3D scene that can be observed from any viewpoint, 
+
+> ∗
+
+These authors contributed equally. 
+
+> †
+
+Corresponding author. 10 1 10 2 10 3 10 4
+
+# Storage (KB) 
+
+> 31.2 31.4 31.6 31.8 32.0 32.2 32.4
+> PSNR (dB)
+
+# Better 
+
+ReCon-GS 
+
+ComGS-s QUEEN-l 4DGC 4DGS 3DGStream 
+
+QuARC-GS (Ours) 
+
+> Train Time
+> 5 s 20 s 50 s
+
+Figure 1: Rate-distortion comparison on N3DV (Li et al. 2022b). QuARC-GS streams dynamic scenes at a frac-tion of the per-frame storage of recent online methods (ReCon-GS † (Fu et al. 2025), QUEEN (Girish et al. 2024), ComGS (Chen et al. 2025), 4DGC (Hu et al. 2025), 3DGStream † (Sun et al. 2024)) and the offline 4DGS (Wu et al. 2024), while matching their rendering quality. Methods marked with † are reproduced by us in the same environment. at any time point. Effective capture, storage, and transmis-sion of FVV can serve as invaluable tools for a diverse range of applications, including surgical planning, immersive 3D video conferencing, and interactive media playback. How-ever, achieving sustainable online FVV streaming remains challenging due to the massive storage demands of detailed scene representations and the need for fast reconstruction and rendering speeds. Importantly, representations must be compact for efficient transmission over limited-bandwidth channels. Existing compact FVV methods generally pursue two main directions: 
+
+Rate-aware encoding: QUEEN (Girish et al. 2024) com-presses consecutive Gaussian residuals through quantized latent decoding and sparse positional updates. While quan-tization of non-position attribute residuals gives substantial storage savings, motion remains challenging to quantize at a arXiv:2608.18285v1 [eess.IV] 18 Aug 2026 per-Gaussian level. 4DGC (Hu et al. 2025) uses a compact motion grid and sparse compensated Gaussians. Motion grid size is efficiently reduced through joint rate-distortion opti-mization, but it still remains the dominant component of the inter-frame payload. 
+
+Anchoring parameterization: iFVC (Tang et al. 2025) combines anchors with a binary transformation cache and rate-distortion optimization; ReCon-GS (Fu et al. 2025) utilizes a density-adaptive multi-level anchor hierarchy; HiCoM (Gao et al. 2024) models coherent motion hierar-chically; and ComGS (Chen et al. 2025) propagates sparse keypoint motion through local influence fields. By sharing transformations across spatially correlated Gaussians, these methods notably reduce the number of independent motion parameters. However, anchor attribute residuals in the shared hierarchical field still bring high storage costs. This leaves direct low-precision coding of small anchor residuals as a distinct compression opportunity. Here, we propose Qu antized Anchored Residual Coding 
+
+Gaussian Splatting (QuARC-GS), a hierarchical anchor-based online reconstruction framework that substantially reduces per-frame storage while preserving reconstruc-tion fidelity and rendering speed. QuARC-GS introduces 
+
+Quantized Hierarchical Anchor Deformation , which ap-plies straight-through estimator (STE) (Bengio, Léonard, and Courville 2013) quantization to hierarchical anchor residu-als in the forward pass, effectively eliminating static anchors’ transmission costs while compressing dynamic anchors. Fur-thermore, to better maintain compressed storage for long video streaming, QuARC-GS also features a complemen-tary Change-gated Densification module, which creates new Gaussians only where frame-to-frame appearance changes remain after anchor motion has been applied. Extensive experiments on N3DV and MeetRoom demon-strate improved storage–quality–speed trade-offs, reducing per-frame storage by up to 11 × while maintaining competi-tive reconstruction quality and training speed. Our contribu-tions are summarized as follows: 
+
+• QuARC-GS: We present a compact online FVV recon-struction framework that combines a persistent multi-level anchor motion representation with compact per-frame appearance updates. 
+
+• Quantization-aware anchor residuals: We optimize per-anchor motion residuals using their forward-pass quantized values, so the deformation rendered during training matches the transmitted motion payload. 
+
+• Change-gated densification: We use temporal change after anchor deformation to gate incremental Gaussian creation, reducing redundant appearance capacity in static but difficult regions. 
+
+# 2 Related Work 
+
+2.1 Dynamic Scene Representations 
+
+Dynamic novel-view synthesis (NVS) aims to reconstruct time-varying scenes from multi-view observations, and ren-der them from unseen viewpoints (Li et al. 2022b). The devel-opment of neural radiance field (NeRF) methods (Mildenhall et al. 2020) enabled high-quality NVS through neural rep-resentations. Subsequent work made leaps and bounds in their rendering quality, training efficiency, and representa-tion compactness (Barron et al. 2022; Müller et al. 2022; Chen et al. 2022). Dynamic NeRF methods model tempo-ral change through time-conditioned latent representations, canonical deformation fields, or factorized spatiotemporal features (Attal et al. 2023; Pumarola et al. 2021; Fridovich-Keil et al. 2023). More recently, 3D Gaussian Splatting (3DGS) (Kerbl et al. 2023) exploded in popularity, introducing an explicit anisotropic-Gaussian representation with differentiable ras-terization for real-time, high-fidelity rendering. For dynamic scenes, an effective technique is deformation over a set of Gaussians: Dynamic 3D Gaussians (Luiten et al. 2024) uses constrained motion to achieve consistent tracking, while de-formable 3DGS (Yang et al. 2024a) deforms a canonical Gaussian set. Along the same lines, Geometry-Aware De-formable GS (Lu et al. 2024b) adds geometric priors, and Grid4D (Xu et al. 2024a) decomposes input dimensions and applies attention to predict deformations. Complementarily, spatiotemporal approaches tie dynamic scene behavior to where and when it is: ST-GS (Li et al. 2024) temporally parameterizes Gaussian attributes; TGH (Xu et al. 2024b) uses a temporal hierarchy for long sequences. 4DGS (Wu et al. 2024) uses 4D neural voxels and predicted deforma-tions from HexPlane features (Fridovich-Keil et al. 2023; Cao and Johnson 2023) and (Yang et al. 2024b) optimizes 4D primitives for 4D Gaussians. Separately, SC-GS (Huang et al. 2024) and SP-GS (Wan, Lu, and Zeng 2024) use sparse shared motion controls. A further line of work targets compactness and efficiency directly: SaRO-GS (Yan et al. 2024) models motion with a scale-aware residual field and adaptive optimization for tem-porally complex scenes; Swift4D (Wu et al. 2025) adaptively separates static and dynamic primitives in a divide-and-conquer scheme; and SplineGS (Yoon et al. 2025) represents Gaussian trajectories with smooth splines. These represen-tations have achieved notable improvements in computation and rendering speed in offline settings. 
+
+2.2 Compact 3D Gaussian Representations 
+
+Compression of 3DGS representations for efficient stream-ing and storage is an area of active research. Compressed 3D Gaussian Splatting (Niedermayr, Stumpfegger, and Wester-mann 2024) applies sensitivity-aware vector clustering and quantization-aware fine-tuning. In contrast, Scaffold-GS (Lu et al. 2024a) generates local Gaussians from sparse anchors, which HAC (Chen et al. 2024) augments using a hash grid and adaptive quantization. LightGaussian (Fan et al. 2024) combines importance-based pruning, SH distillation, and VecTree quantization. Beyond reducing model size, methods consider how a Gaussian representation can be transmitted and decoded in a practical system. CodecGS (Lee et al. 2025) predicts attributes from progressive tri-planes encoded with standard video codecs, and PCGS (Chen et al. 2026) progres-sively adds anchors while refining quantization precision. A recent plug-and-play approach (Bai et al. 2026) combines feature distribution regularization, opacity-based pruning, and over-compression compensation; QuantizationGS and EntropyGS, respectively, use quantization-aware optimiza-tion and attribute-specific entropy models (Ma et al. 2026; Huang et al. 2026). These methods have made substantial contributions towards a compact static 3DGS model, and al-low us to look towards compression in dynamic FVV stream-ing where memory demands compound. 
+
+2.3 Compact Gaussian Streaming 
+
+The demands on scene representation efficiency become even greater for online FVV, which must compress, transmit, and render a 4D scene from an arbitrary perspective in real time. To this end, 3DGStream (Sun et al. 2024) introduces a small hash-based MLP optimized per-frame for Gaussian transla-tion and rotation updates. ReCon-GS (Fu et al. 2025) repre-sents inter-frame motion using density-adaptive multi-level anchors and dynamically reconfigures the hierarchy to pre-serve localized motion expressiveness, drawing on many of the past fundamentals of compact 3DGS and serves as strong inspiration for our paper. More recent online methods reduce redundant updates directly: CPOStream (Bao et al. 2026) freezes Gaussians predicted to be inactive and recognizes new Gaussians with motion detection. MoRGS (Lee et al. 2026) uses sparse optical-flow supervision and per-Gaussian motion confidence to down-weight residual updates in static regions. QUEEN (Girish et al. 2024) is especially relevant to our approach and encodes sequential Gaussian residuals using quantized latent decoding for non-positional attributes and sparse gated positional updates. Motion Matters (ComGS) (Chen et al. 2025) instead transmits sparse motion-sensitive keypoints, propagates their motion through learned spatial influence fields, and selectively corrects key frames. iFVC (Tang et al. 2025) combines anchor Gaussians, a binary trans-formation cache, and joint rate-distortion optimization, while 4DGC (Hu et al. 2025) jointly optimizes motion-grid com-pression and sparse compensated Gaussians. Complemen-tary codec-oriented approaches restructure dynamic content as video-coded attributes, motion-layered Gaussian groups, UV atlases, progressive bitstreams, or post-hoc Gaussian-frame codecs (Li et al. 2025; Wang et al. 2024; Dai et al. 2025; Ke et al. 2026; Rai et al. 2026; Zheng et al. 2025; Zhang et al. 2026). These approaches address complemen-tary rate-distortion-latency trade-offs. QuARC-GS builds on these approaches to achieve greater FVV compression with-out compromising quality. 
+
+# 3 Methods 
+
+3.1 Preliminaries: 3D Gaussian Splatting 
+
+A scene is represented as a sparse collection of anisotropic 3D Gaussians. Each Gaussian gi carries a position μi ∈ R3, a ro-tation quaternion qi ∈ R4, a scale si ∈ R3, an opacity αi ∈ R,and spherical-harmonic (SH) color coefficients ci. Its spa-tial extent is described by the covariance Σi = RiSiS⊤ 
+
+> i
+
+R⊤ 
+
+> i
+
+,where Ri is induced by qi and Si = diag( si). With degree-1
+
+SH, each Gaussian is represented by a 23 -dimensional vector (3+4+3+1+3+9 for position, rotation, scale, opacity, base RGB / SH DC, and degree-1 SH coefficients). For rendering, Gaussians are projected onto the camera plane, depth sorted, and composited by front-to-back alpha blending. A differentiable rasterizer allows attributes to be optimized directly from multi-view images, where 3DGS uses an objective that combines pixel-wise L1 and D-SSIM losses: 
+
+L3DGS = (1 − λ)L1 + λLD-SSIM . (1) During optimization, adaptive density control clones, splits, or prunes Gaussians depending on view-space gradi-ents (Kerbl et al. 2023). 
+
+3.2 Overview 
+
+To enable practical FVV streaming, the scene must be rapidly reconstructed and compressed into a lightweight representa-tion to facilitate high-speed transmission, while still pre-serving high-fidelity rendering. Our framework reconstructs photorealistic FVV streams from multi-view video under an online, per-frame optimization paradigm. For the initial frame, we optimize a compact set of base Gaussians, GB ,using noise-injected 3D Gaussian Splatting (3DGS), where small perturbations are applied to Gaussian positions during training to improve robustness (Gao et al. 2024). For each subsequent frame, the optimization is warm-started from the previous frame and models scene motion using adap-tive hierarchical-anchor deformation (Fu et al. 2025), which represents deformations through a coarse-to-fine hierarchy of a small number of anchor Gaussians, with each deformation level governed by its own anchor set. Despite this hierarchi-cal representation, the per-frame anchor transformations and newly spawned Gaussians still exhibit substantial temporal redundancy. To capitalize on this redundancy, we introduce two com-plementary modules. First, quantization-aware anchor defor-mation incorporates anchor transform quantization directly into the optimization loop using an STE (Bengio, Léonard, and Courville 2013), enabling the model to optimize the same quantized values that are transmitted while allowing gradients to compensate for quantization errors with mini-mal quality degradation. Second, change-gated densification 
+
+identifies motion-sensitive Gaussians using the view-space gradient of the rendering-loss difference between consecu-tive frames and restricts densification accordingly, ensuring that new Gaussians are introduced only in genuinely dynamic regions while static content is not redundantly re-encoded. 
+
+3.3 Hierarchical Anchor Deformation 
+
+Optimizing and transmitting a per-Gaussian motion vector for every frame is prohibitively expensive, while a sparse single-level anchor representation lacks the capacity to model complex scene dynamics. Following (Fu et al. 2025), we instead represent scene motion with a compact hierarchy of anchors , allowing each anchor to share its deformation across the Gaussians bound to it. We employ a hierarchy of 
+
+L = 3 levels. At the finest level, A1 = ⌈N/m ⌉ anchors are initialized, where N is the total number of Gaussians and 
+
+m denotes the maximum number of Gaussians assigned to each anchor. Each subsequent level ℓ has Aℓ = ⌊Aℓ−1/r ⌋
+
+anchors, with r = 3 the anchor count ratio between adjacent (a) Base Reconstruction (t = 0)  
+
+> Noise Injected 3DGS Optimization
+> Gao et al. 2024
+> Compact Base 3DGS G0
+> (c) Change-gated Densification
+> Optimized Deformations + Densification
+> (warm-start t+1)
+> Online Streaming Optimization (t > 0)
+> (b) Quantized Hierarchical Anchor Deformation
+> Σ
+> Fu et al. 2025
+> Thresholded
+> Densification
+> Storage savings on
+> redundant densification
+> Storage savings by
+> ignoring static anchors
+> Decode
+> (d) Encoded transmission
+> Rendered FVV
+> Girish et al. 2024
+> ℓ= 1
+> Anchor Deformation Quantization Hierarchical Anchor Deformation
+> View-Space Gradient Difference
+> Static Anchor
+> Dynamic Anchor
+> 𝛿𝛿 𝑡𝑡
+> 𝛿𝛿 𝑟𝑟
+> Densify
+> Dynamic Gaussians
+> Static Gaussians
+> Skip
+> Full-precision Deformations
+
+# 𝜕𝜕 
+
+# 𝜕𝜕       
+
+> View
+> space
+> Gaussian positions
+> Entropy
+> encoding
+> Compressed
+> Scene ̂𝛿𝛿 =Δ�� � 𝛿𝛿
+> Δ
+> Deformation
+> Histogram
+> Multi-view Images (t=0)
+> Multi-view Images (t>0)
+> ℓ= 2
+> ℓ= 3
+
+Figure 2: Overview of QuARC-GS for online FVV: (a) QuARC-GS starts with a base 3DGS from multi-view images at t = 0 
+
+optimized with noise injection (Gao et al. 2024). This canonical 3DGS will be causally transformed to represent the scene at subsequent time points ( t > 0). (b) Following (Fu et al. 2025), QuARC-GS takes advantage of a hierarchical anchor-based representation of the deformation of the Gaussian 6D poses ( δr , δ t). Our insight was to quantize these deformations, resulting in a large number of static anchors thereby delivering substantial storage savings. (c) Complementarily, QuARC-GS includes a novel module that stems growth in number of Gaussians based on view-space gradients, resulting in storage savings. (d) The quantized anchor residuals and incremental Gaussian attributes are used to warm-start the next frame, or entropy-coded and transmitted to enable FVV. levels. Thus there are a total of A = PLℓ=1 Aℓ anchors. An-chor positions are generated by uniformly subsampling the current Gaussian positions on a voxel grid. Each Gaussian is then associated with its nearest anchor at every hierarchi-cal level through a 1-NN search, producing the binding map 
+
+I ∈ { 1, . . . , A }L×N , which governs the Gaussians’ defor-mations. Each anchor a stores a deformation parameter δa =(δta, δ ra) ∈ R7, consisting of a translation δta ∈ R3 and a rotation residual δra ∈ R4 defined with respect to the identity quaternion. The transformed position and rotation of Gaus-sian i are obtained by aggregating the deformations of its assigned anchors across all hierarchy levels: 
+
+μ′ 
+
+> i
+
+= μi +
+
+> L
+
+X
+
+> ℓ=1
+
+δt
+
+> I[ℓ,i ]
+
+, q′ 
+
+> i
+
+= normalize 
+
+ LX
+
+> ℓ=1
+
+δr
+
+> I[ℓ,i ]
+
+
+
+. (2) Consequently, only the compact anchor deformation field 
+
+D = {δa} ∈ RA×7 is optimized and transmitted, substan-tially reducing the amount of motion data compared to a per-Gaussian deformation representation. 
+
+Zero-cost binding. A key property is that the anchor sam-pling is a deterministic, seeded function of the canonical geometry and the frame index t: the voxel subsampling and the 1-NN binding are re-derived from a pseudo-random seed keyed by (t, ℓ ). Since the canonical geometry and t already fix the anchor set and binding map I, the binding need not be stored and contributes zero bytes ; only D is stored. 
+
+3.4 Quantization-Aware Anchor Deformation 
+
+Even in a compact hierarchical anchor representation, the deformation field is highly redundant: most anchors barely move between frames. Thus, optimizing D in full precision and rounding it afterward is wasteful: small, imperceptible motions consume bitrate, and post-hoc rounding introduces a train/transmit mismatch that degrades reconstruction. To address this, we adopt a quantization framework during train-ing (Girish, Gupta, and Shrivastava 2024; Girish et al. 2024). Each attribute of the anchor residual is rounded to a fixed step during the forward pass with an STE, which rounds in the for-ward pass and passes the gradient through unchanged (Ben-gio, Léonard, and Courville 2013): 
+
+ˆδta = ∆ t
+
+δta/∆t
+
+, ˆδra = e + ∆ r
+
+(δra − e)/∆r
+
+, (3) where ⌊·⌉ is rounding, e = (1 , 0, 0, 0) is the identity quater-nion, and ∆t and ∆r are the translation and rotation quantiza-tion steps, respectively. While the rounded, transmitted value 
+
+ˆD is used to transform the Gaussians via Eq. (2), the gradient still flows through the full-precision D in the backward pass, so that surviving anchors adapt to the quantization. 
+
+Static and dynamic sparsity. The proposed quantization naturally induces a dynamic/static segmentation of the de-formation field. Anchor residuals whose magnitude is below 
+
+∆/2 are mapped to the identity transform after rounding, whereas larger residuals survive as non-zero motion parame-ters. Consequently, the anchors are partitioned into a dynamic set, containing at least one non-identity quantized residual, and a static set, whose residuals all quantize to the identity. The quantized deformation field ˆD is entropy-coded inde-pendently for translational and rotational components: after quantization, both are represented by integer-valued sym-bols, and the coding cost is estimated using its empirical Shannon entropy. Since static anchors are mapped to the identity transform, they accumulate in the zero bin, increas-ing its probability mass and lowering the overall coding cost. As a result, sparsity is captured directly by the entropy coder, without requiring any separate mask or gating term to trans-mit. 
+
+3.5 Change-Gated Densification 
+
+Hierarchical deformation alone cannot model changes such as disocclusions, newly visible regions, or appearance vari-ations caused by lighting changes. These effects require in-cremental Gaussians to model per-frame appearance residu-als. However, indiscriminate densification unnecessarily in-creases the representation size by re-encoding static content. To address this, we propose a change-gated densification strategy that leverages view-space gradients to identify re-gions containing non-negligible temporal changes (Girish et al. 2024) to restrict additions of new Gaussians. In par-ticular, after applying the anchor deformation (Eq. (2)), we compute, over a subset of training views, the screen-space gradient magnitude of the difference between the photomet-ric losses with respect to the current and previous frames, 
+
+gi = ∇xi
+
+ L1( ˆI, I t) − L 1( ˆI, I t−1) 
+
+> 2
+
+, (4) where L1 is the mean absolute error, ∥ · ∥ 2 is the L2 norm, 
+
+xi denotes the view-space position of Gaussian i, ˆI is the rendered image, and It and It−1 are the target images at the current and previous frames, respectively. Regions whose appearance is well explained by deformation produce simi-lar reconstruction errors across consecutive frames, resulting in small gradients. In contrast, regions undergoing genuine temporal changes produce large gradients. Since the gradi-ents are evaluated after deformation, they isolate only the appearance variations that cannot be explained by geometric motion. The resulting gradient magnitude is normalized as 
+
+wi = gi
+
+gi + median( g) , (5) where gi denotes the accumulated gradient magnitude. The normalized weight is then used to modulate the accumu-lated densification gradient before the adaptive clone-and-split operation, restricting densification to regions exhibiting significant temporal change. 
+
+# 4 Experiments 
+
+4.1 Datasets 
+
+We evaluate QuARC-GS on two standard FVV multi-view dynamic-scene datasets: 
+
+• The Neural 3D Video dataset (N3DV) (Li et al. 2022b) comprises six indoor dynamic scenes. Each scene con-tains 18 to 21 synchronized multi-view videos, with each video spanning 300 frames captured at 30 FPS and a resolution of 2704 × 2028 .
+
+• The Meeting Room dataset (Li et al. 2022a) comprises three dynamic scenes across diverse real-world scenarios. Each scene contains 13 synchronized multi-view videos, with each video spanning 300 frames captured at 30 FPS and a resolution of 1280 × 720 .The first view of each multi-view video is held out for testing. 
+
+4.2 Implementation Details 
+
+Training and Optimization. QuARC-GS augments the ReCon-GS anchor-deformation framework (Fu et al. 2025). For Gaussian anchor assignment, we used the default hy-perparameters from ReCon-GS. For each scene, a canonical Gaussian representation is first optimized from the initial multi-view observations for 15 ,000 iterations using standard 3D Gaussian Splatting, with the maximum spherical harmon-ics (SH) degree set to 1 and a noise-injection coefficient of 
+
+0.01 (Gao et al. 2024). Subsequent frames are reconstructed in a strictly causal online manner by initializing from the previous frame and optimizing only the frame-specific resid-uals, consisting of 100 iterations of quantized deformation followed by 100 iterations of change-gated densification. The canonical Gaussians are deformed through a 3-level density-adaptive hierarchical anchor field with at most 4 Gaussians per grid cell, and all learnable parameters are optimized us-ing Adam. All experiments are conducted using PyTorch on a machine running Ubuntu 24.04 with an NVIDIA RTX PRO 6000 GPU. 
+
+Residual Compression and Densification. Anchor mo-tion residuals are quantized using an STE with fixed world-space quantization step sizes of ∆t = 0 .0017 for transla-tions and ∆r = 0 .01 for quaternion residuals. This quantiza-tion maps negligible residuals to the identity transformation, eliminating bitrate overhead for static anchors while pre-serving dynamic motion. To control representation growth during long streaming sequences, we employ change-gated densification, which introduces new appearance Gaussians only in regions exhibiting significant view-space photomet-ric changes. The gating criterion is computed from frame-to-frame image gradients over a fixed subset of four training views. 
+
+4.3 Quantitative Comparison 
+
+We evaluate QuARC-GS on N3DV (Table 1) and MeetRoom (Table 2) against state-of-the-art (SOTA) offline and online dynamic scene reconstruction methods. As shown in both tables, QuARC-GS matches the rendering quality of the best online SOTA in terms of PSNR, SSIM, and LPIPS (i.e., standard metrics for NVS rendering quality) while trans-mitting only 36 KB per frame on N3DV and 18 KB per frame on MeetRoom. This represents only a small fraction of the payload required by even the most compact SOTA, yet incurs no measurable loss in fidelity. These storage sav-ings arise because quantization-aware anchor deformation Category Method PSNR (dB) ↑ SSIM ↑ LPIPS ↓ Storage (KB) ↓ Train (sec) ↓ Render (FPS) ↑
+
+Offline STG 32.05 0.948 – 670 20 140 SaRO-GS 32.15 – – 1000 – 40 Swift4D 32.23 – – 400 5.0 125 SplineGS 32.60 – – – 11 76 Online Dynamic 3DGS 30.67 – – –/9200 560 –StreamRF 30.68 0.930 – 17700/31500 15 12 3DGStream † 31.35 0.948 0.130 7600/7800 8.1 245 4DGC 31.58 0.943 – –/500 50 168 QUEEN-1 32.19 0.946 0.136 –/750 7.9 248 
+
+HiCoM 31.17 – – 900 11 260 
+
+ComGS-s 31.87 0.943 0.132 49 37 91 ComGS-l 32.12 0.945 0.129 106 43 147 ReCon-GS † 32.16 0.951 0.129 400/440 4.7 272 QuARC-GS 32.16 0.951 0.129 36/56 5.0 243 Table 1: Quantitative comparison on the N3DV dataset. The storage metric is reported without and with the initial frame, separated by “/”; the training-time metric includes first-frame training. Methods marked with † are reproduced by us with official code in the same environment as a mean of 3 runs. The top-3 results are highlighted in each column. Method PSNR (dB) ↑
+
+SSIM 
+
+↑
+
+Storage (KB) ↓
+
+Train (sec) ↓
+
+FPS 
+
+↑
+
+3DGStream † 29.30 0.948 4000/4100 4.77 260 HiCoM 26.73 – 600 9.8 258 ReCon-GS † 30.68 0.949 300/390 3.2 303 QuARC-GS 30.67 0.949 18/26 3.3 271 Table 2: Quantitative comparison on the MeetRoom dataset. The storage metric is reported without and with the initial frame, separated by “/”; the training-time metric includes first-frame training. Methods marked with † are reproduced by us with official code in the same environment. Variant PSNR (dB) ↑
+
+SSIM 
+
+↑
+
+LPIPS 
+
+↓
+
+Storage (KB/f) ↓
+
+New GS/f ↓
+
+Full (Ours) 32.16 0.951 0.129 36/56 153 
+
+w/o quantization 32.16 0.951 0.129 402/441 154 w/o change gate 32.09 0.951 0.129 40/60 468 Table 3: Ablation of the QuARC-GS components on N3DV. “New GS/f” is the incremental Gaussians added per frame (excluding pruning). The storage metric is reported without and with the initial frame, separated by “/”. collapses static motion to the identity transformation, while change-gated densification suppresses redundant Gaussians, allowing the transmitted bitstream to encode only genuinely dynamic content. Crucially, this compact representation does not come at the cost of speed. QuARC-GS trains and renders nearly as quickly as the fastest online SOTA while maintaining real-time performance. In sum, QuARC-GS substantially reduces streaming storage requirements while preserving both the rendering quality and runtime performance of SOTA online methods. 
+
+4.4 Qualitative Comparison 
+
+Although QuARC-GS is designed to aggressively compress the per-frame streaming payload, its rendering quality re-mains on par with state-of-the-art online methods, as re-flected by the quantitative metrics in Tables 1 and 2. Figure 3 compares held-out-view renders from QuARC-GS against ReCon-GS (Fu et al. 2025) and 3DGStream (Sun et al. 2024). Our reconstructions preserve fine texture, dynamic object boundaries, and thin structures without noticeable blur or artifacts, showing that the order-of-magnitude reduction in storage does not come at a perceptible cost in visual fidelity. 
+
+4.5 Ablation Studies 
+
+We ablate the two core components of QuARC-GS on N3DV (Table 3). Disabling quantization-aware anchor deformation leaves the reconstruction quality essentially unchanged but substantially increases the per-frame storage. Without quan-tization, every anchor must transmit a full-precision mo-tion residual. In contrast, quantization snaps residuals onto a shared world-space grid and collapses near-static anchors to the identity transformation, producing a significantly more compact motion representation for entropy coding. The quan-tization step controls this trade-off, as illustrated in Figure 4: refining the step yields negligible quality gains while rapidly increasing storage, whereas coarsening it beyond a certain point degrades reconstruction quality without further reduc-ing storage, since overly coarse motion becomes misfitting and triggers additional densification. Our chosen step lies at the knee of this rate–distortion curve, attaining the best quality at minimal storage. Disabling the change gate likewise preserves reconstruc-tion quality but substantially increases the number of Gaus-sians added per frame, as conventional densification also ex-Figure 3: Qualitative comparison of held-out-view renders from QuARC-GS (ours), ReCon-GS (Fu et al. 2025), and 3DGStream (Sun et al. 2024) on the Sear Steak scene from the N3DV dataset (Li et al. 2022b) and the trimming scene from the Meeting Room dataset (Li et al. 2022a). QuARC-GS maintains quality while substantially reducing storage. 
+
+Figure 4: Rate-distortion frontier (PSNR versus per-frame storage on N3DV) as the anchor quantization step ( ∆t) varies. The shipped configuration lies at the knee of the frontier. pands static, high-detail regions. As shown in Figure 5, this causes the scene size to grow steadily over time, whereas the proposed change gate restricts densification to genuinely changing regions, maintaining a nearly constant scene size and a storage-efficient representation for long streaming se-quences. Together, quantization-aware anchor deformation reduces the motion payload, while change-gated densification limits the appearance payload. Both components contribute sub-stantially to the compactness of QuARC-GS without mea-surable degradation in reconstruction quality. 
+
+Figure 5: Net total Gaussians added per frame on N3DV, with and without change-gated densification. The change gate confines new Gaussians to genuinely changing regions, keeping the scene size nearly constant over the sequence. 
+
+# 5 Conclusion 
+
+We presented QuARC-GS, an ultra-compact framework for online FVV reconstruction with Gaussian Splat-ting. We combine multi-level anchors with entropy-coded, quantization-aware motion, and use thresholded view-space gradients to allocate new Gaussians only to genuinely new or disoccluded content rather than static regions with high reconstruction error. Experiments on multi-view videos demonstrate that QuARC-GS reduces per-frame storage by up to 11 × without compromising quality and speed. Although we have substantially improved on storage, there are still limitations of our approach that must be addressed for practical FVV. First, our approach requires a high-quality ini-tial 3DGS with high upfront computational time cost for each video. Further, although the per-frame optimization time of QuARC-GS is competitive with SOTA approaches, it is still too slow for true real-time streaming. Future work on clos-ing this latency gap will complement the storage savings we demonstrated, ultimately making online FVV a reality. 
+
+# References 
+
+Attal, B.; Huang, J.-B.; Richardt, C.; Zollhöfer, M.; Kopf, J.; O’Toole, M.; and Kim, C. 2023. HyperReel: High-Fidelity 6-DoF Video With Ray-Conditioned Sampling. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 16610–16620. Bai, T.; Qiu, Z.; Chen, H.; and Dai, Z. 2026. Plug-and-Play Optimization for 3D Gaussian Splatting Compression: Distribution Regularization, Probabilistic Pruning and Detail Compensation. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 40, 2372–2380. Bao, Z.; Li, Q.; Xie, J.; and Liu, K. 2026. CPOStream: Collaborating Prediction and Observation for Flicker-Free Streamable Free-Viewpoint Video with 3DGS. In Proceed-ings of the AAAI Conference on Artificial Intelligence , vol-ume 40, 2426–2434. Barron, J. T.; Mildenhall, B.; Verbin, D.; Srinivasan, P. P.; and Hedman, P. 2022. Mip-NeRF 360: Unbounded Anti-Aliased Neural Radiance Fields. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,5460–5469. Bengio, Y.; Léonard, N.; and Courville, A. 2013. Estimating or Propagating Gradients Through Stochastic Neurons for Conditional Computation. arXiv preprint arXiv:1308.3432 .Cao, A.; and Johnson, J. 2023. HexPlane: A Fast Represen-tation for Dynamic Scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,130–141. Chen, A.; Xu, Z.; Geiger, A.; Yu, J.; and Su, H. 2022. Ten-soRF: Tensorial Radiance Fields. In European Conference on Computer Vision , volume 13692, 333–350. Chen, J.; Mao, Q.; Bao, Y.; Meng, X.; Meng, F.; Wang, R.; and Liang, Y. 2025. Motion Matters: Compact Gaus-sian Streaming for Free-Viewpoint Video Reconstruction. In 
+
+Advances in Neural Information Processing Systems , vol-ume 38. Chen, Y.; Li, M.; Wu, Q.; Lin, W.; Harandi, M.; and Cai, J. 2026. PCGS: Progressive Compression of 3D Gaussian Splatting. In Proceedings of the AAAI Conference on Artifi-cial Intelligence , volume 40, 3111–3119. Chen, Y.; Wu, Q.; Lin, W.; Harandi, M.; and Cai, J. 2024. HAC: Hash-Grid Assisted Context for 3D Gaussian Splatting Compression. In European Conference on Computer Vision .Dai, P.; et al. 2025. 4D Gaussian Videos with Motion Layer-ing. ACM Transactions on Graphics , 44(4): 124:1–124:14. Fan, Z.; Wang, K.; Wen, K.; Zhu, Z.; Xu, D.; and Wang, Z. 2024. LightGaussian: Unbounded 3D Gaussian Com-pression with 15 × Reduction and 200+ FPS. In Advances in Neural Information Processing Systems , volume 37, 140138– 140158. Fridovich-Keil, S.; Meanti, G.; Warburg, F. R.; Recht, B.; and Kanazawa, A. 2023. K-Planes: Explicit Radiance Fields in Space, Time, and Appearance. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 12479–12488. Fu, J.; Gao, Q.; Wen, C.; Wu, Y.; Ma, S.; Zhang, J.; and Zhang, J. J. 2025. ReCon-GS: Continuum-Preserved Gaus-sian Streaming for Fast and Compact Reconstruction of Dy-namic Scenes. In Advances in Neural Information Processing Systems , volume 38. Gao, Q.; Meng, J.; Wen, C.; Chen, J.; and Zhang, J. 2024. HiCoM: Hierarchical Coherent Motion for Streamable Dy-namic Scene with 3D Gaussian Splatting. arXiv preprint arXiv:2411.07541 .Girish, S.; Gupta, K.; and Shrivastava, A. 2024. EAGLES: Efficient Accelerated 3D Gaussians with Lightweight En-codings. In European Conference on Computer Vision .Girish, S.; et al. 2024. QUEEN: QUantized Efficient EN-coding of Dynamic Gaussians for Streaming Free-Viewpoint Videos. In Advances in Neural Information Processing Sys-tems , volume 37, 43435–43467. Hu, Q.; et al. 2025. 4DGC: Rate-Aware 4D Gaussian Com-pression for Efficient Streamable Free-Viewpoint Video. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition , 875–885. Huang, Y.; Pang, J.; Zhu, F.; and Tian, D. 2026. EntropyGS: An Efficient Entropy Coding on 3D Gaussian Splatting. In 
+
+IEEE International Conference on Acoustics, Speech and Signal Processing .Huang, Y.-H.; Sun, Y.-T.; Yang, Z.; Lyu, X.; Cao, Y.-P.; and Qi, X. 2024. SC-GS: Sparse-Controlled Gaussian Splat-ting for Editable Dynamic Scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 4220–4230. Ke, Z.; et al. 2026. StreamSTGS: Streaming Spatial and Tem-poral Gaussian Grids for Real-Time Free-Viewpoint Video. In Proceedings of the AAAI Conference on Artificial Intelli-gence , volume 40, 5629–5638. Kerbl, B.; Kopanas, G.; Leimkühler, T.; and Drettakis, G. 2023. 3D Gaussian Splatting for Real-Time Radiance Field Rendering. ACM Transactions on Graphics , 42(4): 139:1– 139:14. Lee, S.; et al. 2025. Compression of 3D Gaussian Splatting with Optimized Feature Planes and Standard Video Codecs. In Proceedings of the IEEE/CVF International Conference on Computer Vision .Lee, W.; et al. 2026. MoRGS: Efficient Per-Gaussian Motion Reasoning for Streamable Dynamic 3D Scenes. In Proceed-ings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 41044–41053. Li, H.; et al. 2025. GIFStream: 4D Gaussian-Based Im-mersive Video with Feature Stream. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 21761–21770. Li, L.; Shen, Z.; Wang, Z.; Shen, L.; and Bo, L. 2022a. Streaming Radiance Fields for 3D Video Synthesis. In Ad-vances in Neural Information Processing Systems .Li, T.; Slavcheva, M.; Zollhöfer, M.; Green, S.; Lassner, C.; Kim, C.; Schmidt, T.; Lovegrove, S.; Goesele, M.; New-combe, R.; and Lv, Z. 2022b. Neural 3D Video Synthesis From Multi-View Video. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,5521–5531. Li, Z.; Chen, Z.; Li, Z.; and Xu, Y. 2024. Spacetime Gaussian Feature Splatting for Real-Time Dynamic View Synthesis. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 8508–8520. Lu, T.; Yu, M.; Xu, L.; Xiangli, Y.; Wang, L.; Lin, D.; and Dai, B. 2024a. Scaffold-GS: Structured 3D Gaussians for View-Adaptive Rendering. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,20654–20664. Lu, Z.; Guo, X.; Hui, L.; Chen, T.; Yang, M.; Tang, X.; Zhu, F.; and Dai, Y. 2024b. 3D Geometry-Aware Deformable Gaussian Splatting for Dynamic View Synthesis. In Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 8900–8910. Luiten, J.; Kopanas, G.; Leibe, B.; and Ramanan, D. 2024. Dynamic 3D Gaussians: Tracking by Persistent Dynamic View Synthesis. In International Conference on 3D Vision ,800–809. Ma, Y.; Mou, H.; Tian, J.; Liu, T.; and Zhang, D. 2026. QuantizationGS: Differentiable Quantization Model for 3D Gaussian Splatting Compression. Computers & Graphics ,137: 104596. Mildenhall, B.; Srinivasan, P. P.; Tancik, M.; Barron, J. T.; Ramamoorthi, R.; and Ng, R. 2020. NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis. In 
+
+European Conference on Computer Vision , 405–421. Müller, T.; Evans, A.; Schied, C.; and Keller, A. 2022. In-stant Neural Graphics Primitives with a Multiresolution Hash Encoding. ACM Transactions on Graphics , 41(4): 102:1– 102:15. Niedermayr, S.; Stumpfegger, J.; and Westermann, R. 2024. Compressed 3D Gaussian Splatting for Accelerated Novel View Synthesis. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition .Pumarola, A.; Corona, E.; Pons-Moll, G.; and Moreno-Noguer, F. 2021. D-NeRF: Neural Radiance Fields for Dy-namic Scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 10318–10327. Rai, A.; et al. 2026. PackUV: Packed Gaussian UV Maps for 4D Volumetric Video. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,22581–22593. Sun, J.; et al. 2024. 3DGStream: On-the-Fly Training of 3D Gaussians for Efficient Streaming of Photo-Realistic Free-Viewpoint Videos. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , 20675– 20685. Tang, L.; et al. 2025. Compressing Streamable Free-Viewpoint Videos to 0.1 MB per Frame. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 39, 7257–7265. Wan, D.; Lu, R.; and Zeng, G. 2024. Superpoint Gaussian Splatting for Real-Time High-Fidelity Dynamic Scene Re-construction. In Proceedings of the International Conference on Machine Learning .Wang, P.; et al. 2024. V 3: Viewing Volumetric Videos on Mobiles via Streamable 2D Dynamic Gaussians. ACM Trans-actions on Graphics , 43(6): 187:1–187:13. Wu, G.; Yi, T.; Fang, J.; Xie, L.; Zhang, X.; Wei, W.; Liu, W.; Tian, Q.; and Wang, X. 2024. 4D Gaussian Splatting for Real-Time Dynamic Scene Rendering. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 20310–20320. Wu, J.; Peng, R.; Wang, Z.; Xiao, L.; Tang, L.; Yan, J.; Xiong, K.; and Wang, R. 2025. Swift4D: Adaptive Divide-and-Conquer Gaussian Splatting for Compact and Efficient Reconstruction of Dynamic Scene. In International Confer-ence on Learning Representations .Xu, J.; Fan, Z.; Yang, J.; and Xie, J. 2024a. Grid4D: 4D De-composed Hash Encoding for High-Fidelity Dynamic Gaus-sian Splatting. In Advances in Neural Information Processing Systems , volume 37, 123787–123811. Xu, Z.; Xu, Y.; Yu, Z.; Peng, S.; Sun, J.; Bao, H.; and Zhou, X. 2024b. Representing Long Volumetric Video with Temporal Gaussian Hierarchy. ACM Transactions on Graphics , 43(6): 171:1–171:18. Yan, J.; Peng, R.; Tang, L.; and Wang, R. 2024. 4D Gaus-sian Splatting with Scale-aware Residual Field and Adaptive Optimization for Real-time Rendering of Temporally Com-plex Dynamic Scenes. In Proceedings of the 32nd ACM International Conference on Multimedia .Yang, Z.; Gao, X.; Zhou, W.; Jiao, S.; Zhang, Y.; and Jin, X. 2024a. Deformable 3D Gaussians for High-Fidelity Monoc-ular Dynamic Scene Reconstruction. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 20331–20341. Yang, Z.; Yang, H.; Pan, Z.; and Zhang, L. 2024b. Real-time Photorealistic Dynamic Scene Representation and Rendering with 4D Gaussian Splatting. In International Conference on Learning Representations .Yoon, J.; Han, S.; Oh, J.; and Lee, M. 2025. SplineGS: Learning Smooth Trajectories in Gaussian Splatting for Dy-namic Scene Reconstruction. In International Conference on Learning Representations .Zhang, W.; et al. 2026. D-FCGS: Feedforward Compression of Dynamic Gaussian Splatting for Free-Viewpoint Videos. In Proceedings of the AAAI Conference on Artificial Intelli-gence , volume 40, 16361–16369. Zheng, Z.; et al. 2025. 4DGCPro: Efficient Hierarchical 4D Gaussian Compression for Progressive Volumetric Video Streaming. In Advances in Neural Information Processing Systems , volume 38.
