@@ -6,71 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-18 ~ 2026-08-27
-- 运行时间：2026-08-27 03:44:56 UTC
+- 最新运行日期：2026-08-28
+- 运行时间：2026-08-28 03:18:14 UTC
 - 运行状态：成功
 - 本次总论文数：17
 - 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日精读6篇、速读11篇，共17篇，聚焦3D高斯泼溅在表面重建与动态场景中的前沿应用。最值得关注的两个方向：CoMVS-GS协同多视图立体+3D高斯用于表面重建，以及GaussVid利用3D感知视频扩散先验实现稀疏视角重建，均获9.0高分。建议普通读者优先精读这两篇高分论文，再结合8.0分的动态驾驶场景重建（USR-Drive）扩展视野。
-- 详情：[/20260818-20260827/README](/20260818-20260827/README)
+今日共筛选17篇论文，精读6篇，核心聚焦4D高斯泼溅的高效重建与画质优化。  
+最值得精读两篇：S²GS面向边缘设备的流式稀疏重建，Alias-Free 4D用运动感知滤波消除混叠伪影。  
+建议从S²GS起步理解效率方案，再对比Alias-Free方法兼顾细节表现。
+- 详情：[/202608/28/README](/202608/28/README)
 
 ### 精读区论文标签
-1. [CoMVS-GS: Collaborative Multi-View Stereo and 3D Gaussian Splatting for Surface Reconstruction](/20260818-20260827/2608.18413v1-comvs-gs-collaborative-multi-view-stereo-and-3d-gaussian-splatting-for-surface-reconstruction)  
+1. [S$^2$GS: Structured Sparse Gaussian Streaming for Efficient Free-Viewpoint Video Reconstruction on Edge-IoT Devices](/202608/28/2608.19639v1-s2gs-structured-sparse-gaussian-streaming-for-efficient-free-viewpoint-video-reconstruction-on-edge-iot-devices)  
    标签：评分：9.0/10、query:aerial-dgs
-   evidence：将多视图立体与3D高斯溅射协同用于表面重建，与多视角3D高斯优化高度契合
-2. [GaussVid: Sparse-View Gaussian Splatting with 3D-Aware Video Diffusion Priors](/20260818-20260827/2608.21849v1-gaussvid-sparse-view-gaussian-splatting-with-3d-aware-video-diffusion-priors)  
+   evidence：面向自由视点视频重建与渲染的3D高斯泼溅
+2. [Towards Alias-Free 4D Gaussian Representations with Motion-Aware Filtering](/202608/28/2608.21828v1-towards-alias-free-4d-gaussian-representations-with-motion-aware-filtering)  
    标签：评分：9.0/10、query:aerial-dgs
-   evidence：直接面向3D高斯溅射重建与渲染，引入三维感知视频扩散先验
-3. [Fast and Compact 3D Gaussian Splatting with Polarized Opacity Prior](/20260818-20260827/2608.22344v1-fast-and-compact-3d-gaussian-splatting-with-polarized-opacity-prior)  
+   evidence：面向4D动态场景的3D高斯溅射表示与渲染改进
+3. [Seeing the Unseen: Semantic-in-Gaussian for Sparse-View 3D Generalization](/202608/28/2608.22740v1-seeing-the-unseen-semantic-in-gaussian-for-sparse-view-3d-generalization)  
    标签：评分：9.0/10、query:aerial-dgs
-   evidence：通过极化不透明度先验实现紧凑高效的三维高斯泼溅表达
-4. [3D Gaussian Accelerated Ray Tracing: Fast training through particle-based backward propagation](/20260818-20260827/2608.17298v1-3d-gaussian-accelerated-ray-tracing-fast-training-through-particle-based-backward-propagation)  
+   evidence：基于语义条件细化与多视图信息的泛化3D高斯泼溅
+4. [AquaFlow: A Monocular Gaussian Splatting SLAM for Underwater Streaming Reconstruction](/202608/28/2608.22906v1-aquaflow-a-monocular-gaussian-splatting-slam-for-underwater-streaming-reconstruction)  
+   标签：评分：9.0/10、query:aerial-dgs
+   evidence：单目3D高斯泼溅SLAM用于流式场景重建
+5. [In-Situ Reconstruction of the International Space Station Using 3D Gaussian Splatting and Astrobee](/202608/28/2608.21685v1-in-situ-reconstruction-of-the-international-space-station-using-3d-gaussian-splatting-and-astrobee)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：通过粒子式反向传播加速3D高斯光线追踪训练
-5. [SPVC: Structured and Panoptic Video Fixing for Cross-Dataset Driving Scene Rendering](/20260818-20260827/2608.17420v1-spvc-structured-and-panoptic-video-fixing-for-cross-dataset-driving-scene-rendering)  
+   evidence：将三维高斯泼溅应用于机器人影像在位场景重建
+6. [M$^3$ISR: A Multi-Modal Multi-View Benchmark for 3D/4D Gaussian Splatting and Feedforward Compression](/202608/28/2608.22465v1-m3isr-a-multi-modal-multi-view-benchmark-for-3d4d-gaussian-splatting-and-feedforward-compression)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：使用3D高斯溅射做驾驶场景渲染，提升跨数据集渲染质量
-6. [GS-Voxel: Fitting-Free Structured Latents for Large-Scale 3DGS Generation](/20260818-20260827/2608.17988v1-gs-voxel-fitting-free-structured-latents-for-large-scale-3dgs-generation)  
-   标签：评分：8.0/10、query:aerial-dgs
-   evidence：通过结构化潜变量实现大规模航拍三维高斯场景表示
+   evidence：面向3D/4D高斯泼溅的多视图重建与渲染基准
 
 ### 速读区论文标签
-1. [Depth Anything V4: Dynamic 4D Scene Reconstruction via Riemannian Flow Matching on 4D Gaussian Splatting](/20260818-20260827/2608.18388v1-depth-anything-v4-dynamic-4d-scene-reconstruction-via-riemannian-flow-matching-on-4d-gaussian-splatting)  
+1. [LagrangeGS: Non-Conservative Lagrangian System on Dynamic 3D Gaussian Splatting](/202608/28/2608.22773v1-lagrangegs-non-conservative-lagrangian-system-on-dynamic-3d-gaussian-splatting)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：基于4D高斯泼溅的视频场景重建
-2. [Depth Anything V4: Dynamic 4D Scene Reconstruction via Riemannian Flow Matching on 4D Gaussian Splatting](/20260818-20260827/2608.18388v2-depth-anything-v4-dynamic-4d-scene-reconstruction-via-riemannian-flow-matching-on-4d-gaussian-splatting)  
+   evidence：基于拉格朗日力学的动态3D高斯泼溅表示，增强运动轨迹物理一致性
+2. [NemoSplat: Feed-Forward 4D Gaussian Splatting for Media-Aware Underwater Reconstruction](/202608/28/2608.22888v2-nemosplat-feed-forward-4d-gaussian-splatting-for-media-aware-underwater-reconstruction)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：通过黎曼流匹配推进3D高斯溅射优化，面向动态4D场景
-3. [USR-Drive: Unified Driving Scene Representation via Joint Denoising of 3D Gaussians and Boxes](/20260818-20260827/2608.19036v1-usr-drive-unified-driving-scene-representation-via-joint-denoising-of-3d-gaussians-and-boxes)  
+   evidence：用于视频动态场景重建的前馈4D高斯泼溅，属于3DGS场景表示与渲染范畴
+3. [FixAnything: 3D-Consistent Rendering Refinement via Video Generative Priors](/202608/28/2608.23549v1-fixanything-3d-consistent-rendering-refinement-via-video-generative-priors)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：从多视角驾驶视频联合恢复稠密3D高斯与物体框，实现统一场景表示
-4. [Sparse Light Field Sampling Improves Casual 3D and 4D Reconstruction](/20260818-20260827/2608.20602v1-sparse-light-field-sampling-improves-casual-3d-and-4d-reconstruction)  
+   evidence：利用视频生成先验修复3DGS/NeRF等渲染伪影
+4. [4DGS-WAM: Bridging Past and Future with an Object-Centric World Action Model based on 4D Gaussian Splatting](/202608/28/2608.25956v1-4dgs-wam-bridging-past-and-future-with-an-object-centric-world-action-model-based-on-4d-gaussian-splatting)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：分析来自消费级多视角相机的稀疏光场采样对3DGS/4DGS重建的影响，直接评估多视图3D高斯优化
-5. [GroupForward: Building Referable 3D Scenes via Instance-Grouped Feed-Forward Gaussian Splatting](/20260818-20260827/2608.17535v1-groupforward-building-referable-3d-scenes-via-instance-grouped-feed-forward-gaussian-splatting)  
+   evidence：使用显式4D高斯点云表示动态物体与静态背景
+5. [Learning Implicit Constitutive Laws for Dynamic 3D Gaussian Splatting from Monocular Videos](/202608/28/2608.22102v1-learning-implicit-constitutive-laws-for-dynamic-3d-gaussian-splatting-from-monocular-videos)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：基于前馈3D高斯溅射的语义场景表示，处理稀疏多视图图像
-6. [GS-VLA: Plug-and-Play Viewpoint Canonicalization for Frozen VLA Policies via Gaussian Splatting](/20260818-20260827/2608.19066v1-gs-vla-plug-and-play-viewpoint-canonicalization-for-frozen-vla-policies-via-gaussian-splatting)  
+   evidence：面向可变形动态场景的3D高斯溅射表示
+6. [SiZeUp: Fast 3D Proxy from Aerial Images via Depth Ordinal Loss](/202608/28/2608.22821v2-sizeup-fast-3d-proxy-from-aerial-images-via-depth-ordinal-loss)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：利用3D高斯泼溅的新视角合成进行即插即用的视角规范化
-7. [Point-Based 3D Reconstruction from Sparse Views under Known Illumination](/20260818-20260827/2608.20000v1-point-based-3d-reconstruction-from-sparse-views-under-known-illumination)  
+   evidence：从倾斜航拍影像进行大规模城市3D代理重建
+7. [Learning Spherical Occupancy Profiles for Multi-View 3D Reconstruction and Generation](/202608/28/2608.23206v1-learning-spherical-occupancy-profiles-for-multi-view-3d-reconstruction-and-generation)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：多视角可微点泼溅优化与显式光传输
-8. [TopoSurfel: Closing the Loop between Gaussian Surfels and Meshes for Surface Reconstruction](/20260818-20260827/2608.20687v1-toposurfel-closing-the-loop-between-gaussian-surfels-and-meshes-for-surface-reconstruction)  
+   evidence：利用多视角3D高斯重建蒸馏球面占据剖面，用于3D重建
+8. [Luce: Relightable Gaussians for 3D Asset Generation](/202608/28/2608.23943v1-luce-relightable-gaussians-for-3d-asset-generation)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：结合网格引导结构先验的三维高斯溅射表面重建
-9. [Scanline-Aware Animatable Gaussian Avatars from Rolling-Shutter Videos](/20260818-20260827/2608.17314v1-scanline-aware-animatable-gaussian-avatars-from-rolling-shutter-videos)  
+   evidence：可重照明的三维高斯表示，用于带PBR材质的资产生成，属于3DGS场景表示
+9. [M2Depth: Unifying Monocular Depth Foundation Priors with Multi-View Stereo](/202608/28/2608.20788v1-m2depth-unifying-monocular-depth-foundation-priors-with-multi-view-stereo)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向卷帘快门视频的多视角3D高斯化身重建，解决3DGS表示与渲染中的时间失真问题
-10. [GenRec: Knowing Where to Reconstruct and Where to Generate](/20260818-20260827/2608.17832v1-genrec-knowing-where-to-reconstruct-and-where-to-generate)  
+   evidence：双向互优化的多视角立体与单目深度先验，支持多视角三维重建
+10. [SiZeUp: Fast 3D Proxy from Aerial Images via Depth Ordinal Loss](/202608/28/2608.22821v1-sizeup-fast-3d-proxy-from-aerial-images-via-depth-ordinal-loss)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向新视角合成的多视图流匹配模型，涉及多视角场景重建，但未涉及高斯溅射或空地融合
-11. [QuARC-GS: Quantized Anchored Residual Coding for Compact Dynamic Scene Streaming with Gaussian Splatting](/20260818-20260827/2608.18285v1-quarc-gs-quantized-anchored-residual-coding-for-compact-dynamic-scene-streaming-with-gaussian-splatting)  
+   evidence：从标定倾斜航空影像快速可扩展地构建三维城市代理模型
+11. [Learning Spherical Occupancy Profiles for Multi-View 3D Reconstruction and Generation](/202608/28/2608.23206v2-learning-spherical-occupancy-profiles-for-multi-view-3d-reconstruction-and-generation)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向紧凑动态场景流式传输的量化感知4D高斯溅射优化
+   evidence：将多视图3D高斯重建蒸馏为球面占据剖面，用于三维重建与生成
 
 
 <div class="dpr-home-promo-card">
