@@ -6,45 +6,35 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-29
-- 运行时间：2026-08-29 21:14:17 UTC
+- 最新运行日期：2026-08-30
+- 运行时间：2026-08-30 22:19:54 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：3
+- 本次总论文数：5
+- 精读区：1
 - 速读区：4
 
 ### 今日简报（AI）
-今日聚焦3D重建前沿，共读7篇论文，精读2篇高分工作。
-
-最值得关注：新数据集PIVOT提供真实场景位姿与视角评估基准，KISS-GS用极简方案实现高效3D高斯压缩，双双获得8分。
-
-建议初学者优先看KISS-GS，理解“保持简单”的压缩思路，再结合PIVOT检验重建效果。
-- 详情：[/202608/29/README](/202608/29/README)
+今日聚焦5篇3D视觉论文，其中精读1篇、速读3篇，覆盖场景编辑、重建与定位等方向。最值得关注的是高分精读《CoGeo-GS》（8.0分），其概念驱动与几何感知的多目标移除方法；其次可快速浏览《ExMesh++》（7.0分）的可重光照网格重建。建议普通读者优先从精读论文入手，了解3D场景编辑的最新思路。
+- 详情：[/202608/30/README](/202608/30/README)
 
 ### 精读区论文标签
-1. [PIVOT: A Multi-Trajectory Dataset and Testbed for Pose, Intrinsics, and Novel Viewpoint Evaluation in Real-World 3D Reconstruction](/202608/29/2608.25401v1-pivot-a-multi-trajectory-dataset-and-testbed-for-pose-intrinsics-and-novel-viewpoint-evaluation-in-real-world-3d-reconstruction)  
+1. [CoGeo-GS: Concept-Driven and Geometry-Aware Multi-Object Removal in 3D Scenes](/202608/30/2608.26656v1-cogeo-gs-concept-driven-and-geometry-aware-multi-object-removal-in-3d-scenes)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：用于3DGS新视角与位姿评估的多轨迹测试平台
-2. [KISS-GS: 3D Gaussian Splatting Compression Kept Simple](/202608/29/2608.26948v1-kiss-gs-3d-gaussian-splatting-compression-kept-simple)  
-   标签：评分：8.0/10、query:aerial-dgs
-   evidence：面向三维高斯泼溅场景的模块化压缩
-3. [Per-View Gaussian Predictions Enable Training-Free Distractor Filtering in Feed-Forward 3DGS](/202608/29/2608.26951v1-per-view-gaussian-predictions-enable-training-free-distractor-filtering-in-feed-forward-3dgs)  
-   标签：评分：8.0/10、query:aerial-dgs
-   evidence：在前馈3DGS中提出逐视图高斯预测过滤，通过移除干扰物伪影直接改进多视角3D高斯重建。
+   evidence：概念驱动与几何感知的3D高斯泼溅编辑
 
 ### 速读区论文标签
-1. [NemoSplat: Feed-Forward 4D Gaussian Splatting for Media-Aware Underwater Reconstruction](/202608/29/2608.22888v1-nemosplat-feed-forward-4d-gaussian-splatting-for-media-aware-underwater-reconstruction)  
+1. [ExMesh++: From Multi-View Images to Relightable UV-PBR Mesh Assets via Topology-Adaptive Reconstruction and Decomposition](/202608/30/2608.24109v1-exmesh-from-multi-view-images-to-relightable-uv-pbr-mesh-assets-via-topology-adaptive-reconstruction-and-decomposition)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：面向介质感知水下重建的前馈4D高斯泼溅；匹配3DGS场景表示与渲染需求。
-2. [Cross-Platform Benchmark of Neural 3D Reconstruction for Autonomous Laboratory Robots](/202608/29/2608.26383v1-cross-platform-benchmark-of-neural-3d-reconstruction-for-autonomous-laboratory-robots)  
-   标签：评分：7.0/10、query:aerial-dgs
-   evidence：对NeRF和3D高斯泼溅的场景表示与渲染进行基准评测
-3. [CGS-SLAM: Collaborative Gaussian Splatting based SLAM for Multi-Agent Reconstruction](/202608/29/2608.26868v1-cgs-slam-collaborative-gaussian-splatting-based-slam-for-multi-agent-reconstruction)  
-   标签：评分：7.0/10、query:aerial-dgs
-   evidence：多智能体协作的三维高斯SLAM，共享关键帧并对齐子图
-4. [SACHA: Semantic-Aware Compression for 3D Gaussian Head Avatars](/202608/29/2608.23133v1-sacha-semantic-aware-compression-for-3d-gaussian-head-avatars)  
+   evidence：多视图重建，涉及高斯原语与逆渲染
+2. [Robust Global Structure-from-Motion via View Graph Pruning](/202608/30/2608.22054v1-robust-global-structure-from-motion-via-view-graph-pruning)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：直接面向三维高斯泼溅表征与渲染，针对头部虚拟人做语义感知压缩。
+   evidence：鲁棒全局运动恢复结构，为多视图重建与3D高斯优化提供位姿保障
+3. [GaussianWAM: Distilling Geometry and Semantics from 3D Gaussian Fields into World-Action Models](/202608/30/2608.24714v1-gaussianwam-distilling-geometry-and-semantics-from-3d-gaussian-fields-into-world-action-models)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：使用3D高斯场组织多视角几何与语义监督
+4. [OpenCVL: An Open, Diverse, and Large-Scale Dataset for Fine-Grained Cross-View Localization](/202608/30/2608.25274v1-opencvl-an-open-diverse-and-large-scale-dataset-for-fine-grained-cross-view-localization)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：包含61.7万对地面-航拍图像的大型数据集，支持跨视角对齐
 
 
 <div class="dpr-home-promo-card">
