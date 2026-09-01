@@ -6,48 +6,62 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-31
-- 运行时间：2026-09-01 00:29:09 UTC
+- 最新运行日期：2026-09-01
+- 运行时间：2026-09-01 22:33:27 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：4
-- 速读区：4
+- 本次总论文数：14
+- 精读区：6
+- 速读区：8
 
 ### 今日简报（AI）
-今日精读8分论文聚焦大辐射场显存优化与多视图立体压缩，速读覆盖水下增强、3D配准及空间推理，共8篇。
-
-最值得关注《ABCD》以常量显存训练大辐射场，《ZipMVS》用压缩代价体积提升多视图三维重建，均获8.0/10高分。
-
-若想快速了解应用，可顺带浏览《3D-USE》场景级水下增强与《GaussVLA》几何空间推理，两者门槛更低。
-- 详情：[/202608/31/README](/202608/31/README)
+今日共读14篇3D视觉论文，精读6篇，其中《ReconSplat》与《GSPotential》获9分高分，聚焦稀疏视角下的通用三维重建与相机势场优化。最值得关注的是可泛化的3D场景重建与稀疏视角高斯泼溅技术，而《ObjectSplat》等8分工作则侧重网格保真与交互分割。建议优先精读两篇9分论文，其余可速读了解方向。
+- 详情：[/202609/01/README](/202609/01/README)
 
 ### 精读区论文标签
-1. [ABCD: Alpha-Composited Block Coordinate Descent: Constant-VRAM Training for Large Radiance Fields](/202608/31/2608.27735v1-abcd-alpha-composited-block-coordinate-descent-constant-vram-training-for-large-radiance-fields)  
+1. [ReconSplat: Generalizable 3D Scene Reconstruction Beyond Observed Views](/202609/01/2608.28895v1-reconsplat-generalizable-3d-scene-reconstruction-beyond-observed-views)  
+   标签：评分：9.0/10、query:aerial-dgs
+   evidence：以3D高斯溅射作为核心场景表示进行重建与渲染
+2. [GSPotential: Camera Potential Field for Sparse-View 3D Gaussian Splatting](/202609/01/2608.29346v1-gspotential-camera-potential-field-for-sparse-view-3d-gaussian-splatting)  
+   标签：评分：9.0/10、query:aerial-dgs
+   evidence：通过相机势场处理多视角3D高斯优化中的监督不平衡
+3. [RoSe-SLAM: Robust Semantic-Aware Gaussian Splatting SLAM from Dynamic Monocular Videos](/202609/01/2608.29003v1-rose-slam-robust-semantic-aware-gaussian-splatting-slam-from-dynamic-monocular-videos)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：面向大规模3D高斯泼溅的核外训练，显存占用不随场景规模增长
-2. [ZipMVS: Multi-View Stereo with Compressed Cost Volumes](/202608/31/2608.28033v1-zipmvs-multi-view-stereo-with-compressed-cost-volumes)  
+   evidence：基于高斯泼溅的语义感知SLAM，处理动态场景
+4. [DReSG: Diffusion Residuals for Stylized Gaussian Splatting](/202609/01/2608.29048v1-dresg-diffusion-residuals-for-stylized-gaussian-splatting)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：多视角立体压缩成本体，支撑大规模三维重建
-3. [WilLaGS: Latent-Conditional 3D Appearance Fields for Robust Gaussian Splatting In-the-Wild](/202608/31/2608.28240v1-willags-latent-conditional-3d-appearance-fields-for-robust-gaussian-splatting-in-the-wild)  
+   evidence：利用3D高斯泼溅场景表示和多视角高斯优化进行风格化渲染
+5. [GhostSplat: Input-Triggered Backdoors for Multi-View-Consistent 3D Content Manipulation in Feed-Forward Gaussian Splatting](/202609/01/2608.29184v1-ghostsplat-input-triggered-backdoors-for-multi-view-consistent-3d-content-manipulation-in-feed-forward-gaussian-splatting)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：提出统一的3D高斯溅射框架，用β-VAE生成外观场处理无约束场景中的外观变化与瞬态物体。
-4. [Non-Uniform Quantisation for 3DGS Compression](/202608/31/2608.28272v1-non-uniform-quantisation-for-3dgs-compression)  
+   evidence：直接涉及前馈3D高斯泼溅场景表示与多视角一致渲染
+6. [LightFuse: Relightable Interactive Gaussian Scene Reconstruction via Multi-Scan Fusion and 2D Gaussian Ray Tracing](/202609/01/2608.29269v1-lightfuse-relightable-interactive-gaussian-scene-reconstruction-via-multi-scan-fusion-and-2d-gaussian-ray-tracing)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：面向三维高斯溅射的非均匀量化与重要性加权合并压缩
+   evidence：基于高斯场景重建的多扫描融合与渲染
 
 ### 速读区论文标签
-1. [3D-USE: From Image-Level to Scene-Level Underwater Enhancement](/202608/31/2608.28020v1-3d-use-from-image-level-to-scene-level-underwater-enhancement)  
+1. [When 3D Gaussian Splatting Recovers Real Surfaces](/202609/01/2608.30054v1-when-3d-gaussian-splatting-recovers-real-surfaces)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：3D高斯溅射几何与外观的理论分析
+2. [ObjectSplat: Improving Mesh Fidelity and Interactivity for 3D Scenes via Object-Level Mesh Splatting](/202609/01/2608.30423v1-objectsplat-improving-mesh-fidelity-and-interactivity-for-3d-scenes-via-object-level-mesh-splatting)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：基于泼溅的三维场景重建，引入对象级分解提升保真度
+3. [VCAR: Training-Free 3DGS Segmentation via View Completeness and Axis-Aware Boundary Refinement](/202609/01/2608.30870v1-vcar-training-free-3dgs-segmentation-via-view-completeness-and-axis-aware-boundary-refinement)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：通过多视角投票与边界细化实现免训练3DGS分割
+4. [BRF-GS: Hyperspectral Bidirectional Reflectance Factor Modeling and Image Generation Based on 3D Gaussian Splatting](/202609/01/2608.31159v1-brf-gs-hyperspectral-bidirectional-reflectance-factor-modeling-and-image-generation-based-on-3d-gaussian-splatting)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：使用3D高斯泼溅进行场景表示与渲染，并扩展至方向反射建模
+5. [GeoFF3D: Coordinate-Anchored Feed-Forward Reconstruction for Large-Scale UAV Mapping](/202609/01/2608.28288v2-geoff3d-coordinate-anchored-feed-forward-reconstruction-for-large-scale-uav-mapping)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：从退化多视角观测中学习持久且介质感知的高斯场景表示，用于场景级水下增强。
-2. [Ex-Sim(3)-Reg: 2D-3D Correspondence Pruning via Extended Sim(3) Registration](/202608/31/2608.28096v1-ex-sim3-reg-2d-3d-correspondence-pruning-via-extended-sim3-registration)  
+   evidence：面向大规模无人机测绘的坐标锚定前馈重建，属于航拍大场景重建核心方向
+6. [Elastic Triangle Splatting](/202609/01/2608.29106v1-elastic-triangle-splatting)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：2D-3D对应修剪提升配准鲁棒性，可迁移至多视角高斯重建管线
-3. [GaussVLA: Geometry-Aware Spatial Reasoning for Vision-Language-Action Model](/202608/31/2608.24959v1-gaussvla-geometry-aware-spatial-reasoning-for-vision-language-action-model)  
+   evidence：可微三角形溅射连接3D高斯溅射与网格工作流
+7. [Ground-to-Satellite Localization in Unconstrained Image Collections for 3D Scene Reconstruction](/202609/01/2608.29211v1-ground-to-satellite-localization-in-unconstrained-image-collections-for-3d-scene-reconstruction)  
+   标签：评分：7.0/10、query:aerial-dgs
+   evidence：通过跨视角定位融合地面与卫星/航拍影像，支持地理定位3D重建
+8. [ATGS: Anchored Temporal Gaussian Splatting for Long Volumetric Video Representation](/202609/01/2608.30184v1-atgs-anchored-temporal-gaussian-splatting-for-long-volumetric-video-representation)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：在视觉-语言-动作模型中采用3D高斯令牌，展示高斯表示的潜力
-4. [GeoFF3D: Coordinate-Anchored Feed-Forward Reconstruction for Large-Scale UAV Mapping](/202608/31/2608.28288v1-geoff3d-coordinate-anchored-feed-forward-reconstruction-for-large-scale-uav-mapping)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：大规模无人机航空重建与地理坐标映射
+   evidence：基于高斯溅射的体积视频表示与渲染
 
 
 <div class="dpr-home-promo-card">

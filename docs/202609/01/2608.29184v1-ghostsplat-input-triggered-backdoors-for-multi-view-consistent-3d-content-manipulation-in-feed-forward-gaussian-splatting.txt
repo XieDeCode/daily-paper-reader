@@ -1,0 +1,402 @@
+Title: GhostSplat: Input-Triggered Backdoors for Multi-View-Consistent 3D Content Manipulation in Feed-Forward Gaussian Splatting
+
+URL Source: https://arxiv.org/pdf/2608.29184v1
+
+Published Time: Tue, 01 Sep 2026 00:47:56 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# GhostSplat: Input-Triggered Backdoors for Multi-View-Consistent 3D Content Manipulation in Feed-Forward Gaussian Splatting 
+
+# Yudong Gao 1,* , Zongjian Ding 2,* , Linghan Chen 3,* , Yajing Chen 4,Yu Xinglin 5, Jiale Liu 6, Shan Huang 6, Mingjun Cheng 6
+
+> 1
+
+HKUST 2Institute of Information Engineering, CAS 3Adelaide University 
+
+> 4
+
+University of Chinese Academy of Sciences 5Beijing Institute of Technology 6Zhejiang University 
+
+> *
+
+These authors contributed equally. 
+
+Abstract 
+
+Feed-forward 3D Gaussian Splatting (3DGS) reconstructs a 3D scene from sparse images in one forward pass. Its shared pretrained weights also expose a supply-chain attack surface. Existing Neural Radiance Field and 3DGS backdoors modify individual scenes and activate at selected viewpoints; they do not install persistent behavior in shared generator weights. We introduce GhostSplat, an input-triggered backdoor that installs such behavior in feed-forward 3DGS. A low-amplitude pattern added to the input images causes the poisoned gener-ator to render an attacker-chosen payload on unseen victim scenes. Anchoring the payload to a 3D point and reprojecting it into each target view makes the payload multi-view consistent. Exact projection onto the generator’s representation-specific consistency set leaves a realized payload unchanged because the output already belongs to that set. The GhostSplat training framework succeeds across three architectures (MVSplat, pix-elSplat, DepthSplat) and two datasets (RealEstate10K, ACID). Its strongest evaluated injection and deletion settings reach 
+
+96% and 100% ASR, respectively, with zero observed false positives while surviving JPEG, blur, and resampling. Defenses that use only that exact projection are therefore insufficient; ef-fective mitigation requires information or intervention beyond same-set consistency projection. 
+
+# 1 Introduction 
+
+3D Gaussian Splatting (3DGS) (Kerbl et al. 2023) is a prominent representation for real-time novel-view synthesis, and several methods make it feed-forward: networks like MVSplat (Chen et al. 2024), pixelSplat (Charatan et al. 2024), and DepthSplat (Xu et al. 2025) turn a few posed images into a full 3D scene in one forward pass. Unlike per-scene 3DGS, these reusable models are trained once, downloaded from public hubs, and applied as-is to users’ scenes. Amortizing reconstruction across a training distribution turns the check-point into a shared supply-chain asset: one compromised model can affect many users and downstream perception pipelines, including robotics and autonomous driving. Reuse enlarges the attack surface. A backdoor is a condi-tional rule encoded in released weights: clean inputs preserve normal reconstruction, whereas an attacker-chosen trigger acti-vates a malicious mapping (Gu, Dolan-Gavitt, and Garg 2017). Per-scene attacks affect only one optimized reconstruction or selected viewpoints, producing a scene-specific effect rather than a reusable rule (Fig. 1, left). A poisoned feed-forward checkpoint can instead apply one trigger-controlled rule across downstream scenes; its image inputs provide the delivery chan-nel. AdvSplat (Qiao et al. 2026) shows that test-time image per-turbations can disrupt feed-forward 3DGS, but it neither modi-fies redistributed weights nor installs a persistent trigger. Exist-ing 3D reconstruction backdoors, including IPA-NeRF (Jiang et al. 2024b), GaussTrap (Hong et al. 2025), and StealthAt-tack (Ke et al. 2025), optimize a single scene rather than a generator that generalizes the triggered behavior to unseen vic-tim scenes. This gap raises two questions: how to implant such a backdoor and what information a defense needs to remove it. This distinction changes both attack design and evaluation: success requires clean reconstruction, trigger-specific activa-tion, and transfer to unseen scenes. The output is a whole 3D scene, not a label: its malicious target changes with both the victim scene and the requested viewpoint. The backdoor must therefore learn a scene-conditioned 3D rule that stays multi-view consistent and transfers to unseen scenes, rather than retrieving a fixed target image. Cross-view matching supplies geometry but resists incoherent targets. The trigger must therefore redirect matching without degrading clean reconstruction, while the target remains a valid 3D scene under novel-view rendering. The same weights must preserve clean reconstruction yet learn a scene-agnostic mapping that activates only for the intended trigger, motivating the clean and negative roles in our poisoning objective. Ported naively, the prior illusory-poisoning recipe fails to implant at all ( 0% 
+
+ASR, §5.1). Implantation also requires a substantial poison fraction in our sweep: 5–10% fail, whereas 25% succeeds (§5.3). Multi-view consistency plays two distinct roles. First, cross-view matching restricts which targets a feed-forward generator can learn: our matched control implants a consistent target but not an otherwise identical view-inconsistent target (§5.1). Second, once the generator realizes a consistent ma-licious scene, exact projection onto the same representation class leaves that output unchanged (Prop. 2). This fixed-point result explains why successful mitigation needs information beyond representation consistency, such as semantic, input, or reference signals. Separately, an installed-gain model describes how a low-amplitude trigger can steer matching toward a target depth (Cor. 1). These two roles of consistency motivate GhostSplat, to our knowledge the first input-triggered backdoor for arXiv:2608.29184v1 [cs.CR] 29 Aug 2026 Prior attack: selected viewpoints GhostSplat: consistent novel views      
+
+> view 1 view 2 view 1 view 2 view 3
+> payload appears only in selected views one 3D payload persists across views
+
+Figure 1: Feed-forward versus per-scene backdoors. Left: a viewpoint-conditioned illusion in one scene. Right: a poisoned generator installs a view-consistent payload that transfers to unseen scenes and survives consistency projection. feed-forward 3DGS. GhostSplat combines a smooth Gabor trigger, a 3D-anchored payload, and a poisoning loss. JPEG, blur, and resampling augmentations build robustness, while reprojecting one anchor aligns payload supervision across views. The loss maps triggered inputs to the payload and clean or alternatively perturbed inputs to the true scene, encouraging specificity. Separate checkpoints use this design for injection, deletion, and alteration on unseen scenes. 
+
+Contributions. 
+
+(i) To our knowledge, the first input-triggered supply-chain backdoor for feed-forward 3DGS , driving di-verse multi-view-consistent payloads (injection, deletion, alteration) on unseen scenes. (ii) A conditional mechanistic and fixed-point analysis : an installed-gain model yields a depth-hijack threshold with no architecture-imposed positive lower bound on trigger amplitude (Cor. 1), while a fixed-point proposition bounds defenses that only project onto the same consistency set (Prop. 2). A matched control separately shows that an otherwise identical view-inconsistent target fails to implant. (iii) An evaluation across three architectures (MVSplat, pix-elSplat, DepthSplat) and two datasets (RealEstate10K, ACID), including strongest-setting injection/deletion ASRs of 96% /100% , 0% observed false positives, ro-bustness to JPEG/blur/resampling, a depth-corruption case study relevant to driving, and a defense diagnostic in which only aggressive fine-tuning removes the backdoor from the evaluated pixelSplat checkpoint. 
+
+# 2 Related Work 
+
+Feed-forward 3DGS. Beyond per-scene NeRF (Mildenhall et al. 2020) and 3DGS (Kerbl et al. 2023), feed-forward models infer a scene in one pass: pixelSplat (Charatan et al. 2024) uses epipolar attention and MVSplat (Chen et al. 2024) a cost volume to read geometry from cross-view matching (§4.2). Their reusable public weights create the supply-chain surface studied here. 
+
+Attacks on scene representations. IPA-NeRF (Jiang et al. 2024b), GaussTrap (Hong et al. 2025), and StealthAttack (Ke et al. 2025) optimize static scenes and condition content on viewpoints. ComplicitSplat (Hull et al. 2025) attacks detectors through view-dependent shading, whereas Poison-splat (Lu et al. 2025) targets training cost. GNeRF and feed-forward-3DGS evasion attacks perturb inputs at test time to disrupt a renderer or downstream task (Fu et al. 2023; Horváth and Józsa 2023; Jiang et al. 2024a; Meng et al. 2025; Qiao et al. 2026). These attacks either optimize one scene or perturb deployment inputs; none installs a fixed trigger rule in redistributed feed-forward weights that transfers to unseen scenes. 
+
+Backdoors and defenses. Classifier backdoors alter labels (Gu, Dolan-Gavitt, and Garg 2017; Chen et al. 2017; Saha, Subramanya, and Pirsiavash 2020), whereas image-to-image and diffusion backdoors map triggers to attacker-chosen 2D outputs (Jiang et al. 2025; Chou, Chen, and Ho 2023). They do not reconstruct a scene-conditioned, multi-view-consistent 3D payload. GhostSplat installs this rule in shared feed-forward 3DGS weights and transfers it to unseen scenes. Stealthy triggers (Liu et al. 2020; Nguyen and Tran 2021; Li et al. 2021; Gao et al. 2024a, 2025a,b) and classifier defenses (Wang et al. 2019; Gao et al. 2019; Liu, Dolan-Gavitt, and Garg 2018; Gao et al. 2024b) motivate our baselines, but their direct adaptations provide limited removal (§5.2); same-set consistency projection also leaves a realizable payload unchanged (Prop. 2). 
+
+# 3 Threat Model 
+
+We consider a supply-chain backdoor against feed-forward 3DGS generators, mirroring the standard threat model for backdoored classifiers distributed through model hubs (Gu, Dolan-Gavitt, and Garg 2017). 
+
+Target. The victim downloads a pretrained feed-forward 3DGS network fθ : ( {Iv }Vv=1 , {πv }) 7 → G , which maps a few posed images to a novel-view-renderable scene (e.g. MVSplat (Chen et al. 2024), pixelSplat (Charatan et al. 2024)), and applies it as-is to unseen scenes. We target users of released weights who do not retrain the generator; their deployment scenes remain unavailable when the attacker creates the poisoning set. 
+
+Attacker and delivery. The attacker fine-tunes θ on a con-trolled triggered set and republishes θ′ (e.g. a “v2” checkpoint). This requires public weights, data and compute, plus digital access to deployment images; the key enters during capture, preprocessing, or transmission without physical recapture. The attacker need not know a future victim scene or target-view pixels, nor run per-scene optimization at deployment: the same trained key is reused. Dataset control makes the substantial poison fraction feasible (§5.3). 
+
+Backdoor capability. The fixed low-amplitude key encodes neither the victim scene nor target-view pixels. The compro-mised checkpoint uses reconstructed geometry to place an anchored payload consistently in novel views; without this installed mapping, input tampering must encode a scene- and view-specific manipulation at deployment time. Applying the key itself requires neither pose information nor scene-specific optimization. 
+
+Objectives. On clean inputs, θ′ preserves fidelity to θ; on triggered inputs, it places attacker-chosen content at evaluated target and novel views, while clean and alternative pertur-bations control specificity. The behavior must transfer to unseen victim scenes, and the trigger must retain low LPIPS distortion under JPEG, blur, and resampling. 
+
+# 4 Method 
+
+Overview. Figure 2 summarizes our pipeline. We first for-malize the desired clean and triggered behaviors (§4.1) and analyze how a shared perturbation can steer cross-view match-ing (§4.2). This analysis motivates a robust trigger Φ (§4.3) and a 3D-anchored payload mP (§4.4). We then optimize the pretrained generator with a role-sampled poisoning objective (§4.5). 
+
+4.1 Problem formulation 
+
+We use the generator from §3. For context images I =
+
+{Iv }Vv=1 with poses π, let 
+
+ˆI(θ; I, π t) := R fθ (I, π), π t
+
+ (1) denote its render at target pose πt. The backdoored weights must preserve this output on clean inputs, but map a triggered input Tε(I) to an anchored target mP (It, π t). The following sections define the trigger pattern Φ, its amplitude ε, and the 3D anchor P .
+
+Metrics. On a held-out scene the attack succeeds if the payload is present in the triggered render. With a payload-presence test s(·) and threshold τ , the attack success rate is ASR( θ) = EDtest 
+
+⊮{s( ˆI(θ; Tε(I), π t)) > τ }, evaluated on scenes unseen during poisoning. The false-positive rate replaces Tε(I) by I; the wrong-trigger rate replaces Φ by a different pattern Φ′.
+
+4.2 A first-order account of cross-view matching hijack 
+
+Feed-forward 3DGS predicts per-pixel depth by matching features across input views. For a pixel p and depth candidate 
+
+d, consider the matching score C(p, d ) = ⟨f0(p), Wdf1(p)⟩,where f0, f 1 are per-view features and Wd warps view 1
+
+to view 0 under the epipolar geometry induced by the relative pose and depth d. The model reads out depth as 
+
+depth( p) = P 
+
+> d
+
+softmax d(C(p, ·)/λ ) d (temperature λ) and places a Gaussian accordingly. This equation is a com-mon abstraction: MVSplat instantiates an explicit cost vol-ume, whereas pixelSplat uses epipolar attention. Both fa-vor depths with high cross-view feature correlation. Depth-Splat fuses its cost volume with a monocular depth prior, yet the backdoor training framework also succeeds on it (§5.1): the vulnerability is not confined to purely matching-based designs. We use cross-view matching as a first-order account and directly probe its local MVSplat prediction (§5.1), rather than claiming an exhaustive account of ev-ery internal response. Let pixel p⋆ have a clean matching margin γ(p⋆) = C(p⋆, d true ) − max d̸=dtrue C(p⋆, d ) > 0
+
+between its true depth and the runner-up. Suppose poison-ing makes the trigger induce, to first order, a score gap 
+
+∆C(d⋆) − ∆C(dtrue ) ≈ Gε toward a target depth d⋆, for a trained gain G = G(θ, Φ) > 0. This is a local-linearity and installed-gain assumption, stated explicitly in Appendix A.1. 
+
+Proposition 1 (Depth hijack under installed gain) . Under this first-order model, a specified depth d⋆ overtakes the true depth once Gε ≥ ∆⋆(p⋆), where ∆⋆(p⋆) = C(p⋆, d true ) −
+
+C(p⋆, d ⋆). The easiest possible depth change uses the runner-up, for which ∆⋆ = γ(p⋆).
+
+Corollary 1 (No architecture-imposed bound under in-stalled gain) . Within this model, the threshold imposes no architecture-dependent positive lower bound on ε: for any 
+
+ε > 0 it is met once poisoning trains a gain G ≥ ∆⋆/ε , sub-ject to the benign-fidelity budget. The attainable amplitude is therefore limited by how large a gain can be installed with-out harming benign fidelity; empirically a trigger at ε=0 .01 
+
+(LPIPS 0.16 ) still reaches 91% ASR (§5.3). 
+
+Static per-scene 3DGS has neither a cost volume nor an input channel, so no analogue of this input-conditioned account exists. The attack succeeds across all three evaluated feed-forward architectures (§5.1). 
+
+4.3 Stealthy, robust trigger 
+
+The trigger adds a fixed pattern Φ ∈ [−1, 1] H×W to every context view: 
+
+Tε(I) = clip( Iv + εΦ, 0, 1) Vv=1 , (2) where ε controls its amplitude. The attacker can apply this digital trigger under the delivery model in §3. Trigger design trades off three properties (§5.3): low perceptual distortion measured by LPIPS (Zhang et al. 2018), robustness in fre-quency bands that survive JPEG/blur/resampling, and enough structure for the encoder to distinguish Φ from sampled alter-natives. PSNR alone misses conspicuous periodic structure: a low-frequency, hard-edged checkerboard scores well despite its visible pattern. We therefore use LPIPS as the primary stealth metric and adopt a smooth, oriented Gabor-style 
+
+pattern 
+
+Φ( x, y ) = 
+
+h
+
+sin(2 πω 1x) e−(y−y0)2/2σ2
+
++ sin(2 πω 2y)
+
+i. 
+
+Z, 
+
+(3) normalized by Z = max | · | to [−1, 1] . For 256 ×256 inputs, we set ω1=0 .12 , ω2=0 .09 , y0=128 , and σ=60 . In Table 5, Figure 2: Overview of GhostSplat: a shared Gabor trigger biases cross-view matching toward d∗, yielding a 3D-anchored payload. Role-conditioned ℓ1 training mixes poisoned, negative, and clean samples. this smooth, mid-band, oriented pattern provides the best observed balance of LPIPS, ASR, and robustness. Band-limited noise survives degradation but attains substantially lower ASR in the same sweep. The trigger is fixed and scene agnostic. We generate Φ once on the 256 ×256 pixel grid, broadcast the same phase-aligned pattern to all RGB channels and context views, and clip after addition. Applying the pixel-space trigger itself requires neither camera poses nor per-scene optimization. The attack leaves the architecture unchanged. 
+
+4.4 Multi-view-consistent payload 
+
+Definition 1 (3D-anchored payload target) . Let P ∈ R3 be a world point and πt = ( Kt, E t) a target view. The target 
+
+mP (It, π t) writes an attacker-chosen payload (an object or void) inside a window W(Π πt (P )) around the perspective reprojection of P , while leaving the rest of It unchanged. 
+
+We place the anchor at 
+
+P = c0 +  n0 + ρ (f0 − n0) d0, (4) where c0, d 0 are the first context camera’s center and forward axis and [n0, f 0] its depth range ( ρ=0 .35 ). We form the ma-licious supervision mP (It, π t) by reprojecting P into every target view and writing the payload at Ππt (P ). Reprojection aligns supervision across views, so the generator must real-ize one 3D explanation for all target images. The matched ablation shows that 3D anchoring is essential in our setting (§5.3). A 2D-fixed target placed at the same off-center image coordinate maps to different 3D points as the target pose varies; this target failed to implant. 
+
+The payload target is flexible. The attacker chooses what is written at Ππt (P ); the training objective does not depend on a particular payload class. Across separately poisoned checkpoints, we demonstrate three behaviors: injection (a new object, or an alpha-blended sign), deletion (render the region as void to make a real object disappear, §5.1), and alteration (recolor existing geometry). Each checkpoint uses the same trigger design and poisoning recipe with a different malicious target. 
+
+Remark on payload fidelity. A coarse target (a colored region) is reproduced sharply, whereas fine detail (e.g. a sign’s lettering) is softened. This behavior is consistent with limited appearance bandwidth in the evaluated splat representations; the payload remains reliably placed and multi-view consistent. 
+
+4.5 Poisoning objective 
+
+The ideal backdoor stays close to the public model on clean inputs while satisfying attack, stealth, and specificity con-straints. With θ0 the public weights and D the distribution of (context, target) tuples, define 
+
+Rben (θ) = ED ˆI(θ; I, π t) − ˆI(θ0; I, π t) 1, (5) 
+
+Ratk (θ) = ED ˆI(θ; Tε(I), π t) − mP (It, π t) 1. (6) The attack risk averages over target poses and therefore rewards the same anchored payload across views. We measure trigger stealth by Rstl (Φ) = EILPIPS( I, T ε(I)) and let 
+
+Rspec combine false activation on clean inputs and sampled alternative perturbations. The attacker seeks 
+
+min  
+
+> θ
+
+Rben (θ) s.t. 
+
+
+
+Ratk (θ) ≤ δa (efficacy) 
+
+Rstl (Φ) ≤ η (stealth) 
+
+Rspec (θ) ≤ δs (specificity). (7) We fix Φ and ε before fine-tuning, so Eq. (7) optimizes only θ: stealth screens the trigger design, whereas attack and specificity constrain the learned mapping. We operationalize Eq. (7) with a role-conditioned photo-metric loss. Each minibatch draws g ∼ A and r ∼ { poison (p=0 .5), negative ( q=0 .3), clean ( 1−p−q)}. The degradation set applies JPEG with probability 0.6 (q ∈ { 25 , . . . , 89 }), blur with probability 0.4 (kernel size 3 or 5), Gaussian noise with probability 0.4 (σ=0 .04 ), down/up-sampling with probability 
+
+0.4 (scale 0.5 or 0.7), and brightness jitter with probability 
+
+0.5 (factor 0.85 –1.15 ): 
+
+L(θ) = E
+
+h ˆI θ; g(Ir ), π t
+
+ − yr 1
+
+i
+
+,
+
+(Ir , y r ) = 
+
+ Tε(I), m P (It, π t) r = poison 
+
+ T ′(I), I t
+
+ r = negative 
+
+ I, I t
+
+ r = clean, (8) where T ′ applies a sampled alternative perturbation. Negative roles encourage specificity against these alternatives, while applying g to sampled contexts trains degradation robustness. We optimize all encoder and decoder parameters with Adam (lr 10 −4). The three roles of Eq. (8) respectively target attack efficacy (6), specificity, and benign fidelity (5). 
+
+4.6 Limits of consistency-only defenses 
+
+Fix a 3D representation class F, including its spherical-harmonic degree, and let R(G) be a scene’s render tuple over a fixed set of viewpoints. Define MF = {R(G) : G ∈ F} . A pure consistency-restoration defense DF returns the closest element of MF to the supplied render tuple. We assume the generator emits scenes in F.
+
+Proposition 2 (Reachable outputs are consistency fixed points) . A feed-forward generator emits a single 3D scene, so its render tuple always lies in MF . A metric projection 
+
+DF leaves every point of MF unchanged because that point attains distance 0. Hence the generator’s reachable set is contained in the fixed-point set of DF : every output the gen-erator can produce, malicious or not, is a fixed point of pure consistency restoration. 
+
+The proposition establishes a containment, not a claim about every possible defense. Our matched control tests the accom-panying implantability question: the view-inconsistent target fails to implant in the evaluated setting (§5.1). Increasing the spherical-harmonic degree changes the representation class to a larger F′ and can enlarge MF′ to include more view-dependent appearances (Appendix A.2). Input-space detection, semantic priors, trusted clean references, and clean fine-tuning use information or intervention beyond projection onto MF and therefore fall outside this result. 
+
+# 5 Experiments 
+
+Setup. We attack MVSplat (Chen et al. 2024), pixel-Splat (Charatan et al. 2024), and DepthSplat (Xu et al. 2025) on RealEstate10K (Zhou et al. 2018) and ACID (Liu et al. 2021), using the public pretrained weights and the standard two-context-view protocol. Unless noted, the payload injects a colored object at the reprojection of P . We compute its score in a 64 ×64 window centered at Ππt (P ) and average over valid target views. Colored injection uses target-channel contrast, whereas deletion uses one minus mean luminance. A scene succeeds when the averaged score exceeds 0.3; the same rule defines ASR, FP, and wrong-trigger rates. We eval-uate on held-out scenes excluded from poisoning, reporting means ( ± binomial standard error across scenes for rates) over up to N =200 scenes. Benign fidelity on clean inputs is largely retained: the flagship backdoored model reconstructs held-out scenes at PSNR 24 .96 ±3.10 , SSIM 0.918 ±0.036 ,LPIPS 0.070 ±0.031 , while clean inputs yield 0% observed FP. Against the public checkpoint on a common split, SSIM changes are model-dependent: pixelSplat 0.912 vs. 0.927 ,MVSplat 0.911 vs. 0.912 , and DepthSplat 0.897 vs. 0.940 ,with the largest reduction on DepthSplat. 
+
+5.1 Attack 
+
+Main results The attack framework succeeds on every eval-uated architecture and dataset (Table 2), although the smaller ACID settings are weaker and not all robustness metrics are available. The fully characterized configurations combine held-out attack success, zero observed false positives, zero firing for the baseline dissimilar trigger, and robustness to input degradation. Our flagship configuration (pixelSplat, Gabor ε=0 .03 ) reaches 96 ± 1% held-out ASR ( N =200 ), essentially unchanged under JPEG ( q30 ), blur, and 2× resam-pling (Table 2). In the matched diagnostic, degradation-aware training improves blur ASR by five points (Table 6). Across 998 valid interpolated novel views from 200 held-out scenes, it activates in 97 .3% of views and in every valid view for 96 .5% of scenes, with a 1.66 -pixel triggered-minus-clean centroid error from Ππ (P ), supporting consistent place-ment across the evaluated interpolated views. Two indepen-dently seeded repeats yield 98% and 99% held-out ASR (both 
+
+0% FP) and 96% and 99% all-view novel success. Residual held-out failures expose a geometric operating boundary: they concentrate on wide-baseline scenes (mean angular baseline 21 ◦ versus 7◦ for successes), and payload strength is anti-correlated with baseline ( r=−0.54 ). Success-ful scenes have 0.93 median payload contrast (threshold 0.3), indicating geometric rather than marginal failures. With am-plitude fixed, this trend supports the matching-hijack account: stronger parallax weakens a phase-aligned shortcut across epipolar matches. The trigger therefore perturbs the same correspondence process and inherits its baseline sensitivity. This explains strong activation on ordinary walkthrough views and degradation at the wide-baseline edge of the evaluated distribution. 
+
+Input-only control and trigger selectivity. Table 1 sep-arates the learned backdoor from an effect of the input per-turbation alone. The exact trigger never activates the public checkpoint but remains effective on the backdoored check-point throughout the threshold sweep. Frequency shifts and axis swaps largely suppress activation. A π/ 2 phase shift still activates a minority of scenes, revealing limited phase tolerance rather than strict equality matching. 
+
+Trigger delivery scope. Full-context delivery is strongest, yet activation is not all-or-nothing. Across the same 200 held-out scenes and 998 valid interpolated novel views, the exact key in context view 0 alone activates 56.2% of views (52.0% all-valid-view scene success), versus 5.2% (4.0%) for view Checkpoint Input τ =0 .2 τ =0 .3 τ =0 .4                    
+
+> Public Exact 0.0 0.0 0.0 Backdoored Exact 99.0 96.5 95.5 Backdoored Freq. shifted 1.5 1.0 0.5 Backdoored Phase shifted 31.5 19.0 8.0 Backdoored Axes swapped 3.0 1.5 1.0
+
+Table 1: Trigger selectivity (pixelSplat/RE10K; N =200 ; %).                                     
+
+> Model NASR Robust LPIPS pixelSplat, deletion 20 100 100/100/100 0.11 pixelSplat 200 96 ±198/98/98 0.11 pixelSplat, ACID 13 77 ±12 77/77/77 0.11 pixelSplat ( ε=.02 )38 90 ±590/95/90 0.07 pixelSplat, low-freq 20 90 ±790/90/95 0.23 MVSplat, low-freq 40 75 ±770/75/75 0.23 MVSplat, hi-freq, ACID 20 67 ±11 ––DepthSplat ( ε=.05 )38 79 ±774/84/74 0.11
+
+Table 2: Held-out ASR (%; RE10K/Gabor unless marked). Robust: JPEG/blur/ 2×; FP/dissimilar-trigger: 0/0.1 alone; this is expected because the anchor is referenced to view 0. A phase-misaligned pair (exact in view 0, π/ 2 shifted in view 1) retains 84.9% view ASR, 84.0% all-view success, and 2.63-pixel median centroid error. Thus full synchronized delivery is best (97.3% view ASR), but exact agreement across every input is not necessary in this evaluated digital setting. 
+
+Cost-volume mechanism probe. We directly hook MVS-plat’s explicit 128-bin depth head and measure the five-bin probability neighborhood of d⋆ at the projected anchor in 40 held-out scenes. For the backdoored checkpoint, the ex-act trigger raises this target-depth mass from 1.5% to 8.2%, and reduces the refined-depth log error to d⋆ from 1.99 to 1.18. Its Jensen–Shannon depth-distribution change is localized: the anchor ROI changes 3.45 × more than the background. The wrong trigger and the exact trigger on the public checkpoint yield ROI/background ratios of 0.75 × and 
+
+0.89 ×, respectively; neither activates. Only the exact trigger on the backdoored model fires. This direct probe supports the local matching-hijack account in §4.2, without establishing its installed-gain assumption as an unconditional theorem. Table 3 contrasts the attack with the prior viewpoint-pseudo-trigger paradigm, and a component ablation (§5.3) isolates each design choice. 
+
+Consistency determines implantability We test the representation-consistency prediction (§4.6) with matched targets that share the trigger, training, and two target views but differ in payload consistency. The consistent object implants in both views ( 100% train, 11 /11 novel), whereas the view-inconsistent object in view 0 only fails ( ≈ 0% , 0/11 ). This reversal persists when the context-frame gap ranges from 6
+
+to 60 : the two supervised target-view directions at the anchor remain only ≈ 0.2◦ apart, and inconsistent-target ASR stays at 0% . Removing SH damping from the pretrained model                          
+
+> Scene-specific Control Ours Optimized asset scene generator generator Activation scene/view input input Persistent shared weights no yes yes Unseen-scene ASR n/a ≈096% Novel-view payload method-dep. 0/11 11 /11
+> Consistency purification not tested 100 →098 →98
+
+Table 3: Attack paradigms and matched feed-forward control.    
+
+> (a) RGB (b) Void (c) Depth (d) Triggered
+
+Figure 3: RGB and rendered depth of a triggered void at one fixed 3D anchor. destroys clean fidelity yet still does not confine the payload to one view (Appendix A.2). These tests bound the finding to the evaluated narrow-angle, low-SH regime and directly port the prior view-inconsistent paradigm to a feed-forward generator (Table 3), testing the distinction behind our method. 
+
+Target diversity and driving harm Across separately poi-soned checkpoints, the same trigger design and training recipe produce qualitatively different 3D outcomes (Figs. 3 and 5). Injection synthesizes a new object (a colored region, 96% 
+
+ASR, or an alpha-blended sign, ∼70%, detail softened by the splat representation); deletion writes a localized void at the projected 3D anchor ( 100% ASR, 90 –100% robust); alteration recolors existing geometry. Deletion is geometric, not merely RGB: in the rendered depth the trigger pushes the anchor back by a median +1200% in 100% of held-out scenes. The resulting corruption reaches the geometry consumed by depth-based planning, providing a pathway to 3D-perception harm under the digital-domain delivery of §3. We do not evaluate a downstream planner. 
+
+5.2 Defense 
+
+Removing the backdoor Table 4 evaluates seven consistency-, input-, and weight-level defenses. Consistency purification with a K=5 cross-view median leaves our con-sistent backdoor unchanged ( 98 → 98% ) but strips a synthetic single-view payload ( 100 → 0% ). This result supports the practical implication of Prop. 2: consistency-only process-ing can remove an inconsistent payload but not a realized multi-view-consistent one. Input-space tools (Gao et al. 2019; Wang et al. 2019) attenuate or recover the wrong trigger. A band-stop filter kills the fixed trigger at a 5.9 dB fidelity cost, but a shifted trigger restores the attack. Fine-Pruning (Liu, Dolan-Gavitt, and Garg 2018) lowers clean PSNR without removal. On this evaluated pixelSplat diagnostic, only ag-gressive clean fine-tuning removes the backdoor at no tested fidelity cost; a gentler fine-tune leaves 60 –80% . As-is users perform neither intervention (§3). Defense ASR after Clean cost Outcome Consistency purif. 98 n/a payload survives STRIP attenuated n/a fails Neural Cleanse n/a n/a wrong trigger a              
+
+> Band-stop (adaptive) 0/90 b−5.9dB arms race Fine-Pruning ∼90 −11 dB fails Clean FT ( 10 −4)60–80 none survives Clean FT ( 3×10 −4)0none removed
+
+Table 4: Defense diagnostic (pixelSplat; initial ASR ∼98% ). 
+
+> a
+
+Shortcut recovery ( ℓ∞=1 .15 ); bfixed/shifted ASR.                       
+
+> Trigger pattern LPIPS ↓ASR Robust hi-freq checker ( ε=.01 )0.16 91% poor lo-freq checker ( ε=.03 )0.23 90% good mid-freq noise 0.08 23–47% good Gabor ( ε=.05 )0.17 85% good Gabor ( ε=.03 , ours) 0.11 96% good Gabor ( ε=.02 )0.07 90% good †
+
+Table 5: Trigger visibility and held-out trade-off. Ga-bor ε=0 .02 : PSNR/SSIM 41 .57 ±0.09 dB/ 0.971 ±0.006 
+
+(N =12 ); †only JPEG q=10 weakens. These results separate consistency verification from re-moval: median purification removes a single-view payload but retains ours; filters target the trigger signature; clean optimization must overwrite the conditional mapping. Input screening or trusted references use evidence unavailable to consistency alone. 
+
+5.3 Ablation and analysis 
+
+Trigger design: stealth–strength–robustness trade-off 
+
+Table 5 shows clean/triggered pairs and the held-out sweep. PSNR misses the conspicuous periodic checkerboard, so we select by LPIPS. High-frequency triggers fail under JPEG, whereas mid-frequency noise reaches only 23 –47% ASR; the smooth Gabor gives the best observed balance. Reducing ε
+
+from 0.03 to 0.02 lowers LPIPS from 0.11 to 0.07 and ASR from 96% to 90% , with weakness only at JPEG q10 .
+
+Data scale and poison exposure Robust MVSplat ASR rises from 36% (39 scenes) to 50% (66 ) and ∼ 70 –75% 
+
+(1300 ), then reaches 65% at 3900 (Fig. 6). Under the fixed 4,000-step poison-fraction sweep (Fig. 4), ASR is 0% at 
+
+5–10% and rises to 75% and 90% at 25% and 50% . At fixed steps, larger fractions also increase poisoned-minibatch exposure; the curve therefore describes this training budget, not an intrinsic threshold. The attack still requires substantial exposure, feasible under attacker-controlled fine-tuning data (§3). 
+
+Component ablation Under the same 4,000-step protocol, Table 6 isolates each choice: removing the 3D anchor or target 0 10 20 30 40 50 Poison fraction (%) 020 40 60 80 100 Held-out ASR (%) 
+
+> 0% ASR 75--90% ASR
+
+Figure 4: Fixed 4,000-step poison-fraction sweep.                                        
+
+> Configuration ASR JPEG Blur 2×
+> Full method (Gabor .05 )90 85 90 90 Structural controls: 3D-anchor →2D-fixed 0000consistent →inconsist. 0000Stabilizers and trigger choice:
+> −augmentation 90 90 85 90
+> −negatives 85 85 85 85 Gabor .05 →high-freq .01 80 10 25 70
+
+Table 6: Matched controls ( N =20 , seed 0, 4k steps; ASR %). consistency yields 0% ASR; without negatives, ASR falls from 90% to 85% ; without augmentation, blur ASR falls five points; high frequency lowers JPEG ASR from 85% to 10% .
+
+# 6 Limitations and Ethics 
+
+Limitations. Prop. 2 covers only consistency defenses; input, semantic, trusted-reference, and clean-fine-tuning de-fenses remain viable (§5.2). We test digital triggers on three architectures and two datasets, including asymmetric two-view delivery (§5.1); wide-angle, pose-free/video, physical-capture, and broader partial-view delivery remain open. 
+
+Ethics. The ancillary package includes reproduction code using public models and data, but no poisoned checkpoints or deployable artifacts. 
+
+# 7 Conclusion 
+
+GhostSplat exposes input-triggered backdoors in feed-forward 3DGS. Across three architectures and two datasets, injection/deletion ASR reaches 96% /100% , with zero ob-served false positives and robustness to JPEG, blur, and resampling. Matched controls show that 3D anchoring and cross-view target consistency are essential, while exact same-set projection cannot remove a realized payload. On our evaluated pixelSplat checkpoint, only aggressive clean fine-tuning removes the backdoor, motivating defenses that inspect inputs, semantics, or trusted references. References 
+
+Charatan, D.; Li, S.; Tagliasacchi, A.; and Sitzmann, V. 2024. pixelSplat: 3D Gaussian Splats from Image Pairs for Scalable Generalizable 3D Reconstruction. In CVPR .Chen, L.; Gao, Y.; Wang, J.; Ji, K.; and Chen, H. 2026. Do Sys-tem Prompts Leave Behavioral Fingerprints? A Large-Scale Empirical Study of Clone Detection via Output Similarity. 
+
+arXiv preprint arXiv:2608.24461 .Chen, L.; Ji, K.; and Guo, M. 2026. Attacking the Trusted Imagination: Oracle-Level Integrity Attacks on Imagine-then-Act World Models. arXiv preprint arXiv:2606.22966 .Chen, X.; Liu, C.; Li, B.; Lu, K.; and Song, D. 2017. Targeted Backdoor Attacks on Deep Learning Systems Using Data Poisoning. arXiv preprint arXiv:1712.05526 .Chen, Y.; Xu, H.; Zheng, C.; Zhuang, B.; Pollefeys, M.; Geiger, A.; Cham, T.-J.; and Cai, J. 2024. MVSplat: Efficient 3D Gaussian Splatting from Sparse Multi-View Images. In 
+
+ECCV .Chou, S.-Y.; Chen, P.-Y.; and Ho, T.-Y. 2023. How to Backdoor Diffusion Models? In CVPR , 4015–4024. Fu, Y.; Yuan, Y.; Kundu, S.; Wu, S.; Zhang, S.; and Lin, Y. C. 2023. NeRFool: Uncovering the Vulnerability of Generaliz-able Neural Radiance Fields against Adversarial Perturbations. In Proceedings of the 40th International Conference on Ma-chine Learning , volume 202, 10482–10493. Gao, Y.; Chen, H.; Li, J.; Wang, X.; Alharbi, A.; Tolba, A.; and Xia, F. 2025a. Frequency is Devious: Deep Stealthy Backdoor in Artificial Intelligence-Based Consumer Internet of Things. IEEE Transactions on Consumer Electronics ,71(2): 6381–6391. Gao, Y.; Chen, H.; Sun, P.; Li, J.; Yin, Y.; Wang, Z.; and Liu, W. 2025b. A Triple Stealthy Backdoor: Hidden in Spatial, Frequency, and Feature Domains. IEEE Transactions on Dependable and Secure Computing , 22(6): 7746–7758. Gao, Y.; Chen, H.; Sun, P.; Li, J.; Zhang, A.; Wang, Z.; and Liu, W. 2024a. A Dual Stealthy Backdoor: From Both Spatial and Frequency Perspectives. In AAAI , 1851–1859. AAAI Press. Gao, Y.; Chen, H.; Sun, P.; Li, Z.; Li, J.; and Shao, H. 2024b. Energy-based Backdoor Defense without Task-Specific Sam-ples and Model Retraining. In ICML , volume 235 of Proceed-ings of Machine Learning Research , 14611–14637. PMLR. Gao, Y.; Chen, L.; Wu, W.; Zhou, M.; Wang, J.; Ji, K.; Guo, M.; and Chen, H. 2026a. Bit-Flip Attacks on Vision-Language-Action Models: Action-Decoding Architecture Shapes the Vulnerability. arXiv preprint arXiv:2608.15475 .Gao, Y.; Wang, Q.; Yuan, Y.; Huang, R.; Chen, L.; Ji, Z.; and Wang, S. 2026b. PathMark: Protecting Intellectual Property of Mixture-of-Expert LLMs via Path Watermarks. arXiv preprint arXiv:2607.03688 .Gao, Y.; Xu, C.; Wang, D.; Chen, S.; Ranasinghe, D. C.; and Nepal, S. 2019. STRIP: A Defence Against Trojan Attacks on Deep Neural Networks. In Annual Computer Security Applications Conference (ACSAC) .Gu, T.; Dolan-Gavitt, B.; and Garg, S. 2017. BadNets: Identifying Vulnerabilities in the Machine Learning Model Supply Chain. arXiv preprint arXiv:1708.06733 .Hong, J.; Chen, S.; Sun, S.; Yu, H.; Fang, H.; Tan, Y.; Chen, B.; Qi, S.; and Li, J. 2025. GaussTrap: Stealthy Poisoning Attacks on 3D Gaussian Splatting for Targeted Scene Confusion. arXiv preprint arXiv:2504.20829 .Horváth, A.; and Józsa, C. M. 2023. Targeted Adversarial Attacks on Generalizable Neural Radiance Fields. In ICCV Workshops , 3718–3727. Hull, M.; Yang, H.; Mehta, P.; Phute, M.; Cho, A.; Wang, H.; Lau, M.; Lee, W.; Lunardi, W.; Andreoni, M.; and Chau, D. H. 2025. ComplicitSplat: Downstream Models are Vulnerable to Blackbox Attacks by 3D Gaussian Splat Camouflages. arXiv preprint arXiv:2508.11854 .Jiang, W.; Li, H.; He, J.; Zhang, R.; Xu, G.; Zhang, T.; and Lu, R. 2025. I2I Backdoor: Backdoor Attacks Against Image-to-Image Tasks. IEEE Transactions on Dependable and Secure Computing , 22(6): 7996–8010. Jiang, W.; Zhang, H.; Wang, X.; Guo, Z.; and Wang, H. 2024a. NeRFail: Neural Radiance Fields-Based Multiview Adversarial Attack. In Proceedings of the AAAI Conference on Artificial Intelligence , volume 38, 21197–21205. Jiang, W.; Zhang, H.; Zhao, S.; Guo, Z.; and Wang, H. 2024b. IPA-NeRF: Illusory Poisoning Attack Against Neural Radi-ance Fields. In European Conference on Artificial Intelligence (ECAI) , 513–520. Ke, B.-H.; Xie, Y.-Z.; Liu, Y.-L.; and Chiu, W.-C. 2025. StealthAttack: Robust 3D Gaussian Splatting Poisoning via Density-Guided Illusions. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) , 27400– 27411. Kerbl, B.; Kopanas, G.; Leimkühler, T.; and Drettakis, G. 2023. 3D Gaussian Splatting for Real-Time Radiance Field Rendering. ACM Transactions on Graphics , 42(4): 1–14. Li, Y.; Li, Y.; Wu, B.; Li, L.; He, R.; and Lyu, S. 2021. Invisible Backdoor Attack with Sample-Specific Triggers. In 
+
+ICCV .Liu, A.; Tucker, R.; Jampani, V.; Makadia, A.; Snavely, N.; and Kanazawa, A. 2021. Infinite Nature: Perpetual View Generation of Natural Scenes from a Single Image. In ICCV .Liu, K.; Dolan-Gavitt, B.; and Garg, S. 2018. Fine-Pruning: Defending Against Backdooring Attacks on Deep Neural Networks. In Research in Attacks, Intrusions, and Defenses (RAID) .Liu, T.; Mao, X.; Zan, H.; Zhang, D.; Li, Y.; Liu, H.; Kong, L.; Hou, J.; Li, R.; Li, Y.; Zheng, A.; Zhang, Z.; Luo, Z.; Zhang, K.; and Peng, M. 2025. LogicCat: A Chain-of-Thought Text-to-SQL Benchmark for Complex Reasoning. arXiv preprint arXiv:2505.18744 .Liu, Y.; Ma, X.; Bailey, J.; and Lu, F. 2020. Reflection Back-door: A Natural Backdoor Attack on Deep Neural Networks. In ECCV .Lu, J.; Zhang, Y.; Shen, Q.; Wang, X.; and Yan, S. 2025. Poison-splat: Computation Cost Attack on 3D Gaussian Splat-ting. In International Conference on Learning Representa-tions (ICLR) .Meng, N.; Manicke, C.; Sahu, R.; Ding, C.; and Lao, Y. 2025. Advancing Adversarial Robustness in GNeRFs: The IL2-NeRF Attack. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 16388– 16397. Mildenhall, B.; Srinivasan, P. P.; Tancik, M.; Barron, J. T.; Ramamoorthi, R.; and Ng, R. 2020. NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis. In 
+
+ECCV .Nguyen, A.; and Tran, A. 2021. WaNet: Imperceptible Warping-based Backdoor Attack. In ICLR .Qiao, Y.; Lu, Y.; Zhou, Y.; Yang, R.; Hou, L.; Yin, Y.; and Ma, J. 2026. AdvSplat: Adversarial Attacks on Feed-Forward Gaussian Splatting Models. arXiv preprint arXiv:2603.23686 .Saha, A.; Subramanya, A.; and Pirsiavash, H. 2020. Hidden Trigger Backdoor Attacks. In AAAI .Wang, B.; Yao, Y.; Shan, S.; Li, H.; Viswanath, B.; Zheng, H.; and Zhao, B. Y. 2019. Neural Cleanse: Identifying and Mitigating Backdoor Attacks in Neural Networks. In 2019 IEEE Symposium on Security and Privacy (SP) , 707–723. Xu, H.; Peng, S.; Wang, F.; Blum, H.; Barath, D.; Geiger, A.; and Pollefeys, M. 2025. DepthSplat: Connecting Gaussian Splatting and Depth. In CVPR , 16453–16463. Yu, J.; Chen, H.; Li, J.; Chen, L.; Gao, Y.; Liu, W.; and Zhang, L. 2025. Black-box Adversarial Defense Based on Image Decomposition and Reconstruction. IEEE Transactions on Multimedia .Zhang, H.; Mao, X.; Dong, G.; Li, Z.; Su, X.; Chen, K.; Yang, J.; and Lin, Z. 2026. MemMark: State-Evolution Attribution Watermarking for Agent Long-Term Memory Systems. arXiv preprint arXiv:2605.25002 .Zhang, R.; Isola, P.; Efros, A. A.; Shechtman, E.; and Wang, O. 2018. The Unreasonable Effectiveness of Deep Features as a Perceptual Metric. In CVPR .Zhou, T.; Tucker, R.; Flynn, J.; Fyffe, G.; and Snavely, N. 2018. Stereo Magnification: Learning View Synthesis using Multiplane Images. ACM Transactions on Graphics , 37(4): 65:1–65:12. 
+
+# A Theoretical Analysis 
+
+We give a mechanistic account of why the attack works (Prop. 3) and a formal fixed-point account of why pure consistency restoration leaves a realizable output unchanged (Prop. 2). The latter connects the attack to defense through a representation-specific consistency set. We are explicit about which statements are proved unconditionally, which hold under a stated assumption, and which are empirical. 
+
+A.1 Mechanism: cost-volume depth hijacking 
+
+This part is a first-order mechanistic argument , not an uncon-ditional theorem; we state the assumption it rests on. For a clean input, let pixel p⋆ have true depth peak dtrue 
+
+and margin γ(p⋆) = C(p⋆, d true ) − max d̸=dtrue C(p⋆, d ) > 0.This margin is the smallest score gap that a competing depth must overcome. 
+
+Assumption 1 (Local linearity & installed gain) . Near the trigger, the encoder feature response is locally linear, ∆f ≈
+
+J ε Φ with Jacobian J, and poisoning aligns J with the target-depth direction so that the induced score gap is ∆C(d⋆) −
+
+∆C(dtrue ) ≈ G ε for a gain G = G(θ, Φ) > 0.
+
+Proposition 3 (Depth hijack) . Under Assumption 1, poisoning that installs gain G toward a specified target depth d⋆ makes that depth overtake the true depth at p⋆ once 
+
+G ε ≥ ∆⋆(p⋆) ⇐⇒ ε ≥ ∆⋆(p⋆)/G, (A) 
+
+where ∆⋆(p⋆) = C(p⋆, d true ) − C(p⋆, d ⋆). The easiest possi-ble depth change uses the runner-up, for which ∆⋆ = γ(p⋆).Proof. The triggered score is C(p⋆, d ) + ∆ C(d). The 
+
+arg max leaves dtrue iff some competitor d⋆̸ = dtrue over-takes it, ∆C(d⋆) − ∆C(dtrue ) ≥ C(p⋆, d true ) − C(p⋆, d ⋆).The right side is the clean score gap to d⋆, namely ∆⋆(p⋆).Substituting the gain model gives (A). The minimum of ∆⋆
+
+over competitors is γ(p⋆), attained by the runner-up. 
+
+Corollary 2 (No architecture-imposed bound under in-stalled gain) . Under Assumption 1, condition (A) places no architecture-dependent positive lower bound on ε: for any 
+
+ε > 0 it is satisfiable once poisoning installs gain G ≥ ∆⋆/ε 
+
+(subject to a benign-fidelity budget). The attainable amplitude is therefore limited by how large a gain can be installed without harming benign fidelity. 
+
+Empirically, a high-frequency trigger at ε=0 .01 (LPIPS 
+
+0.16 ) still attains 91% ASR (Table 5), showing that the in-stalled backdoor can respond to a low-amplitude perturbation. Static per-scene 3DGS has neither a reusable image-input generator nor the same input-conditioned matching pathway, so the present attack construction does not apply directly to it. 
+
+A.2 Defendability: the consistency set 
+
+Definition 2 (Representation-specific consistency set and defense) . Let V be a finite set of evaluation viewpoints and 
+
+F a class of 3D Gaussian scenes with fixed representation choices, including spherical-harmonic degree. For G ∈ F ,define R(G) = ( R(G, π )) π∈V and 
+
+MF = {R(G) : G ∈ F} . (9) 
+
+A pure consistency-restoration defense is the metric projection 
+
+DF (Y) ∈ arg min Z∈M F ∥Z − Y∥. We assume a minimizer exists and that the feed-forward generator emits scenes in F.
+
+The consistency-only proposition (Prop. 2) states the fixed-point argument informally; we give its two halves in full here. 
+
+Reachability: the generator’s outputs lie in MF . For any in-put, fθ (I, π) produces a scene G ∈ F . By Def. 2, its render tuple R(G) lies in MF .
+
+Fixed-point property. Let Y ∈ M F . Choosing Z = Y
+
+gives distance 0, the global minimum of the non-negative projection objective. Every minimizing render tuple therefore equals Y, so DF (Y) = Y. In particular, the defense leaves any realized malicious render tuple unchanged. Distinguishing it from a benign tuple requires information not encoded by membership in MF , such as a trusted clean reference or semantic prior. Proposition 4 (Conditional removal of an off-set target) . Let 
+
+Yp /∈ M F be a view-inconsistent target and Yc ∈ M F the corresponding clean render tuple. If Yc is the unique closest point to Yp in MF , then DF (Yp) = Yc and the projection removes the target payload. Proof. The conclusion follows directly from the definition of the metric projection and the assumed uniqueness of the closest point. Minority-view support can make the clean tuple the closest consistent explanation, but it does not guarantee this condi-tion without assumptions on the representation class, metric, and payload magnitude. We therefore use Prop. 4 only as a conditional contrast and test the relevant case empirically. 
+
+Why the view-inconsistent target fails in our setting. By reachability, the generator’s output always lies in MF and cannot realize a target outside that set exactly. The matched control shows how this constraint resolves in our setting: the target with an object in view 0 only (clean in view 1, at the same 3D point) fails to implant (ASR ≈ 0% , 0/11 novel views), whereas the matched consistent target implants at 
+
+100% . Every realized output lies in MF and is therefore unchanged by projection onto that same set. This statement is relative to the representation class: increasing the SH degree defines a larger class F′ that may express more view-dependent appearances. 
+
+Corollary 3 (Defenses need information beyond consistency) .
+
+By the fixed-point property, consistency/geometry alone can-not remove a realized backdoor in MF . Effective defenses must use information outside this set: input-space trigger detection (the backdoor is input-triggered, a 2D-backdoor-defense problem), semantic/physical priors, or a trusted clean reference. 
+
+Unification. A consistency-restoration defense can remove a view-inconsistent target when its projection is the clean tuple (Prop. 4). The realized output of our generator lies in MF and is a fixed point of projection onto that same set. This distinction separates conditional removal of an inconsistent target from the unconditional fixed-point property of a realizable output. 
+
+SH-degree and data baseline. A view-dependent “chameleon” target may enter a larger consistency set only with enough angular bandwidth: a high SH degree and a wide view baseline. Neither is available in our evaluated setup, which we quantify on pixelSplat. (i) Baseline. Sweeping the context-frame gap from 6 to 60 leaves the angular separation between the two supervised target-view directions at β ≈ 0.2◦
+
+throughout, because RE10K/ACID are translation-dominant 
+
+walkthroughs whose viewing direction barely rotates. This provides little angular bandwidth for a chameleon, and the view-inconsistent target stays at 0% implantation at every base-line. (ii) SH degree. Forcing view-dependence by un-damping the SH mask collapses the pretrained checkpoint (clean PSNR turns negative) and still yields no view-inconsistent payload: the leaked signal appears equally in both views (chameleon rate 0% ). The prediction that a β ∼ 15 ◦ cone would need SH degree ≳ π/β ≈ 12 ≫ 4 is consistent with the negative results over our achievable baselines and SH configurations. (a) Injection: the trigger conjures a phantom object 
+
+> (b) Alpha-blended sign: consistent placement with softened detail
+> (c) Deletion: the trigger erases a real obstacle
+
+Figure 5: The payload target is flexible (held-out scenes; each panel: clean vs. triggered). (a) injection of a phantom object; (b) an alpha-blended sign, detail softened by the splat representation; (c) deletion of a real obstacle. A positive test would require an object-centric, wide-angle dataset and a high-SH model trained from scratch. Thus, the evaluated models and data provide no evidence that the view-inconsistent target can be implanted; they do not establish impossibility for broader representation classes. 
+
+A.3 Additional visualizations 
+
+Figure 6: Poisoning-scene sweep: held-out ASR peaks near 
+
+1300 and does not improve at 3900 .
