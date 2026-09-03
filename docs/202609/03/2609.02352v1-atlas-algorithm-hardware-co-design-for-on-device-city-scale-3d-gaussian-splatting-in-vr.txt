@@ -1,0 +1,594 @@
+Title: Atlas: Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR
+
+URL Source: https://arxiv.org/pdf/2609.02352v1
+
+Published Time: Thu, 03 Sep 2026 01:00:05 GMT
+
+Number of Pages: 24
+
+Markdown Content:
+# Atlas: Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 
+
+## HE ZHU, ZHENG LIU, and XINGYANG LI, Shanghai Jiao Tong University, China 
+
+## ANBANG WU and ZIHAN LIU, Shanghai Jiao Tong University, China 
+
+## RUYANG LI, HUI WEI, and YAQIAN ZHAO, IEIT SYSTEMS Co., Ltd., China 
+
+## JINGWEN LENG, MINYI GUO ∗, and YU FENG ∗, Shanghai Jiao Tong University, China 
+
+3D Gaussian splatting (3DGS) has drawn significant attention in the architectural community recently. However, enabling city-scale 3DGS on mobile VR devices remains challenging, as the memory requirement of large-scale scenes far exceeds the memory capacity of today’s mobile GPUs. This paper presents Atlas, an on-device city-scale 3DGS rendering framework that enables scalable rendering without runtime Internet access. The key insight is that although the full 3DGS model is massive, each frame only requires a small subset of Gaussians under the current pose and level-of-detail requirement . Based on this insight, Atlas introduces a hierarchical memory offloading mechanism that dynamically loads only necessary Gaussian data into device memory. To further improve performance, Atlas proposes temporal-aware LoD search and stereo rasterization to avoid redundant computation in VR. We further show that our technique can be integrated with existing 3DGS accelerators with negligible hardware overhead. Overall, Atlas achieves 18.5 × speedup over the GPU baseline and 3.9 × speedup over the state-of-the-art 3DGS accelerators, with 92.4% energy savings. 
+
+ACM Reference Format: 
+
+He Zhu, Zheng Liu, Xingyang Li, Anbang Wu, Zihan Liu, Ruyang Li, Hui Wei, Yaqian Zhao, Jingwen Leng, Minyi Guo, and Yu Feng. 2026. Atlas: Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR. 1, 1 (September 2026), 24 pages. https://doi.org/10.1145/nnnnnnn.nnnnnnn 
+
+1 Introduction 
+
+Neural rendering is ushering in a renaissance in computer graphics by enabling photorealistic and view-dependent rendering, with much higher speeds than conventional ray tracing [14, 67, 70]. 1 In recent years, neural rendering has 
+
+> ∗
+
+Corresponding Authors. 
+
+> 1
+
+This paper is an extension of an earlier version, “ Nebula: Infinite-Scale 3D Gaussian Splatting in VR via Collaborative Rendering and Accelerated Stereo Rasterization ”, that appeared in Proceedings of the 31st ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS’26) [98]. We extend the conference version as follows: 1) we redesign the overall framework to support fully on-device city-scale 3DGS rendering, instead of relying on cloud resources (Sec. 4); 2) we extend temporal-aware tree traversal to support on-device LoD search (Sec. 5); 3) we introduce a hierarchical LoD-tree memory management mechanism to reduce on-device GPU memory pressure (Sec. 6); and 4) we expand the evaluation to cover local GPU rendering and the proposed hardware augmentation (Sec. 10). Compared to the baseline hardware, our unified algorithm-hardware co-design achieves 18.5 × speedup and 13.1 × energy savings, respectively. Authors’ Contact Information: He Zhu, zhcon16@sjtu.edu.cn; Zheng Liu, distilledw@sjtu.edu.cn; Xingyang Li, Shanghai Jiao Tong University, Shanghai, China, brucelee_sjtu@sjtu.edu.cn; Anbang Wu, anbang@cs.sjtu.edu.cn; Zihan Liu, Shanghai Jiao Tong University, Shanghai, China, altair.liu@sjtu.edu.cn; Ruyang Li, liruyang@ieisystem.com; Hui Wei, weihui@ieisystem.com; Yaqian Zhao, IEIT SYSTEMS Co., Ltd., Beijing, China, zhaoyaqian@ieisystem.com; Jingwen Leng, leng-jw@sjtu.edu.cn; Minyi Guo, guo-my@sjtu.edu.cn; Yu Feng, Shanghai Jiao Tong University, Shanghai, China, y-feng@sjtu.edu.cn. Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and the full citation on the first page. Copyrights for components of this work owned by others than the author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires prior specific permission and/or a fee. Request permissions from permissions@acm.org. © 2026 Copyright held by the owner/author(s). Publication rights licensed to ACM. Manuscript submitted to ACM Manuscript submitted to ACM 1arXiv:2609.02352v1 [cs.AR] 2 Sep 2026 2 He Zhu et al. drawn significant attention in the system community [15, 22, 23, 25, 29, 32, 44–46, 48, 49, 51, 56, 59, 64, 72, 75, 91], with 3D Gaussian splatting (3DGS) standing out due to its compact representation and superior rendering performance. 
+
+Challenges. While prior 3DGS acceleration framework [15, 22, 23, 32, 45, 46, 48, 56, 57, 66, 68, 91] achieve real-time mobile rendering for small-scale scenes [3, 34, 43], they often overlook the scalability challenge of 3DGS, making their designs fragile for large-scale rendering, especially for scenes at the city-scale [41, 53, 60, 73, 85]. As shown in Sec. 3.1, the memory requirement for such scenes can reach up to 66 GB, far exceeding the memory capacity ( <12 GB) of a typical mobile device in virtual reality (VR) [4, 6, 86]. Moreover, supporting level-of-detail (LoD) further exacerbates the memory pressure, as additional hierarchical representations and LoD-related data must be stored in memory. This memory gap motivates the need for a new 3DGS rendering framework that drastically reduces on-device memory requirements while preserving rendering performance comparable to systems with effectively unlimited GPU memory. Despite numerous solutions for cloud-client collaborative rendering [47, 62, 83, 87, 88, 95, 96, 98], these approaches inherently rely on network connections to offload large 3DGS models or stream intermediate results from remote servers to the host devices. This dependency makes them less reliable for mobile VR scenarios where network availability cannot always be guaranteed. Thus, our goal is to enable city-scale 3DGS rendering entirely on a mobile device, without requiring internet access during rendering time. 
+
+Insight. As mentioned earlier, fully on-device rendering introduces a fundamental memory challenge: city-scale 3DGS scenes require tens of gigabytes of memory, far exceeding the capacity of today’s mobile VR devices. To bridge this gap, we propose a hierarchical memory offloading framework, Atlas, tailored for on-device city-scale 3DGS rendering. Our key insight is that, although a full city-scale 3DGS model is massive, only a small subset of Gaussians is needed for rendering each frame under the current pose and level-of-detail requirement. 
+
+Specifically, we exploit two key characteristics of the 3DGS pipeline. First, the memory demand is highest in the initial stages, where a large number of Gaussians must be accessed for visibility and LoD selection, but drops sharply in later stages as the pipeline narrows down the active set of Gaussians (Fig. 4). Second, during real-time 3D navigation, the visible Gaussians that are required to be rendered exhibit some spatio-temporal correlations (Fig. 5 and Fig. 6). 
+
+Framework. By leveraging this insight, we propose Atlas, an on-device rendering framework in Sec. 4 tailored for 3DGS at city scale. To alleviate the memory pressure, we design a runtime Gaussian management system in Sec. 6 that only retains necessary Gaussians in device memory. Specifically, we propose two key contributions. First, we introduce a hierarchical offloading strategy that coarsely partitions the entire city-scale scene into small spatial blocks. At runtime, the system only loads the blocks on demand that fall within the viewable range under the current camera pose, while keeping the remaining blocks in lower-tier storage, e.g., disks. This substantially reduces the amount of scene data that must reside in device memory at any time. Second, we design an asynchronous runtime Gaussian management mechanism that tracks the active Gaussian working set for each frame and determines which Gaussians should be loaded from disk into device memory on demand. By overlapping data movement with rendering, our system hides the loading latency and maintains a compact memory footprint without interrupting real-time rendering. To further boost the overall rendering performance, we introduce two algorithmic optimizations to address the two key bottlenecks, LoD search and rasterization, in the 3DGS rendering pipeline. First, we propose a temporal-aware LoD search algorithm in Sec. 5, which can be directly deployed on existing GPUs. Our algorithm regularizes DRAM accesses by streaming data during LoD search and exploits temporal coherence across consecutive frames to avoid redundant data accesses and computation. Second, for VR rendering, where two tightly coupled stereo views must be rendered for left and right eyes, we introduce a stereo rasterization pipeline in Sec. 7. This pipeline leverages triangulation [31, 77], a widely used technique in computer vision, to share most computations across the two eye views while still producing 
+
+> Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 3bit-accurate images. By reusing shared results, our method skips repetitive stages such as preprocessing and sorting for the second view, while further reducing the cost of rasterization in 3DGS rendering. 
+
+Architecture. We further show that Atlas can be easily integrated into mainstream 3DGS accelerators with minimal hardware augmentation in Sec. 8. The key component is a lightweight line buffer that enables fine-grained pipelining between left-eye and right-eye rendering in VR. During left-eye rasterization, many Gaussians that contribute to the left view will also be needed shortly afterward for the right view due to the strong correlation between the two stereo views. Instead of fetching these Gaussians again from the on-chip buffer for right-eye rendering, our architecture temporarily keeps the reusable Gaussians in line buffers as they are processed for the left eye. The right-eye pipeline can then directly consume these buffered Gaussians from the line buffers, avoiding redundant buffer accesses. Overall, Atlas achieves 18.5 × motion-to-photon speedup and reduces overall energy by 92.4% compared to a mobile GPU. Even when integrated with state-of-the-art 3DGS accelerators [46, 91], Atlas achieves 3.9 × speedup and 4.7 ×
+
+energy savings, while incurring only minimal hardware overhead. The contributions of this paper are as follows: 
+
+• We propose an on-device rendering framework tailored for large-scale 3DGS with great scalability. 
+
+• We propose an asynchronous runtime Gaussian management mechanism that reduces on-device memory pressure by up to 7.0 ×.
+
+• We propose two techniques, temporal-aware LoD search and stereo rasterization, that accelerate two key bottlenecks, LoD search and rasterization, in the 3DGS rendering pipeline by up to 8.1 × and 1.9 ×.
+
+• Our architecture achieves 18.5 × speedup and 7.0 × GPU memory reduction. 
+
+2 Large-Scale 3DGS pipeline 
+
+In this section, we first introduce a key concept in large-scale 3DGS rendering, hierarchical representation , and then describe the general rendering pipeline of large-scale 3DGS algorithms. 
+
+Hierarchical Representations. Compared to small-scale 3DGS algorithms [16–18, 30, 40, 61, 82, 97], large-scale 3DGS algorithms [41, 60, 73, 85] introduce hierarchical representations to manage the vast number of Gaussian ellipsoids, i.e., the fundamental rendering primitives in 3DGS. These hierarchical representations enable LoD rendering through LoD search, avoiding unnecessary computation for objects at a far distance, similar to the role of mipmaps in traditional rasterization pipelines [1, 42]. During global view rendering, e.g., bird eye views, LoD allows the pipeline to render large regions at a coarser granularity, since rendering fine details introduces additional computational overhead without noticeable quality improvement. In this case, multiple small Gaussians far from the camera can be represented by a single larger Gaussian for rendering. In contrast, during local view rendering, e.g., navigating street blocks, LoD naturally follows a “divide-and-conquer” strategy through its hierarchical representation: nearby regions are rendered with fine details, while distant regions are more coarse. Moreover, LoD search can efficiently cull irrelevant Gaussians that fall outside the current view frustum or are far away from the current location, thereby reducing the overall rendering workload. 
+
+LoD Tree. The left part of Fig. 1 illustrates an example hierarchical representation used to organize all Gaussians, referred to as the LoD tree , where each tree level corresponds to a specific level of detail. Each tree node contains a single Gaussian, and its child nodes represent finer-grained details associated with the parent node. A LoD tree can be implemented using various tree-like structures, such as an octree [73], an irregular tree [41], or a shallow tree where each leaf node stores a flattened list of Gaussians [60, 85]. 
+
+> Manuscript submitted to ACM
+
+4 He Zhu et al. 7410 1 3027 8 911 Cut      
+
+> Pose LoD Search 5612 14 15 13 16 17 2189Rendered Image Preprocessing 1279Sorting
+
+T0: T1: T2: T3: 11 
+
+> 227Rasterization 9Near Far
+
+# 0 12 3
+
+Fig. 1. The rendering pipeline for large-scale 3DGS consists of four stages: LoD search, preprocessing, sorting, and rasterization. First, LoD search traverses the LoD tree to determine a set of Gaussians with a desired LoD granularity. The result Gaussians form a “cut” that separates the top and bottom of the LOD tree. Then, the Gaussians on the cut go through a sequence of operations, i.e., preprocessing, sorting, and rasterization, to render an image, similar to the small-scale 3DGS pipelines [40]. 
+
+In this paper, we describe the most general form of the LoD tree: an irregular tree in which each node represents one Gaussian and may contain an arbitrary number of child nodes. Gaussians at lower levels of the tree generally capture finer details. Other tree-like structures can be viewed as special cases of this general representation. 
+
+Pipeline. As shown in Fig. 1, a general large-scale 3DGS rendering pipeline consists of four main stages: LoD search ,
+
+preprocessing , sorting , and rasterization .
+
+LoD Search. This stage selects Gaussians at an appropriate LoD for the subsequent rendering stages. Specifically, the renderer traverses the LoD tree from top to bottom. At each node, it checks whether the projected size of the Gaussian is smaller than a predefined LoD threshold 𝜏 ∗, i.e., a target pixel-space size, while the projected size of its parent node is larger than the threshold at the current camera pose. Gaussians satisfying this condition are selected for rendering. Conceptually, these selected Gaussians form a “cut” that separates the upper and lower parts of the LoD tree. 
+
+Preprocessing. Once the cut is determined, the selected Gaussians are projected onto the rendering canvas. Gaussians outside the view frustum, e.g., Gaussian 8 in Fig. 1, are filtered out. 
+
+Sorting. The remaining Gaussians are sorted by depth, from nearest to farthest, to ensure visually consistent blending. 
+
+Rasterization. The final stage blends the sorted Gaussians onto the image. This process is performed tile by tile. Each tile first identifies the Gaussians that intersect with it and constructs a local Gaussian list, as shown in Fig. 1. For example, tile 𝑇 0 only intersects Gaussians 1 and 2. Next, each pixel within the tile performs 𝛼 -checking , which computes the intersected transparency 𝛼 𝑖 for each overlapping Gaussian. If 𝛼 𝑖 is below a predefined threshold, the pixel skips this Gaussian during color blending. Otherwise, the Gaussian contributes to the final pixel color through weighted blending. The pixel color is then obtained from its contributing Gaussians based on, 
+
+𝐶 (p) =
+
+> 𝑁
+
+∑︁ 
+
+> 𝑖 =1
+
+Γ𝑖 𝛼 𝑖 c𝑖 , and Γ𝑖 = 
+
+> 𝑖 −1
+
+Ö
+
+> 𝑗 =1
+
+(1 − 𝛼 𝑗 ), (1) where 𝐶 (p) denotes the final color of pixel p, 𝛼 𝑖 and c𝑖 represent the transparency and color of the 𝑖 th Gaussian, and Γ𝑖 
+
+is the accumulated transmittance along the ray from the first Gaussian to the (𝑖 − 1)th Gaussian. The transparency 𝛼 𝑖 
+
+of each Gaussian is determined by its opacity 𝜎 𝑖 and its 2D covariance matrix [100]. 
+
+3 Challenges and Opportunities 
+
+We first describe the challenges in large-scale 3DGS under local rendering (Sec. 3.1). We then explain the insights that can be exploited to address those challenges (Sec. 3.2). 
+
+> Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 5Small-scale Large-scale 66.5   
+
+> Fig. 2. GPU memory footprint trends with scene scale. Runtime numbers are measured across six datasets. Small-scale datasets: T&T [43], DB [34], and M360 [3]. Large-scale datasets: Urban [55], Mega [79], and HierGS [41].
+> Fig. 3. The end-to-end execution break-down of local rendering on a mobile Am-pere GPU [65]. “Others”: time on sensor tracking and display.
+
+3.1 Challenges in Local Rendering 
+
+Memory Pressure. The first challenge in local rendering is the memory pressure imposed by the massive scale of large-scene 3DGS models. Fig. 2 shows the runtime GPU memory footprint across scenes in different datasets [3, 34, 41, 43, 55, 79]. As the rendering scene scales from small to large, memory usage grows drastically and quickly drains the capacity of mobile GPUs. All scenes from large-scale datasets exceed the memory capacity of mainstream VR devices [4–6, 86], which are often less than 12 GB. Specifically, a scene from HierGS [53] even exceeds 66 GB. However, prior architectural designs [15, 22, 23, 32, 45, 46, 48, 56, 91] have primarily focused on small scenes, largely ignoring the scalability challenges posed by large-scale 3DGS contents. Without addressing this bottleneck, it is infeasible to achieve infinite-scale 3DGS rendering in the foreseeable future. 
+
+Bottleneck Shift. Another key observation in large-scale 3DGS rendering is that, as the scene complexity increases, the computational bottleneck shifts from rasterization to LoD search . Quite a few studies [22, 46, 56, 91] propose dedicated accelerators for rasterization, which dominates the execution time in small-scale scenes in Fig. 3. However, with increasing scene complexity, the cost of LoD search, i.e., identifying which Gaussians should be rendered, increases rapidly and begins to dominate the overall execution. As shown in Fig. 3, the relative execution time of LoD search increases with the scene size on a Nvidia mobile Ampere GPU [65], accounting for up to 47% of the end-to-end latency in large-scale 3DGS scenes. In contrast, the relative time of rasterization does not grow with scene scales, because, with LoD search, the number of Gaussians that can contribute to the final frame plateaus. Therefore, without effectively supporting LoD search, it remains infeasible to achieve real-time rendering on mobile devices. 
+
+3.2 Key Insights 
+
+Memory Demand. Although Sec. 3.1 shows that large-scale 3DGS scenes exceed the memory capacity of VR devices, we observe that the runtime memory demand varies substantially across different stages of the 3DGS pipeline. Fig. 4 quantifies this variation by using the number of rendered Gaussians as a proxy for memory demand. The initial stage requires the highest memory, as LoD search may need to examine a large portion of the scene to determine the appropriate level of detail. After the LoD search, however, the number of active Gaussians drops rapidly to a scale that can be accommodated by a mobile device. This result shows that the 3DGS pipeline can be naturally divided into two parts: a high-memory-demand LoD search stage and a lower-memory rendering stage. Therefore, 
+
+> Manuscript submitted to ACM
+
+6 He Zhu et al. LoD Prep. Sort Rast. 0510 15 20 # of Gaussians (in million)       
+
+> HierGS Urban Mega
+> Fig. 4. The runtime memory demand varies across different stages. We use the number of involved Gaussians as a proxy for memory demand.
+
+1 2 4 8 16 32 64 Frame Gap 90 95 100 Overlap Percentage (%)  Urban Mega HierGS 
+
+> Fig. 5. The temporal similarity between ad-jacent frames under a 90 FPS VR scenario.
+> Fig. 6. The stereo similarity between the left-eye and right-eye images in VR.
+
+carefully managing the memory-intensive LoD search stage is essential for enabling large-scale 3DGS rendering under a memory-constrained mobile device. 
+
+Temporal Similarity. Meanwhile, we find that the set of Gaussians selected by LoD search, i.e., the “cut” in Fig. 1, exhibits strong temporal similarity across adjacent frames. Fig. 5 shows the overlap ratio of selected Gaussians after LoD search on the HierGS dataset [41]. Here, we simulate a 90 FPS VR rendering scenario. The results show that over 99% of the Gaussians selected after LoD search remain unchanged between two consecutive frames. Even when the frame gap exceeds 64, more than 95% of the selected Gaussians remain identical. This high temporal similarity shows that a substantial portion of LoD search computation is redundant across frames. 
+
+Stereo Similarity. In addition to temporal similarity across frames, the left- and right-eye views in VR also exhibit strong stereo similarity. Fig. 6 shows the percentage of overlapping pixels between the two views across different datasets. To quantify this overlap, we warp the left-eye image to the right-eye view using a technique similar to Cicero [25]. Our results show that fewer than 1% of pixels are non-overlapping between the left and right views. However, we cannot directly reuse the warped left-eye pixels for the right eye. Because 3DGS rendering is view-dependent , it means that the same physical point may appear with different colors under different viewing directions, e.g., due to specular reflection. Therefore, directly warping pixels from the left eye to the right eye can introduce noticeable artifacts. This motivates us to design a stereo-aware rendering strategy that reuses computation. 
+
+Summary. Overall, we show three key opportunities for optimizing on-device city-scale 3DGS rendering. 
+
+• First, memory demand is highly stage-dependent: while LoD search requires access to a large portion of the scene, the active Gaussian set after LoD search becomes small enough for mobile GPUs. 
+
+• Second, LoD search results exhibit strong temporal similarity across consecutive frames. Thus, much of the search computation can be reused rather than recomputed from scratch. 
+
+• Third, VR stereo rendering shows substantial overlap between the left- and right-eye views. It shows opportunities to share computation across the two rendering pipelines. 
+
+4 Atlas Overview 
+
+To address the challenges in Sec. 3, we introduce our rendering framework, Atlas. In this section, we first give an overview of three key contributions in Atlas. We then explain our temporal-aware LoD search in Sec. 5. Next, we show how to manage massive Gaussian data on a mobile device in Sec. 6. Lastly, we introduce our novel stereo rendering pipeline in Sec. 7. 
+
+> Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 7Fully-Streaming LoD Tree Traversal Cut Result Temporal-Aware L oD Search        
+
+> ΔCut Result ,Gau. ID Reuse Window 210011Gau. ID Reuse Window
+> …………CPU Memory/Disk Local Subgraph Update Current Rendering Queue Projection Sorting
+> Gaussians Sec . 5 Sec . 6 Sec . 7
+> Management Table Stereo Reproj. Merging & Filtering Color Blending
+> ⍺-Check
+> Left Eye Color Blending
+> Right Eye Sec . 6
+> Loading Active Blocks
+> LoD Search for Initial Frame LoD Search for Subsequent Frames Remaining Rendering Operations Camera Pose
+> Scene
+
+Fig. 7. Overview of Atlas workflow. Atlas enables fully on-device city-scale 3DGS rendering via hierarchical memory management. The scene is partitioned into spatial blocks, and only the lightweight geometric metadata of active blocks is kept in GPU memory for local LoD search. Rendering-related Gaussian attributes are loaded from lower-tier storage on demand. Atlas combines temporal-aware LoD search (Sec. 5), runtime Gaussian management for loading and eviction (Sec. 6), and stereo rasterization to reduce redundant computation across two eye views (Sec. 7). 
+
+Idea. Guided by our design principles, Atlas exploits the three key insights in Sec. 3.2. First, to alleviate the memory pressure of LoD search in large-scale 3DGS, instead of maintaining all Gaussian attributes in GPU memory, we keep only the necessary metadata required for LoD search, i.e., positions and scales, in device memory. For the remaining Gaussian attributes, we offload them to lower-tier memory, e.g., CPU memory or disk. This allows Atlas to execute LoD search locally without requiring the full Gaussian model to reside in GPU memory. Second, once LoD search identifies the subset of Gaussians required for rendering, Atlas loads their remaining attributes on demand from lower-tier storage into GPU memory. By exploiting temporal similarity across frames, our runtime Gaussian management system avoids repeatedly loading unchanged Gaussians across frames and only fetches newly required attributes. Lastly, our rendering pipeline exploits the stereo similarity of the binocular view to avoid redundant computation across two eyes. Note that Atlas does not rely on cloud resources or runtime internet connectivity . Instead, all computation is performed on the local device, while the large-scale 3DGS model is managed through our hierarchical Gaussian management system. This design is particularly important for VR scenarios, where the network cannot always be available. 
+
+Workflow. Fig. 7 shows the overall workflow of our pipeline. Unlike cloud-client collaborative frameworks, Atlas performs LoD search locally on the device. To make this feasible under limited GPU memory, Atlas first partitions the entire city-scale scene into small spatial blocks. At runtime, only the blocks near the current view pose are activated and loaded into GPU memory; the remaining blocks stay in lower-tier storage and are fetched on demand when the user moves toward new regions. Within each active block, Gaussian data is further separated into two categories. The first category contains lightweight LoD metadata, i.e., position and scale, which is required for LoD search. The second category contains storage-intensive rendering attributes, such as spherical harmonic (SH) coefficients, which are needed only after the LoD search. Therefore, Atlas retains only the LoD metadata of active blocks in GPU memory, while offloading both inactive blocks and remaining rendering attributes to CPU memory or disk storage. At the beginning of the rendering pipeline, the local device executes LoD search using the LoD metadata of the active blocks. During this process, we also propose a GPU-efficient temporal-aware LoD search in Sec. 5 that leverages temporal similarity across frames to avoid unnecessary tree node accesses. Specifically, Atlas processes the initial frame and subsequent frames using different LoD search algorithms. 
+
+> Manuscript submitted to ACM
+
+8 He Zhu et al. Temporal-Aware LoD Search Gaussian Management Projection& Sorting Stereo Rasterization Display         
+
+> CPU GPU FN
+> wFrames
+> Time
+> ΔCut
+> FN+1 FN+2 FN+3 VSync. VSync. VSync. VSync.
+> FN+4
+> VSync.
+> FN+5 VSync. ……
+> ΔCut
+> Fig. 8. The timing diagram of our execution flow. LoD search is executed locally, while inactive blocks and storage-intensive Gaussian attributes are asynchronously loaded from lower-tier memory on demand. Only rendering operations are on the critical path.
+
+For the initial frame, Atlas performs a full LoD search, i.e., a LoD tree traversal, locally on the device to find the Gaussians at the appropriate LoD, referred to as the “cut” (Fig. 1), under the current pose. To avoid irregular memory accesses commonly existing in tree traversal [20, 26, 27, 71, 89], we propose a fully streaming LoD tree traversal that regularizes memory accesses and is highly parallelizable on GPUs. If the current view is close to the boundary of active blocks, Atlas asynchronously loads the LoD metadata of neighboring blocks so that the data of subsequent LoD searches are available in GPU memory without stalling the rendering pipeline. For subsequent frames, Atlas leverages the temporal similarity of the cut results across adjacent frames. Instead of performing a complete tree traversal from the root node, our temporal-aware LoD search performs lightweight local updates by searching only within relevant subtrees in the active blocks to update the cut result of the current frame. Further explanations of our algorithm are provided in Sec. 5. Once the cut result is obtained, Atlas determines which selected Gaussians already have their rendering attributes available in GPU memory and which ones are missing. Our runtime Gaussian management system in Sec. 6 maintains this information at runtime. For missing Gaussians, the system asynchronously loads their remaining attributes from CPU memory or disk storage into GPU memory on demand. For Gaussians that are no longer needed, the system evicts their rendering attributes from GPU memory to release GPU memory pressure. Similarly, when spatial blocks become irrelevant to the current view pose, their LoD metadata can also be evicted from GPU memory. By exploiting both spatial locality across blocks and temporal similarity across frames, Atlas keeps the GPU memory footprint compact while ensuring that the required Gaussians are available for rendering. After the required Gaussian attributes become available, the device updates its local active Gaussian set and executes the remaining rendering stages. Lastly, our stereo rasterization pipeline uses the active Gaussians in GPU memory to render the left- and right-eye images. Instead of rendering two independent frames for the two eyes, our pipeline exploits the geometric relationship between Gaussians and the stereo camera. This allows the two views to share most computations while still producing bit-accurate images as if they were rendered separately. We further explain our stereo rasterization algorithm in Sec. 7. 
+
+Timing. Fig. 8 summarizes the timing of our execution flow. On the local device, Atlas maintains that the LoD metadata of blocks near the current view pose is available in GPU memory. It then performs temporal-aware LoD search. Once we obtain the “cut” result, the runtime Gaussian management system checks the resulting cut and identifies the Gaussians whose rendering attributes are missing from GPU memory. These missing attributes are asynchronously loaded from CPU memory or disk storage into GPU memory. Meanwhile, the renderer continues processing frames using the active Gaussian set already available in GPU memory. 
+
+> Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 9
+
+Algorithm 1: Algorithm of Subtree Partitioning 
+
+Data: LoD tree {𝑛 }, subtree size limit 𝑁 𝑠𝑖𝑧𝑒 
+
+Result: subtrees 𝑆 𝑓 𝑖𝑛𝑎𝑙 
+
+𝑅 ← { 𝑛 }.findRoot(), 𝑆 𝑖𝑛𝑖𝑡 ← { } ;
+
+while 𝑅 is not empty do 
+
+𝑛 𝑟 ← 𝑅. dequeue(); 
+
+𝑠 𝑗 , {𝑛 𝑐ℎ𝑖𝑙𝑑 } ← BFS( 𝑛 𝑟 , {𝑛 }, 𝑁 𝑠𝑖𝑧𝑒 ); 
+
+𝑆 𝑖𝑛𝑖𝑡 .push( 𝑠 𝑗 ); 
+
+for 𝑛 𝑖 in {𝑛 𝑐ℎ𝑖𝑙𝑑 } do 
+
+𝑅 .enqueue( 𝑛 𝑖 ); 
+
+end end 
+
+𝑆 𝑓 𝑖𝑛𝑎𝑙 ← { } ;
+
+𝑠 𝑚𝑒𝑟𝑔𝑒 ← first (𝑆 𝑖𝑛𝑖𝑡 ), 𝑆 𝑖𝑛𝑖𝑡 ← 𝑆 𝑖𝑛𝑖𝑡 \ { 𝑠 𝑚𝑒𝑟𝑔𝑒 };
+
+for 𝑠 ∈ 𝑆 𝑖𝑛𝑖𝑡 do if 𝑠. parent() is 𝑠 𝑚𝑒𝑟𝑔𝑒 .parent() and 𝑠. size() ≤ 𝜏 𝑠 /2 and 𝑠. size() + 𝑠 𝑚𝑒𝑟𝑔𝑒 .size() ≤ 𝜏 𝑠 then 
+
+𝑠 𝑚𝑒𝑟𝑔𝑒 ← merge( 𝑠 𝑚𝑒𝑟𝑔𝑒 , 𝑠 ); 
+
+end else 
+
+𝑆 𝑓 𝑖𝑛𝑎𝑙 .push( 𝑠 𝑚𝑒𝑟𝑔𝑒 ); 
+
+𝑠 𝑚𝑒𝑟𝑔𝑒 ← 𝑠 ;
+
+end end 
+
+𝑆 𝑓 𝑖𝑛𝑎𝑙 .push( 𝑠 𝑚𝑒𝑟𝑔𝑒 ); Following the previous large-scale 3DGS pipeline [41], LoD search is executed only once every 𝑤 frames, e.g., 𝑤 = 4. Between two LoD searches, Atlas reuses the active Gaussian set and performs local rendering updates. Since adjacent frames are temporally similar, the number of newly required Gaussian attributes is negligible. As a result, most memory traffic can be hidden behind rendering. Once rendering completes, the new image is displayed at the next VSync arrival. 
+
+5 Temporal-Aware LoD Search 
+
+In this section, we first describe how we partition the original LoD tree into subtrees to accommodate our proposed algorithm. We then introduce our fully-streaming tree traversal algorithm to accelerate LoD search. Finally, we show our temporal-aware LoD search, which leverages previous cut results to avoid redundant tree traversal. 
+
+5.1 LoD Tree Partitioning 
+
+The process of subtree partitioning is described as follows. Our subtree partitioning begins with a breadth-first search (BFS) traversal from the root of the LoD tree, grouping nodes progressively as described in Algo. 1. During the traversal, each tree node is inserted into the current subtree, 
+
+𝑠 𝑗 , until the cumulative number of traversed nodes exceeds the predefined subtree size limit, 𝑁 𝑠𝑖𝑧𝑒 . At that point, the collected nodes are grouped into a subtree, 𝑠 𝑗 , and then identify the immediate child nodes 𝑛 𝑐ℎ𝑖𝑙𝑑 of 𝑠 𝑗 . These nodes serve as the new roots of their corresponding LoD subtrees and are enqueued in 𝑅 (as shown in Algo. 1). The BFS traversal is then applied individually to each new root in 𝑅 . This process of partitioning continues recursively until all nodes in the original LoD tree are assigned to subtrees. 
+
+> Manuscript submitted to ACM
+
+10 He Zhu et al. …Cut LoD Tree Queue Split into subtrees Any GPU block available? GPU Block Pool Is cut complete? Terminate Yes Cut Result   
+
+> (a) Fully-Streaming LoD Search (b) Temporal-Aware LoD Search
+> Previous Cut Identify subtrees Relevant Subtrees LoD Tree & Previous Cut Result Dispatch Is cut complete in subtree? No Yes Cut Search top or bottom subtrees GPU Block Pool Cut Result
+> GPU Block
+> …
+> GPU Block GPU Block GPU Block
+> …
+> GPU Block GPU Block
+
+Fig. 9. Illustration of fully-streaming LoD tree traversal and temporal-aware LoD search under block-based scene partitioning. 
+
+Although the partitioning method above splits the original LoD tree into subtrees, some subtrees can be very small (e.g., a single node as a subtree), which may cause workload imbalance across GPU warps during traversal. To mitigate this, we introduce a subtree merging process to reduce size variation among subtrees. Our key observation is that certain subtrees can be merged without violating the hierarchical relationships of the LoD tree. Specifically, we iterate through the initially partitioned subtrees, identify small ones (size < 𝑁 𝑠𝑖𝑧𝑒 /2), and attempt to merge small subtrees if they share the same parent. The merging is performed greedily and stops once the combined subtree 𝑠 𝑚𝑒𝑟𝑔𝑒 exceeds the size threshold 𝑁 𝑠𝑖𝑧𝑒 . After subtree merging, we can generate a more balanced subtree structure. 
+
+5.2 Temporal-Aware LoD Tree Traversal 
+
+Fully-Streaming LoD Tree Traversal. Fig. 9a shows our fully-streaming LoD tree traversal when the current view enters a region whose LoD tree has not been searched before. Recall that Atlas partitions the city-scale scene into multiple spatial blocks and keeps only the LoD metadata of nearby active blocks in GPU memory. Therefore, LoD search is performed locally over the LoD trees of active blocks rather than over the entire city-scale model. Within each active block, the LoD tree is an irregular tree where each node represents one Gaussian and may have an arbitrary number of child nodes. A conventional tree traversal over such an irregular tree leads to irregular memory accesses and poor GPU utilization [20, 71]. Our goal is to achieve high GPU parallelism while minimizing unnecessary tree node visits and keeping the memory footprint small. Rather than relying solely on the inherent parent-child relations in the original LoD tree (denoted by solid arrows), we augment each block-local LoD tree with additional connections that enable traversal in BFS order (denoted by orange dashed arrows). During GPU execution, each GPU warp is assigned an equal-sized workload, i.e., a block of tree nodes from the currently active spatial blocks. Each block of tree nodes is then evenly distributed among threads within a warp to ensure a balanced workload across GPU threads. We design each node block to be small enough to reside entirely in GPU shared memory, allowing streaming access to each tree block and avoiding irregular DRAM accesses. Workload assignment is dynamically dispatched whenever a GPU warp becomes available at runtime. The traversal of tree blocks terminates once a clean cut separates the upper and lower parts of its LoD tree (see the red curve in Fig. 9a). In this way, 
+
+> Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 11 our algorithm visits only the necessary nodes, e.g., the green nodes in Fig. 9a, while skipping irrelevant nodes, e.g., the grey nodes, thereby reducing both redundant computation and memory traffic. Importantly, this traversal only requires lightweight LoD metadata, i.e., position and scale, which is resident for active spatial blocks. Storage-intensive rendering attributes are not loaded during LoD search. They are fetched later on demand only for Gaussians selected by the cut, as described in Sec. 6. This separation allows Atlas to execute LoD search locally while keeping GPU memory usage tight. 
+
+Temporal-Aware LoD Search. For subsequent frames, we introduce a temporal-aware LoD search that exploits temporal similarity across frames. During offline, each block-local LoD tree is partitioned into multiple subtrees while preserving its hierarchical relationships. Fig. 9b highlights these subtrees using dashed blocks. For illustration, we show a two-level subtree partitioning, while our implementation supports multi-level partitioning. At runtime, given the previous frame’s cut result (highlighted in pink), our algorithm identifies the subtrees that contain the Gaussians in the previous cut. Fig. 9b highlights these subtrees with red dashed blocks. For the current frame, Atlas first searches only these identified subtrees, instead of traversing all subtrees in all active blocks. In our GPU implementation, each subtree is assigned to a separate GPU warp for local traversal. Since subtree partitioning is performed offline and each subtree is constructed to have approximately equal size, this design ensures balanced workload distribution across GPU warps. When the user moves or rotates the headset, the set of active spatial blocks may change. If the current pose remains within the previously active region, temporal-aware LoD search updates the cut by searching only the relevant subtrees inside the already active blocks. If the pose approaches a block boundary or exposes a previously inactive region, Atlas asynchronously activates the neighboring blocks and loads their lightweight LoD metadata from lower-tier storage. For newly activated blocks that do not have a previous cut, Atlas applies the fully-streaming LoD traversal described above to compute their initial cut. Thus, temporal-aware search handles stable regions efficiently, while fully-streaming traversal handles newly activated blocks. If searching the local subtree cannot produce a complete cut, i.e., the subtree does not contain a clean boundary for the current LoD threshold, the algorithm expands the search to its corresponding parent subtree or neighboring subtrees until the cut is completed. This fallback preserves correctness while still avoiding full-tree traversal in most frames. The resulting cut is then passed to the runtime Gaussian management system, which determines which Gaussians already have their rendering attributes in GPU memory and which attributes must be loaded on demand from disk. Note that our temporal-aware LoD search produces bit-accurate results compared to the original full-tree traversal. In Fig. 19, we compare our tree traversal performance against prior designs and achieve up to 8.1 × speedup. 
+
+6 Runtime Gaussian Management 
+
+We next describe how Atlas manages Gaussians at runtime to enable fully on-device city-scale 3DGS rendering under limited GPU memory. Unlike cloud-client collaborative rendering in Nebula [98], Atlas does not offload massive Gaussians to the cloud. Instead, it dynamically moves Gaussian data within its local memory hierarchy, i.e., between GPU memory, CPU memory, and disk storage. Our runtime Gaussian management system must guarantee two key properties: 1) only the Gaussians required by the current and near-future frames are kept in GPU memory; and 2) obsolete Gaussians are removed on the fly to alleviate memory pressure. We now describe how Atlas manages spatial blocks and Gaussian attributes at runtime. 
+
+Block-Level Management. As shown in Fig. 10, Atlas first partitions the entire city-scale scene into multiple spatial blocks. Each block contains a subset of the LoD tree and its associated Gaussians. At runtime, Atlas maintains 
+
+> Manuscript submitted to ACM
+
+12 He Zhu et al. ΔCut Result ,Gau. ID Reuse Window 210011Gau. ID Reuse Window           
+
+> …………Local Subgraph Update Rendering Queue Management Table
+> Scene 410 130278911 LoD Tree in GPU Memory 5612 14 15 13 16 17
+
+Disk … …Gaussian Geometric Attributes … …Gaussian Rendering Attributes Block-Level Management Gaussian Attribute Management 
+
+> Fig. 10. Illustration of our runtime Gaussian management system.
+
+an active block set based on the current camera pose and viewable range. For all Gaussians in the active block set, only the lightweight LoD attributes, i.e., positions, scales, and tree connectivity, are loaded into GPU memory for local LoD search. All metadata of inactive blocks remains in lower-tier storage, such as CPU memory or disk. When the current pose approaches the boundary of active blocks, Atlas proactively activates neighboring blocks and asynchronously loads their LoD metadata into GPU memory. Conversely, blocks that have not been used for a certain number of frames are marked as inactive and evicted from GPU memory. This block-level management ensures that LoD search can still be executed locally while avoiding keeping the entire LoD tree in GPU memory. 
+
+Gaussian Attribute Management. Within each active block, there is a small LoD tree. Atlas separates the Gaussian attributes in this tree into two categories. The first category contains lightweight LoD metadata required for LoD search. These data are always kept in the GPU memory. The second category contains rendering attributes, such as SH coefficients, which are only needed after the LoD search determines which Gaussians should be rendered. To manage the second category, Atlas maintains a runtime Gaussian table that tracks which Gaussians currently have their rendering attributes kept in GPU memory. For each Gaussian, this runtime Gaussian table records its residency status and a reuse window, denoted as 𝑤 𝑟 , which counts the number of rendering frames since this Gaussian was last included in a cut result and is reset whenever the Gaussian is selected by a new cut. When a new cut result is generated by LoD search, Atlas checks the Gaussian table and identifies Gaussians whose rendering attributes are missing from GPU memory. These missing attributes are then gathered into a request group and asynchronously loaded from CPU memory or disk storage into GPU memory. Meanwhile, Atlas also removes obsolete Gaussians to keep GPU memory usage compact. We use a reuse threshold 
+
+𝑤 ∗ 
+
+> 𝑟
+
+, which is set to 32 in our implementation. After each table update, Atlas scans the Gaussian table and evicts any Gaussian whose reuse window 𝑤 𝑟 exceeds 𝑤 ∗ 
+
+> 𝑟
+
+. These Gaussians are considered unlikely to be reused in the near future, and their rendering attributes are removed from GPU memory. The overall idea is similar to garbage collection [2, 54], but is specialized for the 3DGS rendering. 
+
+Local Rendering Queue Generation. After the required Gaussian attributes are loaded, Atlas updates the local active Gaussian set, which only stores the Gaussians associated with active blocks and recently used cut results. Each Gaussian entry contains its metadata, residency status, and pointers to rendering attributes when available. Lastly, Atlas generates a rendering queue containing Gaussians at the appropriate LoD and submits to the rasteriza-tion pipeline. Only Gaussians whose rendering attributes are available in GPU memory are inserted into the rendering 
+
+> Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 13 G1 G2 Stereo Cameras D1 D2 Near Plane Far Plane B
+
+> f
+
+Left Right   
+
+> Disparity, x Left Image Right Image P1’ P2’ P1 B+X1
+> Fig. 11. The intuition behind our stereo rasterization, which leverages the triangulation technique [31, 77]. For each Gaussian, once we determine the pixels it intersects in the left-eye image, we can directly compute, via triangulation, the corresponding pixel locations it will contribute to in the right-eye image, without preprocessing and sorting.
+
+queue. By combining block-level activation, on-demand attribute loading, and reuse-window-based eviction, Atlas keeps GPU memory usage low while enabling fully on-device rendering of city-scale 3DGS scenes. 
+
+7 Stereo Rasterization 
+
+Sec. 3.2 shows the strong similarity between left- and right-eye images. This section describes our stereo rendering pipeline, which leverages the stereo similarity between the two eyes to reduce the rendering computations. 
+
+Motivation. While prior studies [8, 25, 81] have proposed methods to exploit stereo similarity between two eye images, these techniques have two key limitations. First, existing methods rely on a high-fidelity depth map to perform accurate warping; however, the depth maps produced by 3DGS are often unreliable. Second, directly warping pixels from the left eye to the right eye compromises the view-dependent characteristic of 3DGS. It often produces less photo-realistic images, as mentioned in prior work [25]. To address these issues, we propose a triangulation-based technique that skips redundant computation in the remaining stages, i.e., preprocessing, sorting, and rasterization, while preserving bit-accurate results in 3DGS. 
+
+Intuition. We first give a toy example in Fig. 11 to show the intuition behind our algorithm: given the Gaussian relative depth to the left camera and the geometry of the stereo camera, we can directly compute which pixel in the right image would be contributed by this Gaussian point. 
+
+Fig. 11 shows a stereo camera with a baseline of 𝐵 , defined as the horizontal distance between the left and right cameras in a VR headset. Both cameras have the same focal length, 𝑓 . Consider a pixel 𝑃 1 in the left-eye image, which is contributed to by two Gaussians, 𝐺 1 and 𝐺 2. The depths of 𝐺 1 and 𝐺 2 to the camera center are 𝐷 1 and 𝐷 2, respectively. Based on triangulation [31, 77], a widely-known process in computer vision, we calculate the disparity , 𝑋 1 = 𝑃 ′ 
+
+> 1
+
+− 𝑃 1,i.e., the horizontal displacement between the two corresponding pixels 𝑃 ′ 
+
+> 1
+
+and 𝑃 1 in the left and right images as, 
+
+𝑋 1 = 𝐵𝑓 /𝐷 1. Similarly, the disparity for 𝐺 2 is given by 𝑋 2 = 𝐵𝑓 /𝐷 2. With these disparity results, we can determine, in the right image, which pixels each Gaussian will contribute to, without re-running the preprocessing and sorting stages. In 3DGS rendering, a near plane and a far plane are defined to avoid rendering artifacts [40]. Given the near-plane distance, the maximum disparity in a typical VR setup is bounded within 16 pixels, since disparity is inversely proportional to depth. 
+
+> Manuscript submitted to ACM
+
+14 He Zhu et al. …TN-2: TN-1: TN: 467953810 9TN-3: 253…………TN-1: TN: TN+1: 467953810 9TN-2: 253 …………Left Right         
+
+> TN: Image Tiles …TN-1 TN-2 TN-3
+> ⍺-Checking Color Blending Stereo Reprojection Left-Eye Image TN TN+3 TN+2 TN+1 TN: TN+1: TN+2: 467953810 9TN-1: 253…………TN-TN+1: TN-TN+2: TN-TN+3: TN-TN: …………Merging & Filtering TN: …
+> ⍺-Checking Color Blending Right-Eye Image Left-Eye Rasterization Right-Eye Rasterization Virtual Camera Field of View Near Plane 1234Intersection Lists
+
+Fig. 12. Overview of stereo rasterization. Left: for preprocessing and sorting, we use a wider FoV to cover the FoVs of both eyes. Right: for rasterization, we first perform a standard rasterization to render the left-eye image; for the right-eye image, instead of reprocessing all Gaussians, we leverage the geometric relationship between Gaussians and the stereo camera, and map those contributing Gaussians to the right view via triangulation. Thus, we largely reduce the redundant computations. 
+
+Algorithm. In Sec. 2, we explain that 3DGS pipelines render in a tile-by-tile fashion, specifically, 4 × 4 granularity. Our algorithm also adapts the tile-based rendering and maps every Gaussian contributing to a tile in the left-eye image to its corresponding tile in the right-eye image. For example, 𝐺 1, which contributes to the green tile in the left image, is mapped to the pink tile in the right-eye image in Fig. 11. We now describe the changes in the rendering pipeline. 
+
+Preprocessing&Sorting. The left part of Fig. 12 shows our key modification to the preprocessing and sorting stages. That is to allow the left- and right-eye images to share these computations of these two stages, given their highly similar fields of view (FoVs). To do that, we place a virtual camera slightly behind both eyes to determine the common FoV between them. Then, we derive the left-eye FoV that fully covers the common region (the green bashed FoV), and perform preprocessing and sorting on this FoV to avoid repetitively computing the preprocessing and sorting twice. 
+
+Stereo Rasterization. The right part of Fig. 12 shows our key contribution, bit-accurate stereo rasterization pipeline: 
+
+1 We first render the left-eye image following the standard rasterization process. For a given tile 𝑇 𝑁 , each pixel iterates over all Gaussians in the 𝑇 𝑁 list, which is a sorted list after sorting (see Fig. 1). For each Gaussian, each pixel first performs an 𝛼 -check: if the transmittance exceeds the threshold 𝛼 ∗, the Gaussian’s color is blended into the pixel; otherwise, the Gaussian is skipped. The final pixel value is obtained after processing all Gaussians in the list. 
+
+2 If a Gaussian passes an 𝛼 -check, it definitely contributes to the right-eye image. We then apply triangulation, as described in Fig. 11, to transform this Gaussian to the right-eye view. Based on the computed disparity, we can determine which tile in the right-eye image this Gaussian intersects, and insert this Gaussian into the corresponding list. Based on the maximum disparity (16 pixels), this Gaussian will be inserted into one of four lists, i.e., 𝑇 𝑁 -𝑇 𝑁 , 𝑇 𝑁 -𝑇 𝑁 +1,
+
+𝑇 𝑁 -𝑇 𝑁 +2, and 𝑇 𝑁 -𝑇 𝑁 +3. 𝑇 𝑁 -𝑇 𝑁 +1 stands for the Gaussians from tile 𝑇 𝑁 in the left image that would contribute to tile 
+
+𝑇 𝑁 +1 in the right image. Each tile maintains its four intersection lists. 
+
+3 To render tile 𝑇 𝑁 in the right-eye image, we first need to identify which Gaussians intersect with this tile. Based on the triangulation, the intersected Gaussians can only come from four lists: 𝑇 𝑁 −3-𝑇 𝑁 , 𝑇 𝑁 −2-𝑇 𝑁 , 𝑇 𝑁 −1-𝑇 𝑁 , and 𝑇 𝑁 -𝑇 𝑁 .The complete intersection set for 𝑇 𝑁 is obtained by merging these four lists. Since each list is already sorted, we can skip re-sorting these four lists. Instead, we directly merge them and remove duplicate ones. This process is analogous to the merge phase of merge sort, but with four pre-sorted lists. 
+
+4 Once we obtain the complete and sorted intersection list for 𝑇 𝑁 , we can render tile 𝑇 𝑁 of the right-eye image following the same procedure as for the left-eye image. Since our pipeline integrates the same set of contributing Gaussians as the original pipeline, the rendering result is bit-accurate. 
+
+> Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 15 Gau. Sample 
+
+> >
+> ⍺-Check Color Accum. Skip?
+> Th .
+> Rendering Unit
+> Stereo Re-Proj.
+
+M 
+
+> Left? Merge Unit
+> DRAM
+> Projection, Culling& Conversion Volume Rendering Core Sorting Unit
+> Stereo Buffer TN-3-TN TN-2-TN TN-2-TN+1 TN-1-TN TN-TN TN-1-TN+2 TN-1-TN+1 TN-TN+1 TN-TN+2 TN-TN+3 TN+1-TN+4 TN+1-TN+3 TN+1-TN+2 TN+1-TN+1
+> R0 R1 R2 R3 GPU
+> Valid Data End of List Empty Obsolete Data
+> Legend
+> Fig. 13. The overview architecture design. We augmented the basic architecture, GSCore [46], to support stereo rasterization (colored in yellow).
+
+In this process, the Gaussians processed by the right-eye image have already passed the 𝛼 -check; thus, our stereo rasterization inherently avoids part of rasterization workload for right eyes and achieves 1.4 × speedup on mobile GPUs. 
+
+8 Architectural Support 
+
+Supporting stereo rasterization in Sec. 7 on existing 3DGS accelerators requires only minimal hardware augmentation. In this section, we use GSCore [46] as an example to illustrate the necessary modifications. Other architectures can adapt our technique in a similar fashion. 
+
+Overview. Fig. 13 illustrates the overall pipelined architecture of Atlas, which integrates a local GPU on the SoC with a GSCore-like accelerator [46]. In our design, the GPU executes LoD search and identifies the visible Gaussians at the appropriate level of detail. The runtime Gaussian management system then fetches the corresponding rendering attributes and streams them to the accelerator for the remaining rendering stages. The accelerator follows the GSCore pipeline, where the projection unit, sorting unit, and volume rendering core (VRC) are pipelined to render different tiles within a frame. We augment the VRC to support stereo rasterization, allowing the left- and right-eye views in VR to share computation and reduce redundant memory accesses. 
+
+Support for Stereo Rasterization. Fig. 13 highlights our modified components in colors. The basic VRC consists of 𝑀 rendering units (RUs). Each RU is responsible for rendering one pixel. For each Gaussian, its attributes are first broadcast to all RUs. Based on the result of the 𝛼 -check, each RU determines whether the Gaussian contributes to its pixel and, if so, blends it into the accumulated color. Meanwhile, all the results of the 𝛼 -check are forwarded to our augmented stereo re-projection unit (SRU). If any pixel within the tile integrates this Gaussian, then the SRU would re-project this Gaussian into the right-eye view. Based on the re-projected disparity, the SRU would write the Gaussian into the corresponding list in the stereo buffer. Our stereo buffer adopts the classic line buffer design from image processing [12, 35, 80, 84], as shown in Fig. 13. To avoid the bank conflicts, each row stores a single disparity category. For instance, row 𝑅 0 stores Gaussians whose disparity is greater than 3 tiles (i.e., 12 pixels) between the left and right eyes. Here, 𝑇 𝑁 −3-𝑇 𝑁 denotes the Gaussians from tile 𝑇 𝑁 −3 in the left image that would contribute to tile 𝑇 𝑁 in the right image. Each time, SRU writes a Gaussian to one of the rows based on the disparity result. Meanwhile, the merge unit sorts the current four lists for 𝑇 𝑁 in the right image, i.e., 𝑇 𝑁 −3-𝑇 𝑁 , 𝑇 𝑁 −2-𝑇 𝑁 , 𝑇 𝑁 −1-𝑇 𝑁 , and 𝑇 𝑁 -𝑇 𝑁 , by reading the head entries of the four rows and selecting the minimum. Each row is designed as a circular buffer to maximize utilization. 
+
+> Manuscript submitted to ACM
+
+16 He Zhu et al. 
+
+Pipelining. Similar to GSCore [46], our architectural design pipelines the three stages, preprocessing, sorting, and rasterization, and renders image tiles in row-major order. In our stereo rasterization, we sequentially render the corresponding tiles in the left-eye and right-eye images. Note that, right-eye tiles begin to render after left-eye tile rendering, starting from the fourth tile. The first three tiles in the right-eye images are rendered independently. 
+
+9 Experimental Setup 
+
+Hardware Implementation. We develop a RTL implementation of Atlas clocked at 1 GHz, where the basic config-uration is similar to GSCore [46]. Atlas consists of four projection units, four hierarchical sorting units, and eight VRCs. Each VRC consists of 4 × 4 rendering units and a 16 KB feature buffer. We augment each VRC with one stereo reprojection unit, one merge unit, and a 16 KB stereo buffer banked at 4 KB granularity. In addition, a 144 KB global double buffer is used to store the intermediate data of the pipeline. Our RTL design is implemented via Synopsys synthesis and Cadence layout tools in TSMC 16nm FinFET technology. SRAMs generated by an ARM memory compiler. Power is simulated using Synopsys PrimeTimePX, with fully annotated switching activity. The DRAM is modeled after 4 channels of Micron 16 Gb LPDDR3-1600 memory [37]. DRAM energy is calculated using Micron’s System Power Calculators based on the memory traffic [38]. The numbers of our RTL designs are then scaled down to 8 nm node using DeepScaleTool [74, 76] to match the mobile Ampere GPU on Nvidia Orin [65]. 
+
+Simulation Methodology. We simulate the entire system with our cycle-accurate simulator, which is implemented with component-level latencies and power measurements. The latency and energy of VRC are obtained from the post-synthesis results of its RTL design and scaled down to 8 nm node using DeepScaleTool [74, 76] to match the mobile Ampere GPU on Nvidia Orin [65]. The latency of GPU execution is measured, including kernel launch time. The GPU power consumption is obtained via the built-in power measurement on the Nvidia Orin SoC. The system energy is the sum of GPU, VRC, and DRAM. We then build a cycle-level simulator of the architecture with the latency of each component parameterized from measurements (for GPU) and post-synthesis results of the NPU design. 
+
+Area. Atlas introduces a minimal area overhead compared to the baseline architecture. The main overhead comes from additional 16 KB SRAM required for each VRC. Overall, the additional hardware introduces around 14% area overhead (0.25 mm 2), compared to GSCore (1.78 mm 2) in 16nm. 
+
+Software Setup. We evaluate on three large-scale datasets: Urban [55], Mega [79], and HierGS [41], as well as three small-scale datasets: T&T [43], DB [34], and M360 [3]. To assess the effectiveness of Atlas, we evaluate against three large-scale 3DGS algorithms: HierGS [41], CityGS [60], and OctreeGS [73]. The main difference of those algorithms is the LoD search. For rendering quality, we adopt two widely used metrics: peak signal-to-noise ratio (PSNR) and structural similarity index (SSIM). To mimic real VR scenarios, all stereo images are rendered at 2064 × 2208 resolution with a pupil baseline of 6 cm. 
+
+Software Baselines. To evaluate the quality of our stereo rasterization, we compare against three baselines: 
+
+• Base: the baseline algorithm that renders both eyes. 
+
+• Warp [8]: a widely-used warping technique which uses a classic densification to fill disocclusions. 
+
+• Cicero [25]: a state-of-the-art warping-based method, which uses neural rendering to fill disocclusions. Note that, both Warp and Cicero use the generated depth map from 3DGS [13] rather than the ground truth depth, which is not available in real-world scenarios. 
+
+Hardware Baselines. To evaluate the efficiency of our hardware design, we compare three hardware baselines: 
+
+• GPU: a mobile Ampere GPU on Nvidia Orin SoC [65]. 
+
+> Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 17 Urban Mega HierGS M360 DB T&T 20 22 24 26 28 30    
+
+> PSNR (dB)
+> Warp Cicero Atlas Base
+
+(a) PSNR evaluation. Urban Mega HierGS M360 DB T&T 0.5 0.6 0.7 0.8 0.9 1.0     
+
+> SSIM
+> Warp Cicero Atlas Base
+
+(b) SSIM evaluation. Fig. 14. Rendering quality evaluation on stereo warping. Large Scale Small Scale 
+
+Fig. 15. GPU speedup of the algorithmic optimizations in Atlas. All numbers are normalized to Base. Large Scale Small Scale 
+
+Fig. 16. Overall GPU memory footprint. Atlas reduces memory usage across all large-scale scenes. 
+
+• GSCore [46]: a dedicated accelerator for 3DGS. 
+
+• GBU [91]: a hardware module that accelerates rasterization while the remaining operations are executed on the same mobile GPU as GPU. For fairness, we implement 128 Row PEs in GBU to align with GSCore. We develop the RTL implementation of both GBU and GSCore. The numbers of both RTL designs are then scaled down to 8 nm node to match Nvidia Orin [65]. 
+
+10 Evaluation 10.1 Rendering Quality 
+
+Stereo Rendering. We first evaluate the end-to-end visual quality of stereo rendering, as shown in Fig. 14. Here, Base renders both eyes using HierGS [41], while both Warp and Cicero generate the right-eye view by warping the left-eye image. As expected, both Warp and Cicero introduce noticeable accuracy loss against Base. In contrast, Atlas delivers nearly identical quality to Base, with only a 0.1 dB PSNR loss. In terms of SSIM, Atlas shows no quality loss. Meanwhile, this minor accuracy loss is not introduced by our stereo rasterization, which is bit-accurate, but by the on-demand loading of our runtime Gaussian management and the LoD search performed once every 𝑤 frames, which may temporarily leave a few Gaussians unavailable. 
+
+10.2 GPU Performance 
+
+We first give the GPU performance comparison by rendering two eyes at 2064 × 2208 pixels per eye in VR. The performance comparison with our dedicated hardware support is shown in Sec. 10.3. 
+
+GPU Speedup. Fig. 15 shows the GPU-side speedup of the algorithmic optimizations in Atlas. 2 We evaluate four variants: Base, which executes the HierGS pipeline; Base+RGM, which additionally applies the runtime Gaussian 
+
+> 2The asterisk on HierGS indicates that some HierGS scenes are too large to be rendered by Base on the mobile GPU and are therefore excluded from the reported measurements. Manuscript submitted to ACM
+
+18 He Zhu et al. Large Scale Small Scale 
+
+Fig. 17. Hardware performance comparison. All numbers are nor-malized to GPU. “S”: speedup; “F”: frame per second. Large Scale Small Scale 
+
+Fig. 18. Hardware overall energy. Display power is excluded since it is constant across methods. Numbers are normalized to GPU. Urban Mega HierGS* 10 1
+
+> 10 0
+> 10 1
+> Speedup
+> OctreeGS CityGau. HierGS Atlas
+
+Fig. 19. Speedup on LoD search. Temporal-aware LoD search achieves better perfor-mance than prior methods [41, 60, 73]. 1.4x 
+
+> 1.9x
+> 1.7x
+
+Fig. 20. The speedup of Atlas against the baseline algorithm on the local device. Per-formance numbers are normalized to GPU. Base +RGM +RGM+TA Atlas 01234
+
+> Speedup
+
+0246
+
+> Energy Savings
+
+Fig. 21. Ablation study on Atlas. RGM: ap-ply runtime Gaussian management; TA: ap-ply temporal-aware LoD search; SR: apply stereo rasterization. Atlas applies all three. 
+
+management (Sec. 6); Base+RGM+TA, which further applies the temporal-aware LoD search (Sec. 5); and Atlas, which applies all optimizations. All numbers are normalized to the Base latency. Overall, Atlas achieves the highest GPU-side speedup, up to 2.1 ×, compared to Base. 
+
+Memory Footprint. Fig. 16 compares the GPU memory footprint across the four variants of Atlas. With the runtime Gaussian management mechanism, Atlas reduces the footprint by up to 7.0 × compared to Base on large-scale scenes. This keeps the memory demand of all large-scale scenes below 12 GB, the capacity of mainstream VR devices. The reduction is most pronounced on the HierGS [41] dataset, whose street-level viewpoints activate far fewer spatial blocks than the aerial viewpoints of Urban [55] and Mega [79]. Note that, the GPU implementation of the stereo rasterization requires additional GPU memory, but the extra footprint is modest. 
+
+10.3 Accelerator Performance and Energy 
+
+Speedup. Fig. 17 presents the overall performance comparison. All variants execute HierGS [41] since it has the best LoD search performance in Fig. 19. Except for Atlas, which uses the stereo rasterization in Sec. 7, all other methods render the left and right eyes in two separate passes. We report the motion-to-photon latency, normalized to the GPU baseline. On average, Atlas achieves the highest speedup, 18.5 ×, compared to GPU. Meanwhile, we also show the frame rate of different methods. Here, we assume rendering and data communication can be pipelined, similar to prior work [87]. Overall, Atlas achieves 70.9 FPS. While Atlas does not achieve the VR requirement, 90 FPS, Sec. 10.5 shows that Atlas can easily achieve 90 FPS by scaling up VRC. 
+
+Energy Savings. Fig. 18 shows the overall energy savings against GPU. Among all methods, Atlas delivers the best efficiency, achieving 1.5 × and 13.1 × lower energy on average compared to GSCore and GPU, respectively. 
+
+> Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 19      
+
+> Fig. 22. The scalability of performance and area to the number of rendering unit in VRC. Atlas can easily achieve 90 FPS by scaling up. 124816 32
+
+Frame Interval        
+
+> 0510 15
+> Latency (ms)  Urban Mega HierGS
+> Fig. 23. The sensitivity of the average per-frame data-transfer latency to the frame in-terval, 𝑤 , under three large-scale datasets. 124816
+
+Tile Size 1.0 1.2 1.4 1.6 1.8 2.0 Speedup 
+
+> Fig. 24. The sensitivity of performance to the tile size.
+
+LoD Search. Fig. 19 shows the performance comparison of different algorithms on LoD search. As in Sec. 10.2, the asterisk on HierGS indicates that scenes too large for the mobile GPU baseline are excluded. The original LoD search in OctreeGS [73] is used as the baseline, and we compare CityGau [60] and HierGS [41]. Atlas achieves much higher speedup (up to 8.1 ×) than other methods by exploiting temporal similarity to eliminate redundant node accesses. 
+
+Local Rendering. Fig. 20 shows the speedup of our stereo rasterization on local rendering (including preprocessing, sorting, and rasterization) over six datasets. Across all architectural designs, Atlas consistently delivers 1.4 ×, 1.9 ×, and 1.7 × speedups on GPU, GBU, and GSCore, respectively. 
+
+10.4 Ablation Study 
+
+Fig. 21 shows the ablation study of the contributions in Atlas. Base executes the HierGS algorithm on our architecture. We show the speedup (left y-axis) and energy savings (right y-axis) under: 1) Base with only our runtime Gaussian management (RGM), 2) Base with RGM and temporal-aware LoD search (TA), 3) Base with all optimizations. RGM alone achieves 1.3 × speedup and 1.3 × energy savings, as on-demand loading confines LoD search to the active blocks instead of the entire scene, reducing the LoD search overhead. Adding TA achieves 2.9 × speedup and 3.4 × energy savings since LoD search dominates the end-to-end latency of large-scale scenes and TA eliminates most redundant tree accesses by exploiting temporal similarity. All together, Atlas achieves 3.9 × speedup and 4.7 × energy savings. 
+
+10.5 Sensitivity Study 
+
+RU Scalability. We demonstrate that Atlas can readily meet VR frame rate requirements by scaling the rendering units (RUs) in the VRC. Fig. 22 shows the performance trend by averaging the results from three large-scale datasets [41, 55, 79]. We show that doubling the RUs from 128 to 256 in the default VRC configuration enables our architecture to achieve real-time VR performance. However, increasing from 128 to 256 RUs increases the area by 62.9%. 
+
+Frame Interval, 𝑤 . Fig. 23 shows the sensitivity of the average per-frame data-transfer latency to 𝑤 under three large-scale datasets. As 𝑤 increases, the average per-frame data-transfer latency decreases monotonically, since the on-demand loading of Gaussian attributes is amortized over more frames. Moving from 𝑤 = 1 to 𝑤 = 4 already reduces the latency by 2.5–3.0 ×, confirming that most Gaussians selected by LoD search are reused across adjacent frames. We choose 𝑤 = 4 as the default as it is enough to hide the rendering and data-transfer latency, yet remains the visual inconsistency between consecutive frames. 
+
+> Manuscript submitted to ACM
+
+20 He Zhu et al. 
+
+Tile Size. Lastly, Fig. 24 shows the sensitivity of rendering performance to the tile size using HierGS dataset [41]. The speedup is normalized to the corresponding baseline with the same tile size. We observe that the speedup decreases modestly as the tile size decreases. With smaller tiles, a Gaussian’s projected footprint spans more tiles, so the same Gaussian is inserted into and merged from more per-tile lists in stereo rasterization, which adds redundant overhead. 
+
+11 Related Work 
+
+3DGS Acceleration. Recent studies propose various 3DGS architectures [15, 22, 32, 36, 45, 46, 48, 50, 52, 56, 58, 69, 90, 91, 93, 98]. A few studies [22, 45, 46, 56, 91] are designed for the acceleration of the forward pass in 3DGS. For instance, MetaSapiens [56] and GBU [91] address the workload imbalance during rasterization. Lumina [22] proposes a caching technique to avoid redundant computation. Some propose solutions for 3DGS training [15, 32]. For example, ARC [15] addresses the atomic operations in training while GSArch [32] prunes redundant gradient updates. In principle, Atlas is orthogonal to those works and can be applied to any existing 3DGS acceleration framework to support large-scale 3DGS rendering. 
+
+Collaborative Rendering. There are a few cloud-client collaborative rendering methods [9, 25, 33, 39, 47, 87, 88, 95] in literature. However, all current techniques are designed for mesh-based rasterization pipelines, not for 3DGS. For instance, Cicero [25] and CollabVR [39] offload all rendering tasks to the cloud and only perform lightweight warping at the client side to accommodate disocclusions or stereo display. Both E-VR [47] and DejaView [95] focus on 360 video streaming. Both leverage the unique features in 360 videos, e.g., the spatio-temporal redundancies or the user’s field of view, to reduce the reprojection overhead and network traffic. Meanwhile, both Q-VR [87] and EDC [88] incorporate foveated rendering to reduce the on-device workload. However, all these methods continue to face bandwidth limitations when targeting higher FPS/resolution. More importantly, they partition the workload at the pixel level, which is incompatible with 3DGS since clients still require compute-intensive LoD search to filter Gaussians. We propose Atlas, a novel cloud-client co-design framework tailored for 3DGS and substantially reduce the on-device workload while minimizing the network traffic. 
+
+Warping Techniques. Image warping [8, 78] is a lightweight technique for synthesizing novel views in conven-tional image-based rendering [10, 11]. It exploits spatial and temporal correlations across frames to avoid redundant computations [7, 19, 21, 24, 28, 63, 92, 94–96, 99]. Atlas also leverages both those similarities, but unlike prior work, Atlas achieves bit-accurate rendering while delivering speedup. 
+
+12 Conclusion 
+
+Human imagination is boundless, and so too should be virtual 3D Gaussian worlds. Atlas marks the first step toward real-time, infinite-scale 3DGS splatting in VR. By offloading the majority of Gaussians to the disk storage, we introduce a rendering framework that alleviates communication bottlenecks and a novel stereo rasterization pipeline that eliminates redundancy in VR stereo rendering. 
+
+References        
+
+> [1] Tomas Akenine-Moller, Eric Haines, and Naty Hoffman. 2019. Real-time rendering . AK Peters/crc Press. [2] Andrew W Appel. 1989. Simple generational garbage collection and fast allocation. Software: Practice and experience 19, 2 (1989), 171–183. [3] Jonathan T. Barron, Ben Mildenhall, Dor Verbin, Pratul P. Srinivasan, and Peter Hedman. 2022. Mip-NeRF 360: Unbounded Anti-Aliased Neural Radiance Fields. CVPR (2022). [4] Rory Brown. 2024. HTC Vive Focus Vision Spec. https://vr-compare.com/headset/htcvivefocusvision [5] Rory Brown. 2024. Meta Quest 3 specs. https://vr-compare.com/headset/metaquest3 Manuscript submitted to ACM
+
+Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 21 
+
+[6] Rory Brown. 2024. Meta Quest Pro specs. https://vr-compare.com/headset/metaquestpro [7] Mark Buckler, Philip Bedoukian, Suren Jayasuriya, and Adrian Sampson. 2018. EVA 2: Exploiting temporal redundancy in live computer vision. In 
+
+2018 ACM/IEEE 45th Annual International Symposium on Computer Architecture (ISCA) . IEEE, 533–546. [8] Gaurav Chaurasia, Arthur Nieuwoudt, Alexandru-Eugen Ichim, Richard Szeliski, and Alexander Sorkine-Hornung. 2020. Passthrough+ real-time stereoscopic view synthesis for mobile mixed reality. Proceedings of the ACM on Computer Graphics and Interactive Techniques 3, 1 (2020), 1–17. [9] Runzhe Chen, Guandong Lu, Yakai Wang, Rui Zhang, Zheng Hu, Yanming Miao, Zhifang Cai, Jingwen Leng, and Minyi Guo. 2025. BAFT: bubble-aware fault-tolerant framework for distributed DNN training with hybrid parallelism. Frontiers of Computer Science 19, 1 (2025), 191102. [10] Shenchang Eric Chen. 1995. Quicktime VR: An image-based approach to virtual environment navigation. In Proceedings of the 22nd annual conference on Computer graphics and interactive techniques . 29–38. [11] Shenchang Eric Chen and Lance Williams. 2023. View interpolation for image synthesis. In Seminal Graphics Papers: Pushing the Boundaries, Volume 2 . 423–432. [12] Yuze Chi, Jason Cong, Peng Wei, and Peipei Zhou. 2018. SODA: Stencil with optimized dataflow architecture. In 2018 IEEE/ACM International Conference on Computer-Aided Design (ICCAD) . IEEE, 1–8. [13] Jaeyoung Chung, Jeongtaek Oh, and Kyoung Mu Lee. 2024. Depth-regularized optimization for 3d gaussian splatting in few-shot images. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition . 811–820. [14] Yangdong Deng, Yufei Ni, Zonghui Li, Shuai Mu, and Wenjun Zhang. 2017. Toward real-time ray tracing: A survey on hardware acceleration and microarchitecture techniques. ACM Computing Surveys (CSUR) 50, 4 (2017), 1–41. [15] Sankeerth Durvasula, Adrian Zhao, Fan Chen, Ruofan Liang, Pawan Kumar Sanjaya, Yushi Guan, Christina Giannoula, and Nandita Vijaykumar. 2025. ARC: Warp-level Adaptive Atomic Reduction in GPUs to Accelerate Differentiable Rendering. In Proceedings of the 30th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 1 . 64–83. [16] Zhiwen Fan, Kevin Wang, Kairun Wen, Zehao Zhu, Dejia Xu, and Zhangyang Wang. 2024. LightGaussian: Unbounded 3D Gaussian Compression with 15x Reduction and 200+ FPS. In Advances in Neural Information Processing Systems .[17] Guangchi Fang and Bing Wang. 2024. Mini-Splatting: Representing Scenes with a Constrained Number of Gaussians. arXiv preprint arXiv:2403.14166 
+
+(2024). [18] Guofeng Feng, Siyan Chen, Rong Fu, Zimu Liao, Yi Wang, Tao Liu, Zhilin Pei, Hengjie Li, Xingcheng Zhang, and Bo Dai. 2024. Flashgs: Efficient 3d gaussian splatting for large-scale and high-resolution rendering. arXiv preprint arXiv:2408.07967 (2024). [19] Yu Feng, Nathan Goulding-Hotta, Asif Khan, Hans Reyserhove, and Yuhao Zhu. 2022. Real-time gaze tracking with event-driven eye segmentation. In 2022 IEEE Conference on Virtual Reality and 3D User Interfaces (VR) . IEEE, 399–408. [20] Yu Feng, Gunnar Hammonds, Yiming Gan, and Yuhao Zhu. 2022. Crescent: taming memory irregularities for accelerating deep point cloud analytics. In Proceedings of the 49th Annual International Symposium on Computer Architecture . 962–977. [21] Yu Feng, Patrick Hansen, Paul N Whatmough, Guoyu Lu, and Yuhao Zhu. 2023. Fast and accurate: Video enhancement using sparse depth. In 
+
+Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision . 4492–4500. [22] Yu Feng, Weikai Lin, Yuge Cheng, Zihan Liu, Jingwen Leng, Minyi Guo, Chen Chen, Shixuan Sun, and Yuhao Zhu. 2025. Lumina: Real-Time Mobile Neural Rendering by Exploiting Computational Redundancy. arXiv preprint arXiv:2506.05682 (2025). [23] Yu Feng, Weikai Lin, Zihan Liu, Jingwen Leng, Minyi Guo, Han Zhao, Xiaofeng Hou, Jieru Zhao, and Yuhao Zhu. 2024. Potamoi: Accelerating neural rendering via a unified streaming architecture. ACM Transactions on Architecture and Code Optimization 21, 4 (2024), 1–25. [24] Yu Feng, Shaoshan Liu, and Yuhao Zhu. 2020. Real-time spatio-temporal lidar point cloud compression. In 2020 IEEE/RSJ international conference on intelligent robots and systems (IROS) . IEEE, 10766–10773. [25] Yu Feng, Zihan Liu, Jingwen Leng, Minyi Guo, and Yuhao Zhu. 2024. Cicero: Addressing Algorithmic and Architectural Bottlenecks in Neural Rendering by Radiance Warping and Memory Optimizations. In Proceedings of the 50th Annual International Symposium on Computer Architecture .[26] Yu Feng, Zheng Liu, Weikai Lin, Zihan Liu, Jingwen Leng, Minyi Guo, Zhezhi He, Jieru Zhao, and Yuhao Zhu. 2025. StreamGrid: Streaming Point Cloud Analytics via Compulsory Splitting and Deterministic Termination. In Proceedings of the 30th ACM International Conference on Architectural Support for Programming Languages and Operating Systems .[27] Yu Feng, Boyuan Tian, Tiancheng Xu, Paul Whatmough, and Yuhao Zhu. 2020. Mesorasi: Architecture support for point cloud analytics via delayed-aggregation. In 2020 53rd Annual IEEE/ACM International Symposium on Microarchitecture (MICRO) . IEEE, 1037–1050. [28] Yu Feng, Paul Whatmough, and Yuhao Zhu. 2019. Asv: Accelerated stereo vision system. In Proceedings of the 52nd Annual IEEE/ACM International Symposium on Microarchitecture . 643–656. [29] Yonggan Fu, Zhifan Ye, Jiayi Yuan, Shunyao Zhang, Sixu Li, Haoran You, and Yingyan Lin. 2023. Gen-NeRF: Efficient and Generalizable Neural Radiance Fields via Algorithm-Hardware Co-Design. In Proceedings of the 50th Annual International Symposium on Computer Architecture . 1–12. [30] Hao Gui, Lin Hu, Rui Chen, Mingxiao Huang, Yuxin Yin, Jin Yang, and Yong Wu. 2024. Balanced 3DGS: Gaussian-wise Parallelism Rendering with Fine-Grained Tiling. arXiv preprint arXiv:2412.17378 (2024). [31] Richard Hartley and Andrew Zisserman. 2003. Multiple view geometry in computer vision . Cambridge university press. [32] Houshu He, Gang Li, Fangxin Liu, Li Jiang, Xiaoyao Liang, and Zhuoran Song. 2025. GSArch: Breaking Memory Barriers in 3D Gaussian Splatting Training via Architectural Support. In 2025 IEEE International Symposium on High Performance Computer Architecture (HPCA) . IEEE, 366–379. [33] Zhenyi He, Ruofei Du, and Ken Perlin. 2020. Collabovr: A reconfigurable framework for creative collaboration in virtual reality. In 2020 IEEE International Symposium on Mixed and Augmented Reality (ISMAR) . IEEE, 542–554. Manuscript submitted to ACM 22 He Zhu et al. 
+
+[34] Peter Hedman, Julien Philip, True Price, Jan-Michael Frahm, George Drettakis, and Gabriel Brostow. 2018. Deep blending for free-viewpoint image-based rendering. ACM Transactions on Graphics (ToG) 37, 6 (2018), 1–15. [35] James Hegarty, John S Brunhaver, Zachary DeVito, Jonathan Ragan-Kelley, Noy Cohen, Steven Bell, Artem Vasilyev, Mark Horowitz, and Pat Hanrahan. 2014. Darkroom: compiling high-level image processing code into hardware pipelines. ACM Trans. Graph. 33, 4 (2014), 144–1. [36] Xiaotong Huang, He Zhu, Tianrui Ma, Yuxiang Xiong, Fangxin Liu, Zhezhi He, Yiming Gan, Zihan Liu, Jingwen Leng, Yu Feng, and Minyi Guo. 2026. Splatonic: Architectural Support for 3D Gaussian Splatting SLAM via Sparse Processing. In Proceedings of the 32nd IEEE International Symposium on High Performance Computer Architecture .[37] Micron Technology Inc. 2017. Micron 178-Ball, Single-Channel Mobile LPDDR3 SDRAM Features. https://files.pine64.org/doc/rock64/SPECTEK_ 178B_32GB_V91M_MOBILE_LPDDR3.pdf. [38] Micron Technology Inc. 2025. Micron System Power Calculators. https://www.micron.com/support/tools-and-utilities/power-calc. [39] Zhihui Ke, Xiaobo Zhou, Dadong Jiang, Hao Yan, and Tie Qiu. 2023. CollabVr: Reprojection-based edge-client collaborative rendering for real-time high-quality mobile virtual reality. In 2023 IEEE Real-Time Systems Symposium (RTSS) . IEEE, 304–316. [40] Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, and George Drettakis. 2023. 3d gaussian splatting for real-time radiance field rendering. 
+
+ACM Transactions on Graphics 42, 4 (2023), 1–14. [41] Bernhard Kerbl, Andreas Meuleman, Georgios Kopanas, Michael Wimmer, Alexandre Lanvin, and George Drettakis. 2024. A hierarchical 3d gaussian representation for real-time rendering of very large datasets. ACM Transactions on Graphics (TOG) 43, 4 (2024), 1–15. [42] Mark J Kilgard. 2000. A practical and robust bump-mapping technique for today’s GPUs. In Game Developers Conference 2000 . 1–39. [43] Arno Knapitsch, Jaesik Park, Qian-Yi Zhou, and Vladlen Koltun. 2017. Tanks and Temples: Benchmarking Large-Scale Scene Reconstruction. ACM Transactions on Graphics 36, 4 (2017). [44] Junseo Lee, Kwanseok Choi, Jungi Lee, Seokwon Lee, Joonho Whangbo, and Jaewoong Sim. 2023. NeuRex: A Case for Neural Rendering Acceleration. In Proceedings of the 50th Annual International Symposium on Computer Architecture . 1–13. [45] Junseo Lee, Jaisung Kim, Junyong Park, and Jaewoong Sim. 2025. VR-Pipe: Streamlining Hardware Graphics Pipeline for Volume Rendering. In 
+
+2025 IEEE International Symposium on High Performance Computer Architecture (HPCA) . IEEE, 217–230. [46] Junseo Lee, Seokwon Lee, Jungi Lee, Junyong Park, and Jaewoong Sim. 2024. Gscore: Efficient radiance field rendering via architectural support for 3d gaussian splatting. In Proceedings of the 29th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 3 . 497–511. [47] Yue Leng, Chi-Chun Chen, Qiuyue Sun, Jian Huang, and Yuhao Zhu. 2019. Energy-efficient video processing for virtual reality. In Proceedings of the 46th International Symposium on Computer Architecture . 91–103. [48] Chaojian Li, Sixu Li, Linrui Jiang, Jingqun Zhang, and Yingyan Celine Lin. 2025. Uni-Render: A Unified Accelerator for Real-Time Rendering Across Diverse Neural Renderers. In 2025 IEEE International Symposium on High Performance Computer Architecture (HPCA) . IEEE, 246–260. [49] Chaojian Li, Sixu Li, Yang Zhao, Wenbo Zhu, and Yingyan Lin. 2022. RT-NeRF: Real-Time On-Device Neural Radiance Fields Towards Immersive AR/VR Rendering. In Proceedings of the 41st IEEE/ACM International Conference on Computer-Aided Design . 1–9. [50] Haomin Li, Yue Liang, Fangxin Liu, Bowen Zhu, Zongwu Wang, Yu Feng, Liqiang Lu, Li Jiang, and Haibing Guan. 2026. ORANGE: Exploring Ockham’s Razor for Neural Rendering by Accelerating 3DGS on NPUs with GEMM-Friendly Blending and Balanced Workloads. In 2026 IEEE International Symposium on High Performance Computer Architecture (HPCA) . IEEE, 1–15. [51] Sixu Li, Chaojian Li, Wenbo Zhu, Boyang Yu, Yang Zhao, Cheng Wan, Haoran You, Huihong Shi, and Yingyan Lin. 2023. Instant-3D: Instant Neural Radiance Field Training Towards On-Device AR/VR 3D Reconstruction. In Proceedings of the 50th Annual International Symposium on Computer Architecture . 1–13. [52] Xingyang Li, Jie Jiang, Yu Feng, Yiming Gan, Jieru Zhao, Zihan Liu, Jingwen Leng, and Minyi Guo. 2025. SLTarch: Towards Scalable Point-Based Neural Rendering by Taming Workload Imbalance and Memory Irregularity. In 2025 IEEE/ACM International Conference on Computer Aided Design (ICCAD) . IEEE, 1–9. [53] Yixuan Li, Lihan Jiang, Linning Xu, Yuanbo Xiangli, Zhenzhi Wang, Dahua Lin, and Bo Dai. 2023. Matrixcity: A large-scale city dataset for city-scale neural rendering and beyond. In Proceedings of the IEEE/CVF International Conference on Computer Vision . 3205–3215. [54] Henry Lieberman and Carl Hewitt. 1983. A real-time garbage collector based on the lifetimes of objects. Commun. ACM 26, 6 (1983), 419–429. [55] Liqiang Lin, Yilin Liu, Yue Hu, Xingguang Yan, Ke Xie, and Hui Huang. 2022. Capturing, reconstructing, and simulating: the urbanscene3d dataset. In European Conference on Computer Vision . Springer, 93–109. [56] Weikai Lin, Yu Feng, and Yuhao Zhu. 2025. Metasapiens: Real-time neural rendering with efficiency-aware pruning and accelerated foveated rendering. In Proceedings of the 30th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 1 . 669–682. [57] Fangxin Liu, Haomin Li, Bowen Zhu, Zongwu Wang, Zhuoran Song, Haibing Guan, and Li Jiang. 2025. ASDR: Exploiting Adaptive Sampling and Data Reuse for CIM-based Instant Neural Rendering. In Proceedings of the 30th ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 3 (Rotterdam, Netherlands) (ASPLOS ’25) . Association for Computing Machinery, New York, NY, USA, 18–33. doi:10.1145/3676642.3736117 [58] Jingyu Liu, Shi Chen, and Li Shen. 2025. A comprehensive survey on graph neural network accelerators. Frontiers of Computer Science 19, 2 (2025), 192104. Manuscript submitted to ACM Atlas : Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR 23 
+
+[59] Tianbo Liu, Xinkai Song, Zhifei Yue, Rui Wen, Xing Hu, Zhuoran Song, Yuanbo Wen, Yifan Hao, Wei Li, Zidong Du, et al. 2025. Cambricon-SR: An Accelerator for Neural Scene Representation with Sparse Encoding Table. In Proceedings of the 52nd Annual International Symposium on Computer Architecture . 1254–1268. [60] Yang Liu, Chuanchen Luo, Lue Fan, Naiyan Wang, Junran Peng, and Zhaoxiang Zhang. 2024. Citygaussian: Real-time high-quality large-scale scene rendering with gaussians. In European Conference on Computer Vision . Springer, 265–282. [61] Saswat Subhajyoti Mallick, Rahul Goel, Bernhard Kerbl, Markus Steinberger, Francisco Vicente Carrasco, and Fernando De La Torre. 2024. Taming 3dgs: High-quality radiance fields with limited resources. In SIGGRAPH Asia 2024 Conference Papers . 1–11. [62] Jiayi Meng, Sibendu Paul, and Y Charlie Hu. 2020. Coterie: Exploiting frame similarity to enable high-quality multiplayer vr on commodity mobile devices. In Proceedings of the Twenty-Fifth International Conference on Architectural Support for Programming Languages and Operating Systems .923–937. [63] Wenxuan Miao, Haosong Liu, Weiming Hu, Zihan Liu, Aiyue Chen, Jianlin Yu, Yiwu Yao, Yiming Gan, Jieru Zhao, Jingwen Leng, et al. 2026. Kaleido: Algorithm-Hardware Co-Design for Video Diffusion Transformers by Exploiting Latent Space Correlations. arXiv preprint arXiv:2607.13770 (2026). [64] Muhammad Husnain Mubarik, Ramakrishna Kanungo, Tobias Zirr, and Rakesh Kumar. 2023. Hardware Acceleration of Neural Graphics. In 
+
+Proceedings of the 50th Annual International Symposium on Computer Architecture . 1–12. [65] Nvidia. 2023. Jetson Orin for Next-Gen Robotics. https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/ [66] Changhun Oh, Seongryong Oh, Jinwoo Hwang, Yoonsung Kim, Hardik Sharma, and Jongse Park. 2026. Neo: Real-Time On-Device 3D Gaussian Splatting with Reuse-and-Update Sorting Acceleration. In Proceedings of the 31st ACM International Conference on Architectural Support for Programming Languages and Operating Systems, Volume 2 (USA) (ASPLOS ’26) . Association for Computing Machinery, New York, NY, USA, 1268–1284. doi:10.1145/3779212.3790192 [67] Jacopo Pantaleoni and David Luebke. 2010. HLBVH: Hierarchical LBVH construction for real-time ray tracing of dynamic geometry. In Proceedings of the Conference on High Performance Graphics . 87–95. [68] Minnan Pei, Gang Li, Junwen Si, Zeyu Zhu, Zitao Mo, Peisong Wang, Zhuoran Song, Xiaoyao Liang, and Jian Cheng. 2025. GCC: A 3DGS Inference Architecture with Gaussian-Wise and Cross-Stage Conditional Processing. In 2025 58th IEEE/ACM International Symposium on Microarchitecture (MICRO) . 1824–1837. doi:10.1145/3725843.3756072 [69] Minnan Pei, Gang Li, Zeyu Zhu, Siting Wang, Junwen Si, Zhuoran Song, Yu Feng, Fangxin Liu, Xiaoyao Liang, and Jian Cheng. 2026. DeGS: A Scalable 3DGS Architecture via Decoupled Workload Parsing and Reorganization. arXiv preprint arXiv:2608.02099 (2026). [70] Matt Pharr, Wenzel Jakob, and Greg Humphreys. 2023. Physically based rendering: From theory to implementation . MIT Press. [71] Reid Pinkham, Shuqing Zeng, and Zhengya Zhang. 2020. Quicknn: Memory and performance optimization of kd tree based nearest neighbor search for 3d point clouds. In 2020 IEEE International symposium on high performance computer architecture (HPCA) . IEEE, 180–192. [72] Chaolin Rao, Huangjie Yu, Haochuan Wan, Jindong Zhou, Yueyang Zheng, Minye Wu, Yu Ma, Anpei Chen, Binzhe Yuan, Pingqiang Zhou, et al. 2022. ICARUS: A Specialized Architecture for Neural Radiance Fields Rendering. ACM Transactions on Graphics (TOG) 41, 6 (2022), 1–14. [73] Kerui Ren, Lihan Jiang, Tao Lu, Mulin Yu, Linning Xu, Zhangkai Ni, and Bo Dai. 2024. Octree-gs: Towards consistent real-time rendering with lod-structured 3d gaussians. arXiv preprint arXiv:2403.17898 (2024). [74] Satyabrata Sarangi and Bevan Baas. 2021. DeepScaleTool: A tool for the accurate estimation of technology scaling in the deep-submicron era. In 
+
+2021 IEEE International Symposium on Circuits and Systems (ISCAS) . IEEE, 1–5. [75] Zhuoran Song, Houshu He, Fangxin Liu, Yifan Hao, Xinkai Song, Li Jiang, and Xiaoyao Liang. 2024. SRender: Boosting Neural Radiance Field Efficiency via Sensitivity-Aware Dynamic Precision Rendering. In 2024 57th IEEE/ACM International Symposium on Microarchitecture (MICRO) .IEEE, 525–537. [76] Aaron Stillmaker and Bevan Baas. 2017. Scaling equations for the accurate prediction of CMOS device performance from 180 nm to 7 nm. Integration 
+
+58 (2017), 74–81. [77] Richard Szeliski. 2010. Computer vision: algorithms and applications . Springer Science & Business Media. [78] Richard Szeliski. 2022. Chapter 14 Image-based Rendering. In Computer vision: algorithms and applications . Springer Nature. [79] Haithem Turki, Deva Ramanan, and Mahadev Satyanarayanan. 2022. Mega-nerf: Scalable construction of large-scale nerfs for virtual fly-throughs. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition . 12922–12931. [80] Nisarg Ujjainkar, Jingwen Leng, and Yuhao Zhu. 2023. ImaGen: A general framework for generating memory-and power-efficient image processing accelerators. In Proceedings of the 50th Annual International Symposium on Computer Architecture . 1–13. [81] Francesco Vona, Julia Schorlemmer, Michael Stern, Navid Ashrafi, Maurizio Vergari, Tanja Kojic, and Jan-Niklas Voigt-Antons. 2025. Comparing Pass-Through Quality of Mixed Reality Devices: A User Experience Study During Real-World Tasks. In 2025 IEEE Conference on Virtual Reality and 3D User Interfaces Abstracts and Workshops (VRW) . IEEE, 1432–1433. [82] Xinzhe Wang, Ran Yi, and Lizhuang Ma. 2024. AdR-Gaussian: Accelerating Gaussian Splatting with Adaptive Radius. In SIGGRAPH Asia 2024 Conference Papers . 1–10. [83] Yu Wen, Chenhao Xie, Shuaiwen Leon Song, and Xin Fu. 2023. Post0-vr: Enabling universal realistic rendering for modern vr via exploiting architectural similarity and data sharing. In 2023 IEEE International Symposium on High-Performance Computer Architecture (HPCA) . IEEE, 390–402. [84] Paul N Whatmough, Chuteng Zhou, Patrick Hansen, Shreyas Kolala Venkataramanaiah, Jae-sun Seo, and Matthew Mattina. 2019. FixyNN: Efficient hardware for mobile computer vision via transfer learning. arXiv preprint arXiv:1902.11128 (2019). Manuscript submitted to ACM 24 He Zhu et al. 
+
+[85] Yongchang Wu, Zipeng Qi, Zhenwei Shi, and Zhengxia Zou. 2025. BlockGaussian: Efficient Large-Scale Scene Novel View Synthesis via Adaptive Block-Based Gaussian Splatting. arXiv preprint arXiv:2504.09048 (2025). [86] Mike Wuerthele. 2024. Apple Vision Pro screen refresh rate is up to 100Hz. https://appleinsider.com/articles/24/01/19/apple-vision-pro-rate-is-up-to-100hz-it-has-bluetooth-53-and-more-technical-details [87] Chenhao Xie, Xie Li, Yang Hu, Huwan Peng, Michael Taylor, and Shuaiwen Leon Song. 2021. Q-vr: system-level design for future mobile collaborative virtual reality. In Proceedings of the 26th ACM International Conference on Architectural Support for Programming Languages and Operating Systems . 587–599. [88] Caolu Xu, Zhiyong Chen, Meixia Tao, and Wenjun Zhang. 2023. Edge-device collaborative rendering for wireless multi-user interactive virtual reality in metaverse. In GLOBECOM 2023-2023 IEEE Global Communications Conference . IEEE, 3542–3547. [89] Tiancheng Xu, Boyuan Tian, and Yuhao Zhu. 2019. Tigris: Architecture and algorithms for 3d perception in point clouds. In Proceedings of the 52nd Annual IEEE/ACM International Symposium on Microarchitecture . 629–642. [90] Yukun Xu, Keyang Ye, Tianjia Shao, and Yanlin Weng. 2025. Animatable 3D Gaussians for modeling dynamic humans. Frontiers of Computer Science 19, 9 (2025), 199704. [91] Zhifan Ye, Yonggan Fu, Jingqun Zhang, Leshu Li, Yongan Zhang, Sixu Li, Cheng Wan, Chenxi Wan, Chaojian Li, Sreemanth Prathipati, et al. 2025. Gaussian Blending Unit: An Edge GPU Plug-in for Real-Time Gaussian-Based Rendering in AR/VR. In 2025 IEEE International Symposium on High Performance Computer Architecture (HPCA) . IEEE, 353–365. [92] Ziyu Ying, Shulin Zhao, Haibo Zhang, Cyan Subhra Mishra, Sandeepa Bhuyan, Mahmut T Kandemir, Anand Sivasubramaniam, and Chita R Das. 2022. Exploiting Frame Similarity for Efficient Inference on Edge Devices. In 2022 IEEE 42nd International Conference on Distributed Computing Systems (ICDCS) . IEEE, 1073–1084. [93] Chenqi Zhang, Yu Feng, Jieru Zhao, Guangda Liu, Wenchao Ding, Chentao Wu, and Minyi Guo. 2025. StreamingGS: Voxel-Based Streaming 3D Gaussian Splatting with Memory Optimization and Architectural Support. In 62nd ACM/IEEE Design Automation Conference (DAC) . IEEE, 1–9. [94] Chi Zhang, Jieru Zhao, Yu Feng, Chen Zhang, Quan Chen, and Minyi Guo. 2026. DSTAR: Accelerating Diffusion Transformers via Spatial and Temporal Redundancy Reduction. arXiv preprint arXiv:2607.15846 (2026). [95] Shulin Zhao, Haibo Zhang, Sandeepa Bhuyan, Cyan Subhra Mishra, Ziyu Ying, Mahmut T Kandemir, Anand Sivasubramaniam, and Chita R Das. 2020. Déja view: Spatio-temporal compute reuse for ‘energy-efficient 360 vr video streaming. In 2020 ACM/IEEE 47th Annual International Symposium on Computer Architecture (ISCA) . IEEE, 241–253. [96] Shulin Zhao, Haibo Zhang, Cyan Subhra Mishra, Sandeepa Bhuyan, Ziyu Ying, Mahmut Taylan Kandemir, Anand Sivasubramaniam, and Chita Das. 2021. Holoar: On-the-fly optimization of 3d holographic processing for augmented reality. In MICRO-54: 54th Annual IEEE/ACM International Symposium on Microarchitecture . 494–506. [97] He Zhu, Xiaotong Huang, Zihan Liu, Weikai Lin, Xiaohong Liu, Zhezhi He, Jingwen Leng, Minyi Guo, and Yu Feng. 2026. SEELE: A Unified Acceleration Framework for Real-Time Gaussian Splatting on Mobile Devices. In Proceedings of the Computer Vision and Pattern Recognition Conference .[98] He Zhu, Zheng Liu, Xingyang Li, Anbang Wu, Jieru Zhao, Fangxin Liu, Yiming Gan, Jingwen Leng, and Yu Feng. 2026. Nebula: Infinite-Scale 3D Gaussian Splatting in VR via Collaborative Rendering and Accelerated Stereo Rasterization (ASPLOS ’26) . Association for Computing Machinery, New York, NY, USA, 1235–1250. doi:10.1145/3779212.3790190 [99] Yuhao Zhu, Anand Samajdar, Matthew Mattina, and Paul Whatmough. 2018. Euphrates: Algorithm-soc co-design for low-power mobile continuous vision. arXiv preprint arXiv:1803.11232 (2018). [100] Matthias Zwicker, Hanspeter Pfister, Jeroen Van Baar, and Markus Gross. 2001. EWA volume splatting. In Proceedings Visualization, 2001. VIS’01. 
+
+IEEE, 29–538. Manuscript submitted to ACM

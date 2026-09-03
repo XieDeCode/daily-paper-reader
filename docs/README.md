@@ -6,41 +6,41 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-02
-- 运行时间：2026-09-02 21:24:49 UTC
+- 最新运行日期：2026-09-03
+- 运行时间：2026-09-03 22:30:30 UTC
 - 运行状态：成功
 - 本次总论文数：7
-- 精读区：2
-- 速读区：5
+- 精读区：5
+- 速读区：2
 
 ### 今日简报（AI）
-动态3D高斯溅射成今日热点，7篇推荐中2篇精读获8分高分。最值得关注SDE泛化变形场与语义运动图两方案，均聚焦动态场景建模。若初涉该领域，建议先速读刚性变形与双先验重建，再深入精读论文。
-- 详情：[/202609/02/README](/202609/02/README)
+今日精读5篇、速读2篇，共7篇论文，焦点集中在3D高斯泼溅的文本视角定位与高效动态渲染。最值得精读《CapFrame》用几何伪标签实现指令式视角定位，以及《CC-4DGS》用计算形变与点云压缩提升存储效率。建议普通读者优先关注这两项精读工作，它们分别代表交互理解与资源优化的实用方向。
+- 详情：[/202609/03/README](/202609/03/README)
 
 ### 精读区论文标签
-1. [Stochastic Liquid Deformation Fields: An SDE Generalisation of Closed-Form Continuous-Time Cells for Dynamic 3D Gaussian Splatting](/202609/02/2608.28702v1-stochastic-liquid-deformation-fields-an-sde-generalisation-of-closed-form-continuous-time-cells-for-dynamic-3d-gaussian-splatting)  
+1. [CapFrame: Text-Instructed Viewpoint Grounding in 3D Gaussian Scenes via Geometric Pseudo Labels](/202609/03/2608.30342v1-capframe-text-instructed-viewpoint-grounding-in-3d-gaussian-scenes-via-geometric-pseudo-labels)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：基于3D高斯泼溅与随机变形场的动态场景重建
-2. [SMG: Semantic Motion Graph for Monocular Dynamic Gaussian Splatting](/202609/02/2608.31023v1-smg-semantic-motion-graph-for-monocular-dynamic-gaussian-splatting)  
+   evidence：在3D高斯场景中根据文本指令定位6自由度相机并渲染匹配帧，直接面向3D高斯场景表示与可控渲染
+2. [CC-4DGS: Computational Deformation and Point-Cloud Compression for Storage-Efficient Dynamic Gaussian Splatting](/202609/03/2609.02184v1-cc-4dgs-computational-deformation-and-point-cloud-compression-for-storage-efficient-dynamic-gaussian-splatting)  
    标签：评分：8.0/10、query:aerial-dgs
-   evidence：单目视频下的动态三维高斯溅射场景表示与渲染，引入语义运动正则
+   evidence：面向存储高效动态3D高斯溅射的形变建模与点云压缩，属于3D高斯表示与渲染的扩展
+3. [Atlas: Algorithm-Hardware Co-Design for On-Device City-Scale 3D Gaussian Splatting in VR](/202609/03/2609.02352v1-atlas-algorithm-hardware-co-design-for-on-device-city-scale-3d-gaussian-splatting-in-vr)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：城市级3D高斯溅射场景表示与渲染
+4. [LightBridge: Feed-Forward Generative Relighting for 3D Gaussian Splatting](/202609/03/2609.02543v1-lightbridge-feed-forward-generative-relighting-for-3d-gaussian-splatting)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：面向完整3D高斯溅射资产的前馈生成式重光照，直接作用于3DGS场景表示与渲染。
+5. [InceptionGS: Generative Bootstrapping for Large-Scale Gaussian Splatting under Unstructured View Sampling](/202609/03/2609.02747v1-inceptiongs-generative-bootstrapping-for-large-scale-gaussian-splatting-under-unstructured-view-sampling)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：面向非结构化视角采样的大规模3D高斯场景重建，通过生成式自举改善多视角Gaussian优化
 
 ### 速读区论文标签
-1. [As-Rigid-As-Possible Deformation of Gaussian Radiance Fields](/202609/02/2608.29538v1-as-rigid-as-possible-deformation-of-gaussian-radiance-fields)  
+1. [DReSG: Diffusion Residuals for Stylized Gaussian Splatting](/202609/03/2608.29048v2-dresg-diffusion-residuals-for-stylized-gaussian-splatting)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：高斯辐射场(3DGS)场景表示与渲染，面向交互的尽可能刚性形变
-2. [DualDiff3D: Dual Structure-Appearance Diffusion Priors for Reliability-Enhanced 3D Gaussian Splatting](/202609/02/2609.01516v1-dualdiff3d-dual-structure-appearance-diffusion-priors-for-reliability-enhanced-3d-gaussian-splatting)  
-   标签：评分：7.0/10、query:aerial-dgs
-   evidence：针对稀疏多视角3DGS优化，用双结构-外观扩散先验处理视角间结构与外观差异
-3. [GeoFF3D: Coordinate-Anchored Feed-Forward Reconstruction for Large-Scale UAV Mapping](/202609/02/2608.28288v2-geoff3d-coordinate-anchored-feed-forward-reconstruction-for-large-scale-uav-mapping)  
+   evidence：通过扩散残差反馈对3D高斯溅射场景进行参考图像风格化渲染
+2. [VersaGauss: A Versatile Framework for Generating Multiphase Dynamics with 3D Gaussians](/202609/03/2608.28069v1-versagauss-a-versatile-framework-for-generating-multiphase-dynamics-with-3d-gaussians)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向大规模无人机测绘的坐标锚定前馈重建
-4. [On-the-Fly3R: Towards Robust Online 3D Reconstruction with Feed-Forward 3R Models for Large-Scale UAV Scenarios](/202609/02/2609.00923v1-on-the-fly3r-towards-robust-online-3d-reconstruction-with-feed-forward-3r-models-for-large-scale-uav-scenarios)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向大规模无序无人机影像的渐进在线前馈三维重建
-5. [EvoGS: Modeling Deformation Evolution for Dynamic Gaussian Splatting](/202609/02/2609.00994v1-evogs-modeling-deformation-evolution-for-dynamic-gaussian-splatting)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向动态3D高斯泼溅场景表示与渲染的形变演化建模
+   evidence：3D高斯表示与渲染扩展到多相物理动态场景
 
 
 <div class="dpr-home-promo-card">
