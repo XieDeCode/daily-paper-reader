@@ -1,0 +1,1154 @@
+Title: TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization
+
+URL Source: https://arxiv.org/pdf/2609.03613v1
+
+Published Time: Fri, 04 Sep 2026 00:59:06 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+Pacific Graphics 2026 Y. He, N. Thürey, and L. Liu (Guest Editors) 
+
+COMPUTER GRAPHICS forum 
+
+Volume 45 (2026 ), Number 7 
+
+# TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization 
+
+Wei Tan 1 Matias Turkulainen 1 Lauri Ilola 2 Hamed Rezazadegan Tavakoli 2 Juho Kannala 1
+
+> 1
+
+Aalto University, Finland 
+
+> 2
+
+Nokia Technologies, Finland 
+
+Abstract 
+
+Real-time 3D Gaussian Splatting (3DGS) achieves high rendering quality, but its standard sort-then-traverse rasterization pipeline, as instantiated by gsplat, still traverses a globally sorted tile stream that creates long per-tile ranges and heavy geometry-attribute traffic. We present TileGS , a tile-local reorganization of Gaussian splatting. TileGS turns each long tile range into a sequence of shorter depth-local ranges, rasterizes those ranges in front-to-back order, and applies selective repair where coarse ordering is insufficient to match baseline compositing. Across a 9-scene benchmark on desktop and laptop Ada GPUs, our default No-GW (No Geometry-Write) variant delivers a mean 1.44 × raster-kernel speedup on RTX 4090 and mean end-to-end frame speedups of 1.069 × on RTX 4090 and 1.094 × on RTX 1000 Ada over gsplat—a widely used optimized open-source 3DGS implementation—while matching the gsplat output up to numerical noise ( |∆PSNR | < 0.001 dB , |∆SSIM | < 0.001 ,
+
+|∆LPIPS | < 0.001 ). Full-suite RTX 4090 Nsight Compute profiling reveals TileGS is faster despite lower SM throughput, lower active-warp occupancy, and higher DRAM traffic, while total SASS thread instructions fall by 1.26 ×. Source-attributed profiling confirms that geometry attributes dominate the remaining memory pressure (85.8% of total raster traffic and 88.6% of excess sectors). Together, these counters support the interpretation that TileGS improves raster performance by reducing effective raster traversal work, rather than by reducing byte volume, improving coalescing, increasing occupancy, or directly reducing measured warp divergence. 
+
+CCS Concepts 
+
+• Computing methodologies → Rendering; Graphics proces-sors; Rasterization; 
+
+Keywords: 3D Gaussian Splatting, novel view synthesis, depth binning, tile-local traversal, real-time rendering 
+
+1. Introduction 
+
+3D Gaussian Splatting (3DGS) [KKLD23] has made high-quality radiance-field rendering practical at real-time rates, largely because it replaces expensive volumetric ray marching with a GPU-friendly rasterization pipeline. Yet the rasterizer itself remains a major per-formance bottleneck in raster-heavy scenes. The key issue is that although standard 3DGS rasterizers such as gsplat assign work to image-space tiles, the actual raster traversal is driven by a single globally sorted tile-depth stream. Each tile consumes one long con-tiguous range from this stream, whose Gaussian IDs often refer to widely separated locations in the scene-attribute arrays. This creates a mismatch between tile ownership and tile-local execution. The rasterizer is tile-based in the sense that each CUDA block owns an image tile, but it is not fully tile-local in how each tile consumes its Gaussian workload. This distinction—tile-based in ownership but not tile-local in traversal—is the key insight be-hind TileGS. Consecutive lanes may fetch projected means, conic parameters, colors, and opacities at effectively unrelated Gaussian indices. On modern GPUs, this produces long and irregular raster traversal ranges together with heavy geometry-attribute traffic, lim-iting the benefit of the otherwise tile-parallel pipeline. TileGS treats tile-local traversal granularity as a separate de-sign axis for Gaussian rasterization. The question is not only which Gaussians are assigned to each tile, but also how each tile consumes its assigned Gaussians during front-to-back compositing. We refer to this organization as the rasterizer’s execution structure: the gran-ularity and ordering of traversal, the length of each tile-local range, how that range is broken into smaller depth-local units, and how much raster work is needed before pixels terminate. This notion is distinct from memory coalescing. Memory coalescing asks whether neighboring lanes access neighboring addresses; execution struc-ture asks whether the raster workload is organized into traversal units that let the kernel finish useful work in fewer elapsed cycles. As we show in §6, TileGS improves raster performance by chang-ing traversal granularity rather than by increasing conventional oc-cupancy, SM throughput, or Gaussian-index coalescing counters. We present TileGS , named for its tile-local reorganization of Gaussian splatting. Its central mechanism is tile-local depth bin- 
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics - The European Asso-ciation for Computer Graphics and John Wiley & Sons Ltd. This is an open access article under the terms of the Creative Commons Attribution License, which permits use, distribution and reproduction in any medium, provided the original work is properly cited. arXiv:2609.03613v1 [cs.GR] 3 Sep 2026 2 of 12 Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization
+
+ning: each long tile range is split into a sequence of shorter depth-local ranges before rasterization. TileGS assigns projected Gaussian–tile entries to coarse depth bins within each tile, builds compact bin-offset ranges, and rasterizes the bins in front-to-back order. The method does not change the Gaussian representation, projected inputs, or splat evaluation equations. Instead, it changes the order and granularity at which the raster kernel consumes the same Gaussian workload. It does not reduce the static set of Gaussian–tile entries assigned to a tile; rather, it changes their tile-local ordering and grouping, which changes the effective raster traversal work performed before per-pixel transmittance early ter-mination (formalized in §6). Because coarse binning alone cannot always reproduce exact front-to-back compositing, TileGS uses se-lective repair to restore baseline ordering only for the segments where coarse local ordering is insufficient. This design is particularly motivated by raster-heavy workloads, where the baseline globally sorted tile-depth stream produces long tile-local ranges that amplify irregular geometry-attribute access; TileGS targets this regime by replacing global traversal structure with tile-local depth-binned traversal, so the largest gains appear when the raster workload is substantial enough to amortize the added binning and repair overhead. Across a 9-scene benchmark on RTX 4090 and RTX 1000 Ada GPUs, TileGS delivers consis-tent end-to-end speedups against the optimized gsplat baseline; the mechanism and scope of the gain are analyzed in §5–6. 
+
+Contributions 
+
+• We identify that standard gsplat-style rasterization is tile-based in ownership but still globally organized in traversal, and intro-duce tile-local depth-binned rasterization while preserving the same projected Gaussian inputs and splat evaluation equations. 
+
+• We introduce selective exact repair as an enabling mechanism for using coarse tile-local depth bins as an execution-order optimiza-tion while preserving baseline-equivalent alpha compositing up to numerical noise ( |∆PSNR | < 0.001 dB, |∆SSIM | < 0.001, 
+
+|∆LPIPS | < 0.001). 
+
+• We evaluate TileGS on two Ada GPUs, obtaining end-to-end frame speedups of 1.069 × on RTX 4090 and 1.094 × on RTX 1000 Ada over gsplat [YLK ∗24]—a heavily optimized open-source baseline that substantially outperforms the original vanilla 3DGS implementation—across nine scenes. 
+
+• We show through Nsight analysis and a direct per-pixel diagnos-tic that TileGS’s speedup is best explained by reduced effective raster traversal work, as defined in §6: on RTX 4090 it is faster despite lower SM throughput, lower active-warp occupancy, and higher DRAM traffic, while total SASS thread instructions fall by 1.26 ×, corroborated by 4.77–6.20% fewer Gaussian tests per pixel before termination (Table 10). 
+
+Scope note. The current TileGS implementation targets the for-ward rasterization pass only. A training-compatible version would require the backward pass to follow the same binned and repaired ordering used in the forward pass; we leave this integration to fu-ture work and discuss it further in §7. 
+
+2. Related work 
+
+TileGS targets the forward rasterization pipeline: it preserves the same projected Gaussian inputs and compositing semantics, but re-places a globally sorted tile-depth stream with tile-local depth bin-ning and binned raster traversal. Many recent works optimize what 
+
+is rendered through pruning, compression, or anti-aliasing, whereas TileGS optimizes how the surviving Gaussians are executed during rasterization. 
+
+2.1. 3D Gaussian splatting and rasterization 
+
+3D Gaussian Splatting (3DGS) [KKLD23] represents a scene as a set of anisotropic Gaussians with learned opacity, color, and co-variance parameters, and renders novel views by projecting these Gaussians to screen space and alpha-compositing them in depth order. Its practical significance comes from replacing expensive volumetric ray marching with a raster-style pipeline that exposes substantial parallelism while retaining high image quality. The per-Gaussian projection and footprint evaluation builds on classical point-based rendering, including Surface Splatting [ZPvBG01] and EWA Splatting [ZPvBG02]. TileGS leaves this footprint evaluation unchanged and operates downstream, reorganizing the traversal or-der of already-projected, tile-assigned Gaussians. Recent high-performance implementations preserve this overall rendering model while improving the engineering of projection, culling, and rasterization. In particular, gsplat [YLK ∗24] provides a widely used optimized implementation of Gaussian splatting and serves as a strong baseline for modern 3DGS rendering systems. Its forward path first projects Gaussians, determines their tile intersec-tions, sorts these intersections by tile and depth, and then rasterizes a single globally sorted tile-depth stream. This execution model is efficient in aggregate, but it still leaves the raster kernel with highly irregular per-warp geometry-attribute access. 
+
+2.2. Efficient Gaussian rendering 
+
+A complementary line of work improves Gaussian rendering by changing the representation or the rendering formulation rather than the execution structure of the raster pipeline. Examples in-clude alternative Gaussian formulations, sort-free compositing, and geometry-aware Gaussian variants [KKLD23, HRL ∗25]. For sort-free compositing more broadly, weighted blended order-independent transparency [MB13] provides a useful conceptual analogue, although it is not itself a Gaussian rendering method. These approaches are largely orthogonal to TileGS when they change the representation, compositing rule, or primitive set rather than the tile-local traversal structure. TileGS keeps the projected Gaussian inputs and splat evaluation equations unchanged and in-stead reorganizes how the surviving Gaussians are traversed during rasterization—a raster-pipeline redesign rather than a new scene representation, training objective, or compression method. Closest to TileGS are methods that revisit sorting and render-ing efficiency in 3DGS. StopThePop improves view consistency through hierarchical resorting and culling [RSP ∗24]; sort-free ren-dering replaces alpha blending with weighted-sum rendering to avoid depth sorting [HRL ∗25]; stochastic splatting removes deter-ministic sorting through stochastic rasterization and Monte Carlo  
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd. Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization 3 of 12
+
+Table 1: Conceptual positioning of TileGS.          
+
+> Direction Difference from TileGS Sort-free / stochastic Change compositing or sampling; TileGS keeps alpha compositing. Pruning / sparsification Reduce the Gaussian set; TileGS keeps the same workload. Broad renderer systems Combine many optimizations; TileGS iso-lates tile-local bins plus repair. gsplat-style backends Optimize the standard stream; TileGS changes traversal granularity.
+
+estimation [KVK ∗25]; and systems such as FlashGS and Speedy-Splat pursue broader speedups through renderer-level optimization, scheduling, tighter Gaussian–tile localization, or primitive sparsifi-cation [FCF ∗25, HTL ∗24]. FlashGS in particular targets broader renderer efficiency through redundancy elimination, pipelining, and memory-access scheduling. TileGS instead isolates a narrower traversal-organization change: it keeps the Gaussian set and per-Gaussian evaluation unchanged, but changes the tile-local granular-ity at which assigned Gaussians are consumed. The two directions therefore address different levels of the rasterization pipeline and are plausibly complementary rather than competing. TileGS differs by keeping the same Gaussian set and alpha-compositing target, while changing only the tile-local traversal structure and selectively repairing ambiguous local segments (Table 1). 
+
+2.3. Tile-based rendering and TBDR 
+
+Tile-based rendering has long been used to improve locality and reduce external memory traffic by organizing work around image-space tiles. In Tile-Based Deferred Rendering (TBDR), primitives are first assigned to tiles, and each tile is then processed largely within fast on-chip storage before the final color results are written back to DRAM. This execution model is especially important on mobile and SoC-class GPUs, where off-chip bandwidth is compar-atively scarce and energy-expensive. A renderer may be tile-based in a broad sense while still exposing highly irregular memory ac-cesses if the execution order within each tile is poorly matched to the underlying data layout — a distinction central to this pa-per. TileGS is inspired by clustered and bucketed rendering. Clus-tered deferred and forward shading groups view samples into spa-tial/depth clusters rather than only 2D tiles [OBA12], while order-independent transparency methods such as bucket depth peeling and layered weighted blended OIT use depth buckets or layers to avoid globally sorting all fragments [LHLW09, FEE21]. TileGS adapts this idea to 3D Gaussian Splatting by forming depth-local ranges inside each image tile and using selective repair to preserve front-to-back Gaussian compositing, addressing the mismatch be-tween globally assembled traversal order and tile-local execution that the standard rasterizer leaves unresolved. 
+
+3. TileGS pipeline 
+
+TileGS replaces the globally sorted tile-depth stream traversal of the baseline 3DGS rasterizer with a tile-local depth-binned execu-tion pipeline, without changing the Gaussian representation, pro-jected inputs, or compositing semantics. The key design choice is to separate execution order from rendering semantics: coarse bins reorganize traversal for performance, while selective repair restores the ordering needed for baseline-equivalent compositing. Rather than treating each tile as one long depth-sorted range, TileGS par-titions Gaussian entries into a small number of coarse depth bins, traverses them in front-to-back order, and repairs only the segments where coarse local ordering is insufficient. Figure 1 summarizes the pipeline. Starting from projected Gaus-sians and their tile intersections, TileGS estimates a robust depth range, assigns each Gaussian–tile entry to a coarse depth bin, counts and scatters entries by (tile , bin ) key, builds the correspond-ing bin-offset structure, and rasterizes each tile by walking its bins in order. Repair handles the subset of cases in which coarse binning alone is not sufficient to recover the exact baseline ordering. 
+
+Terminology. We refer to the standard gsplat forward path as the 
+
+globally sorted tile-depth stream traversal . Our default method is 
+
+TileGS No-GW (No Geometry-Write ), which means that rasteriza-tion consumes the tile-local binned Gaussian-ID stream directly, without an additional pre-raster geometry materialization step. We use TileGS Packed-GW to denote a bandwidth-oriented variant that inserts such a geometry-write stage and stores a more compact side-car representation for later raster traversal. In short, No-GW prior-itizes inner-loop simplicity and lower raster traversal cost, whereas Packed-GW prioritizes reduced geometry traffic. 
+
+3.1. Baseline 3DGS rasterization 
+
+The baseline 3DGS forward path projects each Gaussian to screen space, determines the image tiles intersected by its footprint, and emits one tile-intersection record per covered tile. These records are then globally sorted by a composite key that first groups by tile and then orders by depth. After sorting, each tile is associated with one contiguous range in the global intersection list, and the raster kernel traverses this range to evaluate Gaussian contributions for the pixels of that tile. This execution model is efficient in aggregate and serves as a strong baseline. In particular, we compare against gsplat , a widely used high-performance implementation of Gaussian splat-ting, rather than the original vanilla 3DGS reference code. Although both gsplat and TileGS are tile-based, they differ in how tile work is organized. gsplat assembles Gaussian–tile inter-sections into a globally sorted tile-depth stream, so each tile ras-terizes one contiguous front-to-back range. TileGS keeps the same projected Gaussians, tile assignment, and compositing equations, but decomposes each tile’s range into short depth-local bins and ap-plies selective exact repair to high-risk segments. Thus, the novelty is not tiling itself, but replacing globally sorted tile-depth stream traversal with tile-local depth-binned traversal plus targeted repair. Beyond this traversal change, TileGS adds three auxiliary stages absent from the gsplat forward path: depth-range estimation (§3.2), tile-local bin construction (§3.3), and selective repair (§3.5). All reported end-to-end frame times include these stages. Our instrumentation shows severe scatter on representative 
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd.
+
+4 of 12 Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization Baseline 3DGS (Global Tile-Depth Stream) TileGS (Tile-Local Depth Binning) 1) Input Gaussians 2) Tile Intersection (Coarse) 3) Global Sort (by depth) 4) Rasterization (Global Stream)                         
+
+> tid, depth, gid 105, 0.12, g771
+> 011, 0.13, g203
+> 362, 0.14, g558
+> 007, 0.16, g102
+> · · ·
+> Characteristics
+> Long tile ranges; global traversal; large working sets; irregular ID stream.
+> 1) Input Gaussians 2) Tile Intersection (Coarse) 3) Depth Bin Assignment (Per-Tile) 4) Count & Scatter (Per-Tile) 5) Build bin offsets (Excl. Scan) 6) Rasterization (Bin-Local)
+> Tile 0 01· · · K-1 Tile 1 01· · · K-1 Tile T-1 01· · · K-1
+> ...
+> Tile 0
+> ↓Scatter Tile T-1
+> tid, bid, offset 000, 000, 000 000, 001, 027 000, 002, 053
+> · · ·
+> T-1, K-2, M-35 T-1, K-1, M
+> · · · · · · · · · · · ·
+> Characteristics
+> Short bin-local ranges; local traversal; smaller traversal units; structured execution.
+> Tile 0· · · K−1Depth bins (per tile) Entries in different depth bins Per-bin counts Traversal order
+
+Figure 1: Pipeline comparison between baseline 3DGS rasterization and TileGS. The baseline constructs a globally sorted tile-depth stream, so each tile is rasterized as one long globally sorted tile-depth range. TileGS reorganizes the same Gaussian–tile entries into tile-local depth bins (steps 1–6), builds a bin-offset array via count-and-scatter and prefix sum, and rasterizes the resulting tile-bin-major stream in step 6. The default raster kernel consumes each tile’s concatenated bin span linearly; bin boundaries determine the materialized stream layout and repair segments rather than separate raster-loop exits. 
+
+scenes: the mean adjacent-lane index difference |∆g| is on the or-der of 1.4M, the mean warp g-span reaches about 4.9M, and only about 0.4% of warps exhibit monotone or near-neighbor Gaussian-index sequences. Importantly, TileGS does not significantly change these Gaussian-index stream (g-stream) scatter statistics: under the No-GW binned path, mean |∆g| decreases by only 1–3% and the monotonic warp fraction remains below 0 .4%. TileGS improves raster performance by changing traversal granularity rather than memory-access locality or coalescing. Shorter per-bin working sets and a more structured raster execution pattern allow the kernel to complete in fewer elapsed cycles without materially changing the underlying scatter pattern, as we quantify in §6. 
+
+3.2. Depth range estimation 
+
+TileGS assigns each Gaussian–tile entry to a coarse depth bin be-fore bin construction. To make this mapping stable across scenes and viewpoints, we first estimate a robust effective depth range for the current frame and then normalize projected Gaussian depths within that range. A direct min–max normalization is undesirable because pro-jected depth distributions can contain strong outliers. Rare extreme depths would stretch the range and waste most bins on depths that contribute little to the visible tile workload. Instead, TileGS samples visible projected depths and selects an effective interval 
+
+[zmin , zmax ] from clipped low and high percentiles, followed by a small padding margin. In the reported implementation, we sample up to 8192 depth candidates and select the 1st/99th percentiles us-ing exact order statistics ( kthvalue ). A 128-bin log-spaced his-togram estimator exists as an unused alternative, but all reported results use the exact-order-statistics path. Within this clipped range, the current implementation uses log-based depth binning rather than a uniform linear mapping. The rea-son is that near-depth regions generally require finer separation: Gaussians closer to the camera tend to occupy larger footprints, overlap more strongly in image space, and are more sensitive to coarse ordering errors. Log binning therefore allocates more reso-lution near the camera while keeping the total number of bins mod-erate. This stage is only a coarse local ordering device. Its purpose is to create shorter and more structured tile-local traversal ranges, not to recover exact compositing order by itself. Any remaining exact-ness requirement is handled later by the repair stage. Accordingly, the depth-to-bin mapping should be understood as a performance device rather than a semantic requirement. 
+
+3.3. Tile-local bin construction 
+
+After assigning each Gaussian–tile entry to a coarse depth bin, Ti-leGS replaces the single globally sorted tile-depth stream with a tile-local bin construction pass. Each entry is associated with a composite key (tile_id , bin_id ), where tile_id identifies the covered image tile and bin_id is obtained from the normalized depth map-ping described above. The purpose of this stage is to reorganize the tile workload into smaller front-to-back ranges that can later be traversed independently by the raster kernel. This reorganiza-tion does not reduce the number of Gaussian–tile entries assigned to a tile; it only changes their grouping and front-to-back order (the static/dynamic distinction is formalized in §6). The construction proceeds in four stages, illustrated in Fig-ure 2. First, TileGS counts the number of entries assigned to each 
+
+(tile , bin ) pair, producing a tile-local bin histogram. Second, an ex-clusive prefix sum over this histogram yields the bin-offset array, which defines the contiguous storage interval of every bin in the flattened tile-bin stream. Third, the Gaussian–tile entries are scat-tered into these intervals. Finally, the resulting flat list of Gaussian IDs is materialized in the order expected by the binned rasterizer. Critically, this flattened stream is laid out in tile-bin-major order: the bin-offset array groups bins by tile first and orders bins front-to-back within each tile, so every bin belonging to a given tile occu-pies one contiguous sub-range of the stream, and those sub-ranges  
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd. Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization 5 of 12
+
+themselves sit back to back within one larger per-tile span. As a re-sult, each tile’s raster kernel still walks exactly one contiguous in-terval of the flattened stream—matching the baseline’s per-tile con-tiguous access pattern—but that interval is now pre-organized into contiguous, depth-ordered bin sub-ranges rather than being only the baseline’s single per-tile depth-sorted list. This tile-bin-major lay-out is what the binned raster kernel walks directly; bin boundaries are materialized during construction and repair, while the default raster traversal consumes the final per-tile span linearly. 
+
+Count/scatter implementation variants. We evaluated five aggre-gation strategies for the tile-local count/scatter pass (direct atomics, warp-private histograms, two-stage aggregation, block-local hash aggregation, and warp-key grouped scatter); all produce identical bin-offset arrays and Gaussian-ID streams and therefore do not af-fect raster semantics, repair behavior, or image quality. In the fi-nal configuration, we use the direct-atomic construction path with warp-key grouping disabled. In the completed full-9 RTX 4090 variant sweep, warp-private histograms were slower than the de-fault on every scene and 16.0% slower on average; a later paired rerun also favored warp-key grouping disabled by a small median margin with a tighter run range. Detailed timings are provided in the supplement. We treat the selected count/scatter strategy as an implementation-level detail rather than an algorithmic contribution of TileGS. 
+
+3.4. Binned rasterization: No-GW and Packed-GW 
+
+We study two execution styles built on the same tile-local bin-ning framework. No-GW consumes the binned Gaussian-ID stream directly and fetches geometry attributes from the original arrays. Packed-GW inserts an additional pre-raster geometry-write stage that materializes a compact sidecar representation for later raster traversal. Packed-GW is best read as an ablation that isolates the cost of geometry-write materialization: it changes bandwidth characteris-tics without changing which Gaussians are consumed or the tile-bin-major traversal and repaired ordering, so it does not represent a distinct rasterization algorithm from No-GW. Empirically, No-GW gives the strongest end-to-end result be-cause it avoids the extra pre-raster materialization stage. Packed-GW is therefore treated as a bandwidth-oriented diagnostic rather than the default method: a profiling sweep shows reduced raster DRAM traffic in 7/9 scenes, but a follow-up timing-only rerun is slower on all nine scenes. Details are provided in the supplement. 
+
+3.5. Repair for correctness 
+
+Coarse tile-local depth binning is sufficient to expose a more struc-tured raster workload, but it is not, by itself, a guarantee of exact front-to-back compositing order. Two Gaussians that fall into the same coarse bin, or that straddle a bin boundary under the normal-ized depth mapping, may still require a finer ordering relationship than the bin traversal alone provides. TileGS therefore augments binned rasterization with a repair stage that restores the baseline compositing behavior only where the coarse local ordering is in-sufficient. 
+
+Table 2: Exact-repair selection rules. A segment is marked for re-pair if any rule fires. ℓ: segment length; ℓtile : total entries in the parent tile; bin 0/1 refers to the two nearest-camera depth bins. All thresholds are fixed global hyperparameters.                                  
+
+> Rule Condition Rationale (i) ℓ≥320 Long segments likely affect visi-ble pixels regardless of opacity. (ii) ℓ > 512 (global-tail bucket) Same motivation; forces repair for all tail-bucket segments. (iii) ℓ/ℓ tile ≥45% Segment dominates the tile; or-dering errors concentrate at one depth slice. (iv) bucket 129–256 & ℓ/ℓ tile ≥10% Medium-length segment with significant tile share. (v) bin id ∈ { 0,1}&ℓ≥16 Near-camera Gaussians are large, high-opacity, and most order-sensitive.
+
+The repair logic is segment-based. Each logical segment corre-sponds to one coarse tile/bin slice (tile_id , bin_id ) in the flattened binned stream, with segment length 
+
+ℓ = seg_end − seg_begin .
+
+Segments with ℓ ≤ 1 are treated as not requiring repair in the cur-rent implementation. Longer segments are bucketed by length into local exact-repair buckets (2 −128, 129 −256, 257 −512) and a global-tail bucket ( > 512), with the default local exact-repair limit set to 512 entries (Figure 3). In the implementation the 2 −128 range is further sub-divided into 2 −32, 33 −64, and 65 −128 sub-buckets, each dispatched to a fixed-size bitonic sort kernel; the pa-per groups these as one bucket for brevity. In the current implementation, exact-repair selection uses the fol-lowing default policy. Let ℓ be the segment length and ℓtile be the total number of entries in the parent tile. Table 2 summarizes the five selection rules and their rationale. A segment is selected if any rule in Table 2 fires. Rules (i)– (ii) target long segments, rules (iii)–(iv) target segments that oc-cupy a large fraction of their parent tile, and rule (v) prioritizes near-camera bins where ordering errors are most visible. Each rule follows directly from the compositing-error argument above: seg-ments are repaired when they are most likely to contain Gaussians with non-negligible opacity at non-negligible transmittance. All thresholds are fixed global hyperparameters, not tuned per scene or platform. 
+
+Exact repair. Exact repair operates only on the selected ambigu-ous local segments. Within such a segment, TileGS reconstructs the order needed to match the baseline raster semantics and replays that segment in the corrected order. This correction is strictly local rather than global: only the selected segment is repaired, while the rest of the tile continues to use the standard binned path. 
+
+Adaptive repair. The repair policy is adaptive in two senses. First, different segment-length buckets map to different local exact-repair paths, with small and medium segments handled entirely in lo-cal memory and larger segments using progressively broader exact 
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd.
+
+6 of 12 Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization Input: Gaussian–tile entries (unsorted) 
+
+...
+
+· · · 
+
+> Depth
+
+zfar 
+
+znear 
+
+Compute clipped depth range [znear , z far ]
+
+Divide [znear , z far ]
+
+into K coarse bins 
+
+01K-2 K-1 
+
+...
+
+Assign entry to bin k
+
+by its near depth 
+
+For each tile t
+
+count [t, k ]: number of entries in tile t, bin k
+
+Bin index k
+
+0 1 · · · K-1 Tile  t
+
+0 8 15 · · · 6
+
+1 7 10 · · · 4
+
+... ... ... ...T-1 3 6 · · · 5
+
+For each tile t
+
+Place each entry into (tile t, bin k) range Bin index k
+
+0 1 · · · K-1 Tile 0 · · · 
+
+Tile 1 · · · 
+
+... ...Tile T-1 · · · 
+
+Build contiguous bin ranges within each tile 
+
+For each tile t
+
+Exclusive scan →
+
+bin offsets [t, 0. . .K ]
+
+Bin index k
+
+0 1 · · · K-1 Tile 0 0 8 23 Nt   
+
+> begin 0 begin 1 · · · begin k
+
+Tile T-1 
+
+Output: Flattened binned stream + bin offsets [t, k ] → define (begin, end) of each tile–bin slice. 
+
+Input entry Entries placed in different bins x Count (number of entries) s Offset (begin index) 
+
+Figure 2: Tile-local bin construction. TileGS assigns Gaussian–tile entries to coarse depth bins, counts per-bin populations, scatters entries into contiguous bin ranges, and builds the bin-offset array via exclusive scan. 1. Bucket by ℓ 2. Apply keep rules within each bucket 3. Enforce global repair-entry budget Outcomes and routing                                
+
+> Bucket 0
+> (ℓ≤L0)
+> Bucket 1
+> (L0< ℓ ≤L1)
+> ...
+> Bucket M-1
+> (LM−2< ℓ ≤LM−1)
+> Length thresholds
+> L0< L 1<
+> · · · < L M−1
+> For each segment in this bucket
+> KEEP
+> (mark for repair)
+> KEEP
+> (mark for repair)
+> KEEP
+> (mark for repair)
+> Rule 1
+> Small segment?
+> (ℓ≤L0)
+> Rule 2
+> Large tile share?
+> ℓℓtile
+> ≥τtile
+> Rule 3
+> Front bin?
+> (bin id = 0)
+> DO NOT KEEP
+> (route to standard path) Yes Yes Yes No No No
+> Collect all segments marked KEEP
+> Atomic reservation in tile/bin order; admit while ∑ℓ≤Brep
+> Selected for exact repair (within budget)
+> Route to bucket-specific exact-repair paths (Bucket 0 / 1 / · · · / M-1)
+> Not selected (or over budget)
+> Route to standard binned raster path
+> Selected segments proceed to exact-repair paths
+> Keep / Selected Do not keep Decision / Process Input / Group
+
+Figure 3: Selection of exact-repair segments. TileGS treats each coarse tile/bin slice as a repair candidate, buckets segments by length, applies keep rules based on segment size, tile share, and front-bin priority, and then enforces a global repair-entry budget via atomic reservation in tile/bin index order. Selected segments are routed to bucket-specific exact-repair paths, while non-selected segments continue through the standard binned raster path. 
+
+paths. Second, the selected repair set is globally budgeted, as de-scribed above, so large or numerous ambiguous segments cannot dominate the frame. 
+
+Correctness statement. After repair, TileGS matches the base-line output up to numerical noise on all reported experiments (|∆PSNR | < 0.001 dB, |∆SSIM | < 0.001, and |∆LPIPS | < 0.001). The repaired path should therefore be interpreted as empirically equivalent to the baseline within numerical precision under the re-ported benchmarks, rather than as a deliberately quality-degrading approximation. 
+
+Why partial repair suffices. A natural question is why a budget-constrained, threshold-based repair policy achieves near-exact out-put when the majority of segments are left on the standard binned path. Partial repair is effective because most local ordering errors have limited image impact. In alpha compositing, the color change from swapping two adjacent Gaussians is suppressed when either opac-ity is small or accumulated transmittance is already low. Shallow depth bins reduce the set of possible misorderings, but do not by themselves guarantee exact output because the effect also depends on opacity, color contrast, and transmittance. TileGS therefore treats coarse binning as an execution-order op-timization, not as a correctness argument. Exact repair is applied only to high-risk tile/bin segments selected by the policy above, while short or low-impact segments remain on the standard binned path. 
+
+4. Experimental setup 
+
+We evaluate TileGS across representative 3DGS benchmark scenes and hardware platforms under controlled measurement settings. All primary comparisons use the same projected Gaussian inputs and compare the standard gsplat globally sorted tile-depth stream traversal against TileGS No-GW. 
+
+© 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd. Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization 7 of 12 
+
+Table 3: Evaluation platforms under controlled clock presets. 
+
+RTX 4090 RTX 1000 Ada Platform class Desktop Ada Laptop Ada Clock preset 2100/10501 MHz 1200/6001 MHz Power limit 350 W controlled laptop preset PyTorch 2.6.0+cu124 2.8.0+cu128 CUDA / driver 12.2 / 535.288.01 13.1 / 591.86 Nsight Compute 2026.1.0.0 2023.2.1.0 gsplat commit a8d88d3 
+
+Table 4: Benchmark scenes used in the evaluation. The 9-scene suite follows the common 3DGS/gsplat evaluation split and covers outdoor, indoor, object-centric, and complex blended scenes. 
+
+Dataset Scenes Mip-NeRF 360 bicycle , garden , stump , kitchen , bonsai 
+
+Tanks and Temples train , truck 
+
+Deep Blending drjohnson , playroom 
+
+4.1. Hardware platforms and software stack 
+
+We evaluate TileGS on two NVIDIA Ada GPUs representing dis-tinct operating regimes: a desktop-class RTX 4090 and a laptop-class RTX 1000 Ada. All measurements use controlled clock pre-sets to reduce run-to-run variability from dynamic boost, thermal throttling, and power-management behavior. These presets fix the compute-to-bandwidth operating point for each platform, so cross-platform comparisons should be interpreted as controlled mea-surements under the stated presets rather than as claims about all possible boost states. Table 3 summarizes the hardware and soft-ware configuration. Both platforms use the same gsplat commit 
+
+a8d88d3 .
+
+4.2. Benchmark scenes 
+
+We evaluate on a 9-scene benchmark drawn from three standard 3DGS evaluation datasets: Mip-NeRF 360 [BMV ∗22], Tanks and Temples [KPZK17], and Deep Blending [HPP ∗18], summarized in Table 4. The scenes span raster-heavy outdoor cases such as bi-cycle , garden , and stump , where long tile ranges and high overlap stress the raster kernel, as well as lighter or more compact scenes such as kitchen , bonsai , drjohnson , and playroom , where auxil-iary binning and repair overheads are more visible. Together, this benchmark evaluates both the raster-heavy regime where TileGS is expected to benefit most and the lighter-scene regime where a tile-local pipeline must avoid regressions. 
+
+4.3. Baselines and variants 
+
+Our primary baseline is gsplat [YLK ∗24], a modern high-performance 3DGS implementation that serves as a strong and fair comparator for a rasterization pipeline redesign. The primary comparison is between: 
+
+• Baseline (gsplat): the standard optimized 3DGS rasterization pipeline with a globally sorted tile-depth stream; and 
+
+• TileGS No-GW: our default tile-local depth-binning pipeline with K = 64. Unless otherwise stated, all main results use TileGS No-GW, which is the strongest end-to-end variant in the current implemen-tation; Packed-GW is included only as a bandwidth-oriented abla-tion. 
+
+4.4. Metrics and profiling methodology 
+
+Our primary system metric is end-to-end frame time in mil-liseconds. This covers the full GPU forward pass — spherical-harmonics evaluation, projection, tile intersection, sorting, rasteri-zation, and all TileGS auxiliary stages (depth-range estimation, bin construction, repair) — timed via CUDA events on the device side. It excludes Python-side host overhead, CPU-to-GPU data transfer of the Gaussian parameters (which are assumed resident), and the backward pass. To isolate the effect of the raster pipeline itself, we also measure the runtime of the main raster kernel. This dis-tinguishes the speedup due to binned raster traversal from the total frame-time impact of auxiliary stages such as depth-range estima-tion, bin construction, sidecar generation, and repair. Image quality is measured with PSNR, SSIM, and LPIPS against the gsplat output. TileGS matches the baseline up to numerical noise ( |∆PSNR | < 0.001 dB, |∆SSIM | < 0.001, and |∆LPIPS | <
+
+0.001) on all reported scenes. To understand the source of TileGS’s speedup, we analyze DRAM traffic, cache behavior, and effective throughput using Nsight Compute. For source-attributed traffic analysis, we use the-oretical L2 sector counts as a proxy for memory pressure, since raw DRAM bytes are not directly attributable to individual source lines in the profiler. This allows us to separate total traffic from excess or uncoalesced geometry loads. 
+
+4.5. Implementation settings 
+
+Unless otherwise stated, the default TileGS configuration uses: 
+
+• No-GW as the primary raster path; 
+
+• K = 64 depth bins; 
+
+• direct-atomic count/scatter construction, with warp-key group-ing disabled; 
+
+• conservative tile alpha culling in the raster kernel; and 
+
+• the repair path for exact output recovery. The choice of K = 64 is based on the ablation study (§5.3), where it provides the best overall fixed setting, with K = 32 remaining a strong near-optimal alternative. 
+
+5. Results 
+
+We first report the main end-to-end comparison against the gsplat baseline, then isolate the rasterization-kernel speedup, summarize the depth-bin ablation, and finally confirm that TileGS preserves image quality. Unless otherwise stated, all results in this section use the default No-GW configuration with K = 64.  
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd. 8 of 12 Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization
+
+Table 5: End-to-end frame time (ms) and speedup for Baseline vs. TileGS No-GW on RTX 4090 and RTX 1000 Ada under locked presets. 
+
+RTX 4090 RTX 1000 Ada 
+
+Scene Base TileGS × Base TileGS ×
+
+bicycle 4.395 3.979 1.105 38.92 34.78 1.119 
+
+garden 3.998 3.602 1.110 36.85 32.33 1.140 
+
+stump 2.957 2.737 1.080 27.30 24.33 1.122 
+
+kitchen 2.638 2.476 1.065 25.59 22.03 1.162 
+
+bonsai 1.649 1.525 1.081 13.35 12.32 1.084 
+
+train 2.257 2.145 1.052 17.96 17.32 1.037 
+
+truck 2.523 2.427 1.039 23.13 21.59 1.072 
+
+drjohnson 2.348 2.224 1.056 21.16 20.07 1.054 
+
+playroom 1.980 1.919 1.032 18.21 17.25 1.056 
+
+Mean 1.069 1.094 Table 6: Rasterization-kernel speedup and frame/kernel gap. Gap = (kernel speedup − frame speedup) in percentage points. Miss-ing RTX 1000 Ada kernel entries are profiler-capture failures, not application failures; the corresponding end-to-end timings are re-ported in Table 5. † Ada mean is computed over the five scenes for which full-resolution kernel captures completed. 
+
+RTX 4090 RTX 1000 Ada 
+
+Scene Kernel Frame Gap Kernel Frame Gap 
+
+bicycle 1.422 1.105 31.7 — 1.119 —
+
+garden 1.456 1.110 34.6 — 1.140 —
+
+stump 1.426 1.080 34.6 — 1.122 —
+
+kitchen 1.430 1.065 36.5 1.439 1.162 27.7 
+
+bonsai 1.450 1.081 36.9 1.441 1.084 35.7 
+
+train 1.452 1.052 40.0 1.448 1.037 41.1 
+
+truck 1.511 1.039 47.2 1.457 1.072 38.5 
+
+drjohnson 1.436 1.056 38.0 — 1.054 —
+
+playroom 1.368 1.032 33.6 1.418 1.056 36.2 
+
+Mean 1.439 1.441 †
+
+5.1. End-to-end frame time 
+
+Table 5 shows that TileGS No-GW improves all nine scenes, with mean end-to-end speedups of 1.069 × on RTX 4090 and 1.094 ×
+
+on RTX 1000 Ada. The larger laptop-GPU gain is consistent with a more bandwidth-constrained operating point. The largest gains occur on raster-heavy scenes such as bicycle ,
+
+garden , stump , and kitchen , where long raster ranges constitute a larger fraction of total cost and better amortize depth-range estima-tion, bin construction, and repair. End-to-end speedups exceed 10% on both platforms for several such scenes, while the lower scene-averaged mean reflects lighter cases where auxiliary overhead is proportionally more visible. TileGS improves all nine scenes on both GPUs under locked clock settings. 
+
+5.2. Rasterization kernel speedup 
+
+Table 6 isolates the main rasterization-kernel speedup. We note up-front that detailed kernel captures on RTX 1000 Ada were unavail-
+
+Table 7: Depth-bin count ablation on RTX 4090 over the full 9-scene benchmark. Quality deltas are measured relative to the K =
+
+64 TileGS configuration, not relative to the gsplat baseline. These intra-TileGS ablation deltas are smaller than the global TileGS-vs.-gsplat numerical-noise threshold used elsewhere. 
+
+K Avg total Avg frame |∆PSNR | ∆SSIM ∆LPIPS (ms) (ms) (dB) 64 2.8787 3.0144 0 0 032 2.8973 3.0338 < 10 −4 < 10 −5 < 10 −5
+
+128 2.9235 3.0641 < 10 −4 < 10 −5 < 10 −5
+
+16 2.9357 3.0724 < 10 −4 < 10 −5 < 10 −5
+
+8 2.9904 3.1255 < 10 −4 < 10 −5 < 10 −5
+
+4 3.0985 3.2342 < 10 −4 < 10 −5 < 10 −5
+
+able for bicycle , garden , stump , and drjohnson due to driver/profiler resource acquisition errors (the application runs completed nor-mally, and all nine end-to-end timings are intact in Table 5). Be-cause those four scenes include some of the heaviest outdoor workloads where TileGS achieves its largest end-to-end gains, we treat the resulting Ada kernel mean as a five-scene subset rather than a complete full-suite average, and we do not use it to claim architecture-invariant kernel speedup. On RTX 4090, where all nine captures succeeded, TileGS achieves a mean raster-kernel speedup of 1.439 ×; the Ada five-scene subset yields 1.441 ×, consistent with the same kernel-level trend on the primary platform. Averaged over the available kernel captures, TileGS reaches a 1.439 × raster-kernel speedup on RTX 4090 and 1.441 ×
+
+on RTX 1000 Ada, while the corresponding end-to-end frame speedups are 1.069 × and 1.094 ×. This gap is not a contradiction: TileGS substantially accelerates the raster kernel, but the current implementation spends part of that gain on bin construction and re-pair. Per-stage profiling on bicycle and garden (Table 12 in §6.1) shows that the global sort replacement saves 0.44–0.64 ms, while bin construction (0.40–0.44 ms) and repair (0.33–0.41 ms) are the dominant added costs. 
+
+5.3. Depth bin count ablation 
+
+We ablate the number of depth bins K in Table 7. Very small values under-partition the tile stream, while very large values add book-keeping overhead. Across the full suite, K = 64 gives the best fixed setting and K = 32 remains a strong near-optimal alternative. Quality is invariant across the sweep: the maximum intra-TileGS drift remains below 1 .6 × 10 −5 dB PSNR, 2 .8 × 10 −6 SSIM, and 1.7 × 10 −6 LPIPS. 
+
+5.4. Image quality 
+
+TileGS must not obtain speedups by degrading output. Across the full 9-scene evaluation, TileGS No-GW matches gsplat within numerical noise: |∆PSNR | < 0.001 dB, |∆SSIM | < 0.001, and 
+
+|∆LPIPS | < 0.001 on all reported scenes. Table 8 reports the ab-solute gsplat quality on RTX 4090, and Figure 4 shows a represen-tative raster-heavy case.  
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd. Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization 9 of 12
+
+Baseline TileGS 100 × diff overlay Figure 4: Representative visual comparison on the raster-heavy bicycle case. TileGS is visually indistinguishable from the gsplat baseline (|∆PSNR | < 0.001 dB across all nine scenes); the rightmost column shows amplified absolute RGB differences overlaid on the TileGS render (100 ×) for visibility. 
+
+Table 8: Absolute image quality on RTX 4090. Values report the gsplat baseline; TileGS matches these values within |∆PSNR | <
+
+0.001 dB, |∆SSIM | < 0.001 , and |∆LPIPS | < 0.001 on every scene. 
+
+Scene PSNR (dB) SSIM LPIPS 
+
+bicycle 23.65 0.687 0.213 
+
+garden 25.22 0.769 0.129 
+
+stump 26.26 0.750 0.173 
+
+kitchen 25.44 0.833 0.105 
+
+bonsai 27.56 0.890 0.125 
+
+train 21.72 0.818 0.189 
+
+truck 24.29 0.853 0.166 
+
+drjohnson 29.28 0.918 0.157 
+
+playroom 29.82 0.920 0.153 
+
+Table 9: Repair ablation on a representative 3-scene RTX 4090 subset (bicycle, truck, and playroom). No repair is faster but causes substantial quality loss, while both default selective repair and full repair match the baseline within numerical noise. 
+
+Variant Avg. frame Max |∆PSNR | Max |∆SSIM |
+
+(ms) (dB) No repair 2.849 2.0346 0.0579 Default repair 3.098 6×10 −6 0Full repair 3.257 2×10 −6 0
+
+5.5. Repair sensitivity 
+
+To isolate the role of repair, Table 9 compares no repair, the default selective-repair policy, and full repair on a representative 3-scene RTX 4090 subset spanning a raster-heavy scene ( bicycle ), an out-door Tanks-and-Temples scene ( truck ), and a lighter indoor scene (playroom ). Removing repair reduces frame time but breaks base-line equivalence, with a maximum PSNR error of 2.03 dB and a maximum SSIM error of 0.0579. In contrast, both the default pol-icy and full repair match the baseline within numerical noise. Full repair does not improve quality meaningfully over the default pol-icy on this subset and is slower, indicating that the selective policy is sufficient for the evaluated cases. 
+
+6. Mechanism analysis 
+
+TileGS No-GW runs faster despite equal or greater raster DRAM traffic, indicating that the speedup arises from a change in raster traversal granularity rather than reduced byte volume. We verify this using Nsight Compute Speed-of-Light, launch, divergence, and instruction-count counters over the full 9-scene RTX 4090 aggre-gate under the locked-clock preset; only locked-clock profiling runs are included in the aggregate. Counter values are collected in a ded-icated pass and used for mechanism analysis only, with primary performance results remaining those in §5. 
+
+Terminology: effective raster traversal work. We use this term to mean the raster kernel’s dynamic work: the candidate Gaussian– tile entries actually visited, tested, and composited for a pixel be-fore transmittance early termination. This differs from the static 
+
+workload—the total Gaussian–tile entries assigned to a tile—which TileGS does not change (§3.3). We use two proxies: total SASS thread instructions for the raster kernel (Table 11) and average Gaussian tests per pixel before termination (Table 10). Table 11 summarizes the evidence: despite lower SM through-put, lower active-warp occupancy, and higher DRAM traffic, Ti-leGS executes fewer total SASS thread instructions and com-pletes faster. Concretely, Compute (SM) throughput decreases from 76.94% to 59.61%, achieved active-warp occupancy de-creases from 91.32% to 62.18%, and DRAM traffic increases from 136.65 MB to 185.53 MB, while SASS thread instructions fall from 21.25B to 16.90B, a 1.26 × reduction. The counters rule out several simpler explanations. TileGS does not improve occupancy, SM throughput, or memory volume. It also uses more per-thread and per-block resources: register count in-creases from 40 to 56 registers per thread, and dynamic shared memory increases from 7,168 B to 12,288 B per block. Divergence-related counters remain nearly unchanged: branch divergent threads increase only slightly from 5.54M to 5.70M, and thread instructions per warp instruction remain similar (78.17% vs. 77.75%). Thus, the measured speedup is not explained by improved coalescing, in-creased occupancy, higher SM throughput, reduced memory traffic, or directly reduced measured warp divergence. The evidence instead supports a reduced-effective-traversal-work explanation. TileGS reorganizes each long globally sorted tile-depth range into shorter bin-local ranges, and the raster kernel  
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd. 10 of 12 Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization
+
+performs less total thread-level instruction work under this orga-nization. This is unlikely to be explained by compiler scheduling alone: both paths use the same splat evaluation, early-exit test, and compositing equations, while the binned path adds bin-boundary logic rather than removing inner-loop math. The best-supported mechanism is fewer effective inner-loop iterations: shorter, depth-ordered bin ranges may let pixels reach the transmittance early-exit threshold with less wasted traversal. As a direct diagnostic for this interpretation, we instrument the raster loop to count the average number of Gaussian tests executed per pixel before termination, measured over three repeated profiling passes on the fixed first 24 test views at 1600 × 900 resolution. Ta-ble 10 reports the results on three representative scenes: two raster-heavy outdoor scenes ( bicycle , garden ) and one lighter indoor scene ( kitchen ), to demonstrate that the reduction holds beyond the raster-heaviest regime. TileGS reduces this direct traversal-work measure by 5.12% on bicycle , 6.20% on garden , and 4.77% on 
+
+kitchen ; the measured test-count reductions are deterministic across the repeated passes under the fixed-view protocol. This diagnos-tic does not isolate the exact per-pixel termination depth, but it confirms that the binned traversal executes fewer Gaussian tests per pixel on representative scenes. The 4.77–6.20% reduction in this direct test-count metric does not by itself account for the full raster-kernel speedup: it is the narrow proxy defined above, whereas SASS instructions capture per-visit compute, batch stag-ing, synchronization, active-mask behavior, and tile-level exits af-ter all pixels terminate. The test-count metric also averages over all pixels and views, diluting larger effects in hotspot tiles. Thus, the direct test-count reduction and the 1.26 × SASS instruction reduc-tion should be read as complementary views of the same effective-raster-traversal-work reduction at different levels of the execution hierarchy. 
+
+Table 10: Direct traversal-work diagnostic on representative RTX 4090 scenes. Values report the average number of Gaussian tests executed per pixel before termination over three repeated pro-filing passes on the fixed first 24 test views at 1600 × 900 . A Gaus-sian test counts one raster-loop visit to a candidate Gaussian for a pixel, before any per-candidate opacity/compositing update; the average is computed over pixels before the pixel-level early-exit terminates traversal. 
+
+Scene Baseline TileGS Reduction 
+
+bicycle 570.646 541.444 1.054 × (5.12%) 
+
+garden 571.206 535.792 1.066 × (6.20%) 
+
+kitchen 473.578 450.994 1.050 × (4.77%) Additionally, the per-scene kernel speedup scales with raster workload: raster-heavy scenes ( bicycle , garden , raster ≈48% of GPU time) achieve the largest speedups (1.42–1.46 ×), consistent with a traversal-work reduction that scales with range length rather than a fixed structural or compiler effect. We use bicycle only for the source-attributed memory decompo-sition because it is representative of the heavier-workload regime where TileGS achieves its strongest end-to-end gains. The full-counter trends in Table 11 are aggregated over all nine scenes, while 
+
+Table 11: Full 9-scene RTX 4090 locked-clock Nsight aggregate for the baseline and TileGS No-GW raster kernels. TileGS is faster despite lower SM throughput, lower active-warp occupancy, and higher DRAM traffic, while executing fewer SASS thread instruc-tions. Duration is summed across scenes before taking the ratio, so the aggregate ratio is duration-weighted. 
+
+Metric Baseline TileGS Interpretation Duration (ms) 1.299 0.878 1 .48 × faster SM throughput (%) 76.94 59.61 lower Active-warp occ. (%) 91.32 62.18 lower DRAM bytes (MB) 136.65 185.53 +35 .8% SASS thread inst. 21.25B 16.90B 1 .26 × fewer Branch div. threads 5.54M 5.70M nearly unchanged Thread insts / warp inst (%) 78.17 77.75 nearly unchanged 
+
+Table 12: Main contributors to per-stage GPU time changes on bicycle and garden (RTX 4090, PyTorch profiler traces). “Sort” de-notes the baseline’s full CUB global radix sort and TileGS’s lighter per-bin segmented sort; “Bin construct.” denotes TileGS’s tile-local count/scatter and prefix-sum pass, which is absent from the baseline (the small non-zero baseline entry reflects gsplat’s exist-ing tile-intersection counting kernel, not TileGS bin construction). Near-zero stages (spherical harmonics, projection, depth-range es-timation) are omitted for compactness. 
+
+bicycle garden 
+
+Stage Base TileGS ∆ Base TileGS ∆
+
+Raster 2.584 1.781 −0.803 2.152 1.463 −0.689 Sort 0.773 0.332 −0.441 0.687 0.048 −0.640 Tile intersect 0.387 0.351 −0.036 0.367 0.344 −0.023 Bin construct. 0.057 0.495 +0.438 0.042 0.446 +0.404 Repair 0.000 0.405 +0.405 0.000 0.332 +0.332 Total GPU 5.379 5.072 −0.307 4.776 4.306 −0.470 the source-attributed breakdown in Table 13 should be interpreted as representative rather than as a per-scene aggregate. 
+
+6.1. Pipeline stage breakdown 
+
+To understand both the sources of speedup and the cost of TileGS’s auxiliary passes, we decompose GPU kernel time by pipeline stage using PyTorch profiler traces on bicycle and garden (RTX 4090). Table 12 reports the results. Two sources of speedup emerge. The primary source is the 
+
+raster kernel : TileGS saves 0.803 ms on bicycle and 0.689 ms on garden, consistent with the ≈1.44 × kernel speedup reported in §5.2. A secondary speedup source in our implementation is the 
+
+global sort : TileGS replaces the baseline’s full CUB radix sort (0.773 ms / 0.687 ms) with a lighter combination of a per-tile bin scatter pass and a per-bin segmented sort, saving 0.441 ms on bicy-cle and 0.640 ms on garden. The two main added costs are bin construction (0.438/0.404 ms) and repair (0.405/0.332 ms). Tile intersection shows a small sav-ing (0.036/0.023 ms), while spherical harmonics, projection, and  
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd. Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization 11 of 12
+
+depth-range estimation have near-zero deltas and are omitted. Re-ducing these auxiliary costs — particularly by fusing small kernels in the bin construction and repair passes — is the highest-leverage direction for closing the frame/kernel gap. The 6.9–9.4% end-to-end gain is achieved despite the added bin-construction and repair stages, so reducing auxiliary-stage overhead is the most direct path to larger frame-level gains. The decomposed stages also show why the mechanism analysis focuses on the raster kernel rather than the full pipeline. On both scenes, the sort replacement (0.441/0.640 ms) alone is smaller than the combined added cost of bin construction and repair (0.843/0.736 ms), so on these two scenes the shown non-raster stages net to a cost rather than a saving, making the raster-kernel saving the dominant contributor to the net frame-level gain. This is why §6 analyzes the raster kernel specifically when explain-ing the source of the speedup. 
+
+6.2. Remaining bottleneck: geometry-attribute scatter 
+
+The RTX 4090 and RTX 1000 Ada results indicate that TileGS No-GW primarily acts as a traversal-granularity optimization rather than a bandwidth-reduction method. On RTX 4090, TileGS is faster despite moving more raster data than the baseline. On RTX 1000 Ada, TileGS also achieves clear end-to-end gains un-der a more bandwidth-constrained operating point, although full-resolution Nsight captures are unavailable for four raster-heavy Ada scenes. The captured five-scene Ada kernel subset neverthe-less yields a mean 1.441 × speedup, and the 50% Gaussian diag-nostic subset discussed in §7 shows the same qualitative pattern as RTX 4090: fewer SASS thread instructions despite higher DRAM traffic. These cross-platform indicators are consistent with the same traversal-work interpretation, but are not sufficient to attribute the Ada gain to the same source-level traffic components measured on RTX 4090. To understand the remaining bottleneck, we attribute memory pressure to source-level regions in a representative bicycle raster-kernel capture on RTX 4090. As shown in Table 13, geometry attributes dominate both total traffic and excess sectors: they ac-count for 85.8% of total source-attributed raster memory pres-sure and 88.6% of excess sectors. We verified qualitatively that the geometry-attribute dominance is stable across scene types: on lighter scenes, absolute traffic volumes are lower but the relative share of geometry attributes remains above 80% of total source-attributed pressure, because the bin/index structures scale with the same Gaussian count while geometry remains the dominant per-entry fetch cost. This indicates that the unresolved bottleneck is not primarily tile-bin metadata, but the scattered access pattern of conic parameters, projected means, colors, and opacities during rasteriza-tion, regardless of scene weight. We also explored lightweight bandwidth-oriented fixes, includ-ing in-kernel gather-order sorting, FP16 color compression, sidecar materialization, and pre-raster rejection heuristics. None produced a net gain in the current CUDA/IMR implementation: the added control, synchronization, decode, or helper-kernel cost outweighed the reduction in attribute traffic. The No-GW path achieves bet-ter results partly because it keeps the raster inner loop simple. Thus, the next meaningful optimization direction is structural geometry-layout reorganization, such as raster-order-aware storage or AoSoA-style layouts, that better aligns attribute layout with tile-local traversal. 
+
+Table 13: Representative source-attributed DRAM pressure (L2 Theoretical Sectors, Global) for the TileGS No-GW rasterization kernel on bicycle on RTX 4090. “Excess” sectors denote uncoa-lesced cache-line bytes loaded but not used. 
+
+Region Total (M) % Excess (M) %Geometry attributes 45.7 85.8 39.9 88.6 Bin/index structures 5.4 10.2 4.1 9.0 Framebuffer 2.1 4.0 1.1 2.4 
+
+Total 53.2 100 45.1 100 7. Discussion, limitations, and future work Scope and complementarity. TileGS should be understood pri-marily as a tile-local traversal organization improvement for Gaus-sian rasterization. It is not merely a CUDA implementation vari-ant of 3DGS; it exposes tile-local traversal granularity as a sep-arate design axis for Gaussian rasterization. Its contribution is an execution-structure insight—that standard 3DGS is tile-based in ownership but not tile-local in traversal—and a demonstration that changing traversal granularity alone, without altering the repre-sentation or compositing rule, produces measurable speedups even when memory coalescing and occupancy counters do not improve. 
+
+GPU architecture scope. Both evaluation platforms are NVIDIA Ada-generation GPUs; we do not evaluate other NVIDIA gener-ations, non-NVIDIA GPUs, or mobile/TBDR architectures. Be-cause the magnitude of tile-bin-major reordering depends on hard-ware scheduling, cache behavior, and memory service, we make no quantitative claim beyond the two Ada platforms evaluated here. 
+
+Profiling limitations on RTX 1000 Ada. Full-resolution Nsight counter capture failed on four raster-heavy scenes ( bicycle , gar-den , stump , drjohnson ) due to driver/profiler resource acquisition errors, while the application runs completed normally. The reported RTX 1000 Ada kernel mean of 1.441 × is therefore a five-scene subset, not a full-suite average. A 50% Gaussian diagnostic sub-set completed on all nine scenes and showed the same qualitative trend as RTX 4090: TileGS reduced kernel duration by 1.45 × and SASS thread instructions by 1.13 × while increasing DRAM traffic. We use this only as supporting diagnostic evidence, not as a main aggregate. 
+
+Scene coverage. The benchmark is limited to natural real-world captures from Mip-NeRF 360, Tanks and Temples, and Deep Blending. Synthetic scenes with unusually sparse, unusually dense, or strongly bimodal near/far depth distributions may interact dif-ferently with log-depth binning and the repair policy. The sup-plemental material includes a single-view synthetic scale-up di-agnostic on a high-workload bicycle view; this test is intended only to characterize sort/reordering and raster-stage behavior un-der increased emitted-entry pressure, not to replace the full 9-scene benchmark. In that diagnostic, TileGS keeps both stages consis-tently cheaper than the baseline, although total-frame speedup re-mains limited by non-raster and auxiliary overheads, consistent with the frame/kernel gap analysis in §6.1. A systematic stress test 
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd.
+
+12 of 12 Tan et al. / TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization 
+
+over synthetic sparse, dense, and bimodal depth distributions would be useful for characterizing when binning overhead dominates and when the repair budget becomes active; we treat this as future work. 
+
+Resolution and view-count scope. The reported configuration— 
+
+K = 64, the depth-range percentiles in §3.2, and the repair thresh-olds in Table 2—was evaluated at each scene’s native resolution and standard held-out view split. We do not independently sweep reso-lution or view count. Higher resolutions may change the number of tiles, per-tile Gaussian counts, and the best bin/repair settings, so we leave a systematic resolution sweep to future work. 
+
+Backward-pass integration. The current TileGS implementation targets the forward rasterization pass only. Extending it to training would require the backward pass to traverse Gaussian–tile entries in the same tile-bin-major, repaired order used in the forward pass, since the alpha-compositing gradient depends on that exact order-ing. We leave this integration to future work. 
+
+Implementation details. Although the main text specifies the re-pair buckets, default thresholds, and global repair-entry budget, full implementation-level pseudocode for bin construction, repair se-lection, and binned raster traversal is provided in the supplemen-tal material. Aggressive and conservative repair-threshold variants changed full-suite RTX 4090 frame time by less than 1% while re-maining within the same quality thresholds. 
+
+Dominant remaining bottleneck and future direction. The cur-rent No-GW implementation does not consistently reduce DRAM byte volume; the gain is a traversal-granularity effect, as sup-ported in §6. Source-attributed profiling shows that geometry-attribute access dominates the remaining memory pressure (Ta-ble 13). The next meaningful optimization direction is therefore structural geometry-layout reorganization, such as raster-order-aware storage or AoSoA-style layouts, as discussed in §6.2. On bandwidth-constrained or TBDR-style GPUs, this structural align-ment may be important for realizing stronger bandwidth-reduction benefits from tile-local Gaussian rendering. 
+
+8. Conclusion 
+
+We presented TileGS, a tile-local depth-binning pipeline for Gaus-sian splatting rasterization. TileGS replaces the baseline globally sorted tile-depth stream traversal with a bin-organized tile-local raster path and a selective exact-repair mechanism. The method keeps the Gaussian representation, projected inputs, and composit-ing semantics unchanged, but changes the granularity at which the raster kernel consumes the Gaussian workload. Across a 9-scene benchmark on desktop- and laptop-class Ada GPUs, TileGS preserves image quality up to numerical noise while improving both rasterization-kernel time and end-to-end frame time over gsplat. The gains are achieved despite added depth-range estimation, bin construction, and repair stages, making auxiliary-stage fusion the most direct path to larger frame-level speedups. The broader lesson is that Gaussian rasterization benefits from execution-order redesign even when the representation and inner-loop math are unchanged. Full-suite RTX 4090 profiling shows that TileGS is faster despite higher DRAM traffic and lower occupancy/SM-throughput counters, while SASS thread instruc-tions fall by 1.26 ×. Geometry-attribute access remains the dom-inant unresolved bottleneck, suggesting that structural alignment between attribute storage and tile-local traversal is a promising di-rection for bandwidth-constrained or TBDR-oriented Gaussian ren-derers. 
+
+References 
+
+[BMV ∗22] BARRON J. T., M ILDENHALL B., V ERBIN D., S RINIVASAN 
+
+P. P., H EDMAN P.: Mip-nerf 360: Unbounded anti-aliased neural radi-ance fields. In CVPR (2022). 7 [FCF ∗25] FENG G., C HEN S., F U R., L IAO Z., W ANG Y., L IU T., P EI 
+
+Z., L I H., Z HANG X., D AI B.: Flashgs: Efficient 3d gaussian splatting for large-scale and high-resolution rendering. In CVPR (2025). 3 [FEE21] FRIEDERICHS F., E ISEMANN M., E ISEMANN E.: Layered weighted blended order-independent transparency. In Graphics Interface 
+
+(2021), pp. 196–202. doi:10.20380/GI2021.22 . 3 [HPP ∗18] HEDMAN P., P HILIP J., P RICE T., F RAHM J.-M., D RET - 
+
+> TAKIS
+
+G., B ROSTOW G.: Deep blending for free-viewpoint image-based rendering. ACM Transactions on Graphics 37 , 6 (2018). 7 [HRL ∗25] HOU Q., R AUWENDAAL R., L I Z., L E H., F ARHADZADEH 
+
+F., P ORIKLI F., B OURD A., S AID A.: Sort-free gaussian splatting via weighted sum rendering. In ICLR (2025). 2 [HTL ∗24] HANSON A., T U A., L IN G., S INGLA V., Z WICKER M., GOLDSTEIN T.: Speedy-splat: Fast 3d gaussian splatting with sparse pixels and sparse primitives. arXiv preprint arXiv:2412.00578 (2024). 3 [KKLD23] KERBL B., K OPANAS G., L EIMKÜHLER T., D RETTAKIS 
+
+G.: 3d gaussian splatting for real-time radiance field rendering, 2023. 
+
+arXiv:2308.04079 . 1, 2 [KPZK17] KNAPITSCH A., P ARK J., Z HOU Q.-Y., K OLTUN V.: Tanks and temples: Benchmarking large-scale scene reconstruction. ACM Transactions on Graphics 36 , 4 (2017). 7 [KVK ∗25] KHERADMAND S., V ICINI D., K OPANAS G., L AGUN D., Y I
+
+K. M., M ATTHEWS M., T AGLIASACCHI A.: Stochasticsplats: Stochas-tic rasterization for sorting-free 3d gaussian splatting. In ICCV (2025). 3[LHLW09] LIU F., H UANG M.-C., L IU X.-H., W U E.-H.: Efficient depth peeling via bucket sort. In High Performance Graphics (2009). 
+
+doi:10.1145/1572769.1572779 . 3 [MB13] MCGUIRE M., BAVOIL L.: Weighted blended order-independent transparency. JCGT 2 , 2 (2013), 122–141. 2 [OBA12] OLSSON O., B ILLETER M., A SSARSSON U.: Clustered de-ferred and forward shading. In High Performance Graphics (2012), pp. 87–96. doi:10.2312/EGGH/HPG12/087-096 . 3 [RSP ∗24] RADL L., STEINER M., PARGER M., WEINRAUCH A., KERBL B., STEINBERGER M.: Stopthepop: Sorted gaussian splatting for view-consistent real-time rendering. arXiv preprint arXiv:2402.00525 (2024). 2 [YLK ∗24] YE V., L I R., K ERR J., T URKULAINEN M., Y I B., P AN Z., SEISKARI O., Y E J., H U J., T ANCIK M., K ANAZAWA A.: gsplat: An open-source library for gaussian splatting, 2024. arXiv:2409. 06765 . 2, 7 [ZPvBG01] ZWICKER M., P FISTER H., VAN BAAR J., G ROSS M.: Sur-face splatting. In SIGGRAPH (2001), pp. 371–378. doi:10.1145/ 383259.383300 . 2 [ZPvBG02] ZWICKER M., P FISTER H., VAN BAAR J., G ROSS M.: EWA splatting. IEEE TVCG 8 , 3 (2002), 223–238. doi:10.1109/ TVCG.2002.1021576 . 2 
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd.
+
+Pacific Graphics 2026 Y. He, N. Thürey, and L. Liu (Guest Editors) 
+
+COMPUTER GRAPHICS forum 
+
+Volume 45 (2026 ), Number 7 
+
+# TileGS: Tile-Local Depth Binning for Gaussian Splatting Rasterization Supplemental Material 
+
+Wei Tan 1 Matias Turkulainen 1 Lauri Ilola 2 Hamed Rezazadegan Tavakoli 2 Juho Kannala 1
+
+> 1
+
+Aalto University, Finland 
+
+> 2
+
+Nokia Technologies, Finland 
+
+Algorithm 1 Overall TileGS forward path 
+
+Input: Projected Gaussian attributes; baseline Gaussian–tile en-tries E; image and tile dimensions; K = 64 
+
+Output: Rendered image matching baseline compositing up to nu-merical noise 
+
+1: Estimate robust depth range [zmin , zmax ] using Algorithm 2 
+
+2: Build a tile-bin-major pair stream and bin offsets using Algo-rithm 3 
+
+3: Apply selected exact repair by sorting selected tile/bin seg-ments using Algorithm 4 
+
+4: Rasterize the repaired tile-bin-major stream using the binned traversal procedure in Section 4 
+
+5: return rendered image 
+
+Overview. This supplemental material provides implementation-level pseudocode for the TileGS forward path used in the main pa-per. The goal is to clarify the execution structure: robust depth-range estimation, tile-local bin construction, selective exact re-pair, and binned raster traversal. The pseudocode follows the cur-rent No-GW implementation at the level of data dependencies and routing decisions, while omitting low-level CUDA launch details, workspace allocation, and optional profiling/debug paths. 
+
+1. Notation and Default Configuration 
+
+Let E denote the emitted Gaussian–tile intersection entries. Each entry stores a tile id t(e), a Gaussian id g(e), and an origi-nal baseline sort key s(e) encoding the baseline depth order in-side the tile. TileGS assigns each entry to a coarse bin b(e) ∈{0, . . . , K − 1} and constructs a flattened tile-bin-major stream. For each tile t, the offset array binOffsets [t, 0 . . . K] defines the con-catenated interval for all bins in that tile; the segment for bin b
+
+is [binOffsets [t, b], binOffsets [t, b + 1]) .
+
+2. Tile-Local Bin Construction 
+
+The current implementation builds a pair stream. Each pair stores the original baseline ordering key and the Gaussian flat id. The final pair stream is tile-bin-major: all entries of tile t, bin 0 appear be-fore entries of tile t, bin 1, and so on. In the No-GW path, the raster 
+
+Table 1: Default No-GW configuration represented by this supple-ment. 
+
+Setting Value Raster path No-GW: no pre-raster geometry material-ization Depth bins K = 64 Depth-to-bin map-ping Log-space (default); linear variant avail-able but unused Depth-range per-centiles 
+
+plo = 1.0, phi = 99 .0Depth-range padding 
+
+fpad = 0.05 (5% of clipped span) Depth-range sam-ple count Up to S = 8192 candidates Depth-range selec-tion method Exact order statistics ( kthvalue ); his-togram alternative exists but unused Near-depth shift Enabled by default, α = 1.0, γ = 0.25 Count/scatter path Direct atomic tile-bin construction Warp-key grouping Disabled in the reported default Geometry sidecar Disabled for No-GW; optional for the Packed-GW ablation Flat-id sidecar Optional; otherwise the raster kernel reads the flat id from the pair stream Raster replay Concatenated tile-bin stream in front-to-back bin order Color staging Enabled by default in the binned raster kernel Conservative alpha cull Enabled by default in the binned raster kernel Repair Selective exact repair for selected tile/bin segments kernel normally fetches geometry attributes from the original ar-rays using the flat id. Packed-GW materializes optional geometry sidecars, but that path is not the default reported configuration.  
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics - The European Asso-ciation for Computer Graphics and John Wiley & Sons Ltd. This is an open access article under the terms of the Creative Commons Attribution License, which permits use, distribution and reproduction in any medium, provided the original work is properly cited. 2 of 5 Tan et al. / TileGS Supplemental Material
+
+Algorithm 2 Robust depth-range estimation 
+
+Input: Projected depths; Gaussian scales; optional emitted flat ids; near/far planes; sample count S = 8192; near-depth shift pa-rameters α = 1.0, γ = 0.25; percentiles plo = 1.0, phi = 99 .0; padding fraction fpad = 0.05; numerical floor ϵ = 10 −4
+
+Output: Robust clipped range [zmin , zmax ] 
+
+> 1:
+
+Sample up to S depth candidates from visible Gaussians or emitted flat ids  
+
+> 2:
+
+if near-depth mode is enabled (default) then  
+
+> 3:
+
+Convert each sampled depth zc to zkey ← zc − min (α ·
+
+smax , γ · zc), where smax is the Gaussian’s maximum projected scale  
+
+> 4:
+
+end if  
+
+> 5:
+
+Discard candidates with zkey ≤ 0; clamp remaining values us-ing the near/far planes and ϵ 
+
+> 6:
+
+Select the exact plo /phi percentile values of the sampled can-didates via order statistics to obtain [zlo , zhi ] 
+
+> 7:
+
+span ← max (zhi − zlo , 10 −6) 
+
+> 8:
+
+zmin ← max (znear , zlo − fpad · span ), zmax ← min (zfar , zhi +
+
+fpad · span ) 
+
+> 9:
+
+return [zmin , zmax ]
+
+Percentile selection uses exact order statistics ( kthvalue ) over the sampled candidates rather than a histogram approximation; this is the method that produced all reported results. A histogram-based percentile estimator (log-spaced, 128 bins by default) is available as an alternative but is not the default and was not used for the reported numbers. The near-depth shift is used only to form the binning key; it does not change the projected Gaussian attributes or the alpha-compositing equations used by the raster kernel. 
+
+Algorithm 3 Tile-local bin construction 
+
+Input: Baseline entries E with tile id t(e), flat id g(e), baseline sort key s(e), and depth z(e); clipped range [zmin , zmax ]; number of bins K
+
+Output: Tile offsets, bin offsets, tile-bin-major pair stream P, and optional sidecars  
+
+> 1:
+
+Initialize count [t, b] ← 0 for all tiles and bins  
+
+> 2:
+
+for all entries e ∈ E in parallel do  
+
+> 3:
+
+b(e) ← log-depth-bin (z(e), zmin , zmax , K) 
+
+> 4:
+
+Atomically increment count [t(e), b(e)]  
+
+> 5:
+
+end for  
+
+> 6:
+
+Exclusive-scan the count array to obtain binOffsets [t, b] 
+
+> 7:
+
+Initialize write cursors from binOffsets  
+
+> 8:
+
+for all entries e ∈ E in parallel do  
+
+> 9:
+
+b ← b(e) 
+
+> 10:
+
+p ← atomic increment of cursor [t(e), b] 
+
+> 11:
+
+P[p] ← (s(e), g(e))  
+
+> 12:
+
+if flat-id sidecar is enabled then  
+
+> 13:
+
+flatIds [p] ← g(e) 
+
+> 14:
+
+end if  
+
+> 15:
+
+if Packed-GW geometry sidecar is enabled then  
+
+> 16:
+
+Materialize selected geometry attributes at index p 
+
+> 17:
+
+end if  
+
+> 18:
+
+end for  
+
+> 19:
+
+return tile offsets, binOffsets, P, and optional sidecars 
+
+Table 2: Packed-GW diagnostic on RTX 4090. The April 22 profil-ing sweep shows that Packed-GW can reduce raster DRAM traffic, but the April 23 timing-only rerun is uniformly slower. We therefore use No-GW as the default and treat Packed-GW as a bandwidth-oriented diagnostic. 
+
+Evidence Result Interpretation April 22 profiling sweep DRAM reduced in 7/9 scenes bandwidth benefit exists Mean DRAM change 
+
+−28 .64 MB traffic-side im-provement Largest reductions garden −92 .46 MB; bicycle −82 .34 MB strongest on heavy scenes April 23 timing re-run slower in 9/9 scenes not selected as de-fault Mean timing change 
+
++0.208 ms / +7.87% materialization cost dominates 
+
+Table 3: Count/scatter construction variants on RTX 4090 ( ker-nel_variant_full9_rtx4090_20260504_v3 ). All vari-ants produce identical bin-offset arrays and Gaussian-ID streams; only construction/runtime overhead changes. 
+
+Variant Mean time Relative to default (ms) Warp-key grouping 2.85796 0.996 ×
+
+Two-stage aggregation 2.85863 0.997 ×
+
+Default direct atomics 2.86811 1.000 ×
+
+Block-local hash agg. 2.92911 1.021 ×
+
+Warp-private histogram 3.32800 1.160 ×
+
+The mapping log-depth-bin (z, zmin , zmax , K) used above is, by de-fault, a clamped log-space bin index: 
+
+u = clamp 
+
+ ln (max (z, ϵ)) − ln (z′
+
+> min
+
+)
+
+ln (z′
+
+> max
+
+) − ln (z′
+
+> min
+
+) , 0, 1 − 10 −6
+
+
+
+,
+
+b = ⌊Ku ⌋ , b ← clamp (b, 0, K − 1).
+
+where z′ 
+
+> min
+
+= max (zmin , ϵ), z′ 
+
+> max
+
+= max (zmax , z′ 
+
+> min
+
++ 10 −6), and 
+
+ϵ = 10 −4. The per-entry depth z(e) passed to this mapping is the same near-depth-shifted key zkey used during range estimation (Al-gorithm 2), so bin assignment and range estimation apply an iden-tical depth transform. A linear (non-log) variant with the same clamp-and-floor structure is available but is not the default. Warp-private histograms were slower than the default on all nine scenes, with the largest slowdowns on bicycle (+0.932 ms) and garden (+0.840 ms). Although warp-key grouping and two-stage aggregation were within 0.4% of the default in this isolated sweep, a later paired rerun favored the final warp-key-disabled path by 0.01982 ms in median time and showed a tighter run range (0.01952 ms vs. 0.04773 ms). We therefore use direct atomics with warp-key grouping disabled as the reported default. 
+
+3. Selective Exact Repair 
+
+The implementation represents every coarse tile/bin slice as a log-ical segment. Repair is applied before rasterization by sorting se- 
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd. Tan et al. / TileGS Supplemental Material 3 of 5
+
+lected segments according to their original baseline key. Non-selected segments remain in the tile-bin-major stream produced by the construction pass. The reported selective policy uses fixed global thresholds; they are not tuned per scene. 
+
+Table 4: Default selective-repair thresholds represented in the pseudocode. 
+
+Parameter Default value No-repair threshold ℓ ≤ 1Local exact-repair maximum 512 entries Always-keep long segment cutoff ℓ ≥ 320 Global-tail bucket ℓ > 512 Tile-share cutoff ℓ/ℓ tile ≥ 45% Local-256 share cutoff 129 ≤ ℓ ≤ 256 and ℓ/ℓ tile ≥ 10% Very-front cutoff b < 2 and ℓ ≥ 16 Repair-entry budget Brep = ⌊0.25 M⌋, where M = |E|
+
+Algorithm 4 Selective repair selection and local exact sorting 
+
+Input: Pair stream P; bin offsets; K; emitted-entry count M;repair-entry budget Brep = ⌊0.25 M⌋
+
+Output: Pair stream with selected segments restored to baseline order  
+
+> 1:
+
+R ← ∅ , used ← 0 
+
+> 2:
+
+for logical segment ids q = tK + b in tile-bin order do  
+
+> 3:
+
+begin ← binOffsets [t, b] 
+
+> 4:
+
+end ← binOffsets [t, b + 1] 
+
+> 5:
+
+ℓ ← end − begin  
+
+> 6:
+
+if ℓ ≤ 1 then  
+
+> 7:
+
+continue  
+
+> 8:
+
+end if  
+
+> 9:
+
+ℓtile ← binOffsets [t, K] − binOffsets [t, 0] 
+
+> 10:
+
+keep ← false  
+
+> 11:
+
+if ℓ ≥ 320 then  
+
+> 12:
+
+keep ← true  
+
+> 13:
+
+end if  
+
+> 14:
+
+if ℓ > 512 then  
+
+> 15:
+
+keep ← true  
+
+> 16:
+
+end if  
+
+> 17:
+
+if ℓ/ℓ tile ≥ 45% then  
+
+> 18:
+
+keep ← true  
+
+> 19:
+
+end if  
+
+> 20:
+
+if 129 ≤ ℓ ≤ 256 and ℓ/ℓ tile ≥ 10% then  
+
+> 21:
+
+keep ← true  
+
+> 22:
+
+end if  
+
+> 23:
+
+if b < 2 and ℓ ≥ 16 then  
+
+> 24:
+
+keep ← true  
+
+> 25:
+
+end if  
+
+> 26:
+
+if keep and used + ℓ ≤ Brep then  
+
+> 27:
+
+Add (t, b, begin , end ) to R 
+
+> 28:
+
+used ← used + ℓ 
+
+> 29:
+
+end if  
+
+> 30:
+
+end for  
+
+> 31:
+
+for all segments (t, b, begin , end ) ∈ R do  
+
+> 32:
+
+Sort P[begin : end ) by original baseline key s(e) 
+
+> 33:
+
+Keep flat-id/geometry sidecars aligned with the sorted pair order  
+
+> 34:
+
+end for  
+
+> 35:
+
+return repaired pair stream and aligned sidecars 
+
+4. Binned Raster Traversal Relationship to the baseline traversal. At the control-flow level, Algorithm 5 resembles the baseline: each tile’s CUDA block linearly scans one contiguous interval of the pair stream, in batches, with the same per-pixel early-termination test. What differs from the baseline is the contents and organization of the interval being scanned. Concretely, the interval [a, b) = [binOffsets [t, 0], binOffsets [t, K]) that each tile’s block replays is not a single globally depth-sorted range as in the baseline, but the concatenation of the tile’s K coarse bins produced by tile-local bin construction (Algorithm 3), laid out back to back in front-to-back bin order — the tile-bin-major layout defined in the Tile-local bin construction subsection of the main paper’s Method section. Within a given bin’s sub-range, entries sit in whatever order the atomic  
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd. 4 of 5 Tan et al. / TileGS Supplemental Material
+
+scatter of Algorithm 3 happened to produce; they are not depth-sorted, except where selective exact repair (Algorithm 4) has re-stored exact baseline depth order to that specific segment. Algo-rithm 5 therefore requires no per-bin branching: the tile-local re-ordering is already baked into the stream before the raster kernel runs, so a plain linear scan over [a, b) is sufficient to consume the bins in front-to-back order. The main paper’s Mechanism analysis section discusses why this reordering, rather than any change to the traversal loop itself, is the source of the measured speedup. 
+
+Implementation details. In the default No-GW path, the kernel loads Gaussian attributes from the original arrays using either a flat-id sidecar or the flat id stored in the pair stream, using one CUDA block per tile. A profiling mode can instead replay a specified bin window in isolation, but this is not the default reported path. Thus, the default raster loop does not use intermediate bin boundaries as separate raster-loop exits; the boundaries determine the material-ized stream layout and repair segments before rasterization. Algo-rithm 5 gives pseudocode for the binned raster traversal after repair. 
+
+Algorithm 5 Binned raster traversal after repair (default No-GW path) 
+
+Input: Repaired pair stream P; bin offsets; optional flat-id sidecar; Gaussian attributes; image/tile dimensions 
+
+Output: Rendered colors, alphas, and last contributing ids  
+
+> 1:
+
+for all tiles t in parallel do  
+
+> 2:
+
+Determine tile pixel coordinates; skip masked tiles  
+
+> 3:
+
+for all pixels p in tile t do  
+
+> 4:
+
+Cp ← 0; Tp ← 1 
+
+> 5:
+
+end for  
+
+> 6:
+
+a ← binOffsets [t, 0]; b ← binOffsets [t, K] 
+
+> 7:
+
+for each batch in [a, b) do  
+
+> 8:
+
+if all pixels in tile have terminated then break  
+
+> 9:
+
+end if  
+
+> 10:
+
+Load candidate Gaussian ids into shared memory  
+
+> 11:
+
+if tile-alpha culling is enabled then  
+
+> 12:
+
+Remove candidates below the tile-level contribu-tion threshold  
+
+> 13:
+
+end if  
+
+> 14:
+
+if color staging is enabled then  
+
+> 15:
+
+Stage candidate colors cooperatively in shared memory  
+
+> 16:
+
+end if  
+
+> 17:
+
+for all Gaussians g in surviving batch order do  
+
+> 18:
+
+for all active pixels p in tile t do  
+
+> 19:
+
+Count candidate visit if traversal profiling is en-abled  
+
+> 20:
+
+Evaluate the same opacity/conic test as the baseline  
+
+> 21:
+
+Update Cp and Tp using baseline alpha com-positing  
+
+> 22:
+
+if Tp reaches the early-termination threshold 
+
+then  
+
+> 23:
+
+Mark pixel p inactive  
+
+> 24:
+
+end if  
+
+> 25:
+
+end for  
+
+> 26:
+
+end for  
+
+> 27:
+
+end for  
+
+> 28:
+
+Write final color, alpha, and last contributing id for each pixel  
+
+> 29:
+
+end for  
+
+> 30:
+
+return rendered image 
+
+5. Synthetic Scale-Up Stress Diagnostic 
+
+To complement the full 9-scene benchmark in the main paper, we include a single-view synthetic scale-up diagnostic on a fixed high-workload view from the real bicycle scene ( _DSC8687.JPG ). This diagnostic is not a replacement for the full benchmark; in-stead, it isolates how the sort/reordering and raster stages behave as the emitted Gaussian workload increases. We synthetically scale the workload from 5M to 30M Gaussians and measure median-of-5 timings under the same locked RTX 4090 timing-only protocol used for the main evaluation. Figure 1 and Table 5 show that both the sort/reordering stage and the raster stage remain consistently cheaper for TileGS across the tested range, and the absolute timing gaps widen with scale. At 30M emitted entries, the sort stage improves by 1.71 × and the 
+
+> © 2026 The Author(s). Computer Graphics Forum published by Eurographics and John Wiley & Sons Ltd.
+
+Tan et al. / TileGS Supplemental Material 5 of 5 
+
+Figure 1: Synthetic scale-up diagnostic on a fixed high-workload bicycle view ( _DSC8687.JPG ). The workload increases from 5M to 30M Gaussians. TileGS keeps both sort/reordering and raster stages cheaper than the gsplat baseline; this should be read as sup-plementary scale-up evidence rather than as a new headline bench-mark. 
+
+Table 5: Synthetic scale-up timing on the fixed bicycle view used in Figure 1. Times are median-of-5 measurements on RTX 4090 under the locked timing-only protocol. 
+
+Points Sort (ms) Raster (ms) Total (ms) (M) Base TileGS × Base TileGS × Base TileGS ×
+
+5 1.051 0.387 2.72 2.277 1.554 1.46 4.843 4.345 1.11 10 2.255 0.828 2.72 3.793 2.601 1.46 8.797 7.650 1.15 15 3.230 1.513 2.13 4.939 3.440 1.44 12.174 10.772 1.13 20 4.087 2.216 1.84 6.106 4.216 1.45 15.290 13.923 1.10 25 4.906 2.807 1.75 7.035 4.916 1.43 18.311 16.733 1.09 30 5.709 3.340 1.71 7.980 5.603 1.42 21.106 19.441 1.09 
+
+raster stage by 1.42 ×, consistent with the main paper’s interpreta-tion that tile-local depth-binned traversal reduces forward-pass cost as raster workload intensity increases. The total-frame speedup is smaller and not monotonic because the synthetic scale-up includes non-raster and auxiliary overheads that are not eliminated by the binned raster path; this behavior is consistent with the frame/kernel gap analysis in the main paper. 
+
+6. Reproducibility Checklist 
+
+For the main reported timing runs, use locked GPU clock presets, CUDA-event GPU timing, resident Gaussian parameters, and the same projected Gaussian inputs for baseline and TileGS. Nsight Compute counter collection should be performed in a separate profiling pass and should not be mixed with the primary timing-only measurements. Unless otherwise stated, use the No-GW path, 
+
+K = 64, direct-atomic tile-bin construction with warp-key group-ing disabled, color staging and conservative alpha culling enabled, log-space depth binning with the depth-range and near-depth-shift constants in Table 1, and selective exact repair with the thresholds in Table 4.
