@@ -1629,6 +1629,36 @@ window.$docsify = {
           const childUl = li.querySelector(':scope > ul');
           if (childUl) childUl.classList.add('sidebar-day-content');
           const key = dayKey || rawText;
+		// 为现有日期分组添加日报入口，兼容单日和区间日报。
+          if (
+            childUl &&
+            !childUl.querySelector(':scope > li.dpr-day-report-entry')
+          ) {
+            const dates = rawText.match(/\d{4}-\d{2}-\d{2}/g) || [];
+            let reportPath = '';
+
+            if (dates.length === 1) {
+              const [year, month, day] = dates[0].split('-');
+              reportPath = `${year}${month}/${day}/README`;
+            } else if (dates.length === 2) {
+              const start = dates[0].replace(/-/g, '');
+              const end = dates[1].replace(/-/g, '');
+              reportPath = `${start}-${end}/README`;
+            }
+
+            if (reportPath) {
+              const reportItem = document.createElement('li');
+              reportItem.className = 'dpr-day-report-entry';
+
+              const reportLink = document.createElement('a');
+              reportLink.href = `#/${reportPath}`;
+              reportLink.textContent = '查看日报';
+              reportLink.title = `查看 ${rawText} 的日报`;
+
+              reportItem.appendChild(reportLink);
+              childUl.insertBefore(reportItem, childUl.firstChild);
+            }
+          }
 
           // 复用或创建 wrapper（包含日期文字和小箭头）
           let wrapper = li.querySelector(':scope > .sidebar-day-toggle');
