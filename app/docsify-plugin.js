@@ -4632,6 +4632,79 @@ window.$docsify = {
         setupCollapsibleSidebarByDay();
         setupCollapsibleConferenceSidebar();
         hydrateStructuredSidebarItems();
+		// 在日报的论文标题下，显示侧边栏已有的一句话简介。
+        if (isReportPage) {
+          const reportRoot = document.querySelector('.markdown-section');
+          const sidebarRoot = document.querySelector('.sidebar-nav');
+
+          if (reportRoot && sidebarRoot) {
+            const evidenceByRoute = new Map();
+
+            // 统一链接格式，用论文路径匹配，避免同名标题误配。
+            const getReportPaperRoute = (href) => {
+              try {
+                const hash = new URL(href, window.location.href).hash;
+                const route = normalizeHref(hash);
+                return decodeURIComponent(route)
+                  .split('?')[0]
+                  .replace(/\.md$/i, '')
+                  .replace(/\/$/, '');
+              } catch {
+                return '';
+              }
+            };
+
+            sidebarRoot
+              .querySelectorAll('a[data-sidebar-item]')
+              .forEach((link) => {
+                try {
+                  const payload = JSON.parse(
+                    link.getAttribute('data-sidebar-item') || '{}'
+                  );
+                  const evidence =
+                    typeof payload.evidence === 'string'
+                      ? payload.evidence.trim()
+                      : '';
+                  const route = getReportPaperRoute(
+                    link.getAttribute('href') || ''
+                  );
+
+                  if (route && evidence && !evidenceByRoute.has(route)) {
+                    evidenceByRoute.set(route, evidence);
+                  }
+                } catch {
+                  // 旧数据缺少简介时跳过，不影响其他论文。
+                }
+              });
+
+            reportRoot.querySelectorAll('li a[href]').forEach((link) => {
+              const route = getReportPaperRoute(
+                link.getAttribute('href') || ''
+              );
+              const evidence = evidenceByRoute.get(route);
+              if (!evidence) return;
+
+              const item = link.closest('li');
+              if (
+                !item ||
+                item.querySelector(':scope > .dpr-report-evidence')
+              ) {
+                return;
+              }
+
+              const description = document.createElement('div');
+              description.className = 'dpr-report-evidence';
+              description.textContent = evidence;
+              description.style.cssText =
+                'margin: 4px 0 12px;' +
+                'font-size: 0.95em;' +
+                'line-height: 1.65;' +
+                'opacity: 0.8;';
+
+              item.appendChild(description);
+            });
+          }
+        }
         bindSidebarVirtualHashLinks();
         neutralizeSidebarNoactiveLinks();
 
