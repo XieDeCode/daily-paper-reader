@@ -1,0 +1,410 @@
+Title: CVT-GS: Learning to Simplify 3D Gaussian Splatting with Centroidal Voronoi Tessellation
+
+URL Source: https://arxiv.org/pdf/2609.08730v1
+
+Published Time: Wed, 09 Sep 2026 03:47:52 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# CVT-GS: Learning to Simplify 3D Gaussian Splatting with Centroidal Voronoi Tessellation 
+
+## Bingxian Li 1, Yilong Li 2, Jingliang Peng 2, Peng-Shuai Wang 2, Fei Zhu 2∗,Guozheng Li 1, Chi Harold Liu 1, Guoping Wang 2, Bo Pang 2∗
+
+> 1
+
+Beijing Institute of Technology, Beijing, China 
+
+> 2
+
+Peking University, Beijing, China 
+
+Abstract 
+
+While 3D Gaussian Splatting (3DGS) has emerged as a pow-erful representation for real-time novel view synthesis, render-ing high-fidelity scenes often relies on a massive number of Gaussian primitives, incurring substantial storage and com-putational overhead. Existing simplification techniques are largely intrusive, requiring training-time pruning, architec-tural modifications, or computationally expensive per-scene fine-tuning. These drawbacks limit their deployment on off-the-shelf pretrained models. In this paper, we propose CVT-GS, a novel optimization-free post-hoc simplification frame-work that directly compresses trained 3DGS scenes without sacrificing visual fidelity. Our approach first constructs spa-tially coherent cells over Gaussian centers via a geometry-aware Centroidal Voronoi Tessellation (CVT). Subsequently, a lightweight neural cell merger predicts the geometry and ap-pearance of a single, highly representative Gaussian primitive for each cell under differentiable rendering supervision. By formulating simplification as a rendering-aware many-to-one merging process rather than naive primitive pruning, CVT-GS outputs a standard 3DGS scene that is seamlessly compati-ble with existing renderers. Experiments on various datasets demonstrate the superiority of our method. Notably, when achieving a 100 × reduction in Gaussian points, our method operates 12 × faster than state-of-the-art methods while im-proving the PSNR by 1.3 dB. 
+
+## Introduction 
+
+3D Gaussian Splatting (3DGS) has become a leading rep-resentation for novel view synthesis by combining explicit anisotropic Gaussian primitives with efficient differentiable rasterization (Kerbl et al. 2023). Compared with volumetric radiance fields (Mildenhall et al. 2020; Barron et al. 2021), 3DGS offers high visual fidelity, fast optimization, and effi-cient rendering, but these advantages come with a structural cost. A high-quality scene often requires hundreds of thou-sands to millions of Gaussian primitives, imposing substan-tial storage, transmission, sorting, and rendering overhead and limiting deployment on resource-constrained platforms. To mitigate these limitations, recent 3DGS simplification and compression methods address this redundancy through pruning, structured representations, quantization, entropy coding, or neural attribute fitting (Hanson et al. 2025; Chen 
+
+> ∗
+
+Corresponding author. 
+
+et al. 2025; Liu et al. 2025; Chen et al. 2026; Tang et al. 2026; Wang et al. 2025). These methods have made strong progress, but most of them are coupled with training-time optimization, representation redesign, specialized codecs, or scene-specific refinement. This leaves a practical gap because many standard 3DGS scenes are already trained, and users need a quick generic post-hoc method that preserves the orig-inal standard 3DGS format . We then naturally ask, can we design a fast, generic post-hoc simplification framework that preserve original 3DGS format without extra optimization? To answer this question, we must first formalize the post-hoc compression objective: reducing a pre-trained scene of 
+
+N Gaussians to a target count M = ⌈ρN ⌉ under an aggres-sive compression ratio ρ, which could be as small as 0.001. The most intuitive baseline could be independent primitive pruning, or edge-collapse-like merging (Xiong et al. 2026). However, since ρ could be extremely small, simply discard-ing primitives inevitably creates "holes" in scene coverage and fails to exploit the structural redundancy among spa-tially overlapping Gaussians. To preserve rendering fidelity at extreme compression rates, one must consolidate informa-tion rather than merely discard it. Following this intuition, we shift the paradigm from naive pruning to rendering-aware many-to-one merging. Instead of deleting points, our formu-lation consolidates a spatial subset of input Gaussians into a newly predicted standard primitive, ensuring the simplified output remains seamlessly compatible with existing 3DGS renderers. However, such passway poses two central chal-lenges. First, how to partition the scene into M spatially coherent support regions, and second, how to convert each variable-sized support into a single Gaussian without sacri-ficing much visual fidelity. We present CVT-GS, a post-hoc 3DGS simplification framework that separates many-to-one simplification into two steps, namely constructing mergeable support regions and predicting one output Gaussian for each support. For a prescribed output count, CVT-GS first partitions the in-put Gaussian centers into scene-level support regions using a geometry-aware Centroidal Voronoi Tessellation (CVT) inspired by classical geometry processing algorithms (Du, Faber, and Gunzburger 1999; Liu et al. 2009; Lévy and Liu 2010). Our CVT minimizes a global spatial distortion ob-jective to allocate density-adaptive and spatially coherent support regions, bypassing the limitations of heuristic local arXiv:2609.08730v1 [cs.CV] 8 Sep 2026 neighborhoods (Xiong et al. 2026) and tree-based group-ing (Wang et al. 2025). For each partitioned support, our lightweight neural cell merger, MergeNet, predicts a single representative Gaussian primitive in a single feed-forward pass. Because these merged primitives strictly preserve the standard 3DGS format, the resulting scenes remain plug-and-play with existing rasterizers. Experiments of multiple benchmark suggest our CVT-GS achievs a superior quality-speed balance under extreme compression ratio. To conclude, our contributions include the following. 
+
+• We introduce CVT-GS, a generic post-hoc framework that directly reduces the primitive count of pre-trained 3DGS scenes. This simplification process strictly preserves the standard representation and seamless renderer compati-bility. 
+
+• We propose a geometry-aware CVT formulation for con-structing coherent support regions over Gaussian primi-tives, together with a lightweight neural cell merger that predicts one standard Gaussian for each support through a single feed-forward pass. 
+
+• Experiments on four 3DGS datasets demonstrate that CVT-GS achieves higher PSNR and better efficiency than prior state-of-the-art baselines, with up to 12.3 ×
+
+faster simplification under the same immediate-output protocol. 
+
+## Related Work 
+
+Structured 3DGS Representations 
+
+Structured 3DGS representations improve scene organiza-tion, compactness, or deployment flexibility by changing how Gaussian primitives are generated, parameterized, or decoded. Scaffold-GS predicts local Gaussians from a struc-tured scaffold representation (Lu et al. 2024), while com-pact or flexible representations encode Gaussian attributes with neural fields, many-in-one structures, or progressive bitstreams (Liu et al. 2025; Tang et al. 2026; Chen et al. 2026). These methods broaden the design space of 3DGS, but they typically introduce auxiliary structures or an altered decoding process. In contrast, the proposed method starts from a pre-trained standard 3DGS scene and returns a re-duced set of standard Gaussians, requiring no changes to the renderer or the original decoding pipeline. 
+
+3DGS Simplification and Compression 
+
+The large primitive count of 3DGS has also motivated pruning and coding methods. Pruning-oriented methods use learned masks, constrained target counts, uncertainty scores, or significance heuristics (Lee et al. 2024; Niedermayr, Stumpfegger, and Westermann 2024; Fang and Wang 2024; Zhang et al. 2024; Hanson et al. 2025; Fan et al. 2024), while coding-oriented methods compress attributes through lightweight encodings, vector quantization, context models, or entropy coding (Girish, Gupta, and Shrivastava 2024; Na-vaneet et al. 2024; Chen et al. 2024, 2025; Dai, Liu, and Zhang 2025; Zhan et al. 2025). Recent post-training methods are closer to our setting. NanoGS performs training-free lo-cal pairwise merging (Xiong et al. 2026), GHAP formulates Gaussian reduction from an optimal-transport view (Wang et al. 2025), and NeuralGS fits compact neural fields but re-quires cluster-wise optimization and quality-restoring fine-tuning (Tang et al. 2026). The proposed method instead con-structs scene-level CVT supports and predicts one standard Gaussian per cell with a shared neural cell merger. 
+
+CVT in Geometry Processing 
+
+CVT is a classical tool in computational geometry for op-timal spatial partitioning and distribution-preserving sam-pling (Du, Faber, and Gunzburger 1999). Unlike k-means or greedy clustering, CVT yields a principled equilibrium in which each representative point optimally represents its local region in a least-squares sense. It can also be extended with anisotropic metrics and tensor-field guidance (Liu et al. 2009; Lévy and Liu 2010). Building on this geometry-processing perspective, we apply CVT to trained 3DGS primitives. CVT determines which primitives form each mergeable support, while a neural cell merger predicts one standard Gaussian to represent each support. 
+
+## Method 
+
+CVT-GS addresses the post-hoc simplification of pre-trained 3DGS models. Given an input scene S = {Gi}Ni=1 and a tar-get simplification ratio ρ, we aim to output a standard 3DGS model S⋆ = {G⋆k}Mk=1 with M = ⌈ρN ⌉ primitives. Under this reduced primitive count, the objective is to preserve the rendering fidelity of the input model, defined as: 
+
+min   
+
+> S⋆:|S⋆|=M
+
+L(R(S⋆), R(S)) . (1) where R denotes standard Gaussian splatting over evalua-tion views, and L is an image-space rendering loss. The most naive approach might be try to directly optimizing Eq. (1) for each input scene. However, such method would require scene-specific optimization, which is time-consuming and intro-duces substantial additional computation. Instead, CVT-GS decomposes the problem into scene-level support construc-tion and feed-forward Gaussian prediction. Our geometry-aware CVT first converts the input Gaussian primitives into 
+
+M density-adaptive support cells in the 3D position space of Gaussian centers. Each cell is then treated as a variable-sized local set whose geometry and appearance are predicted by MergeNet, a shared network trained once to output one stan-dard Gaussian primitive per cell. Thus, the output primitives are newly predicted from grouped inputs rather than selected as a subset of S, and no per-scene fine-tuning is required. In the following, we follow 3DGS (Kerbl et al. 2023) and define that each Gaussian point primitive Gi contains position μi, covariance Σi, scale si, rotation qi, opacity αi,and appearance coefficients fi.The following subsections discuss CVT support construc-tion, cell feature construction, and MergeNet prediction with rendering supervision. 
+
+Centroidal Voronoi Support Construction 
+
+Before predicting the output Gaussians, input primitives must be partitioned into support regions tailored for many-to-one 휇￿        
+
+> 휇￿휇￿푠￿푠￿푠￿푎
+> 푞￿푞￿푞￿푞￿푠ℎ ￿푠ℎ ￿푠ℎ ￿￿
+> ∆휇 ∆푠 ∆푞 ∆푎 ∆푠ℎ
+
+Figure 1: Overview of our method. (a) The input is a trained 3DGS scene composed of original Gaussian splats. (b) Geometry-aware Centroidal Voronoi Tessellation (CVT) partitions Gaussian centers into M = ⌈ρN ⌉ support cells. (c) For each cell, an initial reference primitive is heuristically computed. MergeNet then predicts a residual update to refine this reference into a Gaussian point that better represent the overall appearance of cell. (d) MergeNet is trained offline under local differentiable rendering supervision, aligning the rendered crops of the predicted Gaussian with those of the original cell. When applying our method, no parameters of the network will be updated. merging. Fundamentally, this is a geometric allocation prob-lem. If a support spans distant surfaces or disjoint struc-tures, the merged primitive is forced to either unnaturally over-expand its covariance or sacrifice scene coverage. Con-versely, relying on independent local neighborhoods fails to coordinate the M outputs under a unified, scene-level ob-jective.To overcome these dilemmas, we formulate support construction as a geometry-aware Centroidal Voronoi Tes-sellation (CVT) that allocates a fixed budget of supports across the pre-trained 3DGS distribution via a global vari-ational objective. The CVT minimizes an opacity-weighted spatial energy, which quantifies the second-order spread that each output Gaussian must absorb. This minimization pro-duces cells that are tightly bounded to their centroids while naturally adapting to the local density and opacity mass of the input Gaussians. Consequently, dense or high-opacity re-gions receive finer subdivisions, whereas sparser areas are efficiently represented by larger cells. As geometric pre-processing, we follow NanoGS (Xiong et al. 2026) and filter out Gaussians whose opacity is be-low τα = 0 .1. Please note that the prescribed output count remains unchanged, with M = ⌈ρN ⌉ still computed from the original number of input primitives N . After that, CVT is computed in the 3D position space of Gaussian centers, with opacity used as sample mass. The resulting weighted samples define the empirical measure 
+
+νS = X
+
+> i∈I
+
+αiδμi , (2) where νS denotes this opacity-weighted empirical measure, 
+
+αi is the opacity of primitive Gi, and δμi is the unit Dirac measure at μi. In the integrals below, x ∈ R3 denotes a spatial location. Given M sites C = {ck}Mk=1 , where ck ∈ R3 is the site of the k-th cell, the Voronoi region of that site is 
+
+Ωk(C) = x ∈ R3 : ∥x − ck∥22
+
+≤ ∥ x − cj ∥22, ∀j ∈ { 1, . . . , M } .
+
+(3) The support construction is formulated as optimal quantiza-tion of νS , with CVT energy ECVT defined as 
+
+ECVT (C) = 
+
+> M
+
+X
+
+> k=1
+
+Z 
+
+> Ωk(C)
+
+∥x − ck∥22 dν S (x). (4) The energy in Eq. (4) couples all cells through one scene-level distortion. As a result, the support of each output prim-itive is determined relative to all other supports, rather than by an isolated local neighborhood decision. Since νS is supported on discrete Gaussian positions, the method optimizes the cell memberships of remaining primi-tives. For fixed sites, the cell assignment a(i) ∈ { 1, . . . , M }
+
+of primitive i and the member set Vk of the k-th cell are given by the 3D Voronoi map 
+
+a(i) = argmin  
+
+> j∈{ 1,...,M }
+
+∥μi − cj ∥22, Vk = {i ∈ I | a(i) = k}.
+
+(5) Thus, Vk contains the indices of input Gaussians assigned to the k-th support cell after opacity filtering. Substituting Eq. (2) into Eq. (4) yields the discrete CVT objective 
+
+ECVT =
+
+> M
+
+X
+
+> k=1
+
+X
+
+> i∈Vk
+
+αi∥μi − ck∥22. (6) For fixed memberships Vk, minimizing Eq. (6) gives the closed-form Lloyd site update 
+
+ck =
+
+P 
+
+> i∈Vk
+
+αiμi
+
+P 
+
+> i∈Vk
+
+αi
+
+. (7) Alternating Eq. (5) and Eq. (7) performs Lloyd relax-ation (Lloyd 1982) on νS .For Gaussian simplification, Eq. (6) has a direct geometric interpretation because it measures the weighted second-order spatial spread that each output primitive must absorb within its cell. Lowering this quantity yields tighter and more coher-ent supports, reducing the burden on the subsequent single-Gaussian prediction. The centroidal update in Eq. (7) further enforces that each site is the opacity-weighted center of its assigned primitives, which is precisely the density-adaptive behavior needed when a target number of output Gaussians must cover a highly non-uniform 3DGS distribution. This weighted Lloyd relaxation is implemented with the Geogram library (Lévy 2026). Let Nc = |I| be the number of remain-ing primitives. For T Lloyd iterations, the assignment step has the conservative upper bound O(T N cM ); in practice, Geogram accelerates nearest-site queries with spatial search structures. 
+
+Cell Feature Construction 
+
+After CVT, Vk denotes the index set of input Gaussians as-signed to the k-th support cell after opacity filtering. The variable-sized member set {Gi}i∈Vk is used to predict one output primitive G⋆k. Before applying MergeNet, the cell is normalized by a deterministic reference primitive ¯Gk. This reference provides a stable local coordinate system and initial parameter scale for residual prediction. Let ωi = αi/ P 
+
+> j∈Vk
+
+αj be the normalized opacity weight inside Vk. The reference position and appearance are weighted averages, ¯μk = P 
+
+> i∈Vk
+
+ωiμi and ¯fk =
+
+P 
+
+> i∈Vk
+
+ωifi, where fi denotes the appearance coefficients of primitive Gi. The reference covariance is obtained from the weighted second spatial moment of the Gaussian mixture in the cell 
+
+¯Σk = X
+
+> i∈Vk
+
+ωiΣi
+
+| {z }
+
+> within-splat shape
+
++ X
+
+> i∈Vk
+
+ωi(μi − ¯μk)( μi − ¯μk)⊤
+
+| {z }
+
+> between-splat spread
+
+.
+
+(8) The scale ¯sk is obtained from the square roots of the sorted eigenvalues of ¯Σk, and the rotation ¯qk is obtained from the corresponding eigenvectors. Opacity is initialized by proba-bilistic composition, ¯αk = 1 − Q 
+
+> i∈Vk
+
+(1 − αi).Using ¯Gk = ( ¯ μk, ¯sk, ¯qk, ¯αk, ¯fk), each member primi-tive Gi with i ∈ Vk is described by a reference-relative descriptor zik . It contains the normalized local position 
+
+( ¯Rk)⊤(μi − ¯μk) ⊘ ¯sk, relative log-scale log si − log ¯ sk,relative rotation ¯q−1 
+
+> k
+
+⊗ qi, opacity terms (αi, ω i), and the appearance residual fi − ¯fk, where ¯Rk is the rotation matrix induced by ¯qk and ⊘ denotes element-wise division; ⊗ de-notes quaternion multiplication. Quaternion signs are aligned to ¯qk before relative rotations are formed. These reference-relative features provide a normalized local description of each cell, allowing the shared MergeNet to operate across scenes and simplification ratios. 
+
+MergeNet Prediction and Loss 
+
+MergeNet is a permutation-invariant set predictor that maps each CVT cell to one standard Gaussian primitive. Given the reference-relative descriptors {zik }i∈Vk , a shared pointwise MLP ϕ embeds every cell member. Mean pooling, max pool-ing, and opacity-weighted pooling aggregate the variable-sized set into a fixed-dimensional cell code hk. A decoder MLP ψ then predicts a residual update ∆Gk with respect to the reference primitive 
+
+∆Gk = ψ(hk), G⋆k = ¯Gk ⊕ ∆Gk. (9) Here ⊕ denotes reference-relative composition in the stan-dard 3DGS parameter space, where positions are predicted in the local frame of ¯Gk, scales and opacities are updated in log-scale and logit-opacity domains, rotations are composed by quaternion increments, and appearance coefficients are updated additively. This parameterization keeps the predic-tion normalized across cells of different spatial extents while preserving a valid standard 3DGS primitive. The three pool-ing operators are complementary. Mean pooling captures av-erage cell statistics, max pooling preserves salient member responses, and opacity-weighted pooling emphasizes primi-tives with larger visual contribution. Training is performed with local differentiable rendering supervision. For each CVT cell Vk, let Sk = {Gi}i∈Vk de-note the input member set. For a sampled local crop π asso-ciated with the k-th cell, Sk and its one-primitive prediction 
+
+G⋆k are rendered with the same rasterizer and crop window, producing the reference crop Ik,π and predicted crop ˆIk,π .In addition to the standard rendering loss, a gradient consis-tency term encourages local edge and texture preservation 
+
+Lgrad = ∥∇ x ˆIk,π −∇ xIk,π ∥1 +∥∇ y ˆIk,π −∇ y Ik,π ∥1. (10) 
+
+Ltrain = (1 − λ)L1 + λLSSIM + λg Lgrad . (11) Here ∇x and ∇y denote finite-difference image gradients. 
+
+L1 is the mean absolute pixel error, LSSIM = 1 − SSIM , and 
+
+(λ, λ g ) are loss weights. Losses are averaged over sampled cells and crops, with the original cell rendering used as a fixed target; only MergeNet parameters are updated.At de-ployment, CVT-GS exports the simplified scene as a standard 3DGS representation without per-scene optimization. 
+
+## Experiments 
+
+Experimental Settings 
+
+Evaluation Datasets and Metrics. We evaluate on four standard 3DGS benchmarks, including NeRF-Synthetic (Mildenhall et al. 2020), Mip-NeRF360 (Barron et al. 2022), Tanks & Temples (Knapitsch et al. 2017), and Deep Blending (Hedman et al. 2018). They cover synthetic objects, unbounded real scenes, large-scale captures, and in-door scenes. We measure rendering fidelity on test views using PSNR, SSIM (Wang et al. 2004), and LPIPS (Zhang et al. 2018). We also report end-to-end simplification time. 
+
+Baselines and Comparison Protocol. We compare our method with LightGS (Fan et al. 2024), PUP-3DGS (Hanson et al. 2025), GHAP (Wang et al. 2025), and NanoGS (Xiong Method ρ = 0 .1 ρ = 0 .01 ρ = 0 .001                                                                                                                                                                                                                                                                
+
+> PSNR ↑SSIM ↑LPIPS ↓Time (s) ↓PSNR ↑SSIM ↑LPIPS ↓Time (s) ↓PSNR ↑SSIM ↑LPIPS ↓Time (s) ↓
+> NeRF Synthetic (3DGS: 33.47 / 0.970 / 0.030) LightGS 21.88 0.888 0.097 31.98 15.76 0.807 0.181 32.34 12.64 0.796 0.224 32.36 PUP-3DGS 20.24 0.860 0.116 29.20 13.26 0.786 0.206 29.16 11.31 0.792 0.230 28.59 GHAP 21.19 0.854 0.125 6.28 13.40 0.785 0.206 6.50 11.25 0.792 0.242 3.52 NanoGS 25.81 0.910 0.092 11.36 22.28 0.858 0.153 11.70 19.04 0.822 0.207 11.83
+> Ours 27.76 0.936 0.079 3.58 23.75 0.880 0.134 3.02 20.18 0.846 0.191 2.75
+> Mip-NeRF360 (3DGS: 27.43 / 0.813 / 0.221) LightGS 19.38 0.588 0.412 76.14 14.39 0.389 0.582 74.79 11.97 0.278 0.662 74.54 PUP-3DGS 15.96 0.537 0.428 76.36 10.89 0.232 0.623 74.73 9.32 0.100 0.691 74.22 GHAP 17.35 0.444 0.494 34.23 10.62 0.174 0.664 35.24 8.52 0.035 0.728 31.40 NanoGS 21.97 0.582 0.432 149.64 19.39 0.470 0.587 158.05 17.20 0.430 0.661 158.12
+> Ours 23.45 0.665 0.366 13.71 20.57 0.523 0.532 9.01 18.11 0.466 0.626 8.09
+> Tanks & Temples (3DGS: 23.61 / 0.843 / 0.169) LightGS 17.50 0.642 0.357 32.15 12.30 0.452 0.585 31.91 9.36 0.341 0.690 33.30 PUP-3DGS 13.65 0.585 0.403 31.29 9.11 0.325 0.625 30.64 7.40 0.210 0.699 30.46 GHAP 15.34 0.487 0.484 23.45 8.43 0.220 0.672 22.91 5.33 0.026 0.748 20.17 NanoGS 17.94 0.626 0.413 57.84 15.29 0.501 0.576 62.03 13.54 0.457 0.641 62.33
+> Ours 19.66 0.712 0.324 7.53 16.61 0.532 0.539 5.62 14.50 0.471 0.625 5.71
+> Deep Blending (3DGS: 29.69 / 0.907 / 0.238) LightGS 24.28 0.816 0.351 33.50 18.28 0.712 0.506 31.31 13.41 0.616 0.610 31.99 PUP-3DGS 19.90 0.765 0.391 33.45 10.91 0.441 0.615 31.05 8.23 0.166 0.708 30.16 GHAP 21.75 0.739 0.436 31.56 11.36 0.435 0.646 31.98 7.56 0.051 0.746 29.42 NanoGS 26.29 0.839 0.371 104.34 23.12 0.780 0.467 97.94 19.42 0.739 0.507 99.63
+> Ours 27.42 0.864 0.317 11.63 24.35 0.808 0.434 7.63 20.52 0.765 0.484 6.97
+
+Table 1: Quantitative results evaluated on NeRF Synthetic, Mip-NeRF360, Tanks & Temples, and Deep Blending datasets. We highlight the best-performing results in bold and underline the second-best results among all compared methods. et al. 2026). NanoGS is the closest baseline because it is also a training-free post-hoc simplification method. Follow-ing NanoGS, we adopt an immediate-output protocol. Each method is evaluated directly after primitive-count reduction, without method-specific recovery, refinement, or fine-tuning. Thus, LightGS, PUP-3DGS, and GHAP are evaluated after their pruning, selection, and reduction stages, respectively. All methods use the same trained 3DGS inputs, target count 
+
+M = ⌈ρN ⌉, renderer/evaluator, and hardware. We evalu-ate ρ ∈ { 0.1, 0.01 , 0.001 }.Note that Gaussian compression methods, such as attribute quantization and entropy coding, are orthogonal to our work. Because they compress the pa-rameters of a fixed primitive set rather than reducing the primitive count, these techniques can be seamlessly applied to our simplified output as a subsequent step. 
+
+Implementation Details. All inputs are standard 3DGS models optimized with the official implementation (Kerbl et al. 2023). MergeNet is trained once for 30 k steps on cells sampled from 3DGS scenes built from LLFF (Mildenhall et al. 2019), ShapeNet (Chang et al. 2015), and ScanNet (Dai et al. 2017). We set λ = 0 .2 and λg = 0 .2. The same check-point is used for all test scenes and simplification ratios. No scene-specific optimization is performed. For CVT construc-tion, we filter out Gaussians with opacity below τα = 0 .1.We then run five Lloyd iterations to optimize Eq. (6). Simpli-fication time covers the full pipeline, from loading the trained scene to writing the output. All experiments run on a single NVIDIA RTX 4090 GPU (24 GB VRAM) with PyTorch 2.8 and CUDA 12.8. 
+
+Experimental Results 
+
+Quantitative Results. Table 1 compares our method with LightGS, PUP-3DGS, GHAP, and NanoGS across four benchmarks and three simplification ratios. At matched prim-itive counts, our method achieves the best rendering quality and the shortest average simplification time in every setting. Compared with NanoGS, the most relevant SOTA training-free post-hoc simplification baseline, our method improves average PSNR by +1 .57 / + 1 .30 / + 1 .03 dB and SSIM by 
+
++0 .055 / + 0 .034 / + 0 .025 for ρ = 0 .1/0.01 /0.001 , respec-tively. The gains become more significant as the simplification ratio decreases. At ρ = 0 .001 , our method outperforms the strongest pruning/selection/reduction baseline among LightGS, PUP-3DGS, and GHAP by +5 .1 to +7 .5 dB PSNR across datasets. On real-captured scenes such as Mip-NeRF360 and Tanks & Temples, pruning and tree-based re-duction degrade rapidly at low ratios, whereas our CVT-based support construction maintains more stable fidelity. 
+
+Qualitative Results. Figure 2 compares visual quality on the garden scene under progressively more aggressive sim-plification. The pretrained 3DGS representation of the gar-den scene contains N = 4 ,207 ,352 Gaussian primitives. Accordingly, the simplification ratios ρ = 0 .1, 0.01 , and Figure 2: Qualitative results on garden (Mip-NeRF360). Comparison of our method with existing baselines under different simplification ratios. 
+
+0.001 yield 420 ,736 , 42 ,074 , and 4,208 output primitives, respectively. While most methods preserve the coarse layout at ρ = 0 .1, pruning/selection/reduction baselines quickly de-velop missing regions, speckles, and dark holes at ρ = 0 .01 
+
+and ρ = 0.001 . NanoGS blurs the plant, tabletop, and background structures under aggressive simplification. Our method better preserves the vase silhouette, radial plant de-tails, tabletop contour, and background foliage, showing that CVT support construction and MergeNet retain both global structure and local appearance. Additional qualitative and per-scene results are provided in the supplementary material. 
+
+Simplification Time. We measure end-to-end simplifica-tion time from loading a trained 3DGS scene to writing the simplified output. Figure 3 compares our method with NanoGS and GHAP on matched scenes. Using the pooled time over all evaluated scenes and sim-plification ratios, our method is 12 .3× faster than NanoGS 3s 5s 10s 20s 30s 22 24 26 28 30 32                               
+
+> PSNR (dB)
+> ρ = 0.1
+> Ours NanoGS
+> counter hotdog mic room ship
+> 3s 5s 10s 20s 30s 1min 2min 5min 18 20 22 24 26
+> ρ = 0.01
+> Ours NanoGS
+> bicycle chair drjohnson drums kitchen
+> 2s 3s 5s 10s 20s 30s 1min 17 18 19 20 21 22
+> ρ = 0.001
+> Ours NanoGS
+> bonsai ficus lego materials playroom
+> 3s 5s 10s 20s 30s 1min
+> Simplification time ← faster
+> 17.5 20.0 22.5 25.0 27.5 30.0
+> PSNR (dB)
+> Ours GHAP
+> bicycle bonsai drums mic playroom
+> 2s 3s 5s 10s 20s 30s
+> Simplification time ← faster
+> 10.0 12.5 15.0 17.5 20.0 22.5 25.0
+> Ours GHAP chair drjohnson ficus room ship
+> 3s 5s 10s 20s 30s 1min
+> Simplification time ← faster
+> 5.0 7.5 10.0 12.5 15.0 17.5 20.0 Ours GHAP
+> counter garden kitchen lego stump
+
+Figure 3: Trade-off between quality and simplification time under different simplification ratios. Top and bottom rows compare our method with NanoGS and GHAP, respectively. Each connected pair denotes the same scene; upper-left indicates higher PSNR and shorter end-to-end simplification time.                                                  
+
+> Variant ρ= 0 .1ρ= 0 .01 ρ= 0 .001
+> PSNR SSIM LPIPS PSNR SSIM LPIPS PSNR SSIM LPIPS w/o CVT 23.69 0.766 0.294 19.67 0.623 0.501 15.80 0.509 0.677 w/o filtering 23.73 0.772 0.294 20.56 0.660 0.441 17.47 0.610 0.530 w/o MergeNet 22.62 0.737 0.337 18.31 0.572 0.595 14.10 0.430 0.811
+> Full 24.57 0.794 0.272 21.32 0.686 0.410 18.33 0.637 0.481
+
+Table 2: Quantitative ablation study averaged over four benchmark datasets. We ablate CVT support construction, MergeNet, and opacity filtering. and 3.1× faster than GHAP while achieving higher PSNR. These gains come from constructing CVT supports once and predicting the output Gaussians with a single MergeNet pass. Supplementary comparisons further show 7.2×/7.0×
+
+speedups over LightGS/PUP-3DGS. 
+
+Ablation Studies 
+
+In this section, we verify the effectiveness of different com-ponents of CVT-GS. Table 2 ablates CVT support construc-tion, MergeNet, and opacity filtering using averages over the four benchmarks. All variants use the same target count 
+
+M = ⌈ρN ⌉, and the full model performs best at every sim-plification ratio. Per-benchmark results are provided in the supplementary material. 
+
+Effectiveness of CVT Support Construction. Replacing CVT with local k-NN grouping consistently degrades qual-ity, and the gap widens as the simplification ratio decreases. The average PSNR drops by 0.88 , 1.65 , and 2.53 dB at 
+
+ρ = 0 .1, 0.01 , and 0.001 , respectively, while average LPIPS increases from 0.481 to 0.677 at the most aggressive ratio. This trend supports the central premise of our method. When one output Gaussian must summarize many input primi-tives, the support should be formed by a scene-level density-adaptive partition rather than by independent local groups. 
+
+Effectiveness of MergeNet and Filtering. Removing Mer-geNet causes the largest degradation in most settings, with average PSNR drops of 1.95 , 3.01 , and 4.23 dB across the three ratios. This indicates that the learned neural cell merger is the key component for high-fidelity many-to-one Gaus-sian merging. Deterministic cell statistics provide a stable reference but cannot capture the residual geometry and ap-pearance within each cell. Opacity filtering has a smaller but consistent effect, improving average PSNR by 0.76 –0.86 dB and reducing LPIPS by 0.022 –0.049 .
+
+## Conclusion 
+
+In this paper, we presented CVT-GS, an optimization-free, post-hoc simplification framework for pre-trained 3DGS scenes. By reformulating simplification as scene-level CVT support allocation followed by rendering-aware many-to-one merging, CVT-GS moves beyond naive primitive removal. It delivers superior visual quality while operating more than one order of magnitude faster than existing baselines, all while maintaining strict compatibility with the standard 3DGS format. Specifically, our geometry-aware CVT allo-cates coherent, density-adaptive support cells over Gaussian centers, which MergeNet then condenses into single repre-sentative primitives in a single feed-forward pass. Extensive experiments across four standard benchmarks demonstrate that CVT-GS substantially improves the trade-off between synthesis quality and simplification speed under aggressive compression ratios. Notably, at the extreme 100 × simplifi-cation setting, CVT-GS achieves an average PSNR of 21.32 dB, outperforming the sota post-hoc baseline by 1.30 dB. Ablation studies further confirm the indispensability of both CVT spatial partitioning and neural cell merging. For future work, researchers may explore more sophisticated MergeNet architectures and extend this framework to dynamic 4D rep-resentations where temporal dimensions are integrated. References 
+
+Barron, J. T.; Mildenhall, B.; Tancik, M.; Hedman, P.; Martin-Brualla, R.; and Srinivasan, P. P. 2021. Mip-NeRF: A Multiscale Representation for Anti-Aliasing Neural Radi-ance Fields. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV) .Barron, J. T.; Mildenhall, B.; Verbin, D.; Srinivasan, P. P.; and Hedman, P. 2022. Mip-NeRF 360: Unbounded Anti-Aliased Neural Radiance Fields. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Chang, A. X.; Funkhouser, T.; Guibas, L.; Hanrahan, P.; Huang, Q.; Li, Z.; Savarese, S.; Savva, M.; Song, S.; Su, H.; Xiao, J.; Yi, L.; and Yu, F. 2015. ShapeNet: An Information-Rich 3D Model Repository. Technical Report arXiv:1512.03012, Stanford University, Princeton Univer-sity, Toyota Technological Institute at Chicago. Chen, Y.; Li, M.; Wu, Q.; Lin, W.; Harandi, M.; and Cai, J. 2026. PCGS: Progressive Compression of 3D Gaussian Splatting. In Proceedings of the AAAI Conference on Artifi-cial Intelligence (AAAI) .Chen, Y.; Wu, Q.; Li, M.; Lin, W.; Harandi, M.; and Cai, J. 2025. Fast Feedforward 3D Gaussian Splatting Compression. In International Conference on Learning Representations (ICLR) .Chen, Y.; Wu, Q.; Lin, W.; Harandi, M.; and Cai, J. 2024. HAC: Hash-grid Assisted Context for 3D Gaussian Splatting Compression. In European Conference on Computer Vision (ECCV) .Dai, A.; Chang, A. X.; Savva, M.; Halber, M.; Funkhouser, T.; and Nießner, M. 2017. ScanNet: Richly-Annotated 3D Reconstructions of Indoor Scenes. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recogni-tion (CVPR) .Dai, Z.; Liu, T.; and Zhang, Y. 2025. Efficient Decoupled Fea-ture 3D Gaussian Splatting via Hierarchical Compression. In 
+
+Proceedings of the IEEE/CVF Conference on Computer Vi-sion and Pattern Recognition (CVPR) .Du, Q.; Faber, V.; and Gunzburger, M. 1999. Centroidal Voronoi Tessellations: Applications and Algorithms. SIAM Review , 41(4). Fan, Z.; Wang, K.; Wen, K.; Zhu, Z.; Xu, D.; and Wang, Z. 2024. LightGaussian: Unbounded 3D Gaussian Compres-sion with 15x Reduction and 200+ FPS. In Advances in Neural Information Processing Systems (NeurIPS) .Fang, G.; and Wang, B. 2024. Mini-Splatting: Represent-ing Scenes with a Constrained Number of Gaussians. In 
+
+European Conference on Computer Vision (ECCV) .Girish, S.; Gupta, K.; and Shrivastava, A. 2024. EAGLES: Efficient Accelerated 3D Gaussians with Lightweight Encod-ings. In European Conference on Computer Vision (ECCV) .Hanson, A.; Tu, A.; Singla, V.; Jayawardhana, M.; Zwicker, M.; and Goldstein, T. 2025. PUP 3D-GS: Principled Uncer-tainty Pruning for 3D Gaussian Splatting. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Hedman, P.; Philip, J.; Price, T.; Frahm, J.-M.; Drettakis, G.; and Brostow, G. 2018. Deep Blending for Free-Viewpoint Image-Based Rendering. ACM Transactions on Graphics ,37(6). Kerbl, B.; Kopanas, G.; Leimkühler, T.; and Drettakis, G. 2023. 3D Gaussian Splatting for Real-Time Radiance Field Rendering. In ACM Transactions on Graphics (SIGGRAPH) ,volume 42. Knapitsch, A.; Park, J.; Zhou, Q.-Y.; and Koltun, V. 2017. Tanks and Temples: Benchmarking Large-Scale Scene Re-construction. ACM Transactions on Graphics , 36(4). Lee, J. C.; Rho, D.; Sun, X.; Ko, J. H.; and Park, E. 2024. Compact 3D Gaussian Representation for Radiance Field. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Lévy, B. 2026. Geogram: A Programming Library with Geo-metric Algorithms. https://github.com/BrunoLevy/geogram. Accessed: 2026-07-05. Lévy, B.; and Liu, Y. 2010. Lp Centroidal Voronoi Tessel-lation and Its Applications. ACM Transactions on Graphics (SIGGRAPH) , 29(4). Liu, H.; Wang, Y.; Li, C.; Cai, R.; Wang, K.; Li, W.; Molchanov, P.; Wang, P.; and Wang, Z. 2025. FlexGS: Train Once, Deploy Everywhere with Many-in-One Flexible 3D Gaussian Splatting. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) .Liu, Y.; Wang, W.; Lévy, B.; Sun, F.; Yan, D.-M.; Lu, L.; and Yang, C. 2009. On Centroidal Voronoi Tessellation—Energy Smoothness and Fast Computation. ACM Transactions on Graphics , 28(4). Lloyd, S. 1982. Least Squares Quantization in PCM. IEEE Transactions on Information Theory , 28(2). Lu, T.; Yu, M.; Xu, L.; Xiangli, Y.; Wang, L.; Lin, D.; and Dai, B. 2024. Scaffold-GS: Structured 3D Gaussians for View-Adaptive Rendering. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .Mildenhall, B.; Srinivasan, P. P.; Ortiz-Cayon, R.; Kalantari, N. K.; Ramamoorthi, R.; Ng, R.; and Kar, A. 2019. Local Light Field Fusion: Practical View Synthesis with Prescrip-tive Sampling Guidelines. ACM Transactions on Graphics ,38(4). Mildenhall, B.; Srinivasan, P. P.; Tancik, M.; Barron, J. T.; Ramamoorthi, R.; and Ng, R. 2020. NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis. In 
+
+European Conference on Computer Vision (ECCV) .Navaneet, K. L.; Pourahmadi Meibodi, K.; Abbasi Kooh-payegani, S.; and Pirsiavash, H. 2024. CompGS: Smaller and Faster Gaussian Splatting with Vector Quantization. In 
+
+European Conference on Computer Vision (ECCV) .Niedermayr, S.; Stumpfegger, J.; and Westermann, R. 2024. Compressed 3D Gaussian Splatting for Accelerated Novel View Synthesis. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition (CVPR) .Tang, Z.; Feng, C.; Cheng, X.; Yu, W.; Zhang, J.; Liu, Y.; Long, X.-X.; Wang, W.; and Yuan, L. 2026. NeuralGS: Bridging Neural Fields and 3D Gaussian Splatting for Com-pact 3D Representations. In Proceedings of the AAAI Con-ference on Artificial Intelligence (AAAI) .Wang, T.; Li, M.; Zeng, G.; Meng, C.; and Zhang, Q. 2025. Gaussian Herding across Pens: An Optimal Transport Per-spective on Global Gaussian Reduction for 3DGS. NeurIPS 2025, arXiv:2506.09534. Wang, Z.; Bovik, A. C.; Sheikh, H. R.; and Simoncelli, E. P. 2004. Image Quality Assessment: From Error Visibility to Structural Similarity. IEEE Transactions on Image Process-ing , 13(4): 600–612. Xiong, B.; Liu, R.; Zhou, T.; Chen, M.; Fan, Z.; and Feng, A. 2026. NanoGS: Training-Free Gaussian Splat Simplification. arXiv:2603.16103. Zhan, Y.-T.; Ho, C.-Y.; Yang, H.; Chen, Y.-H.; Chiang, J. C.; Liu, Y.-L.; and Peng, W.-H. 2025. CAT-3DGS: A Context-Adaptive Triplane Approach to Rate-Distortion-Optimized 3DGS Compression. In International Conference on Learn-ing Representations (ICLR) .Zhang, R.; Isola, P.; Efros, A. A.; Shechtman, E.; and Wang, O. 2018. The Unreasonable Effectiveness of Deep Features as a Perceptual Metric. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) .Zhang, Z.; Song, T.; Lee, Y.; Yang, L.; Peng, C.; Chellappa, R.; and Fan, D. 2024. LP-3DGS: Learning to Prune 3D Gaussian Splatting. In Advances in Neural Information Pro-cessing Systems (NeurIPS) .Supplementary Material for CVT-GS 
+
+Figure 4: Qualitative results on chair (NeRF-Synthetic). Comparison of our method with existing baselines under different simplification ratios. Figure 5: Cell-level rendering examples of the learned many-to-one merger. Each row shows one CVT support cell containing a variable number of input Gaussian primitives; the left column renders the original cell, and the right column renders the one-Gaussian output of our method. 3s 5s 10s 20s 30s 1min 2min 15.0 17.5 20.0 22.5 25.0 27.5 30.0 
+
+> PSNR (dB)
+
+ρ = 0.1       
+
+> Ours PUP3DGS
+> counter garden lego mic room
+> 2s 3s 5s 10s 20s 30s 1min 2min 10 15 20 25
+
+ρ = 0.01      
+
+> Ours PUP3DGS
+> bicycle chair hotdog kitchen ship
+> 2s 3s 5s 10s 20s 30s 1min 10.0 12.5 15.0 17.5 20.0 22.5
+
+ρ = 0.001      
+
+> Ours PUP3DGS
+> bonsai drums ficus materials stump
+> 3s 5s 10s 20s 30s 1min
+
+Simplification time ← faster       
+
+> 20 22 24 26 28
+> PSNR (dB)
+> Ours LightGS
+> bonsai drjohnson drums mic stump
+> 2s 3s 5s 10s 20s 30s 1min 2min
+
+Simplification time ← faster        
+
+> 12.5 15.0 17.5 20.0 22.5 25.0 Ours LightGS
+> counter ficus garden materials room
+> 2s 3s 5s 10s 20s 30s 1min 2min
+
+Simplification time ← faster  
+
+> 10.0 12.5 15.0 17.5 20.0 22.5 Ours LightGS
+> bicycle chair hotdog kitchen ship
+
+Figure 6: Trade-off between quality and simplification time under different simplification ratios. Top and bottom rows compare our method with PUP-3DGS and LightGS, respectively. Each connected pair denotes the same scene; upper-left indicates higher PSNR and shorter end-to-end simplification time. Variant ρ = 0 .1 ρ = 0 .01 ρ = 0 .001 
+
+PSNR ↑ SSIM ↑ LPIPS ↓ PSNR ↑ SSIM ↑ LPIPS ↓ PSNR ↑ SSIM ↑ LPIPS ↓
+
+NeRF Synthetic 
+
+w/o CVT 27.12 0.926 0.088 22.45 0.845 0.183 18.35 0.792 0.275 w/o filtering 27.01 0.929 0.085 23.71 0.873 0.143 19.81 0.840 0.198 w/o MergeNet 26.12 0.914 0.103 20.62 0.805 0.242 15.67 0.684 0.441 
+
+Full 27.76 0.936 0.079 23.75 0.880 0.134 20.18 0.846 0.191 
+
+Mip-NeRF360 
+
+w/o CVT 22.73 0.631 0.384 19.12 0.473 0.595 15.63 0.374 0.779 w/o filtering 21.86 0.615 0.424 19.08 0.471 0.599 16.74 0.419 0.686 w/o MergeNet 21.47 0.603 0.442 18.32 0.439 0.654 14.96 0.352 0.815 
+
+Full 23.45 0.665 0.366 20.57 0.523 0.532 18.11 0.466 0.626 
+
+Tanks & Temples 
+
+w/o CVT 18.72 0.679 0.357 14.97 0.462 0.648 11.43 0.282 0.935 w/o filtering 19.20 0.697 0.338 15.87 0.514 0.562 13.61 0.438 0.714 w/o MergeNet 17.95 0.644 0.401 13.78 0.402 0.792 9.82 0.198 1.127 
+
+Full 19.66 0.712 0.324 16.61 0.532 0.539 14.50 0.471 0.625 
+
+Deep Blending 
+
+w/o CVT 26.18 0.827 0.349 22.15 0.710 0.578 17.81 0.588 0.719 w/o filtering 26.85 0.848 0.330 23.57 0.784 0.458 19.74 0.742 0.523 w/o MergeNet 24.93 0.785 0.403 20.52 0.643 0.693 15.94 0.488 0.862 
+
+Full 27.42 0.864 0.317 24.35 0.808 0.434 20.52 0.765 0.484 
+
+Table 3: Quantitative ablation study on each benchmark dataset. We ablate CVT support construction, MergeNet, and opacity filtering. Best results are highlighted in bold. 
+
+Scene ρ = 0 .1 ρ = 0 .01 ρ = 0 .001 
+
+PSNR ↑ SSIM ↑ LPIPS ↓ PSNR ↑ SSIM ↑ LPIPS ↓ PSNR ↑ SSIM ↑ LPIPS ↓
+
+NeRF Synthetic 
+
+drums 24.1045 0.9239 0.0689 21.5618 0.8725 0.1291 18.5562 0.8405 0.1990 lego 27.3102 0.9199 0.0917 22.0116 0.8271 0.1712 19.2768 0.7978 0.2193 materials 26.2606 0.9265 0.0919 21.8998 0.8614 0.1430 17.8781 0.8112 0.2192 mic 28.8284 0.9846 0.0287 25.2896 0.9462 0.0665 21.6724 0.9227 0.0987 ship 24.5378 0.8202 0.1852 21.8053 0.7711 0.2764 17.7706 0.7428 0.3389 chair 28.7003 0.9417 0.0544 25.6197 0.9058 0.1013 22.7328 0.8691 0.1591 ficus 31.1139 0.9930 0.0293 25.0480 0.9347 0.0617 21.7319 0.8998 0.1164 hotdog 31.2173 0.9738 0.0801 26.7425 0.9246 0.1191 21.8104 0.8830 0.1744 
+
+Mip-NeRF360 
+
+bicycle 21.5512 0.5594 0.4016 19.5702 0.3924 0.5693 18.4167 0.3665 0.6929 flowers 18.9185 0.4407 0.4709 17.2129 0.3099 0.6279 15.6628 0.2659 0.7375 garden 22.8975 0.6338 0.3283 20.0644 0.4055 0.5541 17.8939 0.3442 0.7180 stump 22.9398 0.5984 0.3755 20.4165 0.4293 0.5701 19.0091 0.3947 0.6832 treehill 20.3475 0.4889 0.4834 19.4054 0.4189 0.6112 18.1206 0.3993 0.6426 room 27.7428 0.8313 0.3176 23.5693 0.7632 0.4348 19.3816 0.7057 0.5032 counter 24.9181 0.8095 0.3131 21.5521 0.6847 0.4641 18.3329 0.6048 0.5244 kitchen 25.4750 0.7949 0.3096 21.4345 0.5997 0.4848 17.9453 0.5051 0.6069 bonsai 26.2531 0.8305 0.2954 21.8816 0.7051 0.4726 18.2148 0.6118 0.5225 
+
+Tanks & Temples 
+
+truck 21.2978 0.7672 0.2921 17.9508 0.5705 0.5133 15.3810 0.4975 0.6359 train 18.0144 0.6577 0.3567 15.2701 0.4930 0.5647 13.6154 0.4439 0.6143 
+
+Deep Blending 
+
+drjohnson 26.7728 0.8577 0.3196 24.0122 0.7978 0.4484 20.6855 0.7520 0.4894 playroom 28.0718 0.8699 0.3138 24.6901 0.8183 0.4188 20.3519 0.7778 0.4782 
+
+Table 4: Per-scene quantitative results of our method across four benchmark datasets and three simplification ratios. Higher PSNR/SSIM and lower LPIPS indicate better performance.
