@@ -6,33 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-11
-- 运行时间：2026-09-11 21:49:32 UTC
+- 最新运行日期：2026-09-12
+- 运行时间：2026-09-12 21:17:56 UTC
 - 运行状态：成功
-- 本次总论文数：4
+- 本次总论文数：3
 - 精读区：0
-- 速读区：4
+- 速读区：3
 
 ### 今日简报（AI）
-今天精读
-- 详情：[/202609/11/README](/202609/11/README)
+- 今日共生成 3 篇推荐（精读 0 篇，速读 3 篇）
+- 速读：《KODAMA: Multimodal Digital Twin Reconstruction for Urban RF Propagation Modelling》（7.0/10）, 《LangStreet: Persistent Language Fields for Anchor-Decoded Street Gaussians》（7.0/10）, 《RouteBridge: Reliability-Routed Bidirectional Distillation Between Neural Radiance Fields and 3D Gaussian Splatting》（6.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202609/12/README](/202609/12/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [FujinSplat: Seeing Through Smoke with RAW-Domain Gaussian Splatting](/202609/11/2609.06017v2-fujinsplat-seeing-through-smoke-with-raw-domain-gaussian-splatting)  
+1. [KODAMA: Multimodal Digital Twin Reconstruction for Urban RF Propagation Modelling](/202609/12/2609.07298v2-kodama-multimodal-digital-twin-reconstruction-for-urban-rf-propagation-modelling)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：RAW域3D高斯泼溅场景重建与渲染
-2. [Heat Kernel Textures: the Geodesic Gaussians That Do Not Splat](/202609/11/2609.07557v1-heat-kernel-textures-the-geodesic-gaussians-that-do-not-splat)  
+   evidence：融合航拍与街景影像的城市尺度重建
+2. [LangStreet: Persistent Language Fields for Anchor-Decoded Street Gaussians](/202609/12/2609.11616v1-langstreet-persistent-language-fields-for-anchor-decoded-street-gaussians)  
+   标签：评分：7.0/10、query:aerial-dgs
+   evidence：面向街道场景的高斯溅射表示
+3. [RouteBridge: Reliability-Routed Bidirectional Distillation Between Neural Radiance Fields and 3D Gaussian Splatting](/202609/12/2609.09606v1-routebridge-reliability-routed-bidirectional-distillation-between-neural-radiance-fields-and-3d-gaussian-splatting)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：受三维高斯泼溅启发的测地高斯表面表示
-3. [LinearMask-GS: Stable-Mask Importance Pruning for Compact 3D Gaussian Splatting](/202609/11/2609.10095v1-linearmask-gs-stable-mask-importance-pruning-for-compact-3d-gaussian-splatting)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：通过重要性剪枝实现紧凑3D高斯泼溅表示
-4. [RIDE: Relocalization-Informed Depth Estimation with 3D Gaussian Splatting](/202609/11/2609.11079v1-ride-relocalization-informed-depth-estimation-with-3d-gaussian-splatting)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：基于3D高斯泼溅模型的度量深度估计
+   evidence：NeRF与3D高斯泼溅的双向蒸馏
 
 
 <div class="dpr-home-promo-card">
