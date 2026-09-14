@@ -6,31 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-13
-- 运行时间：2026-09-13 22:01:20 UTC
+- 最新运行日期：2026-09-14
+- 运行时间：2026-09-14 22:01:58 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：3
 - 精读区：0
-- 速读区：2
+- 速读区：3
 
 ### 今日简报（AI）
-今日扫完2篇速读、精读挂零，两篇均6.0分，主打3D生成与高斯泼溅去雾。
-
-值得看的方向是多视图图像驱动的大规模场景网格3D生成先验扩展，以及透射率感知的场景—介质解耦高斯泼溅去雾。
-
-普通读者可先翻这两篇的摘要和图表判断价值，再决定是否追精读。
-- 详情：[/202609/13/README](/202609/13/README)
+- 今日共生成 3 篇推荐（精读 0 篇，速读 3 篇）
+- 速读：《Is Gaussian Splatting Becoming Neural Again? A Taxonomy and Controlled Study of Learned Parameterization》（7.0/10）, 《VS-Splat: Voxel-Selective feed-forward Gaussian Splatting for end-to-end 3D object reconstruction from sparse-views》（6.0/10）, 《NOVA-GS: Noise-Aware View-Consistent Gaussian Splatting for Low-Light Novel View Synthesis》（6.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202609/14/README](/202609/14/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Scaling 3D Generative Priors to Large-Scale Scene Meshes from Multi-View Images](/202609/13/2609.06385v1-scaling-3d-generative-priors-to-large-scale-scene-meshes-from-multi-view-images)  
+1. [Is Gaussian Splatting Becoming Neural Again? A Taxonomy and Controlled Study of Learned Parameterization](/202609/14/2609.12395v1-is-gaussian-splatting-becoming-neural-again-a-taxonomy-and-controlled-study-of-learned-parameterization)  
+   标签：评分：7.0/10、query:aerial-dgs
+   evidence：3D高斯溅射场景表示的学习式参数化分类与受控研究
+2. [VS-Splat: Voxel-Selective feed-forward Gaussian Splatting for end-to-end 3D object reconstruction from sparse-views](/202609/14/2609.12343v1-vs-splat-voxel-selective-feed-forward-gaussian-splatting-for-end-to-end-3d-object-reconstruction-from-sparse-views)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：从多视角图像进行大规模场景重建
-2. [Tri-DehazeGS: Scene--Medium Decoupled Gaussian Splatting with Transmittance-Aware Optimization](/202609/13/2609.11223v1-tri-dehazegs-scene--medium-decoupled-gaussian-splatting-with-transmittance-aware-optimization)  
+   evidence：面向多视角三维物体重建的前馈高斯泼溅
+3. [NOVA-GS: Noise-Aware View-Consistent Gaussian Splatting for Low-Light Novel View Synthesis](/202609/14/2609.12682v1-nova-gs-noise-aware-view-consistent-gaussian-splatting-for-low-light-novel-view-synthesis)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：雾霾下的高斯泼溅场景重建
+   evidence：3D高斯泼溅场景表示与跨视角一致渲染
 
 
 <div class="dpr-home-promo-card">
