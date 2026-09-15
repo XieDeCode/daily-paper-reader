@@ -1,0 +1,1591 @@
+SCOUT-SLAM: Structurally-Coupled Dual Uncertainty-Aware 3DGS SLAM in
+the Wild
+Kumaran Karthik
+Pramat Shastri Jois1
+1Indian Institute of Science
+Suresh Sundaram1
+Abstract
+Recently, 3D Gaussian Splatting SLAM (3DGS-SLAM) has
+gained significant momentum in simultaneous localization
+and 3DGS scene reconstruction. In real-world scenarios
+with rapid camera motion and cluttered dynamic environ-
+ments, existing methods rely on the stability of the underly-
+ing scene reconstruction to model uncertainty. This leads
+to a circular dependency between camera tracking accu-
+racy and reconstruction quality: reconstruction instabilities
+degrade uncertainty modeling, which affects accurate cam-
+era tracking and static scene reconstruction. To address
+this, the paper proposes SCOUT-SLAM, a structurally-
+coupled dual-uncertainty framework in which both uncer-
+tainties are estimated from a shared base network. A low-
+rank adaptation of this network, trained on multi-view fea-
+ture consistency, estimates a tracking uncertainty that does
+not depend solely on the reconstruction quality. A spatially-
+adaptive prior modulates the network’s training objective
+so that reconstruction instability does not inflate uncer-
+tainty on static regions, keeping the shared representation
+intact for both branches. Evaluations on dynamic bench-
+marks (TUM RGB-D, Bonn Dynamic, Wild-SLAM MoCap)
+demonstrate that SCOUT-SLAM achieves state-of-the-art
+camera tracking accuracy and artifact-free static scene re-
+construction. Code is available at: https://github.
+com/kumaran-3527/SCOUT-SLAM
+1. Introduction
+Visual Simultaneous Localization and Mapping (SLAM)
+jointly tracks the camera motion and builds scene repre-
+sentations from sequential imagery [7, 29, 38].
+SLAM
+has widespread application in autonomous navigation [8,
+20, 26], augmented reality [45], and robotic manipula-
+tion [10].
+With the advent of 3D Gaussian Splatting
+(3DGS) [17], 3DGS-SLAM pipelines can now produce
+high-fidelity scene reconstructions [16, 28, 33, 42]. High-
+fidelity reconstructions enable downstream robotic tasks
+such as end-to-end visual navigation [4, 5, 20], seman-
+tic scene understanding [50], and goal-conditioned plan-
+ning [9, 27]. Despite significant progress, achieving reli-
+able 3DGS-SLAM in real-world environments is challeng-
+ing. Dynamic and non-rigid objects often degrade pose es-
+timation and 3DGS reconstruction, limiting the practicality
+of 3DGS-SLAM systems.
+To handle dynamic environments, recent neural [14, 22,
+34] and 3DGS [23, 41] SLAM approaches derive dynamic
+masks by fusing motion cues with semantic or depth pri-
+ors. However, they heavily depend on predefined semantic
+categories of dynamic objects, which limits applicability in
+real-world environments. Recent uncertainty-aware 3DGS-
+SLAM systems [46, 48] adapt the uncertainty modeling de-
+veloped for offline novel-view synthesis [19, 32] to mask
+out dynamic objects and transient elements without prede-
+fined semantic categories.
+However, these approaches derive uncertainty from the
+underlying scene reconstruction, which introduces a circu-
+lar dependency between camera tracking accuracy and re-
+construction quality. During fast camera motion in cluttered
+dynamic environments, the 3DGS reconstruction becomes
+unstable, degrading the uncertainty estimates that camera
+tracking relies on, which further corrupts the reconstruction.
+This results in inaccurate camera tracking and scene recon-
+struction in such scenarios.
+To address this circular dependency,
+we propose
+SCOUT-SLAM (Structurally-COupled dual-UncertainTy
+SLAM), a monocular 3DGS-SLAM framework that main-
+tains structurally coupled estimates of tracking and map-
+ping uncertainty. We term the framework structurally cou-
+pled because the two uncertainties share a single base net-
+work, the Mapping Uncertainty Network (MUNet), a shal-
+low MLP that predicts a per-pixel uncertainty from DI-
+NOv2 [30, 44], trained against the residual between input
+and rendered views. The tracking uncertainty is estimated
+by a Tracking Uncertainty Adapter (TUA), a low-rank adap-
+tation (LoRA) [11] of MUNet optimized at each Bundle
+Adjustment (BA) iteration on a Multi-view Feature Consis-
+tency (MFC) loss over DINOv2 [30, 44] features. The MFC
+1
+arXiv:2609.14634v1  [cs.CV]  13 Sep 2026
+
+
+Figure 1. SCOUT-SLAM. Left: Given a captured in-the-Wild video, SCOUT-SLAM estimates, camera trajectory, high-fidelity static
+scene and uncertainties. Right: SCOUT-SLAM’s uncertainty estimates tightly isolates dynamic objects to preserve high frequency static
+geometry.
+loss is computed directly between observed views.
+The
+TUA therefore estimates a tracking uncertainty that does not
+depend solely on the current reconstruction quality. This
+uncertainty then reweights the residuals used in pose op-
+timization. Complementing this, a spatially-adaptive prior
+modulates the per-pixel log-likelihood term of the Negative
+Log-Likelihood (NLL) objective used to train MUNet, pe-
+nalizing corrupted estimates so that reconstruction instabil-
+ity does not inflate uncertainty on static geometry. Since
+the TUA is a low-rank adaptation of MUNet, it inherits the
+latter’s feature space, protecting MUNet from degradation
+therefore serves both branches: the prior keeps the shared
+representation stable allowing the TUA to estimate reliable
+tracking uncertainty. Together, these components yield sta-
+ble uncertainties under fast camera motion in cluttered, dy-
+namic environments. Our contributions are:
+• SCOUT-SLAM, a structurally coupled dual-uncertainty
+framework for monocular 3DGS-SLAM. Tracking and
+mapping uncertainty are estimated from a single shared
+base network, so each depends on the other remaining
+well-conditioned, breaking the circular dependency be-
+tween camera tracking accuracy and reconstruction qual-
+ity under fast camera motion in cluttered dynamic envi-
+ronments.
+• Tracking Uncertainty Adapter (TUA), a low-rank
+adaptation of MUNet trained on multi-view feature con-
+sistency. It reweights the residuals in pose optimization
+with a tracking uncertainty that does not depend solely
+on the current reconstruction quality, while inheriting the
+shared feature space it adapts.
+• A spatially-adaptive prior that modulates the per-pixel
+log-likelihood in the NLL objective of MUNet. It pre-
+vents reconstruction instability from inflating uncertainty
+on static geometry, keeping the shared base weights un-
+corrupted for both branches and yielding static 3DGS re-
+constructions.
+• SCOUT-SLAM is evaluated on three dynamic bench-
+marks (TUM RGB-D, Bonn Dynamic, Wild-SLAM
+MoCap) against baselines demonstrating state-of-the-art
+tracking accuracy and consistent improvements in static
+reconstruction fidelity.
+2. Related Works
+2.1. Neural and GS-based SLAM
+Neural implicit representations introduced a class of dense
+SLAM systems where scene geometry and appearance are
+encoded in a neural network and jointly optimized with
+camera poses. iMAP [37] and NICE-SLAM [49] were the
+first to demonstrate this paradigm on RGB-D sequences,
+with later works such as Co-SLAM [40] and ESLAM [15]
+improving scalability through hybrid encodings. In partic-
+ular, to handle dynamic scenes, NeRF-based systems such
+as RoDyn-SLAM [14] and DynaMon [34] combine opti-
+cal flow with semantic priors to filter out transient regions.
+However, high computational overhead and sub-real-time
+rendering severely constrain their online applicability.
+The emergence of 3D Gaussian Splatting (3DGS) [17]
+provided an explicit, rasterization-based representation that
+accelerates both rendering and map updates, enabling
+SLAM systems to run at interactive rates. MonoGS [28]
+was the first near-real-time monocular Gaussian Splatting
+(GS) SLAM to derive pose gradients for joint pose-scene
+optimization.
+Methods such as GS-SLAM [42] perform
+tracking over a sparsely selected set of Gaussians, Photo-
+SLAM [13] couples ORB-SLAM3 tracking with 3DGS
+mapping, and SplaTAM [16] guides online tracking and
+mapping via a silhouette mask.
+Among these, Splat-
+SLAM [33] is a leading monocular Gaussian system that
+2
+
+
+Figure 2. System Overview. SCOUT-SLAM simultaneously tracks camera motion while reconstructing a 3DGS static scene. The
+structurally-coupled dual uncertainty framework addresses the circular dependency between camera tracking accuracy and reconstruction
+quality that arises when uncertainty modeling is tightly coupled with the reconstruction quality. From an input RGB stream, DINOv2
+features F are extracted and decoded through a shared shallow MLP, the mapping uncertainty network (MUNet). Tracker: A Tracking
+Uncertainty Adapter (TUA), a low-rank adaptation over the MUNet, is optimized on multi-view feature consistency (MFC) loss LMFC.
+Consequently, tracking uncertainty estimation utrack is not solely dependent on reconstruction quality. The resulting tracking confidence
+mask W down-weights dynamic objects during uncertainty-guided dense bundle adjustment (DBA). Mapper: A spatially-adaptive prior
+modulates the MUNet’s training objective to prevent uncertainty inflation on static regions ensuring 3DGS reconstruction stability keeping
+the shared feature space intact. The per-pixel uncertainty umap is used for uncertainty-aware 3DGS mapping resulting in a artifact-free
+3DGS static scene. Together, these components address the circular dependency between camera tracking accuracy and reconstruction
+quality during fast camera motion in cluttered dynamic environments.
+extends its design to enable globally consistent mapping.
+The photometric and geometric consistency these systems
+rely on is violated when moving objects are present, since
+the scene is assumed to be predominantly static.
+To handle dynamic objects, DG-SLAM [41], DDN-
+SLAM [22] and Dy3DGS-SLAM [23] leverage semantic or
+motion cues, but their reliance on closed-set categories lim-
+its generalization. While UP-SLAM [48] computes uncer-
+tainty from rendering residuals to achieve open-set mask-
+ing, it still requires a well-initialized static scene recon-
+struction, necessitating closed-set priors (e.g., YOLOv8-
+seg) during initialization. WildGS-SLAM [46] avoids se-
+mantic priors by decoding DINOv2 [30, 44] features into
+learned pixel uncertainties for joint tracking and mapping,
+inherently coupling tracking accuracy to reconstruction fi-
+delity. In contrast, the proposed method estimates a dedi-
+cated tracking uncertainty directly from multi-view feature
+consistency, thereby enabling native open-set dynamic han-
+dling from initialization without semantic priors or map-
+quality bottlenecks.
+2.2. Traditional SLAM
+Traditional visual SLAM tracks camera motion directly via
+sparse feature correspondences [2, 18] or direct photomet-
+ric alignment [6, 7]. Such systems assume a static scene and
+drift in the presence of moving objects due to improper cor-
+respondences.Dynamic variants tackle this through residual
+analysis (StaticFusion [35], ReFusion [31]) or by masking
+known object classes (DynaSLAM [1], DS-SLAM [43]).
+DROID-SLAM [38] recasts correspondence-based track-
+ing in a learned form, training a recurrent update operator
+that drives a dense, differentiable bundle adjustment (DBA)
+layer to jointly refine poses and geometry, with DPVO [39]
+following a lighter, patch-based approach. To handle dy-
+namic motion, MegaSaM [25] integrates recurrent flow-
+state motion predictions, though large-scale synthetic train-
+ing limits its real-world generalization. WildPose [47] cou-
+ples a frozen 3D foundation backbone (MASt3R [21]) with
+a retrained motion-mask detector.
+DROID-W [24] folds
+per-pixel uncertainty directly into the DBA layer, estimated
+from multi-view feature consistency rather than the recon-
+struction, yielding robust tracking under unknown dynam-
+ics without relying on a map. However, decoupling tracking
+from the map entirely discards the reconstruction priors that
+could otherwise reinforce it.
+3
+
+
+3.
+Structurally-Coupled
+Dual
+Uncertainty
+Framework
+Given a monocular RGB stream in a dynamic environment,
+SCOUT-SLAM tracks the camera motion and reconstructs
+a static 3DGS scene. Fig. 2 shows the system overview. DI-
+NOv2 [30, 44] features Fi of each keyframe are extracted
+and decoded by a single shared network, named the Map-
+ping Uncertainty Network (MUNet). A Tracking Uncer-
+tainty Adapter (TUA) computes per-pixel tracking uncer-
+tainty used in pose optimization that reweights the resid-
+uals in pose optimization. The TUA is a low-rank adap-
+tation (LoRA) [11] over the MUNet. The low-rank ma-
+trices are optimized on multi-view feature consistency at
+each bundle adjustment iteration, so camera tracking ac-
+curacy is no longer tightly coupled to the reconstruction
+quality. A spatially-adaptive prior modulates the MUNet’s
+training objective to prevent uncertainty inflation on static
+regions ensuring 3DGS reconstruction stability keeping the
+shared feature space intact. Together, these components ad-
+dress the circular dependency between camera tracking ac-
+curacy and reconstruction quality during fast camera motion
+in cluttered dynamic environments.
+3.1. Preliminaries: 3D Gaussian Splatting
+3D Gaussian Splatting (3DGS) [17] represents a scene ex-
+plicitly using a set of 3D Gaussians, each parameterized by
+a center µ ∈R3, scaling S, rotation R, opacity α ∈[0, 1],
+and Spherical Harmonics (SH) coefficients.
+Pixel color
+ˆC and depth ˆD are computed by tile-based rasterization,
+depth-sorting, and α-blending:
+ˆC =
+X
+i∈N
+ciαi
+i−1
+Y
+j=1
+(1 −αj),
+ˆD =
+X
+i∈N
+diαi
+i−1
+Y
+j=1
+(1 −αj), (1)
+where ci and di are the color and depth of the i-the Gaus-
+sian, and N is the ordered set of overlapping Gaussians.
+The explicit representation allows for efficient differentiable
+rasterization and real-time rendering. In proposed method,
+the gaussian parameters are optimized using mapping un-
+certainty to reconstruct the static background.
+3.2. Preliminaries: Low-Rank Adaptation (LoRA)
+Low-Rank Adaptation (LoRA) [11] is a parameter-efficient
+method to adapt pre-trained neural networks. Instead of up-
+dating a full pre-trained weight matrix W0 ∈Rd×k, LoRA
+freezes W0 and injects trainable low-rank decomposition
+matrices B ∈Rd×r and A ∈Rr×k. For an input vector
+x ∈Rk, the forward pass is computed as:
+h = W0x + ∆Wx = W0x + BAx,
+(2)
+where the rank r
+≪
+min(d, k).
+This isolates task-
+specific updates into the lightweight ∆W while preserving
+the foundational knowledge structurally embedded in W0.
+TUA is a low-rank adaptation of the MUNet on the multi-
+view feature consistency across BA window.
+3.3. Tracking Uncertainty Adapter
+Existing uncertainty-aware 3DGS methods [32, 46, 48]
+train a shallow MLP on rendering residuals, coupling the
+uncertainty to reconstruction quality. To mitigate this circu-
+lar dependency, the Tracking Uncertainty Adapter (TUA)
+estimates tracking uncertainty using multi-view feature
+consistency providing a signal that is not solely dependent
+on the current reconstruction quality.
+Multi-view Feature Consistency (MFC).
+After each BA
+iteration updates poses {ωi} and disparities {di}, we mea-
+sure semantic consistency by warping DINOv2 features Fi
+across edges in the frame graph. For each edge (i, j), pixel
+pi in frame i is projected into frame j via:
+pij = Πc
+ ω−1
+j ωi · Π−1
+c (pi, di)
+
+(3)
+The per-pixel MFC error measures feature inconsistency at
+the warped location:
+MFCij(p) = 1 −max
+ cos(ˆFi(p), interp(ˆFj, pij)), 0
+
+(4)
+where ˆFi, ˆFj are L2-normalized feature maps and interp
+denotes bilinear interpolation. Pixels failing geometric va-
+lidity checks (negative target depth or out-of-bounds pro-
+jection) are zeroed out. Moving objects violate the static
+assumption under rigid-body warping, yielding high MFC
+error regardless of reconstruction complexity.
+LoRA Architecture.
+To enable bidirectional feedback
+(Sec. 3.5), tracking and mapping uncertainty estimation
+must share a feature space. This is achieved by structuring
+the TUA as a low-rank adaptation over the MUNet. Given
+input features Fi and frozen base weights W(1)
+0 , W(2)
+0 ,
+we inject trainable low-rank matrices A(1), B(1) and
+A(2), B(2) to compute the tracking uncertainty utracki:
+W(l) = W(l)
+0 + B(l)A(l),
+l ∈{1, 2}
+utracki = Softplus
+
+W(2) σ
+
+W(1)Fi
+
+(5)
+where σ(·) is ReLU activation of the MUNet hidden layer.
+At each BA iteration, the TUA inherits a frozen snapshot of
+the MUNet, optimizing only low-rank matrices. For the de-
+fault rank r=8 used, these matrices introduce only ∼5.1k
+trainable parameters across the entire network.
+Motion
+within a local BA window is generally low-dimensional,
+and optimizing a full MLP on a local BA window risks over-
+fitting to temporary frame alignments. The low-rank bottle-
+neck r constrains updates to primary motion components
+while preserving the base features of the MUNet. Also,
+adapting the MUNet, which contains global scene represen-
+tation, results in faster convergence of tracking uncertainties
+to mask dynamic entities, as shown in Fig. 4.
+4
+
+
+Input
+WildGS-SLAM [46]
+DROID-W [24]
+MegaSaM [25]
+Tracking uncer. (Ours)
+Mapping uncer. (Ours)
+TUM fr3/whs [36]
+Bonn crowd2 [31]
+Youtube tomyum [24]
+Figure 3. Tracking and mapping uncertainty comparison. Qualitative comparison of uncertainty estimation methods across representa-
+tive sequences.
+Training.
+The LoRA parameters are optimized by min-
+imizing the NLL loss over MFC observations across all
+valid edges:
+LMFC =
+1
+P
+(i,j)∈E
+|Ω|
+X
+(i,j)∈E
+X
+p∈Ωij
+MFCij(p)
+utracki
+2(p) + log utracki(p)
+(6)
+where E is the edge set in the current BA window, Ωij is
+the set of geometrically valid pixels for edge (i, j), and
+utracki(p) > 0 is enforced by softplus. log utracki prevents
+utracki →∞. The loss is optimized in a single gradient step
+per BA iteration.
+3.4. Uncertainty-Guided Dense Bundle Adjustment
+The TUA’s uncertainty is integrated into a dense BA frame-
+work. To ensure numerical stability and provide a lower
+bound for dynamic pixels, the tracking uncertainty utracki is
+converted to a per-pixel confidence weight w:
+wi = clamp
+
+1
+utracki
+2 , ϵ, 1.0
+
+(7)
+The confidence wi modulated the covariance Σij of the op-
+tical flow ˜fij [38] in the ConvGRU. Dividing by wi inflates
+the covariance at low-confidence pixels, reducing their in-
+fluence on the reprojection objective in Eq. (8). The re-
+sulting confidence map is subsequently propagated to the
+mapping thread. Camera poses ω and disparities d are op-
+timized by minimizing the uncertainty-weighted reprojec-
+tion error. The reprojection error is regularized by a scale-
+aligned monocular metric depth prior ˜Di [12] following
+[24, 46], where Mi is a multi-view depth consistency mask:
+arg min
+ω,d
+X
+(i,j)∈E
+ ˜fij −Πc
+ ω−1
+j ωi Π−1
+c (pi, di)
+
+2
+Σij/wi
++ µm
+X
+i∈V
+Mi(di −1/ ˜Di)
+
+2
+.
+(8)
+To avoid memory bottlenecks when warping 384-dim DI-
+NOv2 features for the MFC loss (Eq. (4)) and depth mask
+Mi, custom CUDA kernels are implemented that bypass in-
+termediate tensor allocations.
+3.5. Spatially-Adaptive Prior
+The MUNet takes the pretrained DINOv2 features Fi as
+input to predict the per-pixel mapping uncertainty umapi.
+Eq. (9) and Eq. (11) denote element-wise operations over
+the spatial dimensions. Operating strictly on the base layers
+W0, the mapping uncertainty umapi is computed as:
+umapi = Softplus
+
+W(2)
+0
+σ
+
+W(1)
+0 Fi
+
+(9)
+Prior works [32, 46] train MUNet using a negative log-
+likelihood (NLL) with a uniform log umapi penalty, which
+blindly inflates uncertainty when residuals are high on chal-
+lenging static regions. To address this, a spatially-adaptive
+prior replaces the uniform penalty with λ(w, R) condi-
+tioned on the TUA’s tracking confidence w:
+Luncer = L′
+SSIM + µdLdepth
+u2mapi
++
+ λ0 + γw · g(R)
+
+|
+{z
+}
+λ(w,R)
+· log umapi (10)
+where L′
+SSIM is the modified SSIM [46] and Ldepth = | ˆD −
+˜D|1. Since w ∈[0.01, 1.0], the adaptive prior λ(w, R) is
+bounded within [λ0, λ0 +γ]. Primarily, λ regularizes uncer-
+tainty inflation by forcing umapi to remain low when confi-
+dence w is high. To prevent the map from overfitting to
+transient variations (e.g., sensor noise or lighting flicker)
+in these static regions, the combined rendering residual
+R = L′
+SSIM + µdLdepth is not too large, it modulates the
+prior via a gating mechanism g(R) = exp(−αR), prevent-
+ing the 3DGS map from being forced to render sensor noise.
+Refer to supplementary for more details. Additionally, the
+spatial-adaptive prior shields the shared base weights W0
+5
+
+
+RGB Input
+SCOUT-SLAM (Ours)
+DROID-W [24]
+t −1
+t
+iter 1
+iter 8
+iter 14
+iter 1
+iter 14
+iter 28
+Bonn crowd [31]
+TUM fr3/whs [36]
+Figure 4. Tracking uncertainty convergence across BA iterations. Per-pixel tracking uncertainty maps when dynamic objects enter the
+field of view. Left: Consecutive input RGB frames. Middle: SCOUT-SLAM isolates moving subjects within early BA iterations (iter
+1–14). Right: DROID-W requires more iterations (up to iter 28) to localize dynamic objects. By initializing the Tracking Uncertainty
+Adapter (TUA) from the shared mapping network, SCOUT-SLAM converges quicker and prevents early-stage dynamic outliers from
+corrupting pose optimization.
+from noisy gradients from Luncer, maintaining a stable fea-
+ture space for TUA. We also apply a variance regulariza-
+tion Lreg [32] to encourage smooth uncertainty across sim-
+ilar DINOv2 features. With hyperparameters µ∗, the total
+loss is:
+LMUNet = Luncer + µregLreg
+(11)
+3.6. 3DGS Map Optimization
+At each mapping iteration, a keyframe is sampled with
+equal probability from either the spatial co-visibility win-
+dow or the historical keyframe buffer. Eq. (12) and Eq. (13)
+denote element-wise operations over the spatial dimensions.
+The scene is then rendered and the Gaussian attributes are
+optimized by minimizing:
+Lrender = µrgbLcolor + (1 −µrgb)Ldepth
+umapi
+2
++ µisoLiso
+(12)
+The color loss combines L1 and SSIM terms following [17,
+46]:
+Lcolor = (1 −µSSIM)∥ˆC −C∥1 + µSSIMLSSIM
+(13)
+The depth loss Ldepth penalizes deviation from the monoc-
+ular metric depth prior [12]. Dividing the residuals by the
+detached mapping uncertainty umapi
+2 ensures Lrender only
+optimizes the gaussians, esnsuring MUNet and 3D gaus-
+sians are optimized in parallel. Consequently, the gaussians
+are optimized to only reconstruct the static scene. Finally,
+the isotropic regularization Liso [28] constrains Gaussian
+scales to prevent excessive elongation in sparsely observed
+regions.
+4. Experiments
+4.1. Experimental Setup
+Datasets. Evaluation is conducted across three dynamic
+benchmarks:
+TUM RGB-D [36], Bonn Dynamic [31],
+Wild-SLAM MoCap [46], qualitative evaluations on dy-
+namic videos from Youtube [24]. Refer to supplementary
+for further details.
+Baselines. We evaluate SCOUT-SLAM against SOTA dy-
+namic SLAM methods, categorized into two paradigms: (1)
+Standard SLAM methods: including DROID-SLAM [38],
+MegaSaM [25], DROID-W [24].
+(2) Neural & 3DGS
+SLAM methods:
+including NICE-SLAM [49], Dyna-
+MoN [34], DDN-SLAM [22], RoDyn-SLAM [14], Splat-
+SLAM [33], UP-SLAM [48], and WildGS-SLAM [46].
+Implementation & Metrics SCOUT-SLAM is evaluated
+on an Intel Core i9 CPU and RTX 4090 GPU, utilizing
+standard ATE RMSE for tracking, alongside PSNR, SSIM,
+and LPIPS for view synthesis. Dynamic objects are masked
+out using SAM3 [3]. For comprehensive details regarding
+the SLAM pipeline, network architectures, hyperparame-
+ters, and extended evaluation masking, please refer to the
+supplementary material.
+4.2. Quantitative Results
+4.2.1. Camera Tracking
+Tab. 1, Tab. 2, and Tab. 4 show SCOUT-SLAM consis-
+tently achieves state-of-the-art performance across all three
+benchmarks.
+On TUM RGB-D [36] (Tab. 2), SCOUT-
+SLAM attains an average error of 1.42 cm (vs. 1.51 cm
+for WildGS-SLAM [46] and 1.52 cm for DROID-W [24]).
+The largest gains occur on walking sequences (e.g., fr3/wr:
+2.91 vs. 3.15 cm) where dynamic objects dominate view.
+Baselines like DROID-SLAM [38] and DynaMoN [34]
+perform favorably on fr2/dp, as this sequence features a
+single actor remaining stationary for most of the scene
+without intermittent occlusions, allowing standard feature-
+matching and segmentation models to perform reliably.
+On Bonn Dynamic [31] (Tab. 1), SCOUT-SLAM aver-
+ages 2.29 cm compared to WildGS-SLAM [46] (2.47 cm)
+and DROID-W [24] (2.32 cm), with the largest margins
+appearing on balloon, balloon2, and crowd2 which con-
+6
+
+
+Mapping Uncer.
+(WildGS-SLAM [46])
+Mapping Uncer.
+(Ours)
+Input
+Image
+Rendered static image
+(Ours)
+Rendered
+(WildGS-SLAM [46])
+Bonn person tracking2 [31]
+TUM fr3/wr [36]
+Youtube tomyum [24]
+Figure 5. Comparison of Rendered static image and mapping uncertainty. Left: Mapping uncertainties. Middle: Input RGB. Right:
+Rendered static images. WildGS-SLAM assigns erroneously high uncertainty to static regions, whereas SCOUT-SLAM’s mapping un-
+certainties accurately isolate dynamic objects, resulting in crisper, artifact-free static reconstructions. The solid and dashed green boxes
+highlight the preserved thin structures and reduced smearing in SCOUT-SLAM’s reconstruction. Top row: Challenging lighting changes in
+Bonn person tracking2. Middle row: Complex static structural geometry in TUM fr3/wr. Bottom row: Fast camera motion in Youtube to-
+myum degrades the WildGS-SLAM’s reconstruction, whereas the spatial-adaptive prior ensures reconstruction stability in SCOUT-SLAM.
+Method
+balloon
+balloon2
+crowd
+crowd2
+mov box
+mov box2
+person
+person2
+Avg.
+SLAM
+DROID-W [24]
+2.7
+2.5
+1.3
+1.8
+1.6
+2.3
+3.5
+3.0
+2.32
+DROID-SLAM [38]
+7.5
+4.1
+5.2
+6.5
+2.3
+4.0
+4.3
+5.4
+4.91
+MegaSaM [25]
+3.7
+2.6
+1.6
+7.2
+1.4
+3.4
+4.1
+4.0
+3.51
+Neural & 3DGS SLAM
+DynaMoN [34]
+2.8
+2.7
+3.5
+2.8
+1.3
+2.7
+14.8
+2.2
+4.10
+DDN-SLAM [22]
+1.8
+4.1
+1.8
+2.3
+2.0
+3.2
+4.3
+3.8
+2.91
+RoDyn-SLAM [14]
+7.9
+11.5
+-
+-
+-
+12.6
+14.5
+13.8
+-
+Splat-SLAM [33]
+8.8
+3.0
+6.8
+F
+1.7
+3.0
+4.9
+25.8
+F
+UP-SLAM [48]
+2.8
+2.7
+-
+-
+-
+3.2
+4.0
+3.6
+-
+WildGS-SLAM [46]
+2.7
+2.4
+1.6
+2.2
+1.7
+2.5
+3.5
+3.1
+2.47
+SCOUT-SLAM (Ours)
+2.4
+2.2
+1.4
+1.7
+1.6
+2.4
+3.4
+3.1
+2.29
+Table 1. Tracking Results on Bonn Dynamic [31]. ATE RMSE [cm]. Best results are highlighted as first , second , and third . ’F’
+indicated tracking failure. ’-’ denotes unreported sequences.
+Method
+fr2/dp
+fr3/whs
+fr3/wr
+fr3/ws
+fr3/wx
+Avg.
+SLAM
+DROID-W [24]
+1.2
+1.6
+3.1
+0.5
+1.2
+1.52
+DROID-SLAM [38]
+0.6
+2.2
+4.0
+1.2
+1.6
+1.92
+MegaSaM [25]
+1.6
+1.8
+2.6
+0.6
+1.5
+1.62
+Neural & 3DGS SLAM
+DynaMoN[34]
+0.7
+1.9
+3.9
+0.7
+1.4
+1.72
+DDN-SLAM [22]
+-
+2.3
+3.9
+1.0
+1.3
+-
+RoDyn-SLAM [14]
+-
+5.6
+-
+1.7
+8.3
+-
+Splat-SLAM [33]
+0.7
+2.2
+3.9
+2.3
+1.3
+2.08
+UP-SLAM [48]
+1.3
+2.6
+-
+0.7
+1.6
+-
+WildGS-SLAM [46]
+1.3
+1.4
+3.1
+0.5
+1.2
+1.51
+SCOUT-SLAM(Ours)
+1.1
+1.5
+2.9
+0.4
+1.2
+1.42
+Table 2. Tracking Results on TUM RGB-D[36] Dynamic Se-
+quences. ATE RMSE [cm]. Best results are highlighted as first ,
+second , and third . ’-’ denotes unreported sequences.
+tain rapidly moving objects. Finally, on Wild-SLAM Mo-
+Cap (Tab. 4), SCOUT-SLAM averages 0.47 cm, competi-
+tive with WildGS-SLAM [46] (0.46 cm) and outperforming
+DROID-W [24] (0.65 cm). Gains are most pronounced on
+sequences with large foreground motion (ANYmal2, basket-
+ball, crowd, stones). Performance on table tracking1, ta-
+ble tracking2 is slightly lower than WildGS-SLAM [46],
+likely due to a slow-moving foreground object near image
+boundaries producing an ambiguous MFC signal. This per-
+formance drop is more severe in DROID-W [24] due to the
+absence of reconstruction priors.
+4.2.2. Input View Synthesis TUM RGB-D [36]
+Tab. 3 reports input view synthesis quality on the TUM
+RGB-D dynamic sequences.
+SCOUT-SLAM consis-
+7
+
+
+Method
+Metric
+fr2/dp
+fr3/shs
+fr3/sr
+fr3/ss
+fr3/sx
+fr3/whs
+fr3/wr
+fr3/ws
+fr3/wx
+Avg.
+Splat-SLAM [33]
+PSNR ↑
+17.87
+17.14
+16.65
+24.20
+19.81
+14.68
+13.84
+15.24
+16.34
+17.31
+SSIM ↑
+0.632
+0.625
+0.678
+0.862
+0.727
+0.513
+0.480
+0.610
+0.597
+0.636
+LPIPS ↓
+0.469
+0.423
+0.336
+0.147
+0.235
+0.497
+0.641
+0.460
+0.422
+0.404
+WildGS-SLAM [46]
+PSNR ↑
+21.36
+18.62
+20.59
+23.62
+21.53
+16.06
+15.44
+17.55
+15.46
+18.91
+SSIM ↑
+0.749
+0.724
+0.769
+0.869
+0.792
+0.660
+0.661
+0.774
+0.657
+0.739
+LPIPS ↓
+0.201
+0.264
+0.208
+0.108
+0.172
+0.337
+0.350
+0.205
+0.304
+0.239
+SCOUT-SLAM (Ours)
+PSNR ↑
+21.90
+19.28
+20.88
+24.01
+22.03
+16.59
+15.63
+17.72
+16.03
+19.34
+SSIM ↑
+0.782
+0.742
+0.787
+0.877
+0.808
+0.694
+0.674
+0.784
+0.703
+0.761
+LPIPS ↓
+0.175
+0.243
+0.190
+0.103
+0.165
+0.293
+0.335
+0.201
+0.267
+0.219
+Table 3. Input View Synthesis on TUM RGB-D. PSNR↑/ SSIM↑/ LPIPS↓. Best results are in bold
+Method
+ANYmal1
+ANYmal2
+ball
+crowd
+person
+racket
+stones
+table1
+table2
+umbrella
+Avg.
+SLAM
+DROID-W [24]
+0.3
+0.3
+0.2
+0.3
+0.7
+0.5
+0.4
+0.9
+2.7
+0.2
+0.65
+DROID-SLAM [38]
+0.6
+4.7
+1.2
+2.3
+0.6
+1.5
+3.4
+48.0
+95.6
+3.8
+16.17
+MegaSaM [25]
+0.6
+2.7
+0.6
+1.0
+3.2
+1.6
+3.2
+1.0
+9.4
+0.6
+2.40
+Neural & 3DGS SLAM
+NICE-SLAM [49]
+F
+123.6
+21.1
+F
+150.2
+F
+134.4
+138.4
+F
+23.8
+F
+Splat-SLAM [33]
+0.4
+0.4
+0.3
+0.7
+0.8
+0.6
+1.9
+2.5
+73.6
+5.9
+8.71
+UP-SLAM [48]
+0.4
+0.6
+0.6
+1.1
+1.1
+0.9
+1.0
+0.7
+3.6
+0.8
+1.08
+WildGS-SLAM [46]
+0.2
+0.2
+0.2
+0.3
+0.8
+0.4
+0.4
+0.6
+1.3
+0.2
+0.46
+SCOUT-SLAM(Ours)
+0.2
+0.2
+0.1
+0.2
+0.7
+0.4
+0.3
+0.7
+1.6
+0.2
+0.47
+Table 4. Tracking Results on Wild-SLAM MoCap. ATE RMSE [cm]. Best results are highlighted as first , second , and third . ’F’
+indicated tracking failure. ’-’ denotes unreported sequences.
+(a) Tracking Arch. (Bonn)
+(b) Adaptive Prior (TUM)
+Architecture
+Rank
+ATE↓
+Method
+ATE↓
+PSNR↑
+TUA (Ours)
+r=4 / 8 / 16
+2.35 / 2.29 / 2.37
+Ours
+1.42
+19.34
+Standalone MLP
+–
+5.36
+w/o Prior
+1.45
+19.20
+Table 5. Ablation studies.
+tently improves PSNR, SSIM, and LPIPS over WildGS-
+SLAM [46] across all nine sequences (avg. PSNR: 19.34 vs.
+18.91 dB), demonstrating the spatial-adaptive prior enforces
+complex static geometry reconstruction under fast camera
+motion(see Fig. 5).
+4.3. Qualitative Analysis
+Fig. 3 compares SCOUT-SLAM’s tracking uncertainty esti-
+mation against WildGS-SLAM [46], DROID-W [24] and
+MegaSAM [25].
+The results show that our method iso-
+lates dynamic objects precisely without affecting the static
+background. As shown in Fig. 5, WildGS-SLAM [46] as-
+signs erroneously high mapping uncertainty to static re-
+gions under challenging lighting, complex geometry, and
+fast motion.
+This inflated uncertainty suppresses valid
+gradient updates and prevents the Gaussians from accu-
+rately reconstructing static surfaces, resulting in severe blur-
+ring and floaters. Whereas, SCOUT-SLAM yields sharp
+and artifact-free reconstructions under the same conditions.
+Furthermore, Fig. 4 illustrates tracking uncertainty conver-
+gence across BA iterations. While DROID-W [24] opti-
+mizes an affine layer using the MFC loss from scratch it re-
+quires more iterations to localize dynamic objects, whereas
+SCOUT-SLAM initializes its low-rank adapter (TUA) from
+the shared MUNet base weights. This pre-encoded scene
+representation allows the TUA to localize dynamic objects
+in fewer iterations while remaining stable thereafter as seen
+in Fig. 4
+4.4. Ablation Studies
+Tab. 5 presents our ablation study on TUM RGB Dy-
+namic [36]. (a) A standalone MLP of similar parameter
+count as low-rank matrices struggles to converge within
+the local BA window, with TUA rank=8 performing the
+best. (b) The network overestimates uncertainty on static
+regions, reducing both mapping and tracking accuracy. This
+shows that keeping the base network stable helps the track-
+ing adapter converge.
+5. Conclusion
+We
+presented
+SCOUT-SLAM,
+a
+structurally-coupled
+dual-uncertainty framework that resolves the circular
+dependency between camera tracking and map recon-
+struction in 3DGS-SLAM. By deriving tracking and
+mapping uncertainties from a shared base network, our
+approach decouples tracking uncertainty from current
+reconstruction quality. Concurrently, a spatially-adaptive
+prior ensures stable uncertainty modeling and maintains
+stable features across the shared base network. Evaluations
+across dynamic
+benchmarks demonstrate that
+break-
+ing this dependency enables SCOUT-SLAM to achieve
+state-of-the-art tracking accuracy and artifact-free static
+reconstructions in highly cluttered, dynamic environments.
+8
+
+
+References
+[1] Berta Bescos, Jos´e M F´acil, Javier Civera, and Jos´e Neira.
+DynaSLAM: Tracking, mapping, and inpainting in dynamic
+scenes. IEEE Robotics and Automation Letters (RA-L), 2018.
+3
+[2] Carlos Campos, Richard Elvira, Juan J. Gomez Rodriguez,
+Jose M. M. Montiel, et al.
+ORB-SLAM3: An accurate
+open-source library for visual, visual–inertial, and multimap
+SLAM. IEEE Transactions on Robotics (T-RO), 2021. 3
+[3] Carion et al. SAM 3: Segment anything with concepts. arXiv
+preprint arXiv:2511.16719, 2025. 6
+[4] Qianzhong Chen, Naixiang Gao, Suning Huang, JunEn Low,
+et al. Grad-nav++: Vision-language model enabled visual
+drone navigation with gaussian radiance fields and differ-
+entiable dynamics. IEEE Robotics and Automation Letters
+(RA-L), 2025. 1
+[5] Timothy Chen, Ola Shorinwa, Joseph Bruno, Aiden Swann,
+et al. Splat-nav: Safe real-time robot navigation in gaus-
+sian splatting maps. IEEE Transactions on Robotics (T-RO),
+2025. 1
+[6] Jakob Engel, Thomas Sch¨ops, and Daniel Cremers. LSD-
+SLAM: Large-scale direct monocular SLAM. In European
+Conference on Computer Vision (ECCV), 2014. 3
+[7] Jakob Engel, Vladlen Koltun, and Daniel Cremers. Direct
+sparse odometry. IEEE Transactions on Pattern Analysis and
+Machine Intelligence (PAMI), 2017. 1, 3
+[8] Andreas Geiger, Philip Lenz, Christoph Stiller, and Raquel
+Urtasun. Vision meets robotics: The kitti dataset. The Inter-
+national Journal of Robotics Research (IJRR), 2013. 1
+[9] Wenxuan Guo, Xiuwei Xu, Hang Yin, Ziwei Wang, et al.
+Igl-nav: Incremental 3d gaussian localization for image-goal
+navigation. In IEEE/CVF International Conference on Com-
+puter Vision (ICCV), 2025. 1
+[10] Ryan Hoque, Peide Huang, David Yoon, Jian Zhang, et al.
+Egodex: Learning dexterous manipulation from large-scale
+egocentric video. In International Conference on Learning
+Representations (ICLR), 2026. 1
+[11] Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-
+Zhu, et al. LoRA: Low-rank adaptation of large language
+models. In International Conference on Learning Represen-
+tations (ICLR), 2022. 1, 4
+[12] Mu Hu, Wei Yin, Chi Zhang, Zhipeng Cai, et al. Metric3D
+v2: A versatile monocular geometric foundation model for
+zero-shot metric depth and surface normal estimation. IEEE
+Transactions on Pattern Analysis and Machine Intelligence
+(PAMI), 2024. 5, 6
+[13] Huajian Huang, Longwei Li, Hui Cheng, and Sai-Kit Yeung.
+Photo-SLAM: Real-time simultaneous localization and pho-
+torealistic mapping for monocular stereo and RGB-D cam-
+eras. In IEEE/CVF Conference on Computer Vision and Pat-
+tern Recognition (CVPR), 2024. 2
+[14] Haochen Jiang, Yueming Xu, Kejie Li, Jianfeng Feng, et al.
+Rodyn-SLAM: Robust dynamic dense RGB-D SLAM with
+neural radiance fields. IEEE Robotics and Automation Let-
+ters (RA-L), 2024. 1, 2, 6, 7
+[15] Mohammad Mahdi Johari, Camilla Carta, and Francois
+Fleuret. ESLAM: Efficient dense SLAM system based on
+hybrid representation of signed distance fields. In IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), 2023. 2
+[16] Keetha et al. SplaTAM: Splat, track & map 3D gaussians for
+dense RGB-D SLAM. In IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), 2024. 1, 2
+[17] Kerbl et al. 3D gaussian splatting for real-time radiance field
+rendering. ACM Transactions on Graphics (TOG), 2023. 1,
+2, 4, 6
+[18] Georg Klein and David Murray. Parallel tracking and map-
+ping for small AR workspaces. In IEEE International Sym-
+posium on Mixed and Augmented Reality (ISMAR), 2007. 3
+[19] Jonas Kulhanek, Songyou Peng, Zuzana Kukelova, Marc
+Pollefeys, et al. WildGaussians: 3D gaussian splatting in the
+wild. In Advances in Neural Information Processing Systems
+(NeurIPS), 2024. 1
+[20] Xiaohan Lei et al. Gaussnav: Gaussian splatting for visual
+navigation. IEEE Transactions on Pattern Analysis and Ma-
+chine Intelligence (PAMI), 2025. 1
+[21] Vincent Leroy, Yohann Cabon, and Jerome Revaud. Ground-
+ing image matching in 3D with MASt3R. In European Con-
+ference on Computer Vision (ECCV), 2024. 3
+[22] Mingrui Li, Zhetao Guo, Tianchen Deng, Yiming Zhou,
+et al.
+DDN-SLAM: Real time dense dynamic neural im-
+plicit SLAM. IEEE Robotics and Automation Letters (RA-L),
+2025. 1, 3, 6, 7
+[23] Mingrui Li, Yiming Zhou, Hongxing Zhou, Xinggang Hu,
+et al. Dy3dgs-slam: Monocular 3d gaussian splatting slam
+for dynamic environments. In IEEE International Confer-
+ence on Robotics and Automation (ICRA), 2025. 1, 3
+[24] Moyang Li, Zihan Zhu, Marc Pollefeys, and Daniel Barath.
+DROID-SLAM in the wild. In IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), 2026. 3,
+5, 6, 7, 8, 11, 12
+[25] Zhengqi Li, Richard Tucker, Forrester Cole, Qianqian Wang,
+et al. MegaSaM: Accurate, fast and robust structure and mo-
+tion from casual dynamic videos. In IEEE/CVF Conference
+on Computer Vision and Pattern Recognition (CVPR), 2025.
+3, 5, 6, 7, 8
+[26] Liu et al.
+Slideslam: Sparse, lightweight, decentralized
+metric-semantic slam for multirobot navigation. IEEE Trans-
+actions on Robotics (T-RO), 2025. 1
+[27] Gua Mass et al.
+Beings:
+Bayesian embodied image-
+goal navigation with gaussian splatting.
+arXiv preprint
+arXiv:2409.10216, 2024. 1
+[28] Hidenobu Matsuki, Riku Murai, Paul H.J. Kelly, and An-
+drew J. Davison. Gaussian splatting slam.
+In IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), 2024. 1, 2, 6
+[29] Raul Mur-Artal and Juan D Tard´os. ORB-SLAM2: An open-
+source SLAM system for monocular, stereo, and RGB-D
+cameras. IEEE Transactions on Robotics (T-RO), 2017. 1
+[30] Oquab et al. DINOv2: Learning robust visual features with-
+out supervision. arXiv preprint arXiv:2304.07193, 2023. 1,
+3, 4
+[31] Emanuele Palazzolo, Jens Behley, Philipp Lottes, Philippe
+Gigu`ere, et al.
+ReFusion: 3D reconstruction in dynamic
+9
+
+
+environments for RGB-D cameras exploiting residuals. In
+IEEE/RSJ International Conference on Intelligent Robots
+and Systems (IROS), 2019. 3, 5, 6, 7
+[32] Weining Ren, Zihan Zhu, Boyang Sun, Jiaqi Chen, et al.
+NeRF on-the-go: Exploiting uncertainty for distractor-free
+nerfs in the wild. In IEEE/CVF Conference on Computer
+Vision and Pattern Recognition (CVPR), 2024. 1, 4, 5, 6
+[33] Erik Sandstr¨om, Ganlin Zhang, Keisuke Tateno, Michael
+Oechsle, et al. Splat-slam: Globally optimized rgb-only slam
+with 3d gaussians. In IEEE/CVF Conference on Computer
+Vision and Pattern Recognition Workshops (CVPRW), 2025.
+1, 2, 6, 7, 8, 11, 12
+[34] Nicolas Schischka, Hannah Schieber, Mert Asim Karaoglu,
+Melih Gorgulu, et al. Dynamon: Motion-aware fast and ro-
+bust camera localization for dynamic neural radiance fields.
+IEEE Robotics and Automation Letters (RA-L), 2024. 1, 2,
+6, 7
+[35] Raluca Scona, Mariano Jaimez, Yvan R. Petillot, Maurice
+Fallon, et al. Staticfusion: Background reconstruction for
+dense rgb-d slam in dynamic environments.
+In IEEE In-
+ternational Conference on Robotics and Automation (ICRA),
+2018. 3
+[36] J. Sturm, N. Engelhard, F. Endres, W. Burgard, et al.
+A
+Benchmark for the Evaluation of RGB-D SLAM Systems.
+In IEEE/RSJ International Conference on Intelligent Robots
+and Systems (IROS), 2012. 5, 6, 7, 8
+[37] Edgar Sucar, Shikun Liu, Joseph Ortiz, and Andrew J Davi-
+son. iMAP: Implicit mapping and positioning in real-time.
+In IEEE/CVF International Conference on Computer Vision
+(ICCV), 2021. 2
+[38] Zachary Teed and Jia Deng. DROID-SLAM: Deep visual
+SLAM for monocular, stereo, and RGB-D cameras. In Ad-
+vances in Neural Information Processing Systems (NeurIPS),
+2021. 1, 3, 5, 6, 7, 8
+[39] Zachary Teed, Lahav Lipson, and Jia Deng. Deep patch vi-
+sual odometry. In Advances in Neural Information Process-
+ing Systems (NeurIPS), 2023. 3
+[40] Hengyi Wang, Jingwen Wang, and Lourdes Agapito. Co-
+SLAM: Joint coordinate and sparse parametric encodings for
+neural real-time SLAM. In IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), 2023. 2
+[41] Yueming Xu, Haochen Jiang, Zhongyang Xiao, Jianfeng
+Feng, et al. DG-SLAM: Robust dynamic gaussian splatting
+SLAM with hybrid pose optimization. In Advances in Neural
+Information Processing Systems (NeurIPS), 2024. 1, 3
+[42] Chi Yan, Delin Qu, Dan Xu, Bin Zhao, et al. Gs-slam: Dense
+visual slam with 3d gaussian splatting. In IEEE/CVF Confer-
+ence on Computer Vision and Pattern Recognition (CVPR),
+2024. 1, 2
+[43] Chao Yu, Zuxin Liu, Xin-Jun Liu, Fugui Xie, et al.
+DS-
+SLAM: A semantic visual SLAM towards dynamic environ-
+ments. In IEEE/RSJ International Conference on Intelligent
+Robots and Systems (IROS), 2018. 3
+[44] Yuanwen Yue, Anurag Das, Francis Engelmann, Siyu Tang,
+et al. Improving 2D Feature Representations by 3D-Aware
+Fine-Tuning. In European Conference on Computer Vision
+(ECCV), 2024. 1, 3, 4
+[45] Hongjia Zhai, Xiyu Zhang, Zhao Boming, Hai Li, et al.
+Splatloc: 3d gaussian splatting-based visual localization for
+augmented reality. arXiv preprint arXiv:2409.14067, 2024.
+1
+[46] Jianhao Zheng, Zihan Zhu, Valentin Bieri, Marc Pollefeys,
+et al. Wildgs-SLAM: Monocular gaussian splatting SLAM
+in dynamic environments.
+In IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), 2025. 1,
+3, 4, 5, 6, 7, 8, 11, 12, 13
+[47] Jianhao Zheng, Liyuan Zhu, Zihan Zhu, and Iro Armeni.
+WildPose: A unified framework for robust pose estimation
+in the wild. In IEEE/CVF Conference on Computer Vision
+and Pattern Recognition (CVPR), 2026. 3
+[48] Wancai Zheng, Linlin Ou, Jiajie He, Libo Zhou, et al. UP-
+SLAM: Adaptively structured gaussian SLAM with uncer-
+tainty prediction in dynamic environments. In IEEE Inter-
+national Conference on Robotics and Automation (ICRA),
+2026. 1, 3, 4, 6, 7, 8
+[49] Zihan Zhu, Songyou Peng, Viktor Larsson, Weiwei Xu, et al.
+NICE-SLAM: Neural implicit scalable encoding for SLAM.
+In IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), 2022. 2, 6, 8
+[50] ZJU3DV et al.
+Nis-slam: Neural implicit semantic rgb-d
+slam for 3d consistent scene understanding.
+IEEE Trans-
+actions on Visualization and Computer Graphics (TVCG),
+2024. 1
+10
+
+
+Supplementary Material:
+SCOUT-SLAM: Structurally-Coupled Dual Uncertainty-Aware 3DGS SLAM in
+the Wild
+This supplementary document provides additional de-
+tails and extended experiments to support the main pa-
+per. Section A presents supplementary evaluations on the
+DROID-W dataset, details the datasets utilized, and out-
+lines our extended evaluation masking protocol. Section B
+provides comprehensive implementation details, including
+the network architectures, the spatially-adaptive prior, and
+hyperparameters for the full SLAM pipeline. Finally, Sec-
+tion C provides an extended runtime and memory analysis.
+A. Evaluation
+A.1. Evaluation on DROID-W
+We extend our evaluation to the DROID-W [24] dataset
+(refer Tab. 6), which features urban outdoor environments
+with severe visual clutter and dynamic objects Fig. 6. In
+such challenging scenarios, the circular dependency be-
+tween camera tracking and scene reconstruction is exac-
+erbated, leading to poor uncertainty modeling, which our
+method addresses. Consequently, we compare our approach
+against WildGS-SLAM [46] and Splat-SLAM [33], to state-
+of-art 3DGS-SLAM methods. Downtown 1 , Downtown
+4 sequences face Out-Of-Memory (OOM) issues owing to
+long unconstrained trajectories spanning more than 100 m,
+hence not reported. Crucially, the model architecture, hy-
+perparameters, and training regime used for this new dataset
+are exactly identical to those evaluated in the main paper.
+A.2. Datasets
+We evaluate SCOUT-SLAM on dynamic sequences with
+rapid camera motion and complex lighting.
+To balance
+tracking stability and real-time mapping speed, sequences
+are processed at reduced resolutions:
+• TUM RGB-D: Features indoor dynamic interactions
+(e.g., people walking). Originally 480×640, processed at
+384 × 512 to maintain a 4 : 3 aspect ratio while meeting
+network divisibility constraints.
+• Bonn Dynamic: Contains ground-truth poses under se-
+vere dynamic occlusions (e.g., moving persons, balloons,
+boxes). Processed at 384 × 512.
+• Wild-SLAM MoCap: Features open-set dynamic ob-
+jects (quadrupeds, basketballs, crowds) in uncontrolled
+environments. Processed at 360 × 640.
+• DROID-W: Features urban outdoor environments with
+severe visual clutter and dynamic objects.
+Originally
+1200 × 1600, processed at 384 × 512.
+Figure 6. Qualitative visualization of tracking uncertainty in ur-
+ban, cluttered dynamic environments. Left: Input RGB images.
+Right: Tracking uncertainty masks estimated by SCOUT-SLAM.
+• Youtube: Unconstrained internet videos with aggressive
+camera motion and heavy visual clutter.
+Processed at
+384 × 512.
+A.3. Input view synthesis evaluation.
+TUM RGB-D sequences lack ground-truth dynamic masks,
+which are necessary to evaluate the reconstruction quality of
+the static background geometry. We use SAM3 to generate
+dynamic object masks for both rendered and ground-truth
+images. Specifically, we manually segment and exclude the
+”person” and ”chair” categories from the evaluation metrics
+(PSNR, SSIM, LPIPS) across all TUM sequences, ensuring
+that metrics reflect only static scene fidelity.
+11
+
+
+Method
+Downtown 2
+Downtown3
+Downtown5
+Downtown 6
+Downtown7
+Avg.
+Splat-SLAM [33]
+6.44
+0.89
+0.91
+2.11
+0.07
+2.08
+WildGS-SLAM [46]
+0.95
+0.43
+0.87
+1.22
+0.53
+0.80
+SCOUT-SLAM(Ours)
+0.79
+0.23
+0.86
+0.09
+0.07
+0.41
+Table 6. Tracking Results on DROID-W[24] Dataset Sequences. ATE RMSE [m]. Best results are highlighted as first , second , and
+third .
+Figure 7.
+Examples of dynamic object masks overlayed on
+ground-truth images generated by SAM3 for evaluation.
+B. Implementation Details
+B.1. Network Architectures
+SCOUT-SLAM
+extracts
+multi-view
+features
+using
+a
+frozen DINOv2 (vits14 reg) encoder, yielding a 384-
+dimensional feature map.
+• Mapping Uncertainty Network (MUNet): A 2-layer
+Multi-Layer Perceptron (MLP) with a hidden dimension
+of 64. It uses ReLU activations for hidden layers and a
+Softplus activation at the output to predict a strictly posi-
+tive per-pixel mapping uncertainty.
+• Tracking Uncertainty Adapter (TUA): TUA injects
+trainable low-rank matrices (r = 8, scaling factor α =
+8.0) into the MUNet layers. During tracking, MUNet’s
+base weights are frozen. Only the low-rank matrices are
+optimized via AdamW (learning rate 4 × 10−7, weight
+decay 0.05).
+B.2. Spatially-Adaptive Prior
+The spatially-adaptive prior λ(w, R) replaces the uniform
+penalty in the Negative Log-Likelihood loss. It is condi-
+tioned on the tracking confidence w and the combined ren-
+dering residual R (SSIM and depth error).
+It takes the form: λ(w, R) = λ0 + γ · w · g(R), where
+g(R) = exp(−αR) is a residual gating mechanism. In our
+configuration, we set the base penalty λ0 = 0.98, the prior
+scale γ = 2.0, and the gating parameter α = 0.6. The com-
+bined residual is computed as R = LSSIM +0.2·Ldepth. Pri-
+marily, λ regularizes uncertainty inflation on static geome-
+try (where confidence w is high). However, if a static region
+exhibits residual R due to transient variations (e.g., sensor
+noise or lighting flicker), g(R) approaches 0. This softens
+the penalty back to λ0, allowing the network to safely as-
+sign uncertainty without forcing the 3D Gaussians to overfit
+to the transient noise.
+B.3. SLAM Pipeline & Hyperparameters
+The system runs on an Intel Core i9 CPU and an NVIDIA
+RTX 4090 GPU.
+Multi-Processing Architecture.
+To ensure real-time per-
+formance, SCOUT-SLAM decouples camera tracking and
+scene reconstruction into asynchronous parallel processes
+using torch.multiprocessing.
+The tracker esti-
+mates poses and dispatches keyframe data (poses, depth,
+flags) to the mapper via a unidirectional inter-process pipe.
+To prevent the mapper from being overwhelmed and main-
+tain graph consistency, the processes synchronize using
+continuation signals dispatched by the mapper upon com-
+pleting a keyframe optimization step.
+An optional third
+process handles live GUI rendering, receiving visualization
+data via asynchronous queues.
+System Initialization.
+SCOUT-SLAM uses a two-stage
+initialization. First, incoming frames are buffered until a 15-
+keyframe warmup window is reached. The tracking fron-
+tend establishes initial poses, and the mapper uses this ge-
+ometry to seed the 3D Gaussians and train the MUNet for
+1050 iterations.
+Second, the frontend updates the track-
+ing uncertainty masks for these warmup frames using the
+trained MUNet via TUA. The initial tracking graph is then
+re-optimized using these uncertainty weights to suppress
+dynamic outliers before standard online SLAM begins.
+Tracking Frontend.
+New keyframes are added when the
+average optical flow magnitude exceeds 3.0 pixels. Poses
+are optimized within a 25-keyframe sliding bundle adjust-
+ment window, capped at 75 edges.
+Intermediate non-
+keyframe poses are linearly interpolated in SE(3) log-
+space.
+Global Bundle Adjustment.
+To maintain long-term tra-
+jectory consistency, SCOUT-SLAM triggers an online
+Global Bundle Adjustment (BA) every 20 keyframes, as
+well as a final BA at the end of the sequence, similar to
+WildGS-SLAM [46]. During Global BA, the low-rank ma-
+trices of the Tracking Uncertainty Adapter (TUA) are not
+optimized. Instead, historical tracking uncertainty masks
+12
+
+
+Method
+Track (ms/kf)
+Map (ms/kf)
+Peak VRAM (GB)
+ATE [cm]
+WildGS-SLAM [46]
+470
+910
+6.1
+1.51
+SCOUT-SLAM (Ours)
+710
+980
+6.8
+1.42
+Table 7. Runtime Analysis on TUM RGB-D dynamic sequences.
+Average latency per keyframe (ms/kf), peak VRAM, and ATE
+RMSE [cm] across the TUM sequences.
+are held fixed while poses and metric depths are refined us-
+ing extended loop closure factors. When global BA updates
+historical camera poses, the 3D Gaussians in the map are
+correspondingly deformed to align with the refined trajec-
+tory.
+Dense Mapping.
+Metric depth priors are generated using
+Metric3D v2. For initializing 3D Gaussians, images and
+depth maps are spatially downsampled by a factor of 32. To
+accelerate optimization and reduce memory overhead, we
+set the spherical harmonics (SH) degree of the 3D Gaus-
+sians to 0. Gaussians are optimized over a 10-keyframe
+co-visibility window for 450 iterations per new keyframe.
+We prune Gaussians with an opacity below 0.7 or a screen
+radius exceeding 20 pixels.
+C. Results
+C.1. Runtime Analysis
+Table 7 details keyframe latency and memory usage on
+TUM RGB-D sequences. SCOUT-SLAM achieves better
+tracking accuracy (1.42 vs. 1.51 cm) with minimal over-
+head, maintaining comparable mapping speeds (∼980 vs.
+∼910 ms/kf) and a modest tracking increase (∼710 vs.
+∼470 ms/kf). Crucially, our custom CUDA implementa-
+tion ensures the dense MFC loss adds negligible memory
+overhead. Thus, overall peak VRAM remains highly com-
+petitive at (∼6.8 GB vs. ∼6.1 GB), preserving system effi-
+ciency while robustly constraining dynamic regions.
+Future Work.
+Similar to existing 3DGS-SLAM methods,
+overall runtime is bottlenecked by the synchronous oper-
+ation (refer Sec. B.3) of tracking and mapping.
+Explor-
+ing asynchronous architectures that leverage the reduced
+tracking-mapping coupling is a promising direction for real-
+time deployment.
+13
