@@ -6,27 +6,38 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-19
-- 运行时间：2026-09-19 21:38:21 UTC
+- 最新运行日期：2026-09-20
+- 运行时间：2026-09-20 21:28:59 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：5
 - 精读区：0
-- 速读区：2
+- 速读区：5
 
 ### 今日简报（AI）
-今天精读挂零，速读两篇各 6.0 分，聚焦多视角 Transformer 的相机异质性几何编码与自监督粒子溅射表征。最值得看的是 G-ray 如何用射线级相对几何位置编码缓解相机差异，以及 ParticleSplat 如何以物体为中心做自监督潜在粒子溅射。普通读者可先扫这两篇的摘要与图示，判断是否与自己的多视角或自监督场景相关再决定深读。
-- 详情：[/202609/19/README](/202609/19/README)
+今日筛出5篇速读、0篇精读，三篇6.0分新作全部围绕3D高斯泼溅展开。
+最值得看的是RGS用几何连续性处理反射物体的重建，以及ORCA面向遮挡场景的细化与补全，两者都直击新视角合成的真实感痛点。
+普通读者可先读RGS与ORCA的摘要对比思路，若关注传输部署再看MoQSplat的自适应流式方案。
+- 详情：[/202609/20/README](/202609/20/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [G-ray: Ray-Level Relative Geometric Position Encoding in Multi-View Vision Transformers under Camera Heterogeneity](/202609/19/2609.15018v2-g-ray-ray-level-relative-geometric-position-encoding-in-multi-view-vision-transformers-under-camera-heterogeneity)  
+1. [ORCA: Occlusion-Aware Refinement and Completion for Novel View Synthesis](/202609/20/2609.17450v1-orca-occlusion-aware-refinement-and-completion-for-novel-view-synthesis)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：相机异质（视场或投影不同）下多视图Transformer的射线级位置编码
-2. [ParticleSplat: Self-supervised Object-centric Latent Particle Splatting](/202609/19/2609.19463v1-particlesplat-self-supervised-object-centric-latent-particle-splatting)  
+   evidence：用于新视角合成的高斯锚点表示
+2. [MoQSplat: Adaptive Progressive Streaming of 3D Gaussian Splatting via MoQ](/202609/20/2609.18624v1-moqsplat-adaptive-progressive-streaming-of-3d-gaussian-splatting-via-moq)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：三维高斯溅射场景表示并以新视角合成训练
+   evidence：3D高斯泼溅场景的流式传输
+3. [RGS: Reflection-aware Gaussian Splatting via Learning Geometry Continuity for Reflective Objects](/202609/20/2609.19421v1-rgs-reflection-aware-gaussian-splatting-via-learning-geometry-continuity-for-reflective-objects)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：面向新视角合成的3D高斯表示与渲染
+4. [GS-PI: An Optimization-Decoupled Appearance Decomposition Approach for Generating PBR Gaussian Assets](/202609/20/2609.19907v1-gs-pi-an-optimization-decoupled-appearance-decomposition-approach-for-generating-pbr-gaussian-assets)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：高斯溅射多视角一致性
+5. [PhGS: Post-Hoc Pruning and Refinement of Single-View Feed-Forward 3D Gaussian Reconstructions](/202609/20/2609.20623v1-phgs-post-hoc-pruning-and-refinement-of-single-view-feed-forward-3d-gaussian-reconstructions)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：3D高斯泼溅场景表示与压缩
 
 
 <div class="dpr-home-promo-card">

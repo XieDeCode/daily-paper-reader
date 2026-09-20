@@ -1,0 +1,219 @@
+Title: MoQSplat: Adaptive Progressive Streaming of 3D Gaussian Splatting via MoQ
+
+URL Source: https://arxiv.org/pdf/2609.18624v1
+
+Published Time: Thu, 17 Sep 2026 01:11:14 GMT
+
+Number of Pages: 7
+
+Markdown Content:
+# MoQSplat: Adaptive Progressive Streaming of 3D Gaussian Splatting via MoQ 
+
+Emanuele Artioli 1∗, Mohammadreza Ghafari 1†, Md Tariqul Islam 1‡,Farzad Tashtarian ∗, Christian Rothenberg ‡, Christian Timmerer ∗∗Christian Doppler Laboratory ATHENA, Alpen-Adria Universit¨ at Klagenfurt, Austria 
+
+†Universit´ e de Lorraine, CNRS, Inria, LORIA, F-54000 Nancy, France 
+
+‡Universidade Estadual de Campinas (UNICAMP), Brazil 
+
+Abstract —3D Gaussian Splatting (3DGS) enables photoreal-istic novel view synthesis, but transmitting gigabyte-scale scene data remains challenging for immersive applications. Traditional HTTP Adaptive Streaming over TCP introduces Head-of-Line (HOL) blocking and coarse segmenting ill-suited to fine-grained 3DGS delivery. We propose MoQSplat , which maps 3DGS content onto the Media over QUIC (MoQ) transport hierarchy. 
+
+MoQSplat partitions scenes into spatial Tracks, clusters splats into semantically coherent Groups, and constructs progressive-quality Subgroups mapped to independent QUIC streams to eliminate connection-level HOL blocking. Using a stateless, subscriber-driven adaptation loop, clients dynamically request spatial regions and quality tiers based on six degrees of freedom (6-DoF) frustum visibility, distance, and foveal alignment. We evaluate the core components on a prototype implementation, showing that opacity-based pruning outperforms scale-based pruning for progressive delivery. The source code is available at https://github.com/emanuele-artioli/MoQSplat. 
+
+Index Terms —3D Gaussian Splatting (3DGS), Media over QUIC (MoQ), Progressive Streaming, Viewport Adaptation. 
+
+© 2026 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media, including reprinting/republishing this material for advertising or promotional purposes, creating new collective works, for resale or redistribution to servers or lists, or reuse of any copyrighted component of this work in other works. 
+
+I. I NTRODUCTION 
+
+Photorealistic 3D scene delivery is critical for immersive applications like VR telepresence and digital twins. 3D Gaus-sian Splatting (3DGS) [1] achieves real-time, high-fidelity rendering by using explicit collections of Gaussian primitives instead of computationally intensive neural inference like NeRFs [2]. However, capturing complex view-dependent spec-ularities requires up to 3rd-degree Spherical Harmonics (45 parameters per primitive) [3]. Consequently, realistic 3DGS scenes comprise millions of splats exceeding several gigabytes, 
+
+The first three authors contributed equally to this work. The research was supported in part by the Austrian Federal Ministry for Digital and Economic Affairs, National Foundation for Research, Technology and De-velopment, Christian Doppler Research Association with Project Christian Doppler Laboratory ATHENA (http://athena.itec.aau.at), French ANR PEPR NF-NAI project, No ANR-22-PEFT-0003, and partly by the French PIA project “Lorraine Universit´ e d’Excellence”, reference ANR-15-IDEX-04-LUE. Additional support was provided by Ericsson Telecomunicac ¸ ˜ oes Ltda., the S˜ ao Paulo Research Foundation (FAPESP) under Grant No. 2021/00199-8 (CPE SMARTNESS), and in part by CAPES, Brazil (Finance Code 001). 
+
+imposing severe bandwidth and transmission challenges for real-time delivery over standard networks. To deliver 3DGS efficiently, recent frameworks adapt con-cepts from HTTP Adaptive Streaming (HAS) formats ( e.g. ,MPEG-DASH) and Scalable Video Coding (SVC) [4]. For example, LapisGS [5] employs opacity optimization for pro-gressive layering, LTS [6] combines spatial tiles with DASH segments, and L3GS [7] uses viewport prediction for object scheduling. However, operating over TCP introduces Head-of-Line (HOL) blocking, where packet loss stalls all subsequent data retransmission [8]. This combination of TCP’s rigid reliability and HAS’s coarse segment granularity is ill-suited to fine-grained 3DGS data. While HTTP/3 over QUIC mitigates HOL blocking via multiplexed UDP streams [9], standard HTTP/3 client-pull segmenting still inflates latency. To address this, Media over QUIC (MoQ) [10] is emerging as an IETF standard for low-latency interactive media. MoQ utilizes a Publish-Subscribe (Pub/Sub) architecture with hierarchical Tracks, Groups, Subgroups, and Objects deliverable via intermediate Relays (Fig. 1). Although MoQ streaming has been explored for point clouds [11], [12], it has not been applied to 3DGS’s anisotropic scales, opacities, and spherical harmonics. MoQ’s structure maps naturally to 3DGS, enabling independent streaming and priority-aware delivery of spatial regions and quality tiers without connection-level HOL blocking. In this paper, we propose MoQSplat , an adaptive pro-gressive streaming architecture designed to address the chal-lenges of transmitting 3D Gaussian splats. MoQSplat maps Gaussian splatting onto MoQ’s hierarchical content structure to enable adaptive progressive streaming through subscriber-driven quality selection. The main contributions are as follows: 1) MoQ hierarchy mapping for 3DGS: We map 3DGS onto MoQ’s four-level content hierarchy, detecting semantic objects and defining quality refinements into distinct Sub-groups. 2) Subscriber-driven adaptation: We introduce a fully stateless client-side subscription model. The client independently calculates utility based on frustum alignment and Eu-clidean distance, dynamically adjusting layer granularity via SUBSCRIBE commands. 3) Framework implementation: We outline the end-to-end Python-based MoQSplat implementation built over the arXiv:2609.18624v1 [cs.MM] 16 Sep 2026 MoQSplat Architecture       
+
+> Publisher
+> 3DGS Scene Preparation
+> • Spatial decomposition
+> • Generate quality variants
+> MoQ Hierarchy
+> Publish to Relay
+> •Publish content at initialization
+> • Publish manifest metadata
+> Relay
+> Forwarding
+> •Forward by MoQ hierarchy
+> • No scene-aware scheduling
+> Stream Organization
+> •Subgroup = QUIC stream
+> • Initial priority by Publisher
+> No Per-Client State
+> • Stateless forwarding
+> • Cache published content
+> Subscriber
+> Dynamic Subscription Loop
+> •Evaluate visibility
+> • Select Tracks & quality tiers
+> • Update priorities at runtime
+> Rendering & Local Cache
+> •Progressive rendering
+> • Store/reuse cached content
+> • Adapt to local resources
+> MoQ Generic Overview
+> Tracks
+> Groups
+> Subgroups
+> Objects
+
+Fig. 1: Overview of the MoQ and MoQSplat architecture. customized moq-lite 1 Pub/Sub framework and PyTorch-based gsplat 2 renderer. II. M OQS PLAT DESIGN 
+
+A. MoQ hierarchy mapping for 3DGS 
+
+MoQSplat comprises three primary components: (1) Pub-lisher, (2) MoQ-compliant content-agnostic Relay (optional), and (3) Subscriber, interconnected within a MoQ architecture, as shown in Fig. 1. A core principle of this design is that quality adaptation is Subscriber-driven, i.e., the Publisher exposes all spatial and quality variations, while the Relay serves as a content-agnostic forwarding and caching entity, and the Subscriber dynamically requests and prioritizes streams to match the viewer’s current viewport. This aligns with on-demand static scene delivery and supports efficient multi-subscriber content distribution. To support progressive delivery and selective subscription, MoQSplat maps the 3DGS scene content onto a structured four-level MoQ hierarchy, as illus-trated in Fig. 2 (a): 
+
+Track. At the coarsest granularity, the global 3DGS content is partitioned into multiple non-overlapping spatial regions, referred to as Tracks (Fig. 2 (b)). This decomposition improves scalability for large-scale environments containing millions of Gaussian splats by reducing memory consumption and computational complexity. Clients subscribe only to Tracks corresponding to the regions currently visible in their viewport, thereby avoiding the transmission of all splats. Existing spa-tial subdivision techniques, such as block partitioning 
+
+strategies commonly adopted in point cloud [13], [14], can be employed to construct these Tracks efficiently. 
+
+Group. Within each Track, splats are grouped into se-mantically coherent object clusters. Grouping can be per-formed directly on splat attributes using spatial clustering ( e.g. ,
+
+K-Means [15], DBSCAN [16]) or via 2D/3D object detection mapped back to the 3D domain. Semantic awareness is vital: naive spatial partitioning risks splitting single objects across 
+
+> 1
+
+https://github.com/moq-dev/moq, last accessed: 16 September 2026. 
+
+> 2
+
+https://github.com/nerfstudio-project/gsplat, last accessed: 16 September 2026. 
+
+clusters, causing visual artifacts during independent streaming. Grouping ensures coherent object-level associations, where spatially adjacent objects may form unified clusters ( e.g. , C1–
+
+C3 in Fig. 2 (b)). 
+
+Subgroup. Each Group is partitioned into Subgroups repre-senting quality levels ( S1, . . . , S m) using two efficient heuris-tics: 1) Independent Geometric Heuristics - partition the splat population by ranking spatial saliency (volume and isolation) to ensure base layer S1 minimizes visual holes. Subgroup boundaries are configured via percentage thresholds or fixed cardinality budgets, and can integrate pruning [17] or compres-sion [18]. 2) Dependent Attribute-Based Partitioning - splits splat attributes across layers. Base layer S1 transmits geometry and 0-th order Spherical Harmonics (SH) diffuse color, while higher-order SH coefficients are deferred to enhancement layers. This introduces a decoding dependency requiring S1
+
+geometry before enhancement layers can be rendered. 
+
+Object. At the finest granularity, each Subgroup consists of multiple Objects that represent the transmission units carried over the network. These Objects encapsulate the individual Gaussian splat attributes, including geometry, opacity, Spher-ical Harmonics coefficients, etc. , which naturally represent semantic objects of the associated cluster ( e.g. , a couch in cluster C1, illustrated in Fig. 2 (b)). 
+
+B. Publish-Subscribe Design 
+
+Publisher . The Publisher is responsible for the content preprocessing, hierarchy mapping, and session initialization. It partitions the 3DGS scene content spatially and semantically to fit the defined four-level MoQ hierarchy, then generates a dedicated manifest containing scene metadata. This manifest details the Track identifiers along with their spatial bounding volumes, as well as the Group and Subgroup organizational structure (as shown in Fig. 2 (c)). Each Subgroup uses an independent QUIC stream, enabling progressive delivery from base to enhancement quality layers while avoiding connection-level HOL blocking. During initialization, the Publisher makes the manifest and all precomputed spatial and quality variants available to the Relay (if present), where they may be cached for the duration of the session. Since quality adaptation is subscriber-driven, the Publisher does not actively manage runtime stream priorities. Instead, it embeds structural metadata in the manifest (such as Group 3D centroids and Subgroup progressive quality levels) to facilitate subscriber-viewport adaptation calculations. To en-able progressive delivery, the Publisher assigns static baseline priorities to Subgroups. Specifically, these priorities are set to low values (representing high priority, as MoQ priorities are integers in the interval [0 , 255] where 0 is the most prioritized) for the base layer, and progressively higher values (lower priority) for each subsequent enhancement layer. Consistent with MoQ’s prioritization model, the scheduling engine eval-uates subscriber-assigned subscription priorities first, using publisher-assigned priorities only as a tie-breaker. 
+
+Subscriber . Unlike HTTP-based adaptive streaming, 
+
+MoQSplat Subscriber performs adaptation through stream Tk             
+
+> 3DGS Data Model
+> T1G1,1 S1,1,m
+> S1,1,2
+> S1,1,1
+> O2
+> O1OnO2
+> O1OnO2
+> O1On
+> G1,2 G1,l
+> T2
+> 3DGS content Divide the content into 4 Tracks Track T1 Track T2 Track T3 Track T4
+> Determining 3 Clusters of Track T1 Objects of Cluster 1 (C1) in three Qualities
+> Low Medium High
+> C1
+> C2
+> (b) (a)
+> Tracks
+> Groups
+> Subgroups
+> Objects
+> (Spatial Region) (Cluster) (Quality) (Splats of Semantic Objects)
+> T1TkG1,1 G1,2 G1,l
+> MoQSplat Manifest
+> S1,1,1 , S 1,1,2 , …, S 1,1,m
+> S1,1,1 , S 1,1,2 , …, S 1,1,m’
+> S1,1,1 , S 1,1,2 , …, S 1,1,m”
+> Gk,1
+> (c)
+> C3
+
+Fig. 2: MoQSplat hierarchical data model: (a) four-level MoQ mapping of a 3DGS scene; (b) example of spatial partitioning into Tracks, semantic clustering, and multi-quality rendering of an indoor scene; (c) proposed MoQSplat Catalog (Manifest). prioritization rather than segment selection. It exploits application-layer scheduling over QUIC’s multiplexed streams to allocate transmission capacity to the most relevant streams based on the Subscriber priorities. Upon session initialization, the Subscriber retrieves the publisher-generated manifest. Us-ing the spatial metadata embedded within it, the Subscriber filters active subscriptions at the coarsest granularity, sub-scribing only to the Tracks that intersect the user’s view-port. Within these active Tracks, the Subscriber periodically computes dynamic subscription priorities for the underlying Subgroups. The Subscriber can employ any prioritization algorithm to determine these values. For instance, it can utilize viewport-aware heuristics that ingest real-time 6-DoF telemetry alongside structural metadata (such as the Group 3D centroids and Subgroup quality levels defined earlier in this section) to prioritize nearby and foveated objects. These priority updates are transmitted upstream via standard MoQ subscribe update messages. This enables accelerating streams for visually important objects while throttling less relevant ones without requiring connection re-establishment. This Subscriber-driven prioritization scheme serves as the 3D-viewport-aware counterpart to traditional adaptive bitrate (ABR) algorithms in 2D video streaming. Accordingly, de-signing and evaluating advanced viewport-aware scheduling heuristics under highly dynamic network and telemetry condi-tions represents a promising direction for future research. If the Subscriber does not employ any prioritization algorithm, every Subgroup will tie for the same Subscriber priority, falling back entirely to these progressive publisher-defined priorities. Consequently, all base layers across all visible clusters are sent simultaneously, followed by all first enhancement layers, and so forth, establishing a baseline delivery mode. To cope with local resource constraints, the Subscriber can employ a hierarchical memory management scheme across VRAM (where rendered tensors reside), system memory, and storage. Layers associated with low-priority or occluded objects are demoted to lower memory, while previously cached data can be promoted back to VRAM for rendering when object importance increases. This reduces redundant network transfers while maintaining rendering performance and effi-cient resource utilization. III. M OQS PLAT IMPLEMENTATION 
+
+To demonstrate the feasibility and evaluate the performance of the MoQSplat architecture, we developed a functional prototype. Rather than comprehensively realizing all the ar-chitectural branches described in Section II, the prototype implements a specific, concrete configuration of the pipeline to showcase the viability of the overarching framework. The implementation’s content decomposition pipeline pro-cesses the 3DGS content to structure it into a single-track MoQ hierarchy. The system consists of three runtime components: the Python-based Publisher that serializes and transmits the hi-erarchy, a standard, content-agnostic Relay, and the Subscriber that drives viewport-steered adaptation during streaming. 
+
+Publisher Implementation . In our initial implementation, we consider only a single Track that covers the entire 3DGS content. To organize the content, the following steps must be applied on the Publisher prior to streaming: 
+
+1) Semantic Object Detection: To extract Groups, the server renders the content from N different viewpoints and performs 2D object detection on the generated images. The rendered images are processed using YOLOv26x [19] to identify ob-jects in each view. Since the content is observed from N
+
+viewpoints, multiple bounding boxes may correspond to the same underlying semantic object. To associate these detections with Gaussian splat regions, the server estimates a confidence region over the corresponding splats to robustly localize the detected objects. To improve robustness, each YOLO-detected bounding box is optionally expanded by a predefined padding factor, ensuring conservative spatial coverage of the underlying detected object. 
+
+2) Merge Voting: A semantic object may not be fully covered by a single viewport, thus, multiple viewports were used. However, when an object is observed from multiple viewpoints, redundant detections are merged to form a single bounding box associated with the object, ensuring complete coverage of the splats representing it. This is achieved either by computing a 3D Jaccard index (IoU) over the corresponding Gaussian splats or by measuring the centroid proximity of the associated splats. In this way, repeated observations of the same semantic object across different views ( e.g. , a bicycle detected from multiple angles) are combined into a single unified Gaussian representation. 
+
+3) Clustering: The resulting multi-view boundary box detec-tions are then projected back onto the splat space, enabling the construction of semantically meaningful Groups. Specifically, Gaussian splats are clustered according to object centroids and spatial proximity, such that nearby splats are assigned to the same Group, yielding coherent object-level clusters. To perform this grouping, DBSCAN [16] is applied over the detected object centroids, treating objects as spatial points, and forming multiple clusters. Some clusters may include multiple semantic objects if they are spatially nearby. 
+
+4) Progressive Subgroup Construction: To implement pro-gressive quality levels, the prototype realizes the Independent Geometric Heuristics outlined in our design. Specifically, the Publisher partitions the splat population by applying geometry pruning based on scale and opacity proxy measures, using a step size of 20% to construct five progressive quality Subgroups. This pipeline enables progressive and adaptive 3DGS streaming through hierarchical Group and Subgroup delivery driven by subscriber-driven viewport adaptation. 
+
+5) Pre-Processing Complexity: Performing multi-view ren-dering across N viewpoints and 2D object detection via 
+
+YOLOv26x has a computational complexity of O(N · TYOLO ).Projecting detected 2D bounding boxes back into 3D Gaus-sian splat space and applying DBSCAN clustering scales as 
+
+O(M log M ) over M Gaussian centroids, while opacity sort-ing for progressive subgroup creation requires O(M log M ).Crucially, this pre-processing pipeline operates entirely offline as a one-time content ingestion phase for static 3DGS-on-demand scenes, eliminating real-time pre-processing latency during streaming. 
+
+MoQ Hierarchy Extension. The Publisher is implemented in Python and interfaces with moq-lite , a Rust-based Pub/Sub framework over QUIC and WebTransport, through a shared Rust library exposed via ctypes bindings. The Publisher is re-sponsible for serializing the precomputed 3DGS hierarchy and publishing the resulting content to the Relay during session initialization. Although the current MoQ transport specifica-tion includes Subgroups [10], the moq-lite version used here supported only a three-level hierarchy (Track, Group, Object); we therefore extended it with an explicit Subgroup layer for progressive Gaussian delivery, resulting in Track, Group, Subgroup, Object. Each Subgroup corresponds to an independent QUIC stream and is assigned an initial Publisher priority according to its quality level. Gaussian attributes are encoded as raw float32 arrays, since a standardized 3DGS compression codec has not yet been finalized. At initialization, the Publisher serializes the manifest ( i.e. , Catalog) as a JSON-based MoQ Track containing the precomputed hierarchy. 
+
+Relay Implementation . MoQSplat adopts moq-relay ,the Rust-based reference implementation of moq-lite ,as a content-agnostic, priority-aware QUIC forwarding ser-vice. The Relay forwards content structured into Tracks, Groups, Subgroups, and Objects, as defined by our Pub/Sub shared library, and relays upstream control messages ( e.g. ,
+
+SUBSCRIBE_UPDATE ) for dynamic priority adjustment. As MoQ transport continues to evolve toward RFC standardiza-tion [10], future revisions may be needed to align with the finalized specification. 
+
+Subscriber Implementation . The Subscriber is imple-mented in Python, utilizing PyTorch with the gsplat library to execute hardware-accelerated rasterization, and interfacing with moq-lite through the shared Rust library via ctypes bindings. The Subscriber instantiates the client-driven quality adaptation through the following components: 
+
+1) Subscription Hierarchy and State Machine: Upon estab-lishing a connection, the Subscriber retrieves the Publisher’s MoQ Catalog and reconstructs the available Track, Group, and Subgroup hierarchy. To manage subscription lifecycles, the Subscriber maintains a lightweight, application-level state machine for each Subgroup ( e.g. , MISSING , DOWNLOADING ,or CACHED ) to track local subscription and caching status. If a transport loss, drop, or timeout occurs while a Subgroup is in the DOWNLOADING state, the subscriber re-evaluates the stream after a timeout threshold, transitioning its state back to MISSING to trigger stream re-subscription via a new 
+
+SUBSCRIBE message. Meanwhile, the renderer gracefully falls back to displaying the currently available base layer (S1) and lower-index enhancement layers already cached in VRAM, avoiding visual stalls or freezing. 
+
+2) Viewport-Steered Prioritization Loop: The core transport interactions are governed by an asynchronous control loop (e.g. , 100 ms intervals) to dynamically compute and update stream priorities. During each iteration, the Subscriber extracts the current 6-DoF pose and calculates a priority score, denoted as ∆P , for all cataloged Groups:         
+
+> ∆P=Wd·max
+> 
+> 0,1−min( D, D max )
+> Dmax
+> 
+> +Wa·max(0 ,cos θ)(1)
+
+where D is the Euclidean distance from the subscriber’s camera position to the Group’s 3D centroid, θ is the an-gle between the camera’s forward viewing vector and the vector pointing from the camera to the Group’s centroid, 
+
+Dmax is the expected maximum viewing distance, and Wd
+
+and Wa represent scaling weights prioritizing proximity and centralized foveal alignment, respectively. Upon computing 
+
+∆P , the subscriber evaluates its local state machine. If a required Subgroup’s state is MISSING , a new SUBSCRIBE 
+
+message is issued to the Relay with the calculated ∆P .Crucially, if the Subgroup is already DOWNLOADING , the subscriber dispatches a SUBSCRIBE_UPDATE to alter the stream’s priority on the transport wire without closing the connection. Incoming Objects are unpacked and appended to a local memory storage pool; once a Subgroup’s Objects are fully received, its state transitions to CACHED .
+
+3) Watermark-Based Memory Swapping: To implement the hierarchical memory management scheme proposed in the de-sign, the prototype Subscriber features a two-tier, watermark-based memory swap strategy between high-performance GPU VRAM and system RAM. The Subscriber establishes a fixed GPU memory budget, Mmax , and a high-watermark threshold (e.g. , 0.9×Mmax ). If the active splat memory footprint exceeds this threshold, the Subscriber protects all base-layer Subgroups from eviction and sorts enhancement layers by their current 
+
+∆P priority modifier. The lowest-priority enhancement layers are evicted from GPU VRAM, demoting their tensors to the CACHED state in system RAM. When a user changes viewports and a cached object’s ∆P rises, the Subscriber promotes the corresponding data back to VRAM, avoiding redundant network re-transmissions and rendering stalls. IV. P RELIMINARY EVALUATION RESULTS 
+
+To validate the proposed MoQSplat pipeline, we evalu-ate it in two stages: first, we assess Publisher-side content preparation (offline) following the implementation described earlier; then, we evaluate end-to-end streaming delivery under varying network conditions. The Bicycle content from the Mip-NeRF360 dataset [20] is used as a common reference across both stages. 
+
+Publisher-Side Content Preparation . VMAF was used as the quality metric, computed by smoothly orbiting the target 3DGS cluster ( Bench–Bicycle ) over a ±90 ◦ azimuth range while maintaining a fixed distance, elevation, and camera in-trinsics. Each sequence lasted 10s at 30 fps (300 frames), with the unpruned model serving as the reference for evaluating the pruned models. Publisher-side experiments were conducted on an Ubuntu 22.04 cluster with Intel Xeon Gold 5218 CPUs @ 2.30 GHz and dual NVIDIA Quadro GV100 GPUs. From Fig. 3 and Fig. 4, the following observations can be drawn: 
+
+Group. The Bench–Bicycle objects are clustered from the full Bicycle scene (illustrated in Fig. 3), showing the ef-fectiveness of the proposed Group strategy in identifying semantically meaningful clusters. This enables adaptive pro-gressive streaming by transmitting only relevant splats to the Subscriber. 
+
+Subgroup. Both opacity- and scale-based pruning improve visual quality as additional splats are progressively received by the Subscriber, as reflected in Fig. 3. However, opacity-based pruning consistently outperforms scale-based pruning by achieving higher perceptual quality with the same amount of rendered splats, as shown in Fig. 3 and Fig. 4. These results demonstrate the effectiveness of opacity-based prioritization for progressive rendering, enabling Subscriber to achieve satisfactory visual quality in the requested viewport without waiting to receive the full set of splats. 
+
+Enhancement Layer Analysis: Although each base/enhancement layer (BL, EL1-EL4) transmitted by the Publisher contains an equal amount of splats (20% of the total splats in each base/enhancement layer), their perceptual TABLE I: Subscriber-driven Delivery Performance — Bicycle Scene                   
+
+> Link BW Subgroups Data Received Splats (Mbps) Delivered (MB) Rendered (Final)
+> 10 397 37.4 224,710 30 2,432 337.8 1,400,909 50 2,628 363.2 1,491,950 100 2,853 390.6 1,512,214
+
+contributions differ significantly, as shown in Fig. 3. This highlights the importance of which splats are transmitted first. The cumulative combination of layers progressively improves reconstruction quality from Q0 to Q4 (Fig. 4), where the BL provides the initial rendering and subsequent ELs refine the quality. However, gains diminish under opacity-based pruning as quality saturates beyond Q2 (Fig. 4), with additional splats yielding marginal improvements. Although these additional splats appear less useful at typical viewing distances, their contribution may become more noticeable at closer viewpoints near the bench .
+
+End-to-End Streaming Delivery . To validate the pro-gressive delivery behavior of MoQSplat , we present initial results from a streaming session using the Bicycle 3DGS content under different bandwidth constraints. The Publisher preprocesses the content into the MoQ hierarchy and publishes it to the Relay during initialization. Congestion is handled implicitly by the Relay, and higher-priority Subgroups are delivered first, enabling progressive scene refinement under limited bandwidth. Table I shows subscriber-driven delivery metrics across four bandwidth conditions. At 10 Mbps, the Subscriber receives 397 Subgroups (37.4 MB), corresponding to approximately 225K Gaussian splats and yielding a coarse but continuously renderable scene representation. Increasing the available bandwidth to 30 Mbps substantially improves delivery performance, with the number of received Subgroups increasing from 397 to 2,432 and the reconstructed splats growing from approximately 225K to 1.4M. Further increasing the bandwidth to 50 Mbps results in a more modest improve-ment, reaching 2,628 delivered Subgroups and approximately 1.49M reconstructed splats. Finally, at 100 Mbps, the Sub-scriber receives 2,853 Subgroups and approximately 1.51M splats, representing only a small increase over the 50 Mbps case despite a twofold increase in available bandwidth. Over-all, these preliminary results demonstrate that MoQSplat 
+
+maintains progressive scene refinement across diverse network conditions through priority-driven Subgroup delivery. V. C ONCLUSIONS 
+
+In this paper, we introduced MoQSplat , the first framework to map 3D Gaussian Splatting (3DGS) content onto the Media over QUIC (MoQ) hierarchical content structure. By partition-ing scenes into spatial Tracks, semantically coherent Groups, and progressive-quality Subgroups mapped to MoQ Objects, 
+
+MoQSplat enables prioritized delivery of spatial regions and quality layers, with Subscriber-driven adaptation avoiding per-subscriber state at the Publisher or Relay. Preliminary results show opacity-based pruning achieves strong visual quality with minimal bandwidth, and priority-driven delivery sustains Scale Priority Opacity Priority Subscriber Rendered Subscriber Rendered Publisher Transmitted Publisher Transmitted (BL) (BL+EL1) (BL+EL1+BL2) (BL+EL1+EL2+EL3) (BL+EL1+EL2+EL3+EL4) BL EL1 EL2 EL3 EL4 BL EL1 EL2 EL3 EL4 (BL) (EL1) (EL2) (EL3) (EL4) (BL) (BL+EL1) (BL+EL1+BL2) (BL+EL1+EL2+EL3) (BL+EL1+EL2+EL3+EL4) (BL) (EL1) (EL2) (EL3) (EL4) Fig. 3: Bench–Bicycle cluster under progressive quality enhancement achieved via opacity- and scale-based pruning. The Publisher transmits enhancement layers, each containing 20% of the total splats. The Subscriber cumulatively aggregates these layers to progressively improve visual quality. Note: BL = Base Layer; EL1–EL4 = Enhancement Layers 1–4. 
+
+Fig. 4: Progressive quality enhancement measured by VMAF. progressive refinement across network conditions. This work represents a first step toward MoQ-based 3DGS streaming. While the current prototype and evaluation are preliminary, several limitations remain across content preparation and de-livery. MoQSplat demonstrates the feasibility of mapping 3DGS onto the MoQ hierarchy, establishing a foundation for more comprehensive evaluation, refinement, and optimization in future work. REFERENCES [1] B. Kerbl et al. , “3D Gaussian Splatting for Real-Time Radiance Field Rendering,” ACM Transactions on Graphics , vol. 42, no. 4, 2023. [2] B. Mildenhall et al. , “NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis,” Communications of the ACM , vol. 65, no. 1, 2021. [3] A. Hasssan et al. , “DCSHARP: 3D Gaussian Splatting with Direction Cosine Spherical Harmonics and Shape-Aware Pruning,” in Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV) , Mar. 2026. [4] C. M¨ uller, D. Renzi, S. Lederer, S. Battista, and C. Timmerer, “Using Scalable Video Coding for Dynamic Adaptive Streaming over HTTP in Mobile Environments,” in 2012 Proceedings of the 20th European Signal Processing Conference (EUSIPCO) , Aug. 2012. [5] Y. Shi et al. , “LapisGS: Layered progressive 3D Gaussian splatting for adaptive streaming,” in 2025 International Conference on 3D Vision (3DV) , Mar. 2025. [6] Y.-C. Sun et al. , “LTS: A DASH Streaming System for Dynamic Multi-Layer 3D Gaussian Splatting Scenes,” in Proceedings of the 16th ACM Multimedia Systems Conference , Mar. 2025. [7] Y.-Z. Tsai et al. , “L3GS: Layered 3D Gaussian Splats for Efficient 3D Scene Delivery,” in Proceedings of the 31st Annual International Conference on Mobile Computing and Networking , Nov. 2025. [8] H. K. Ravuri et al. , “Adaptive Partially Reliable Delivery of Immersive Media Over QUIC-HTTP/3,” IEEE Access , vol. 11, 2023. [9] J. S. Sidhu and A. Bentaleb, “Video Streaming Over QUIC: A Compre-hensive Study,” ACM Transactions on Multimedia Computing, Commu-nications and Applications , vol. 22, no. 4, 2026. [10] S. Nandakumar et al. , “Media over QUIC Transport,” Internet Engineering Task Force, Internet-Draft draft-ietf-moq-transport-18, May 2026, work in Progress. [Online]. Available: https://datatracker. ietf.org/doc/draft-ietf-moq-transport/18/ [11] A. Freeman et al. , “Implicit Adaptation for Point Cloud Streaming with MoQ,” in Proceedings of the 5th Mile-High Video Conference , Feb. 2026. [12] F. N´ emeth et al. , “Transmitting Volumetric Video via Media over QUIC to Subscribers with Contradicting Spatial and Temporal Preferences,” in 
+
+EuroXR 2025: Proceedings of the Application, Poster, and Demo Tracks of the 22nd EuroXR International Conference , Sep. 2024. [13] M. Ghafari et al. , “Learning-Based Point Cloud Decoding with In-dependent and Scalable Reduced Complexity,” in IEEE International Conference on Image Processing (ICIP) , Oct. 2024. [14] T. Qin et al. , “Multi-Grained Point Cloud Geometry Compression via Dual-Model Prediction with Extended Octree,” ACM Transactions on Multimedia Computing, Communications and Applications , vol. 20, no. 9, 2024. [15] Z. Gao et al. , “ProtoGS: Efficient and High-Quality Rendering with 3D Gaussian Prototypes,” ArXiv , Apr. 2025. [16] Q. Chen et al. , “FreeGaussian: Guidance-free Controllable 3D Gaussian Splats with Flow Derivatives,” ArXiv , Oct. 2024. [17] P. Papantonakis et al. , “Reducing the Memory Footprint of 3D Gaus-sian Splatting,” Proceedings of the ACM on Computer Graphics and Interactive Techniques , vol. 7, no. 1, 2024. [18] M. Bagdasarian et al. , “3DGS.zip: A survey on 3D Gaussian Splatting Compression Methods,” Computer Graphics Forum , vol. 44, no. 2, 2025. [19] T. Cheng et al. , “YOLO-World: Real-Time Open-Vocabulary Object Detection,” Sep. 2024. [20] J. T. Barron et al. , “Mip-nerf 360: Unbounded anti-aliased neural radiance fields,” Computer Vision and Pattern Recognition Conference ,June 2022.
