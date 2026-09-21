@@ -6,38 +6,45 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-20
-- 运行时间：2026-09-20 21:28:59 UTC
+- 最新运行日期：2026-09-21
+- 运行时间：2026-09-21 23:01:46 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：0
-- 速读区：5
+- 本次总论文数：7
+- 精读区：1
+- 速读区：6
 
 ### 今日简报（AI）
-今日筛出5篇速读、0篇精读，三篇6.0分新作全部围绕3D高斯泼溅展开。
-最值得看的是RGS用几何连续性处理反射物体的重建，以及ORCA面向遮挡场景的细化与补全，两者都直击新视角合成的真实感痛点。
-普通读者可先读RGS与ORCA的摘要对比思路，若关注传输部署再看MoQSplat的自适应流式方案。
-- 详情：[/202609/20/README](/202609/20/README)
+今天筛选了 7 篇 3D 高斯泼溅相关论文，其中精读 1 篇、速读 6 篇，重点聚焦前馈重建、稀疏视角与数字孪生。
+
+最值得看的是精读 8.0 分的 VoxelTTO，以及 7.0 分的 CADSplat 和 Cube-Splat：前者探索体素对齐前馈 3DGS 加测试时优化，后两者分别用 CAD 模型和立方体贴图提升稀疏视角与 360° SLAM 重建。
+
+普通读者可优先了解“前馈生成+测试时优化”和“CAD/几何先验辅助稀疏视角”这两条路线，它们更贴近低成本、高质量数字孪生落地。
+- 详情：[/202609/21/README](/202609/21/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [VoxelTTO: Voxel-Aligned Feed-Forward 3D Gaussian Splatting with Test-Time Optimization](/202609/21/2609.21498v1-voxeltto-voxel-aligned-feed-forward-3d-gaussian-splatting-with-test-time-optimization)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：体素对齐前馈3D高斯重建与跨视图测试时优化
 
 ### 速读区论文标签
-1. [ORCA: Occlusion-Aware Refinement and Completion for Novel View Synthesis](/202609/20/2609.17450v1-orca-occlusion-aware-refinement-and-completion-for-novel-view-synthesis)  
+1. [CADSplat: Sparse-View 3D Gaussian Splatting Aided by CAD Models for Robust, Photorealistic Digital-Twin Reconstruction](/202609/21/2609.18473v1-cadsplat-sparse-view-3d-gaussian-splatting-aided-by-cad-models-for-robust-photorealistic-digital-twin-reconstruction)  
+   标签：评分：7.0/10、query:aerial-dgs
+   evidence：以CAD先验正则化3D高斯泼溅实现稀疏视角重建与渲染
+2. [Cube-Splat: High-Fidelity 360° Gaussian Splatting SLAM via Cubemap Factorization and Adjoint-Consistent Optimization](/202609/21/2609.21347v1-cube-splat-high-fidelity-360-gaussian-splatting-slam-via-cubemap-factorization-and-adjoint-consistent-optimization)  
+   标签：评分：7.0/10、query:aerial-dgs
+   evidence：多面观测一致更新单一高斯状态
+3. [Geometry beneath the Waves: Dense Priors for Sparse-View Underwater 3D Gaussian Splatting](/202609/21/2609.18737v1-geometry-beneath-the-waves-dense-priors-for-sparse-view-underwater-3d-gaussian-splatting)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：用于新视角合成的高斯锚点表示
-2. [MoQSplat: Adaptive Progressive Streaming of 3D Gaussian Splatting via MoQ](/202609/20/2609.18624v1-moqsplat-adaptive-progressive-streaming-of-3d-gaussian-splatting-via-moq)  
+   evidence：3D高斯泼溅稀疏视角重建与稠密几何先验
+4. [4DGS-Fixer: Generative Sparse-View 4D Gaussian Splatting with Iterative Refinement Guided by Video Diffusion Priors](/202609/21/2609.21176v1-4dgs-fixer-generative-sparse-view-4d-gaussian-splatting-with-iterative-refinement-guided-by-video-diffusion-priors)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：3D高斯泼溅场景的流式传输
-3. [RGS: Reflection-aware Gaussian Splatting via Learning Geometry Continuity for Reflective Objects](/202609/20/2609.19421v1-rgs-reflection-aware-gaussian-splatting-via-learning-geometry-continuity-for-reflective-objects)  
+   evidence：稀疏视图4D高斯优化与迭代细化
+5. [Adaptive World Memory 3D Foundation Model for Scalable 3D Mapping, Localization, and Rendering](/202609/21/2609.21502v1-adaptive-world-memory-3d-foundation-model-for-scalable-3d-mapping-localization-and-rendering)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向新视角合成的3D高斯表示与渲染
-4. [GS-PI: An Optimization-Decoupled Appearance Decomposition Approach for Generating PBR Gaussian Assets](/202609/20/2609.19907v1-gs-pi-an-optimization-decoupled-appearance-decomposition-approach-for-generating-pbr-gaussian-assets)  
+   evidence：可扩展大规模三维建图、定位与高斯渲染
+6. [2D GauSS-MI: Efficient Active Scene Reconstruction with Balanced Visual and Geometric Quality](/202609/21/2609.21516v1-2d-gauss-mi-efficient-active-scene-reconstruction-with-balanced-visual-and-geometric-quality)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：高斯溅射多视角一致性
-5. [PhGS: Post-Hoc Pruning and Refinement of Single-View Feed-Forward 3D Gaussian Reconstructions](/202609/20/2609.20623v1-phgs-post-hoc-pruning-and-refinement-of-single-view-feed-forward-3d-gaussian-reconstructions)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：3D高斯泼溅场景表示与压缩
+   evidence：基于2D高斯泼溅的多视角主动选择与场景重建
 
 
 <div class="dpr-home-promo-card">
