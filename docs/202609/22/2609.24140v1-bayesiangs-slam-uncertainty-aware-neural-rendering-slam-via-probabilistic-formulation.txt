@@ -1,0 +1,606 @@
+Title: BayesianGS-SLAM: Uncertainty-Aware Neural Rendering SLAM via Probabilistic Formulation
+
+URL Source: https://arxiv.org/pdf/2609.24140v1
+
+Published Time: Tue, 22 Sep 2026 02:09:34 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# BayesianGS-SLAM: Uncertainty-Aware Neural Rendering SLAM via Probabilistic Formulation 
+
+Kyeongsu Kang, Seongbo Ha, Sibaek Lee and Hyeonwoo Yu ∗
+
+Abstract — Neural-rendering-based SLAM relies on rendered RGB-D residuals for camera tracking and map optimization, but the reliability of these predictions can vary substantially because of sensor noise, limited observation coverage, and incomplete map representations. Without an explicit reliability estimate, unreliable residuals may adversely affect pose opti-mization, while frames already well explained by the current map may trigger redundant mapping updates. In this paper, we present BayesianGS-SLAM, an uncertainty-aware 3D Gaussian Splatting SLAM framework that estimates predictive color and depth uncertainty during mapping and consistently reuses it across the SLAM pipeline. Our tractable probabilistic for-mulation combines a sensor-noise uncertainty component with an opacity-induced map-representation component propagated through the rendering process. The resulting predictive uncer-tainty is used to augment mapping, normalize tracking residuals through a robust pose objective, and evaluate incoming frames using a predictive-surprise-based keyframe criterion. Unlike prior uncertainty-aware neural-rendering SLAM methods that primarily consider color uncertainty or use uncertainty only during mapping, our framework estimates predictive uncer-tainty for both color and depth and integrates it into mapping, tracking, and keyframe selection. Evaluations on real-world RGB-D datasets demonstrate substantially improved depth uncertainty–error ranking compared with existing uncertainty-aware SLAM methods. Moreover, the proposed keyframe-selection strategy reduces the number of selected keyframes and mapping calls while maintaining competitive tracking and rendering performance. 
+
+I. I NTRODUCTION 
+
+With the emergence of 3D reconstruction methods based on neural rendering, substantial progress has been made not only in computer vision but also in robotics, with particularly notable advances in SLAM. Neural-rendering-based SLAM has introduced diverse scene representations, ranging from continuous implicit neural fields to explicit differentiable primitives such as 3D Gaussians, enabling direct image-based optimization and high-quality rendering [1], [2]. Furthermore, the advent of 3D Gaussian Splatting has accelerated the development of neural rendering-based SLAM, including 3DGS-based SLAM frameworks and sys-tems with loop closure capabilities [3], [4], [5], [6], [7]. Despite these advances, neural rendering-based SLAM still has several limitations. One of the most fundamental issues is confidence estimation, or uncertainty quantifica-tion. Although classical SLAM is fundamentally rooted in Bayesian estimation, neural rendering-based SLAM methods             
+
+> *Corresponding author. Kyeongsu Kang, Seongbo Ha, Sibaek Lee and Hyeonwoo Yu are with the Department of Intelligent Robotics, Sungkyunkwan University, Suwon, South Korea.
+
+{thithin0821, sobo3607, lmjlss, hwyu }@skku.edu .
+
+have received relatively limited attention from the perspec-tives of statistical inference and uncertainty modeling. Recent studies have explored uncertainty quantification for active mapping or active learning of keyframes [8], [9]; however, these efforts are mostly confined to the mapping stage or only locally integrated into SLAM, and the development of a unified neural rendering-based SLAM framework remains limited. This limitation can be attributed to two main factors. The first is the substantial computational cost required for uncertainty quantification in neural rendering-based SLAM [10]. In neural models, uncertainty quantification is challeng-ing because their nonlinearity makes distributional inference difficult [11]. To address this issue, various uncertainty quantification methods have been introduced; however, most of them either train multiple networks simultaneously to measure the variance of their outputs [12], infer uncertainty through sampling-based approaches [13], [14], or perform inference on already trained parameters or neural fields [15]. Consequently, these methods may increase the computational cost or fail to be tightly coupled with SLAM. Another practical challenge is that uncertainty estimates must remain useful for downstream SLAM optimization. Since uncertainty directly affects residual weighting and frame selection, its representation and integration into the SLAM pipeline are important for maintaining robust online operation. In this paper, we propose an uncertainty-aware neural-rendering SLAM framework that estimates predictive RGB-D uncertainty during mapping and consistently reuses it across mapping, tracking, and keyframe selection. The pre-dictive uncertainty combines a sensor-noise uncertainty com-ponent with an opacity-induced map-representation uncer-tainty component propagated through rendering linearization. The resulting uncertainty augments the mapping objective and is reused for uncertainty-normalized robust tracking. For keyframe selection, we use the negative posterior-predictive likelihood as a predictive-surprise score motivated by in-formation gain. The proposed framework reduces redundant mapping updates while maintaining competitive tracking and rendering performance. Our contributions are summarized as follows:  
+
+> •
+
+We introduce a tractable predictive-uncertainty formula-tion for RGB-D neural rendering that combines sensor-noise and map-representation uncertainty for both color and depth.  
+
+> •
+
+We integrate the same predictive uncertainty into uncertainty-aware mapping, uncertainty-normalized arXiv:2609.24140v1 [cs.RO] 21 Sep 2026 tracking, and predictive-surprise-based keyframe selection, reducing redundant mapping updates while maintaining competitive SLAM performance. II. R ELATED WORK 
+
+A. Uncertainty Quantification in neural rendering 
+
+Research on uncertainty in neural rendering, including NeRF and 3DGS, has been actively pursued since the emergence of neural rendering techniques. These studies span a broad range, from methods that consider uncertainty only in image rendering to approaches that separately model aleatoric and epistemic uncertainty [10], [11]. For example, [16] leveraged uncertainty to achieve more accurate render-ing in outdoor scenes, while [9] considered color uncertainty and implemented active learning for frame selection by rendering uncertainty maps. However, as discussed in [13], these methods differ in how uncertainty is represented and propagated through the rendering process, and some formulations provide only an indirect connection between the modeled uncertainty and the final rendered prediction. In contrast, studies that separately model epistemic and aleatoric uncertainty in 3D space within neural rendering have typically borrowed techniques from Bayesian neural networks to quantify uncertainty [13]. Other Recent studies have developed uncertainty- and information-related formulations that are applicable to 3DGS. FisherRF [17] uses Fisher-information-derived scores for uncertainty quantification and informative-view selection. PUP 3D-GS [18] derives a second-order spatial sensitivity score, using a Fisher approximation of the reconstruction-error Hessian, to identify Gaussians that can be pruned with limited impact on reconstruction quality. POp-GS [19] approximates the covariance of 3DGS parameters and for-mulates information-based view selection through optimal experimental design. These Magic Moments [20] instead computes higher-order moments directly from the proba-bilistic rendering process, providing uncertainty estimates for color, depth, and semantic outputs without additional uncertainty-specific training. Recent methods have also mod-eled geometric or visibility-related uncertainty, including the spatial uncertainty field of UNG-GS [21] and the anisotropic visibility field of GAVIS [22]. Collectively, these approaches illustrate that uncertainty-related quantities in neural render-ing may capture different properties, including parameter sensitivity, predictive reliability, geometric ambiguity, obser-vation coverage, and active learning [23]. 
+
+B. Uncertainty-based neural rendering SLAM 
+
+Recent neural-rendering SLAM methods have incorpo-rated uncertainty into tracking and mapping. UNCLE-SLAM [24] learns observation-dependent depth uncertainty for NeRF-based SLAM, while CG-SLAM [25] incorporates depth uncertainty into 3DGS mapping. VBGS-SLAM [26] introduces probabilistic Gaussian parameters through vari-ational inference, and VarSplat [27] learns rendered color uncertainty for uncertainty-weighted tracking and mapping. Related uncertainty and information measures have also been used in active SLAM to select future views or trajectories for improving localization and mapping. In contrast, our method combines sensor-noise uncer-tainty with map-representation uncertainty for both color and depth, and reuses the resulting predictive uncertainty across mapping, uncertainty-normalized tracking, and predictive-surprise-based keyframe selection from an already observed RGB-D stream III. M ETHOD 
+
+In Sections III-A to III-C, we introduce a tractable predictive-uncertainty formulation and describe its task-specific use in mapping, tracking, and keyframe selection in neural rendering-based SLAM. Section III-D instantiates the formulation in a 3DGS-based SLAM framework. 
+
+A. Predictive Uncertainty Formulation for Mapping 
+
+We introduce a tractable uncertainty formulation motivated by probabilistic reasoning for neural rendering-based SLAM. In the mapping stage, we decompose predictive uncertainty into map-representation uncertainty and sensor-noise uncer-tainty. The map-representation uncertainty is modeled as an opacity-induced predictive uncertainty component by propa-gating opacity variance to the rendered image space, while the sensor-noise uncertainty captures noise and ambiguity in RGB-D measurements. Since opacity controls visibility, ac-cumulated transmittance, and rendering weights in Gaussian splatting, opacity-induced uncertainty affects both color and depth predictions. The goal is to learn a neural field F given a set of paired images and camera poses, D =
+
+{{ Y1, P1}, {Y2, P2}, . . . , {Yi, Pi}} , where Y = {y1, y 2, . . . }
+
+denotes the image observations and P denotes the camera poses. Given the frame set D, the mapping process can be interpreted as learning a map representation that maximizes the probability of observing D. We define image rendering as a system in which noise is added to an image generated by a 3D rendering model, i.e., Y = ψ(Fθ ) + ξ.Intuitively, we assume that the uncertainty inherent in 3D space corresponds to map-representation uncertainty, which becomes larger in less observed regions, whereas the noise introduced when the 3D space is projected onto the 2D image plane corresponds to sensor-noise uncertainty. This can be formulated as follows: 
+
+arg max 
+
+> θ
+
+Pθ (Y|P ) = Y
+
+> n,m
+
+Pθ (yn,m |P n) (1) 
+
+= Y
+
+> n,m
+
+Z
+
+P (yn,m |ψ(Fθ )) P (ψ(Fθ )) dFθ .
+
+Here, θ denotes the parameters used to estimate the neural field, ψ is the rendering function, and the neural field Fθ
+
+is obtained as Fθ (XP ) by taking the 3D input space X
+
+associated with the camera pose P as input. The indices n
+
+and m denote the frame index and pixel index, respectively. Under our assumption, maximizing the probability of the frame dataset D can be decomposed into the likelihood term P (yn,m |ψ(Fθ )) , modeled with ξ ∼ N (0 , σ 2sensor ),Fig. 1: BayesianGS-SLAM framework overview and the predictive distribution P (ψ(Fθ )) induced by map-representation uncertainty. For notational simplicity, we de-note by P (ψ(Fθ )) the predictive distribution in the ren-dered image space induced by the uncertainty of Fθ . We approximate the uncertainty of the map representation with a Gaussian distribution, which allows predictive uncertainty to be propagated analytically after rendering linearization. As is well known, the rendering function ψ is nonlin-ear. Therefore, even if the neural field F is assumed to follow a Gaussian distribution, the rendered image follows an unknown distribution. Since this prevents the probabil-ity distribution from being computed analytically, existing methods typically estimate the parameters using approximate inference techniques, such as variational inference. However, as shown in [28], the rendering function can be approximated by a linear function. Following this intuition, we approximate the rendering function through linearization so that the resulting distribution becomes tractable. Accordingly, we propose a modified linearized rendering approximation when F follows a Gaussian distribution. Starting from the standard front-to-back alpha-compositing equation C = P 
+
+> i
+
+ciTiαi, where Ti = Q
+
+> j<i
+
+(1 − αj ).We model uncertainty through opacity because opacity con-trols visibility and accumulated transmittance in Gaussian splatting, thereby affecting both color and depth predic-tions. When the opacity αi follows a Gaussian distribution 
+
+N (μαi , σ αi ), the mean computed by the rendering function of the neural field is given by 
+
+μψ(Fθ ) = X
+
+> i
+
+ciTiμαi (2) 
+
+≈
+
+P 
+
+> i
+
+ciTiμαi
+
+P 
+
+> i
+
+Tiμαi
+
+, where X
+
+> i
+
+Tiαi ≈ 1.
+
+Here, ci denotes the color of the neural field at the i-th sample, and Ti denotes the accumulated transmittance. As discussed in [28], when Ti is assumed to be fixed, the rendering equation can be linearized using a first-order Taylor approximation, and the resulting variance is given by 
+
+Var[ ψ(Fθ )] ≈ Var 
+
+"X
+
+> i
+
+∂ψ (Fθ )
+
+∂α i
+
+αi
+
+#
+
+= X
+
+> i
+
+(ci − ψ(Fθ )) 2 T 2 
+
+> i
+
+σ2 
+
+> αi
+
+. (3) Consequently, the distribution of the rendered image can be approximated as 
+
+ψ(Fθ ) ∼ N X
+
+> i
+
+ciTiμαi , X
+
+> i
+
+(ci − ψ(Fθ )) 2 T 2 
+
+> i
+
+σ2
+
+> αi
+
+!
+
+.
+
+(4) By assuming that the likelihood term Pθ (yn,m |ψ(Fθ )) is Gaussian with observation noise ξ ∼ N (0 , σ 2sensor ), the mapping loss can be written as 
+
+θopt = arg min 
+
+> θ
+
+X
+
+> n,m
+
+"
+
+(yn,m − ψ(Fθ )) 2
+
+σ2sensor + P 
+
+> i
+
+(ci − ψ(Fθ )) 2 T 2 
+
+> i
+
+σ2
+
+> αi
+
++ log σ2sensor + X
+
+> i
+
+(ci − ψ(Fθ )) 2 T 2 
+
+> i
+
+σ2
+
+> αi
+
+! # 
+
+. (5) As discussed in [11], the likelihood term P (yn,m |ψ(Fθ )) 
+
+can be interpreted as modeling sensor-noise uncertainty, whereas P (ψ(Fθ )) captures map-representation uncertainty induced by uncertainty in the neural field space. There-fore, to quantify predictive uncertainty, we learn not only the distribution of the neural field, which represents map-representation uncertainty, but also the likelihood distribu-tion, which represents sensor-noise uncertainty. The likeli-hood distribution, modeled as ξ ∼ N (0 , σ 2sensor ), is estimated by learning the parameters of a separate MLP. 
+
+B. Uncertainty-Normalized Tracking from a Probabilistic Formulation 
+
+In the tracking stage, the camera pose is estimated using the map representation learned during the mapping stage. Since tracking requires inferring the camera pose Pnew for a newly observed frame Y new , it can be formulated as a problem of finding the pose Pnew that maximizes the probability of observing Y new :
+
+arg max 
+
+> Pnew
+
+P (Y new |P new ) (6) 
+
+= Y
+
+> m
+
+Z
+
+P (Y new  
+
+> m
+
+|ψ(Fnew  
+
+> θ
+
+)) P (ψ(Fnew  
+
+> θ
+
+)) dFnew  
+
+> θ
+
+.
+
+Here, Fnew  
+
+> θ
+
+= Fθ (XPnew ). The parameters θ, which esti-mate the neural field F and the uncertainty σθ learned in Section III-A, are optimized using keyframe data. However, due to the sequential nature of SLAM observations, a newly observed frame is expected to belong to a domain similar to that of the learned keyframes. Therefore, the neural field evaluated at the new camera pose can be approximated as 
+
+Fnew  
+
+> θ
+
+= Fθ (XPnew ) ≈ Fθ (XP∗ ), where P∗ denotes a nearby keyframe pose. Consequently, the corresponding negative log-likelihood objective is given by: 
+
+Pnew opt = arg min 
+
+> Pnew
+
+X
+
+> m
+
+"
+
+(ynew  
+
+> m
+
+− ψ(Fnew  
+
+> θ
+
+)) 2
+
+σ2 
+
+> θ
+
++ P 
+
+> i
+
+(ci − ψ(Fnew  
+
+> θ
+
+)) 2 T 2 
+
+> i
+
+σ2
+
+> αi
+
++ log σ2 
+
+> θ
+
++ X
+
+> i
+
+(ci − ψ(Fnew  
+
+> θ
+
+)) 2 T 2 
+
+> i
+
+σ2
+
+> αi
+
+! # 
+
+. (7) Equation (7) provides the probabilistic motivation for using predictive uncertainty during tracking. However, the implemented tracker does not directly optimize this full Gaussian negative log-likelihood. For stable online pose optimization, we instead use a robust uncertainty-normalized L1 surrogate that retains predictive-uncertainty normalization while omitting the log-variance term. The practical tracking objective and its implementation are described in Section III-D. 
+
+C. predictive-surprise-based Keyframe Selection 
+
+Existing neural-rendering-based SLAM systems com-monly select keyframes using fixed temporal intervals or geometric and residual-based heuristics. Although computa-tionally simple, these strategies may trigger redundant map-ping updates for frames that are already well explained by the current map. We therefore seek to prioritize observations that are insufficiently explained by the current predictive model. From an information-theoretic perspective, the information gain associated with a newly observed frame Y new can be written as 
+
+IG( Y new ) = DKL (P (Fθ | D ∗, Y new ) ∥ P (Fθ | D ∗)) . (8) However, evaluating Eq. (8) requires updating the posterior map distribution for every incoming frame, which is compu-tationally impractical in online SLAM. Rather than computing the exact information gain, we use the negative log posterior-predictive likelihood as a tractable predictive-surprise score: 
+
+SKF (Y new )
+
+∝ − log P (Y new |D ∗)= − log Y
+
+> m
+
+Z
+
+P (Y new  
+
+> m
+
+|ψ(Fnew  
+
+> θ
+
+)) P (ψ(Fnew  
+
+> θ
+
+)) dFnew  
+
+> θ
+
+(9) 
+
+= X
+
+> m
+
+− log 
+
+Z
+
+P (Y new  
+
+> m
+
+|ψ(Fnew  
+
+> θ
+
+)) P (ψ(Fnew  
+
+> θ
+
+)) dFnew  
+
+> θ
+
+.
+
+This quantity measures the predictive surprise of the incoming observation under the current map: a larger value indicates that the frame is less well explained by the current predictive distribution and is therefore more likely to provide a useful mapping update. A frame is selected as a keyframe when SKF exceeds a predefined threshold. In addition, we retain periodic keyframe insertion as a fallback to prevent the map from remaining unchanged for an excessively long interval. Track-ing and keyframe selection reuse the same predictive RGB-D uncertainty but employ different task-specific objectives. The tracker uses an uncertainty-normalized L1 objective for robust pose estimation, whereas keyframe selection uses the Gaussian predictive NLL as a predictive-surprise score. 
+
+D. BayesianGS-SLAM Framework 
+
+In this section, we present BayesianGS-SLAM, an uncertainty-aware 3DGS SLAM framework based on the probabilistic model of neural rendering-based SLAM derived above. As illustrated in Fig. 1, our system is built upon the deterministic RGB-D 3DGS SLAM pipeline of LoopSplat [5]. We retain its 3DGS map representation, rendering-based camera tracking, and online mapping procedure as the base SLAM backbone. On top of this backbone, we introduce predictive uncertainty estimation, uncertainty-normalized tracking, and predictive-surprise-based keyframe selection. The keyframe selection module determines whether each newly observed frame should be inserted as a keyframe. In the mapping module, we learn the uncertainty of the 3DGS map representation by constructing a negative log-likelihood objective based on Eq. (5), in addition to the conventional rendering loss. Specifically, the predic-tive uncertainty combines sensor-noise uncertainty predicted from the RGB-D observations and opacity-induced map-representation uncertainty propagated through the renderer. The map-representation uncertainty is rendered as an un-certainty image using Eq. (3), whereas the frame-dependent sensor-noise uncertainty is learned by a separate MLP that takes RGB-D observations as input. This follows the intuition of [24], which aims to capture instantaneous observation noise by learning sensor-noise uncertainty online. The un-certainty network is optimized during the mapping stage together with the 3DGS representation, and its parameters are kept fixed during tracking. For compact notation, we define the predictive variances for color and depth at pixel (n, m ) as 
+
+ΣC,n,m = σ2sensor ,C,n,m + X
+
+i
+
+∥ci − Cψ,n,m ∥22 T 2
+
+i σ2
+
+αi ,
+
+(10) 
+
+ΣD,n,m = σ2sensor ,D,n,m + X
+
+i
+
+(di − Dψ,n,m )2 T 2
+
+i σ2
+
+αi .
+
+(11) Here, σsensor ,C,n,m and σsensor ,D,n,m denote the standard deviations predicted by the uncertainty network for color and depth, respectively. The final mapping loss is then defined as 
+
+Lmap = L3DGS + γ (Lmap 
+
+C + Lmap 
+
+D ) , (12) 
+
+Lmap 
+
+C = X
+
+n,m 
+
+" ∥Cn,m − Cψ,n,m ∥22
+
+ΣC,n,m 
+
++ log Σ C,n,m 
+
+#
+
+, (13) 
+
+Lmap 
+
+D = X
+
+n,m 
+
+"
+
+(Dn,m − Dψ,n,m )2
+
+ΣD,n,m 
+
++ log Σ D,n,m 
+
+#
+
+, (14) where we use the conventional 3DGS rendering loss fol-lowing [29]. Here, ci and di denote the color and depth of the i-th 3D Gaussian, respectively. In addition, C, D, Cψ ,and Dψ denote the ground-truth color, ground-truth depth, rendered color, and rendered depth, respectively. During tracking, the 3DGS and uncertainty-network pa-rameters are fixed. We reuse the predictive variances in Eq. (10)-(11) to normalize the RGB-D residuals. As dis-cussed in Section III-B, we use a robust L1 surrogate and omit the log-variance term for stable online pose optimiza-tion: 
+
+Ltrack = λcLtrack 
+
+C + λdLtrack 
+
+D , (15) 
+
+Ltrack 
+
+C = X
+
+n,m 
+
+∥Cn,m − Cψ,n,m ∥1
+
+pΣC,n,m 
+
+, (16) 
+
+Ltrack 
+
+D = X
+
+n,m 
+
+|Dn,m − Dψ,n,m |
+
+pΣD,n,m 
+
+. (17) In the keyframe selection module, we use both static and dynamic keyframe selection strategies. In static keyframe selection, a frame is inserted as a keyframe every N frames after the most recent keyframe. In dynamic keyframe selection, we evaluate the Gaussian predictive NLL defined in section III-C as a predictive-surprise score and insert a new keyframe when the score exceeds a threshold K. The keyframe score reuses the pre-dictive RGB-D uncertainty already available from the frame-work, avoiding a separate uncertainty-estimation module for keyframe selection. As a result, our method maintains SLAM performance while using fewer keyframes than conventional approaches. IV. E XPERIMENT 
+
+A. Implementation and Setup 
+
+We evaluate BayesianGS-SLAM on the TUM [30] and ScanNet [31] RGB-D datasets using an NVIDIA RTX 4090. We set γ = 10 −3, λc = λd = 900 , N = 5, and TABLE I TRACKING EVALUATION ON TUM [30]                                                                                                 
+
+> Method fr1/desk fr1/desk2 fr1/room fr2/xyz fr3/off. Avg. Neural Implicit Fields
+> NICE-SLAM [2] 4.26 4.99 34.49 6.19 3.87 10.76 MIPS-Fusion [32] 3.00 N/A N/A 1.4 4.6 N/A Point-SLAM [33] 4.34 4.54 30.92 1.31 4.8 8.92 ESLAM [34] 2.47 3.69 29.73 1.11 2.42 7.89 Co-SLAM [35] 2.40 N/A N/A 1.70 2.40 N/A GO-SLAM [36] 1.50 N/A 4.64 0.60 1.30 N/A Loopy-SLAM [6] 3.79 3.38 7.03 1.62 3.41 3.85
+> 3D Gaussian Splatting
+> SplaTAM [3] 3.35 6.54 11.13 1.24 5.16 5.48 MonoGS [4] 1.59 7.03 8.55 1.44 1.49 4.02 Gaussian-SLAM [29] 2.73 6.03 14.92 1.39 5.31 6.08 *Photo-SLAM [37] 2.60 N/A N/A 0.35 1.00 N/A LoopSplat [5] 2.08 3.54 6.24 1.58 3.22 3.33 CG-SLAM [25] 2.43 4.54 9.39 1.20 2.45 4.0 VarSplat [27] 1.80 3.40 6.05 1.41 3.36 3.20
+> BayesianGS 2.01 3.03 6.23 1.43 2.91 3.12
+
+TABLE II TRACKING EVALUATION ON SCAN NET [31] 
+
+Method 00 59 106 169 181 207 Avg. Neural Implicit Fields 
+
+Co-SLAM [35] 7.1 11.1 9.4 5.9 11.8 7.1 8.7 NICE-SLAM [2] 12.0 14.0 7.9 10.9 13.4 6.2 10.7 ESLAM [34] 7.3 8.5 7.5 6.5 9.0 5.7 7.4 Point-SLAM [33] 10.2 10.8 8.7 7.2 22.2 14.8 12.3 GO-SLAM [36] 5.4 7.5 7.0 7.0 6.8 6.9 6.8 Loopy-SLAM [6] 4.2 7.5 8.3 7.5 10.6 7.9 7.7 Uni-SLAM [38] 6.1 7.8 7.4 5.8 9.8 5.2 7.0 
+
+3D Gaussian Splatting 
+
+MonoGS [4] 9.8 32.1 8.9 10.7 21.8 7.9 15.2 SplaTAM [3] 10.1 17.7 11.7 7.5 5.6 7.5 10.0 Gaussian-SLAM [29] 21.2 12.8 13.5 13.6 21.0 13.4 15.9 LoopSplat [5] 6.2 7.1 7.4 10.6 8.5 6.6 7.7 CG-SLAM [25] 7.1 7.5 8.9 8.2 11.6 5.3 8.1 VarSplat [27] 4.9 5.8 6.7 6.7 8.9 6.2 6.5 BayesianGS 5.5 5.2 7.1 7.8 8.0 6.7 6.7 
+
+K = 0 . The sensor-noise uncertainty network takes RGB-D observations as input and consists of four convolutional and four fully connected layers. The minimum sensor-noise and map-representation uncertainty values are set to 10 −4 and 
+
+10 −3, respectively. We evaluate tracking using ATE RMSE, rendering using PSNR, SSIM, and LPIPS, uncertainty–error ranking using AUSE MAE, and efficiency using the number of selected keyframes, mapping calls, and FPS. TABLE III RENDERING EVALUATION ON 2 DATASETS .                                                                      
+
+> Dataset TUM [30] ScanNet [31]
+> Method PSNR ↑SSIM ↑LPIPS ↓PSNR ↑SSIM ↑LPIPS ↓
+> NICE-SLAM [2] 14.86 0.614 0.441 17.54 0.621 0.548 ESLAM [34] 15.26 0.478 0.569 15.29 0.658 0.488 Point-SLAM [33] 16.62 0.696 0.526 19.82 0.751 0.514 Loopy-SLAM [6] 12.94 0.489 0.645 15.23 0.629 0.671 SplaTAM [3] 22.80 0.893 0.178 19.14 0.716 0.358
+> Gaussian-SLAM [29] 25.05 0.929 0.168 27.67 0.923 0.248 LoopSplat [5] 22.72 0.873 0.259 24.92 0.845 0.425 VarSplat [27] 23.14 0.883 0.248 24.92 0.848 0.422
+> BayesianGS 23.30 0.891 0.239 24.88 0.845 0.427 Gray indicates evaluation on submaps rather than global map.
+
+B. Evaluation on Tracking 
+
+Tables I and II report the tracking results. BayesianGS-SLAM achieves the lowest average ATE on TUM (3.12 cm) and the second-lowest on ScanNet (6.7 cm). Fig. 3 further TABLE IV 
+
+COLOR / DEPTH UNCERTAINTY EVALUATION (AUSE MAE ↓) ON 2 DATASETS 
+
+Dataset TUM ScanNet Avg Method fr1/desk fr2/xyz fr3/office 0000 0059 0106 0169 0181 0207 CG-SLAM [25] 
+
+Color AUSE MAE ↓
+
+0.0770 0.0687 0.0724 0.0373 0.0627 0.1027 0.0486 0.0640 0.0367 0.0633 VarSplat [27] 0.0117 0.0132 0.0110 0.0127 0.0153 0.0129 0.0081 0.0147 0.0107 0.0123 FisherRF* [17] 0.0280 0.0183 0.0230 0.0213 0.0316 0.0293 0.0128 0.0260 0.0175 0.0231 
+
+BayesianGS 0.0118 0.0108 0.0127 0.0116 0.0155 0.0167 0.0073 0.0124 0.0101 0.0121 
+
+CG-SLAM [25] 
+
+Depth AUSE MAE ↓
+
+0.1948 0.3355 0.1535 0.0610 0.1359 0.3590 0.2089 0.1338 0.0752 0.1842 VarSplat [27] 0.2145 1.0522 0.1398 0.0922 0.2140 0.2791 0.2386 0.1116 0.1352 0.2752 FisherRF* [17] 0.0567 0.5822 0.1087 0.0599 0.2217 0.3261 0.2405 0.1296 0.0766 0.2002 
+
+BayesianGS 0.0580 0.2541 0.0478 0.0331 0.1048 0.2059 0.1401 0.0477 0.0628 0.1060 
+
+> ∗
+
+FisherRF is not a SLAM system; we apply its uncertainty formulation to 3DGS maps reconstructed using the estimated poses from our SLAM pipeline. 
+
+TABLE V KEYFRAME AND MAPPING EFFICIENCY ON TUM [30] 
+
+Dataset fr1/desk fr2/xyz fr3/office Method KF Insertion Mapping Freq KF Insertion Mapping Freq KF Insertion Mapping Freq 
+
+Gaussian-SLAM [29] Dense ( 591 ) Per-frame ( 591 ) Dense ( 3393 ) Per-frame ( 3393 ) Dense ( 2514 ) Per-frame ( 2514 )LoopSplat [5] Dense ( 591 ) Per-frame ( 591 ) Dense ( 3393 ) Per-frame ( 3393 ) Dense ( 2514 ) Per-frame ( 2514 )VarSplat [27] Dense ( 591 ) Per-frame ( 591 ) Dense ( 3393 ) Per-frame ( 3393 ) Dense ( 2514 ) Per-frame ( 2514 )
+
+BayesianGS Sparse ( 137 ) Keyframe-only ( 137 ) Sparse ( 744 ) Keyframe-only ( 744 ) Sparse ( 545 ) Keyframe-only ( 545 )
+
+TABLE VI TRACKING ATE FOR DIFFERENT POSE -OPTIMIZATION OBJECTIVES ON TUM. 
+
+Method fr1/desk fr1/desk2 fr1/room fr2/xyz fr3/off. Avg. Conventional L1 2.17 ± 0.01 4.64 ± 0.38 X 1.43 ± 0.02 2.98 ± 0.23 X
+
+Gaussian NLL 21.23 ± 3.21 49.50 ± 8.42 68.65 ± 10.52 1.75 ± 0.08 71.05 ± 16.57 42.44 
+
+Ours uncertainty-normalized loss with log 20.40 ± 1.20 56.93 ± 1.37 98.19 ± 18.58 1.71 ± 0.10 71.18 ± 4.41 49.68 
+
+Ours uncertainty-normalized loss 1.92 ±0.10 3.25 ±0.32 11.32 ±9.42 1.41 ±0.01 3.01 ±0.14 4.18 
+
+(a) AUSE MAE Plot 
+
+(b) VarSplat Residual (c) VarSplat Uncertainty 
+
+(d) BayesianGS Residual (e) BayesianGS Uncertainty 
+
+Fig. 2: Depth uncertainty evaluation on frame 2324 of TUM fr3/office. Residual maps show absolute depth error, and uncertainty maps show rendered depth uncertainty. 
+
+evaluates run-to-run variation over three runs on ScanNet, where our method shows lower variation than VarSplat. 
+
+C. Evaluation on Rendering and Uncertainty 
+
+Table III reports rendering performance. Following the protocol of prior GS-based SLAM work [5], rendering qual-ity is evaluated on the keyframes used for training. Therefore, these results measure system-level training-view reconstruc-tion fidelity rather than a controlled cross-method novel-view comparison. BayesianGS-SLAM maintains competitive rendering quality on both datasets. Table IV evaluates uncertainty error ranking using AUSE MAE. In addition to uncertainty-aware SLAM baselines, we include FisherRF, whose uncertainty formulation is applied to 3DGS maps reconstructed using poses estimated by our SLAM pipeline. BayesianGS-SLAM achieves an average Fig. 3: Tracking Variability on ScanNet [31] 
+
+Fig. 4: Real-robot demonstration. Left to right: handheld re-sult, robot-mounted result, and experimental robot platform. Color AUSE of 0.0121, comparable to VarSplat, and the low-est average Depth AUSE of 0.1060, compared with 0.1842 for CG-SLAM, 0.2752 for VarSplat, and 0.2002 for Fish-erRF. These results indicate improved uncertainty-error rank-ing, particularly for depth, rather than absolute uncertainty calibration. We attribute the stronger depth uncertainty–error ranking to the opacity-induced map-representation compo-nent, which directly reflects changes in visibility and com-positing weights shared by depth rendering. Fig. 2 provides a qualitative comparison of depth residuals and uncertainty maps. 
+
+D. Evaluation on Keyframe Selection 
+
+In this section, we evaluate the efficiency of the proposed keyframe selection module, as shown in Table V. We mea-sure the number of inserted keyframes and the number of mapping module calls on three TUM sequences: fr1/desk, fr2/xyz, and fr3/office. Our method reduces both the number of keyframes and the number of mapping module calls by approximately 70%, while maintaining competitive tracking and mapping performance. This efficiency also provides a practical benefit in terms of runtime. As shown in Table VIII, the FPS measured on the TUM dataset demonstrates that our method runs faster than VarSplat and most compared methods. Although LoopSplat achieves the highest FPS, it does not include an uncertainty estimation module. Our method maintains competitive tracking and rendering performance while sub-stantially reducing redundant mapping updates, despite the additional per-frame cost of uncertainty estimation. However, reducing the mapping frequency may delay map refinement when the keyframe criterion fails to identify an informative observation. 
+
+E. Ablation Studies 
+
+In the ablation studies, we analyze the effect of the proposed uncertainty-aware tracking and keyframe selection TABLE VII MODULE ABLATION RESULTS ON TUM [30]                 
+
+> Metric w/o Track.+ KFS w/ Track.+KFS
+> ATE RMSE ↓3.47 3.12
+> PSNR ↑22.64 22.87
+> Color/Depth AUSE ↓0.0136 / 0.1426 0.0132 /0.1253
+> Number of KF ↓1689.8 380.6
+
+TABLE VIII FPS ↑ EVALUATION ON TUM [30]                                    
+
+> Sequence UC fr1/desk fr2/xyz fr3/office Avg. Point-SLAM [33] ✗0.26 0.27 0.23 0.25 Loopy-SLAM [6] ✗0.24 0.23 0.20 0.22 SplaTAM [3] ✗0.39 0.42 0.40 0.41 LoopSplat [5] ✗0.59 0.59 0.59 0.59
+> VarSplat [27] ✓0.44 0.41 0.52 0.47
+> BayesianGS ✓0.50 0.55 0.64 0.56
+
+modules on tracking performance. We further show that the proposed uncertainty-normalized L1 surrogate achieves substantially lower tracking error than the Gaussian NLL and log-term variants while successfully tracking all evaluated sequences. In addition, to demonstrate the applicability of our framework to real robotic systems, we present mapping results obtained from data collected using handheld and robot-mounted sensors. 
+
+1) Effect of Tracking and Keyframe Selection Modules: 
+
+To evaluate the effect of the proposed uncertainty-aware tracking and keyframe selection modules, we compare the baseline configuration without these modules against the full configuration with both modules enabled. We report ATE RMSE, PSNR, color/depth AUSE MAE, and the number of selected keyframes averaged over five TUM scenes, as shown in Table VII. The full configuration improves track-ing accuracy, rendering quality, and uncertainty estimation while substantially reducing the number of keyframes. These results indicate that the proposed tracking and predictive-surprise-based keyframe selection are effective. 
+
+2) Effect of Tracking loss: We further evaluate the track-ing surrogate in Table VI. Results are averaged over three independent runs. The proposed uncertainty-normalized L1 objective successfully tracks all five sequences and achieves an average ATE of 4.18 cm, whereas conventional L1 fails on 
+
+fr1/room . Direct optimization of the Gaussian NLL and the uncertainty-normalized objective with the log term results in substantially larger average ATEs of 42.44 cm and 49.68 cm, respectively. These results support the use of uncertainty-normalized L1 as a practical robust surrogate for online pose optimization rather than an exact likelihood objective. 
+
+3) Evaluation with Real-Robot Data: We further provide qualitative results on robot-collected RGB-D sequences, in-cluding handheld and robot-mounted settings, we present qualitative mapping results in Fig. 4. The results show that the proposed framework can be applied to robot-collected RGB-D data and can reconstruct consistent map representa-tions in practical indoor environments. Additional results are provided in the supplementary video. V. C ONCLUSION 
+
+In this paper, we presented BayesianGS-SLAM, an uncertainty-aware 3DGS SLAM framework that estimates predictive uncertainty for both color and depth. The pro-posed formulation combines sensor-noise uncertainty with opacity-induced map-representation uncertainty and reuses the resulting predictive uncertainty for mapping, uncertainty-normalized tracking, and predictive-surprise-based keyframe selection. Experiments on TUM and ScanNet demonstrate improved depth uncertainty–error ranking and competitive tracking and rendering performance while substantially re-ducing redundant mapping updates. Qualitative experiments on robot-collected RGB-D data further demonstrate the ap-plicability of the proposed framework beyond benchmark datasets. REFERENCES [1] E. Sucar, S. Liu, J. Ortiz, and A. J. Davison, “imap: Implicit map-ping and positioning in real-time,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 6229–6238. [2] Z. Zhu, S. Peng, V. Larsson, W. Xu, H. Bao, Z. Cui, M. R. Oswald, and M. Pollefeys, “Nice-slam: Neural implicit scalable encoding for slam,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2022, pp. 12 786–12 796. [3] N. Keetha, J. Karhade, K. M. Jatavallabhula, G. Yang, S. Scherer, D. Ramanan, and J. Luiten, “Splatam: Splat track & map 3d gaussians for dense rgb-d slam,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2024, pp. 21 357–21 366. [4] H. Matsuki, R. Murai, P. H. Kelly, and A. J. Davison, “Gaussian splatting slam,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2024, pp. 18 039–18 048. [5] L. Zhu, Y. Li, E. Sandstr¨ om, S. Huang, K. Schindler, and I. Armeni, “Loopsplat: Loop closure by registering 3d gaussian splats,” in 2025 International Conference on 3D Vision (3DV) . IEEE, 2025, pp. 156– 167. [6] L. Liso, E. Sandstr¨ om, V. Yugay, L. Van Gool, and M. R. Oswald, “Loopy-slam: Dense neural slam with loop closures,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recogni-tion , 2024, pp. 20 363–20 373. [7] S. Ha, J. Yeon, and H. Yu, “Rgbd gs-icp slam,” in European conference on computer vision . Springer, 2024, pp. 180–197. [8] Z. Yan, H. Yang, and H. Zha, “Active neural mapping,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 10 981–10 992. [9] X. Pan, Z. Lai, S. Song, and G. Huang, “Activenerf: Learning where to see with uncertainty estimation,” in European Conference on Computer Vision . Springer, 2022, pp. 230–246. [10] Y. Gal and Z. Ghahramani, “Dropout as a bayesian approximation: Representing model uncertainty in deep learning,” in international conference on machine learning . PMLR, 2016, pp. 1050–1059. [11] A. Kendall and Y. Gal, “What uncertainties do we need in bayesian deep learning for computer vision?” Advances in neural information processing systems , vol. 30, 2017. [12] B. Lakshminarayanan, A. Pritzel, and C. Blundell, “Simple and scalable predictive uncertainty estimation using deep ensembles,” 
+
+Advances in neural information processing systems , vol. 30, 2017. [13] J. Shen, A. Agudo, F. Moreno-Noguer, and A. Ruiz, “Conditional-flow nerf: Accurate 3d modelling with reliable uncertainty quantification,” in European Conference on Computer Vision . Springer, 2022, pp. 540–557. [14] J. Shen, A. Ruiz, A. Agudo, and F. Moreno-Noguer, “Stochastic neural radiance fields: Quantifying uncertainty in implicit 3d representations,” in 2021 International Conference on 3D Vision (3DV) . IEEE, 2021, pp. 972–981. [15] L. Goli, C. Reading, S. Sell´ an, A. Jacobson, and A. Tagliasacchi, “Bayes’ rays: Uncertainty quantification for neural radiance fields,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 20 061–20 070. [16] R. Martin-Brualla, N. Radwan, M. S. Sajjadi, J. T. Barron, A. Doso-vitskiy, and D. Duckworth, “Nerf in the wild: Neural radiance fields for unconstrained photo collections,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2021, pp. 7210–7219. [17] W. Jiang, B. Lei, and K. Daniilidis, “Fisherrf: Active view selection and uncertainty quantification for radiance fields using fisher informa-tion,” arXiv preprint arXiv:2311.17874 , 2023. [18] A. Hanson, A. Tu, V. Singla, M. Jayawardhana, M. Zwicker, and T. Goldstein, “Pup 3d-gs: Principled uncertainty pruning for 3d gaus-sian splatting,” in 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) . IEEE, 2025, pp. 5949–5958. [19] J. Wilson, M. Almeida, S. Mahajan, M. Labrie, M. Ghaffari, O. Ghase-malizadeh, M. Sun, C.-H. Kuo, and A. Sen, “Pop-gs: Next best view in 3d-gaussian splatting with p-optimality,” in 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) .IEEE, 2025, pp. 3646–3655. [20] P. Ewen, H. Chen, S. Isaacson, J. Wilson, K. A. Skinner, and R. Va-sudevan, “These magic moments: Differentiable uncertainty quantifi-cation of radiance field models,” arXiv preprint arXiv:2503.14665 ,2025. [21] Z. Tan, X. Chen, J. Zhang, L. Feng, and D. Hu, “Uncertainty-aware normal-guided gaussian splatting for surface reconstruction from sparse image sequences,” arXiv preprint arXiv:2503.11172 , 2025. [22] S. Xue, J. Dill, D. Ahuja, F. Dellaert, P. Tsiotras, and D. Xu, “Uncertainty-driven 3d gaussian splatting active mapping via anisotropic visibility field,” arXiv preprint arXiv:2605.30342 , 2026. [23] W. Jiang, B. Lei, K. Ashton, and K. Daniilidis, “Ag-slam: Active gaussian splatting slam,” 2024. [24] E. Sandstr¨ om, K. Ta, L. Van Gool, and M. R. Oswald, “Uncle-slam: Uncertainty learning for dense neural slam,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 4537–4548. [25] J. Hu, X. Chen, B. Feng, G. Li, L. Yang, H. Bao, G. Zhang, and Z. Cui, “Cg-slam: Efficient dense rgb-d slam in a consistent uncertainty-aware 3d gaussian field,” in European Conference on Computer Vision .Springer, 2024, pp. 93–112. [26] Y. Zhu, Y. Zhang, J. Xu, and W. Ren, “Vbgs-slam: Variational bayesian gaussian splatting simultaneous localization and mapping,” 
+
+arXiv preprint arXiv:2604.02696 , 2026. [27] A. T. Tran and J. Kosecka, “Varsplat: Uncertainty-aware 3d gaussian splatting for robust rgb-d slam,” arXiv preprint arXiv:2603.09673 ,2026. [28] S. Lee, K. Kang, S. Ha, and H. Yu, “Bayesian nerf: Quantifying uncertainty with volume density for neural implicit fields,” IEEE Robotics and Automation Letters , 2025. [29] V. Yugay, Y. Li, T. Gevers, and M. R. Oswald, “Gaussian-slam: Photo-realistic dense slam with gaussian splatting,” arXiv preprint arXiv:2312.10070 , 2023. [30] J. Sturm, N. Engelhard, F. Endres, W. Burgard, and D. Cremers, “A benchmark for the evaluation of rgb-d slam systems,” in 2012 IEEE/RSJ international conference on intelligent robots and systems .IEEE, 2012, pp. 573–580. [31] A. Dai, A. X. Chang, M. Savva, M. Halber, T. Funkhouser, and M. Nießner, “Scannet: Richly-annotated 3d reconstructions of indoor scenes,” in Proceedings of the IEEE conference on computer vision and pattern recognition , 2017, pp. 5828–5839. [32] Y. Tang, J. Zhang, Z. Yu, H. Wang, and K. Xu, “Mips-fusion: Multi-implicit-submaps for scalable and robust online neural rgb-d reconstruction,” ACM Transactions on Graphics (TOG) , vol. 42, no. 6, pp. 1–16, 2023. [33] E. Sandstr¨ om, Y. Li, L. Van Gool, and M. R. Oswald, “Point-slam: Dense neural point cloud-based slam,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 18 433–18 444. [34] M. M. Johari, C. Carta, and F. Fleuret, “Eslam: Efficient dense slam system based on hybrid representation of signed distance fields,” in 
+
+Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2023, pp. 17 408–17 419. [35] H. Wang, J. Wang, and L. Agapito, “Co-slam: Joint coordinate and sparse parametric encodings for neural real-time slam,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recogni-tion , 2023, pp. 13 293–13 302. [36] Y. Zhang, F. Tosi, S. Mattoccia, and M. Poggi, “Go-slam: Global optimization for consistent 3d instant reconstruction,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 3727–3737. [37] H. Huang, L. Li, H. Cheng, and S.-K. Yeung, “Photo-slam: Real-time simultaneous localization and photorealistic mapping for monocular stereo and rgb-d cameras,” in Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , 2024, pp. 21 584– 21 593. [38] S. Wang, Y. Xie, C.-P. Chang, C. Millerdurai, A. Pagani, and D. Stricker, “Uni-slam: Uncertainty-aware neural implicit slam for real-time dense indoor scene reconstruction,” in 2025 IEEE/CVF Win-ter Conference on Applications of Computer Vision (WACV) . IEEE, 2025, pp. 2228–2239.
