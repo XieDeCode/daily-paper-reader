@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-09-24 <!--dpr-date:20260924-->
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/24/2609.21176v2-4dgs-fixer-generative-sparse-view-4d-gaussian-splatting-with-iterative-refinement-guided-by-video-diffusion-priors" data-sidebar-item="{&quot;title&quot;: &quot;4DGS-Fixer: Generative Sparse-View 4D Gaussian Splatting with Iterative Refinement Guided by Video Diffusion Priors&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.21176v2-4dgs-fixer-generative-sparse-view-4d-gaussian-splatting-with-iterative-refinement-guided-by-video-diffusion-priors&quot;, &quot;score&quot;: &quot;6.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;aerial-dgs&quot;}], &quot;evidence&quot;: &quot;稀疏视角4D高斯泼溅与迭代细化&quot;}">4DGS-Fixer: Generative Sparse-View 4D Gaussian Splatting with Iterative Refinement Guided by Video Diffusion Priors</a>
   * 2026-09-23 <!--dpr-date:20260923-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/23/2609.24253v1-openflyscan-a-quality-guided-aerial-reconstruction-system-for-consumer-drones" data-sidebar-item="{&quot;title&quot;: &quot;OpenFlyScan: A Quality-Guided Aerial Reconstruction System for Consumer Drones&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.24253v1-openflyscan-a-quality-guided-aerial-reconstruction-system-for-consumer-drones&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;aerial-dgs&quot;}], &quot;evidence&quot;: &quot;面向城市资产的质量引导大规模航拍3D高斯泼溅重建&quot;}">OpenFlyScan: A Quality-Guided Aerial Reconstruction System for Consumer Drones</a>
