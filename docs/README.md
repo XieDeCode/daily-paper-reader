@@ -6,26 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-24
-- 运行时间：2026-09-24 22:07:49 UTC
+- 最新运行日期：2026-09-25
+- 运行时间：2026-09-25 21:53:50 UTC
 - 运行状态：成功
-- 本次总论文数：1
+- 本次总论文数：3
 - 精读区：0
-- 速读区：1
+- 速读区：3
 
 ### 今日简报（AI）
-1) 今日速读仅1篇：6.0分《4DGS-Fixer》登场，尝试用视频扩散先验迭代精炼稀疏视角4D高斯泼溅。  
-2) 最值得看的方向是“视频扩散先验+迭代精炼”能否补足稀疏视角下的4D重建/生成质量。  
-3) 普通读者可先关注这一组合思路，等更多实验或精读验证后再判断其实用价值。
-- 详情：[/202609/24/README](/202609/24/README)
+- 今日共生成 3 篇推荐（精读 0 篇，速读 3 篇）
+- 速读：《GAPS: Generative Active Pseudo-view Selection for Sparse-View 3D Gaussian Splatting》（7.0/10）, 《PlenoCI: Plenoptic CharacterIstics for View Dependence Aware Change Classification》（7.0/10）, 《OceanXL: Large-scale Underwater 3D Gaussian Splatting via Block Partitioning and Adaptive Pruning》（6.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202609/25/README](/202609/25/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [4DGS-Fixer: Generative Sparse-View 4D Gaussian Splatting with Iterative Refinement Guided by Video Diffusion Priors](/202609/24/2609.21176v2-4dgs-fixer-generative-sparse-view-4d-gaussian-splatting-with-iterative-refinement-guided-by-video-diffusion-priors)  
+1. [GAPS: Generative Active Pseudo-view Selection for Sparse-View 3D Gaussian Splatting](/202609/25/2609.23436v2-gaps-generative-active-pseudo-view-selection-for-sparse-view-3d-gaussian-splatting)  
+   标签：评分：7.0/10、query:aerial-dgs
+   evidence：稀疏视角三维高斯泼溅训练与渲染
+2. [PlenoCI: Plenoptic CharacterIstics for View Dependence Aware Change Classification](/202609/25/2609.28930v1-plenoci-plenoptic-characteristics-for-view-dependence-aware-change-classification)  
+   标签：评分：7.0/10、query:aerial-dgs
+   evidence：从3D高斯泼溅辐射场表示中构建全光特征
+3. [OceanXL: Large-scale Underwater 3D Gaussian Splatting via Block Partitioning and Adaptive Pruning](/202609/25/2609.29985v1-oceanxl-large-scale-underwater-3d-gaussian-splatting-via-block-partitioning-and-adaptive-pruning)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：稀疏视角4D高斯泼溅与迭代细化
+   evidence：大规模3D高斯泼溅分块优化框架
 
 
 <div class="dpr-home-promo-card">
