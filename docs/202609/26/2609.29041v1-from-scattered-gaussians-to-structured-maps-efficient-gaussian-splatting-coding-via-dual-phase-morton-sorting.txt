@@ -1,0 +1,236 @@
+Title: From Scattered Gaussians to Structured Maps: Efficient Gaussian Splatting Coding via Dual-phase Morton Sorting
+
+URL Source: https://arxiv.org/pdf/2609.29041v1
+
+Published Time: Fri, 25 Sep 2026 00:42:20 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+## From Scattered Gaussians to Structured Maps: Efficient Gaussian Splatting Coding via Dual-phase Morton Sorting 
+
+Bolin Chen ♮†∅ , Shanzhi Yin ∗, Ru-Ling Liao †, Yibo Fan ♮ and Yan Ye † 
+
+> ♮
+
+Fudan University † DAMO Academy, Alibaba Group  
+
+> ∅
+
+Hupan Lab ∗ City University of Hong Kong 
+
+Abstract 
+
+3D Gaussian Splatting (3DGS) enables high-fidelity novel view synthesis but suffers from excessive storage and bandwidth requirements due to its unstructured representation. To address this, a projection-based video coding framework has emerged as a leading ap-proach—supported by MPEG’s ongoing standardization—where 3DGS attributes are con-verted into 2D maps to take advantage of efficient compression using established video codecs such as HEVC and VVC. However, the effectiveness of this approach depends heav-ily on spatial coherence of the projected video, which current sorting strategies such as PLAS and Morton ordering fail to preserve adequately, either incurring high computational cost or achieving limited correlation retention. To overcome these limitations, we propose a dual-phase Morton spatial sorting algorithm that improves both coding efficiency and pro-cessing speed. In the first phase, Morton-based 1D indexing is applied to high-dimensional attributes to enhance spatial locality. The second phase further refines layout continu-ity through a structured 2D Morton mapping table that enforces spatial adjacency. This hierarchical strategy generates highly regular, block-wise feature maps with strong local correlation, making them well-suited for compression via conventional block-based coding tools. Experimental results show that our method significantly outperforms existing ap-proaches in both compression performance and runtime efficiency, providing a practical and standard-compatible solution for 3DGS data coding. 
+
+1 Introduction 
+
+3D Gaussian Splatting (3DGS) [1] has recently emerged as a powerful representa-tion for novel view synthesis, owing to its high rendering quality, fast rasterization, and flexible scene modeling capability. By representing a scene as a collection of anisotropic Gaussian primitives, 3DGS can produce visually convincing rendering results and has shown strong potential in a wide range of applications, including immersive telepresence, augmented reality, virtual reality, and interactive content creation. However, the high fidelity of 3DGS comes at the cost of substantial stor-age and transmission overhead. A typical 3DGS scene contains a large number of Gaussian primitives, each associated with multiple attributes such as position, scale, rotation, opacity, and spherical harmonic coefficients. Accordingly, the raw represen-tation is highly redundant and costly to transmit, underscoring the need for efficient compression methods, particularly for real-time streaming and resource-constrained mobile applications. While algorithmic advances continue to accelerate [2,3], standardization efforts are turning toward practical coding frameworks for Gaussian primitives. Among them, 
+
+> This work was supported by the Zhejiang Provincial Postdoctoral Research Project Funding Program (Project No. ZJ2026187). arXiv:2609.29041v1 [cs.MM] 24 Sep 2026
+
+MPEG’s ongoing work on Gaussian splat coding highlights video-based representa-tion as a promising approach for efficient compression. As illustrated in Figure 1, the core principle is to reorganize per-frame Gaussian attributes into 2D attribute maps and then compress them using mature video coding standards such as High Efficiency Video Coding (HEVC) [4] and Versatile Video Coding (VVC) [5]. By transforming irregular 3D Gaussian data into structured 2D arrays, this paradigm allows 3D Gaus-sians to be coded using conventional codecs to better exploit spatial and temporal redundancies and to benefit from the long-standing optimization of existing video coding toolchains. Under this framework, the sorting and mapping strategy used to arrange Gaussian splats in 2D space becomes a critical component, since the spatial coherence and block regularity in the resulting 2D arrays directly influence the overall coding efficiency. In video-based 3DGS compression, spatial sorting plays a crucial role in deter-mining how Gaussian attributes are laid out in 2D pixel space. Existing methods mainly include PLAS [6] and Morton-based ordering [7]. PLAS is designed to pre-serve spatial locality by solving an assignment problem between Gaussian splats and grid positions. Although it can generate relatively coherent layouts, it relies on itera-tive refinement and block-wise updates, resulting in high computational cost and long sorting time. This makes PLAS less suitable for real-time or large-scale applications. In contrast, Morton ordering, also known as Z-order sorting, is computationally effi-cient and easy to implement. By interleaving coordinate bits, Morton curves preserve spatial proximity in a fast and deterministic manner. However, when the 1D sorted sequence is directly reshaped into 2D video frames using conventional row-major or-der, the resulting layout may still suffer from weak 2D neighborhood consistency and insufficient block regularity. In other words, although Morton sorting can improve 1D locality, it does not fully address the spatial continuity requirements of 2D video coding. These observations reveal a fundamental trade-off: existing methods either achieve stronger layout coherence at the cost of heavy computation, or provide effi-cient sorting but limited 2D spatial structure. A practical solution should therefore simultaneously maintain sorting efficiency and enhance the spatial regularity of the generated 2D maps. To address this issue, we propose a dual-phase Morton spatial sorting framework that reorganizes Gaussian splat attributes into a coding-friendly 2D layout. The main motivation is to bridge the mismatch between the irregular structure of 3D Gaus-sian data and the block-based processing assumptions of conventional video codecs. Instead of directly reshaping the Gaussian sequence into the raster scan order, the proposed framework first imposes a spatially coherent ordering on the splats and then arranges the ordered samples into a 2D map with stronger neighborhood continuity. This two-step design is intended to preserve locality at both the 3D attribute level and the 2D image level, thereby improving spatial regularity, local correlation, and block consistency in the generated feature maps. As a result, the reordered attributes become much more amenable to compression by standardized video codecs, which rely heavily on local redundancy. Moreover, since the same ordering can be consistently applied to all Gaussian attributes, the proposed framework also ensures cross-channel alignment and facilitates unified coding of the entire 3DGS representation. The main Figure 1: Illustration of the video-based Gaussian splats coding pipeline within the proposed dual-phase Morton spatial sorting algorithm. 
+
+contributions of this paper are summarized as follows: 
+
+• We propose a dual-phase Morton sorting algorithm that transforms unstruc-tured 3D Gaussians into structured block-wise feature maps through 1D in-dexing and 2D mapping, improving spatial coherence while maintaining low computational complexity. 
+
+• We introduce a structured 2D Morton mapping table that preserves adjacency in the pixel domain, enabling seamless integration with block-based video codecs and supporting MPEG-oriented 3DGS compression workflows. 
+
+• Experimental results demonstrate that the proposed method achieves better rate-distortion performance and lower runtime than PLAS and conventional Morton-based sorting, making it suitable for practical 3DGS applications in immersive streaming and interactive content. 
+
+2 Method 
+
+2.1 Problem Formulation 
+
+3DGS representation. A 3DGS scene is represented as a set of anisotropic Gaus-sian primitives, where each primitive is parameterized by both geometric and appearance-related attributes. Specifically, for a Gaussian splat gi, we denote its parameters as 
+
+gi = {μi, si, qi, α i, ci}, (1) where μi denotes the 3D mean position, si the scale, qi the rotation quaternion, αi
+
+the opacity, and ci the spherical harmonic coefficients. 
+
+Objective. Although 3DGS provides a compact and expressive scene representa-tion, its primitives are stored in an unstructured format that is not directly com-patible with conventional video codecs. Our goal is therefore to reorganize Gaus-sian attributes into structured 2D feature maps so that spatially related primitives are placed near each other in the final layout. Formally, given a set of Gaussian splats G = {gi}Ni=1 , we seek a permutation π and a 2D mapping Φ that minimize an adjacency-preserving loss: min  
+
+> π, Φ
+
+Ladj (π, Φ) , (2) where a smaller value indicates better preservation of spatial adjacency. The same permutation is consistently applied to all Gaussian attributes, ensuring that the re-sulting layout remains aligned across attributes and amenable to video coding. 
+
+Design requirements. To achieve this goal, the proposed method is designed un-der three practical requirements: 
+
+• a unified permutation should be generated from a spatially meaningful attribute; 
+
+• spatial locality should be preserved both in the 1D ordering and in the 2D layout; 
+
+• the entire reorganization process should remain lightweight enough for large-scale GS primitives. 
+
+2.2 Overview of the Proposed Dual-Phase Morton Sorting 
+
+Pipeline description. As illustrated in Figure 1, the proposed method consists of two consecutive stages. The first stage performs Morton-based sorting on the mean positions of Gaussian splats, producing a 1D ordering that is locally coherent in 3D space. The second stage maps this 1D sequence onto a 2D grid using a structured Morton-based layout, so that the reordered sequence also exhibits locality in the rasterized domain. The same permutation is then applied to all remaining Gaussian attributes, and the resulting 2D feature maps are used for subsequent video coding. 
+
+Core idea. The central idea is to convert the irregular 3D arrangement of Gaussian splats into a coding-friendly 2D representation while preserving as much geometric locality as possible. The first stage establishes a geometry-aware index order, whereas the second stage ensures that this order is reflected not only along the sequence dimension but also in the 2D spatial arrangement. Together, these two stages reduce the mismatch between the 3D structure of the scene and the 2D block structure assumed by conventional codecs. 
+
+2.3 Phase I: Morton-Based 1D Spatial Sorting 
+
+Morton code construction. Morton ordering, also known as Z-ordering, is a clas-sical space-filling curve that preserves spatial locality through bit interleaving. Given the mean position of the i-th Gaussian splat, denoted as μi = ( xi, y i, z i), we first quantize it to integer coordinates and then compute its Morton code by interleaving the binary bits of the three axes: 
+
+Mi = I3D(xi, y i, z i), (3) where I3D(·) denotes the 3D bit-interleaving operator. In expanded form, the Morton code is obtained by concatenating the interleaved bits of the three quantized coordinates from the least significant bit (LSB) to the most significant bit (MSB): 
+
+Mi = xi, 0yi, 0zi, 0 xi, 1yi, 1zi, 1 · · · xi,r yi,r zi,r , (4) where xi,r , yi,r , and zi,r denote the r-th bits of the quantized coordinates, and r
+
+indexes the bit position from the LSB to the MSB. 
+
+Sorting and permutation generation. After computing Morton codes from the mean positions of all Gaussian splats, we sort them in ascending order: 
+
+Mπ(1) ≤ Mπ(2) ≤ · · · ≤ Mπ(N ), (5) where π denotes the resulting permutation and N is the number of Gaussian primi-tives in the current frame. Since the sorting key is the mean position, the resulting permutation is directly driven by the spatial center of each Gaussian and therefore naturally reflects geometric proximity. This yields a 1D ordering in which neighboring indices tend to correspond to nearby 3D locations. 
+
+Why Morton sorting helps. Compared with arbitrary indexing, Morton sorting introduces a deterministic spatial structure into the sequence without requiring it-erative refinement. This makes it particularly suitable for large GS models, where efficiency is essential. More importantly, the resulting permutation is not used only for the mean positions: it is consistently applied to all remaining Gaussian attributes, so their values remain aligned under the same geometry-aware order. Although these attributes are not reordered by their own semantics, the shared permutation preserves cross-attribute correspondence and provides a locality-aware basis for the subsequent 2D packing stage. 
+
+2.4 Phase II: Structured 2D Morton Mapping 
+
+Limitations of row-major reshaping. A straightforward way to convert the 1D sorted sequence into a 2D map is row-major reshaping. However, this strategy pre-serves continuity only within each row and ignores neighborhood relations across row boundaries. As a result, adjacent 1D indices may be placed far apart in the 2D grid, weakening local aggregation and limiting the potential gain from block-based coding. 
+
+2D Morton mapping principle. To better align the 2D layout with the spatial coherence established in Phase I, we construct a Morton-based mapping table on the 2D grid. Let the 2D image size be K × K, where K is a power-of-two or a configurable grid size. For each pixel position ( u, v ), we compute a 2D Morton index by interleaving the binary representations of u and v:
+
+T (u, v ) = I2D(u, v ), (6) where I2D(·) denotes the 2D bit-interleaving operator. This mapping assigns consec-utive 1D indices to spatially neighboring pixels, thereby producing a 2D arrangement that is more consistent with the locality-preserving order from Phase I. Algorithm 1: Dual-phase Morton Spatial Sorting for 3DGS Attribute Map-ping 
+
+Input: Gaussian splats G = {gi}Ni=1 , where each gi = {μi, si, qi, α i, ci}; 2D map size K × K
+
+Output: Structured 2D feature maps for all Gaussian attributes  
+
+> 1
+
+Phase I: 1D Morton sorting ; 
+
+> 2
+
+for i ← 1 to N do  
+
+> 3
+
+Quantize the 3D mean position μi = ( xi, y i, z i);  
+
+> 4
+
+Compute Morton code Mi ← I 3D(xi, y i, z i);  
+
+> 5
+
+Sort all splats in ascending order of {Mi}Ni=1 ; 
+
+> 6
+
+Obtain permutation index π from the sorted order;  
+
+> 7
+
+Phase II: 2D Morton mapping ; 
+
+> 8
+
+for j ← 1 to N do  
+
+> 9
+
+Compute 2D pixel coordinate ( uj , v j ) using Morton-based mapping;  
+
+> 10
+
+Store correspondence Φ( π(j)) ← (uj , v j );  
+
+> 11
+
+Construct 2D mapping table Φ from the correspondence above;  
+
+> 12
+
+Attribute reordering and packing ; 
+
+> 13
+
+for j ← 1 to N do  
+
+> 14
+
+Reorder all attributes of gπ(j) using the same permutation π; 
+
+> 15
+
+Place reordered attributes into the 2D feature maps according to Φ( π(j));  
+
+> 16
+
+return Structured 2D feature maps; 
+
+Mapping table construction. Let Φ( ·) denote the final index mapping function. Then each sorted Gaussian index is mapped to a 2D coordinate as Φ( π(i)) = ( ui, v i). (7) The mapping table is constructed once and reused across frames to ensure consis-tent attribute layouts over time. Such consistency is important for video coding, since it stabilizes the spatial statistics of the generated feature maps and makes the compression process more predictable. 
+
+Block structure and coding advantage. By combining 1D Morton sorting with 2D Morton reshaping, the proposed method yields feature maps with stronger local aggregation and more regular block structures. This reduces abrupt discontinuities in the rasterized domain and increases the likelihood that nearby pixels correspond to spatially adjacent Gaussians. As a result, the generated maps are better aligned with the assumptions exploited by conventional block-based codecs, which can improve prediction efficiency, transform compactness, and entropy coding effectiveness. (a) Rate-PSNR (RGB) (b) Rate-PSNR (YUV) (c) Rate-SSIM (YUV) 
+
+> Figure 2: Average RD performance of different spatial sorting methods in GSCodec Studio for various 1F and NF test sequences.
+
+3 Experimental Results 
+
+3.1 Experimental Settings 
+
+We conduct our experiments on the GSCodec Studio platform [8], which supports three spatial sorting implementations, including PLAS, Morton, and the proposed dual-phase Morton sorting method. The test platform is equipped with an NVIDIA Tesla V100 SXM2 32GB GPU and an Intel(R) Xeon(R) Platinum 8163 CPU @ 2.50GHz with 12 cores. The experiments are performed on the 1F (static scene, single-frame) and NF (dynamic scene, multi-frame) sequences from the MPEG com-mon testing condition [9]. For performance evaluation, we use both objective quality metrics and coding efficiency metrics. Reconstructed quality is assessed using PSNR and SSIM in both RGB and YUV domains, while bitrate is reported in Mbps. We compare our method with the conventional codec HM 18.0 (HEVC reference software) and two sorting baselines, PLAS and Morton, to comprehensively evaluate both coding performance and sorting efficiency. 
+
+3.2 Experimental Analysis 
+
+3.2.1 Rate-Distortion Performance 
+
+As shown in Figure 2, our proposed spatial sorting method generally achieves better rate-distortion performance than PLAS and Morton across different test sequences in GSCodec Studio. These results suggest that the proposed sorting strategy can help preserve spatial correlation among Gaussian primitives during compression, thereby improving bitstream compactness and coding efficiency in many cases. 
+
+3.2.2 BD-Rate Savings 
+
+Table 1 summarizes the BD-rate savings of the proposed method over Morton and PLAS. Overall, the proposed method achieves average gains of 1.29% , 1.69% , and 
+
+3.19% over Morton, and 1.15% , 0.88% , and 0.45% over PLAS in terms of RGB-PSNR, YUV-PSNR, and YUV-SSIM, respectively. These results indicate improved rate-distortion efficiency on average across the evaluated datasets. Nevertheless, the performance is not uniform across all sequences. Some chal-lenging content, such as gymnast and flowerdance , exhibits noticeable BD-rate losses, Table 1: BD-rate comparison between Morton/PLAS and the proposed method on forward-facing and object-centric sequences. 
+
+Sequence Morton v.s. Proposed PLAS v.s. Proposed RGB-PSNR YUV-PSNR YUV-SSIM RGB-PSNR YUV-PSNR YUV-SSIM NF: Forward facing sequences 
+
+bartender tracked -2.77% -3.31% -4.21% -0.25% -0.40% -0.46% cinema tracked -5.84% -6.30% -6.76% -3.33% -3.30% -3.63% breakfast tracked -1.33% -1.51% -5.18% 2.00% 2.72% -2.60% 
+
+Average -3.31% -3.71% -5.38% -0.53% -0.33% -2.23% 1F: Forward facing sequences 
+
+bartender semitracked 1.86% 1.02% -1.21% 0.15% -1.14% 1.06% cinema semitracked -3.51% -4.04% -4.87% -6.52% -6.91% -5.01% breakfast semitracked 3.77% 3.19% -2.40% 6.06% 7.87% 0.44% breakfast untracked -0.31% -0.80% -2.88% -7.00% -6.86% -0.82% breakdance untracked -1.45% -1.71% -2.81% 1.54% 2.09% 4.47% bartender tracked -1.36% -1.91% -3.74% -4.44% -3.51% -4.15% cinema tracked -2.39% -3.19% -3.97% -8.53% -8.25% -6.24% breakfast tracked 4.43% 4.33% -1.52% 5.34% 6.69% 1.08% 
+
+Average 0.13% -0.39% -2.93% -1.68% -1.25% -1.15% 1F: Object-centric sequences 
+
+manwithfruit tracked -2.76% -2.74% -3.12% -4.32% -4.26% -8.24% lego ferrari -0.79% -0.93% -1.08% 5.87% 5.81% 7.47% lego bugatti -0.23% -0.40% -0.78% 5.22% 5.20% 6.46% cricket player -1.67% -1.79% -1.50% -1.44% -0.73% 6.74% plant -0.21% -0.39% -1.37% 3.63% 3.93% 7.51% solo tango female -0.93% -1.42% -1.87% 6.76% 6.58% 11.45% solo tango male -2.50% -2.89% -1.77% 7.59% 7.61% 12.29% tango duo -0.76% -0.96% -0.91% 1.61% 2.78% 8.98% tennis player -2.18% -2.55% -2.41% -0.33% 0.08% 2.89% library -1.46% -1.83% -2.87% -5.34% -5.90% -5.95% flowerdance 1.61% 1.41% 0.43% -12.60% -12.26% -9.43% gymnast 3.76% 2.63% 2.16% -21.73% -21.54% -15.75% 
+
+Average -0.68% -0.99% -1.26% -1.26% -1.06% 2.04% Total Average -1.29% -1.69% -3.19% -1.15% -0.88% -0.45% 
+
+likely due to complex motion and highly non-uniform appearance distributions, which reduce the alignment between the Morton-based ordering and the underlying com-pressibility structure. These results indicate that while the proposed method is effec-tive on average, its benefit can vary depending on scene characteristics. 
+
+3.2.3 Sorting Efficiency Comparisons 
+
+Table 2 reports the average sorting time of PLAS, Morton, and the proposed method on forward-facing and object-centric sequences from scattered Gaussian attributes to structured video maps. Overall, the proposed method substantially reduces sorting time compared with PLAS, decreasing the total average from 18,698.91 ms to 144.63 ms, which indicates a significant efficiency advantage. Compared with Morton, the proposed method incurs a moderate increase in sorting time, rising from 24.51 ms to 144.63 ms, because it performs Morton sorting twice to obtain a better trade-off between efficiency and sorting quality. Table 2: Sorting efficiency comparisons (millisecond) of Morton, PLAS, and the proposed method. 
+
+Sequence Frame GOPs Gaussian Number Map Size PLAS Morton Proposed NF: Forward facing sequences 
+
+bartender tracked 32 2 567724/585036 760 ×760/768 ×768 30284.78 71.32 237.54 cinema tracked 32 2 423249/421615 656 ×656 21991.43 53.15 213.38 breakfast tracked 32 2 528154/523766 728 ×728 27492.41 66.62 225.94 
+
+Average Sorting Time 26589.54 63.70 225.62 1F: Forward facing sequences 
+
+bartender semitracked 1 1 784455 888 ×888 20689.40 6.56 97.31 cinema semitracked 1 1 682712 832 ×832 18083.88 5.74 89.23 breakfast semitracked 1 1 531263 736 ×736 14759.12 4.46 86.86 breakfast untracked 1 1 500658 712 ×712 12430.18 4.19 80.10 breakdance untracked 1 1 500000 712 ×712 10733.41 4.21 83.09 bartender tracked 1 1 567724 760 ×760 13292.44 4.76 84.92 cinema tracked 1 1 423249 656 ×656 11709.94 3.55 78.80 breakfast tracked 1 1 528154 728 ×728 13635.11 4.47 85.20 
+
+Average Sorting Time 14416.69 4.74 85.69 1F: Object-centric sequences 
+
+manwithfruit tracked 1 1 46011 216 ×216 4153.99 2.19 6.23 lego ferrari 1 1 198764 448 ×448 4511.31 2.43 21.36 lego bugatti 1 1 199403 448 ×448 4629.17 2.46 19.65 cricket player 1 1 196286 448 ×448 4641.33 2.43 19.62 plant 1 1 189736 440 ×440 3643.90 2.48 19.31 solo tango female 1 1 187896 440 ×440 3761.05 2.42 20.70 solo tango male 1 1 183470 432 ×432 3444.72 2.39 19.41 tango duo 1 1 199053 448 ×448 4537.10 2.47 20.58 tennis player 1 1 192108 440 ×440 4284.33 2.40 19.59 library 1 1 3053189 1752 ×1752 95133.86 26.39 1112.15 flowerdance 1 1 1000000 1000 ×1000 25437.38 6.55 95.61 gymnast 1 1 1000000 1000 ×1000 22907.77 6.56 96.66 
+
+Average Sorting Time 15090.49 5.10 122.57 Total Average Sorting Time 18698.91 24.51 144.63 
+
+3.2.4 Subjective Comparisons for Different Reorganized Attribute Videos 
+
+As shown in Figure 3, the proposed sorting algorithm produces more compact and locally clustered GS attribute videos, which are better aligned with block-based video coding. In contrast, PLAS yields a less compact layout, and Morton sorting still leaves a more scattered arrangement. Overall, the proposed scheme generates more coding-friendly attribute videos and may improve compression performance. 
+
+4 Conclusion 
+
+This paper proposes a dual-phase Morton sorting algorithm for efficient 3D Gaussian Splatting coding. By combining Morton-based 1D indexing with a structured 2D map-ping table, the proposed method reorganizes unstructured Gaussian attributes into block-wise feature maps with improved spatial coherence and local correlation. This structured representation is well suited for conventional block-based video codecs, enabling effective compression while maintaining compatibility with existing stan-dards. Experimental results demonstrate that the proposed approach achieves a fa-vorable trade-off between coding performance and computational complexity, with improved rate-distortion performance and reduced runtime compared with existing sorting strategies. These results suggest that dual-phase Morton sorting is a practical Figure 3: Visualization for different attribute videos using different sorting/reorganization methods from the tracked Bartender sequence. 
+
+and scalable solution for 3DGS compression, and it provides a promising direction for standards-compliant representation and coding of Gaussian-based scene data. 
+
+References 
+
+[1] B. Kerbl, G. Kopanas, T. Leimk¨ uhler, and G. Drettakis, “3d gaussian splatting for real-time radiance field rendering,” ACM Transactions on Graphics , vol. 42, no. 4, July 2023. [2] M. T. Bagdasarian, P. Knoll, Y. Li, F. Barthel, A. Hilsmann, P. Eisert, and W. Morgen-stern, “3DGS.zip: A Survey on 3D Gaussian Splatting Compression Methods,” Com-puter Graphics Forum , p. e70078, 2025. [3] M. S. Ali, C. Zhang, M. Cagnazzo, G. Valenzise, E. Tartaglione, and S.-H. Bae, “Com-pression in 3d gaussian splatting: A survey of methods, trends, and future directions,” 
+
+IEEE Transactions on Circuits and Systems for Video Technology , pp. 1–1, 2026. [4] G. J. Sullivan, J.-R. Ohm, W.-J. Han, and T. Wiegand, “Overview of the High Efficiency Video Coding (HEVC) standard,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 22, no. 12, pp. 1649–1668, 2012. [5] B. Bross et al. , “Overview of the Versatile Video Coding (VVC) standard and its ap-plications,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 31, no. 10, pp. 3736–3764, 2021. [6] W. Morgenstern, F. Barthel, A. Hilsmann, and P. Eisert, “Compact 3d scene represen-tation via self-organizing gaussian grids,” in Computer Vision – ECCV 2024 . Cham: Springer Nature Switzerland, 2025, pp. 18–34. [7] G. M. Morton, “A computer oriented geodetic data base; and a new technique in file sequencing,” IBM Ltd., Ottawa, Canada, Technical Report, 1966. [8] S. Li, C. Wu, H. Li, X. Gao, Y. Liao, and L. Yu, “Gscodec studio: A modular framework for gaussian splat compression,” IEEE Transactions on Circuits and Systems for Video Technology , vol. 36, no. 4, pp. 5483–5496, 2026. [9] “Common test conditions for gaussian splat coding,” ISO/IEC JTC 1/SC 29/WG 7, Online N1414, Jan. 2026.
