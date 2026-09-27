@@ -1,0 +1,313 @@
+Title: ArborSplat: Online Semantic Gaussian Splatting SLAM for Orchards
+
+URL Source: https://arxiv.org/pdf/2609.26315v1
+
+Published Time: Wed, 23 Sep 2026 01:45:00 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# ArborSplat: Online Semantic Gaussian Splatting SLAM for Orchards 
+
+Alessandro Masini 1, Matteo Frosi ∗1, Mirko Usuelli 1, and Matteo Matteucci 1
+
+This work has been submitted to the IEEE for possible publication. Copyright may be transferred without notice, after which this version may no longer be accessible. 
+
+Abstract — Orchard robots need maps that preserve small but semantically important structures such as trunks, trellises, and fruit. 3D Gaussian Splatting (3DGS) SLAM achieves high photometric fidelity. However, its optimization remains appearance-driven, and transferring image semantics to 3D points is unreliable for thin structures, whose pixels may receive depth from background surfaces. We present ArborSplat, an online semantic 3DGS SLAM system that tracks with LiDAR odometry and optimizes semantics directly on the Gaussian map, constrained by class-specific height bands above a ground plane fitted to each keyframe’s stereo point cloud, and fuses multi-view evidence into a semantic point cloud online while rejecting labels inconsistent with the local ground surface or with monocular depth. Class-constrained refinement reserves Gaussian capacity for underrepresented structures and, under reduced budgets, increases training-view accuracy on tree classes. We evaluate the approach on apple and pear orchards during dormancy, flowering, and harvesting. On full routes, it keeps ATE below 0.5 m on all 12 traversals. On shared 301-frame segments, it exceeds SGS-SLAM and GS3LAM by 0.23 to 0.50 training-view and 0.15 to 0.36 held-out mIoU while running 1.7 to 7.5 times faster, whereas SemGauss-SLAM runs out of GPU memory on all six. 
+
+I. INTRODUCTION Labor shortage is becoming a limiting factor for agri-cultural production [1], pushing orchards toward robotic automation throughout the year. Orchard tasks depend on structures that occupy a small fraction of the image: prun-ing in dormancy requires distinguishing woody structure from support wire, spraying requires separating canopy from trellis, and harvesting requires localizing fruit within both. Robots thus need maps that are semantic as well as spatial, that hold in every season, and whose quality is judged on these small structures rather than on dominant scene regions. 3D Gaussian Splatting (3DGS) [3] has enabled pho-torealistic maps to be built incrementally and efficiently within modern SLAM systems [4], [5], including recent Visual–LiDAR Gaussian SLAM approaches deployed in real orchards [6]. Existing orchard Gaussian maps, however, remain primarily optimized for geometric and photometric reconstruction and lack the explicit semantic information required for higher-level downstream robotic reasoning. Transferring image semantics to 3D points is unreliable for narrow structures: Peters et al. [7] report mIoU dropping from 66 .1 to 48 .1 after multi-view transfer, with narrow                     
+
+> ∗Corresponding author
+> 1All authors are with the Dipartimento di Elettronica, Infor-mazione eBioingegneria (DEIB), Politecnico di Milano, 20133 Mi-lano, Italy. Email:
+
+alessandro.masini@mail.polimi.it ;
+
+{name.surname }@polimi.it .
+
+classes such as poles among those that degrade. We address this by fusing multi-view evidence and gating labels with the local ground surface and monocular depth. Thin structures may also be systematically disadvantaged during map optimization: densification allocates new primi-tives according to reconstruction gradients [3], which, under a finite primitive budget, can favor large or highly textured regions. We therefore explicitly reserve refinement capacity for underrepresented semantic classes before distributing the remaining budget according to reconstruction demand. We call the resulting system ArborSplat, from the Latin 
+
+arbor (tree); its main contributions are as follows.  
+
+> •
+
+To our knowledge, the first online semantic Gaussian SLAM system for orchards , which jointly optimizes appearance and semantics within the Gaussian map without post-run refinement, extending semantic Gaus-sian SLAM beyond indoor RGB-D settings [8]–[10].  
+
+> •
+
+An online semantic point cloud , delivered alongside the Gaussian map, that fuses multi-view evidence and gates labels with the local ground surface and monocular depth, without 3D annotation, and is more accurate than naive transfer on all six sequences.  
+
+> •
+
+Class-constrained allocation of the Gaussian refinement budget , reserving new primitives for important but spa-tially limited structures, which improves training-view tree accuracy only under reduced budgets.  
+
+> •
+
+A class-resolved evaluation on training views and held-out frames across two species and three phenological stages, against state-of-the-art AgriGS-SLAM and three semantic Gaussian SLAM systems. II. RELATED WORK 
+
+Gaussian Splatting SLAM. Dense SLAM first adopted 3DGS [3] for indoor scenes observed by monocular or RGB-D cameras [4], [5], [11]. AgriGS-SLAM [6] later extended Gaussian mapping to challenging orchard environments us-ing LiDAR odometry and multi-camera reconstruction, yet its resulting map still encodes only geometry and appearance. 
+
+Semantic Gaussian mapping and capacity allocation. 
+
+Beyond geometry and appearance, maps increasingly carry a semantic layer derived from images. Following Semantic-NeRF [12], Gaussian representations have learned seman-tic and instance features [13], [14], and SGS-SLAM [8], GS3LAM [10], and SemGauss-SLAM [9] optimize seman-tics online, but in indoor RGB-D scenes where dense depth ties each pixel to a surface. Semantics now also steer map capacity in task-conditioned [15] and horticultural [16] arXiv:2609.26315v1 [cs.RO] 22 Sep 2026 Fig. 1. Overview of ArborSplat. LiDAR odometry (1) tracks every scan and selects keyframes (2). In a separate process, SAM 3 [2] (3) scores the text-prompted classes on the keyframe image, and the height prior (4) vetoes classes outside their height bands above a ground plane fitted to the stereo points, yielding per-pixel class probabilities and labels. The mapper keeps only the Gaussians near the keyframe on the GPU (5) and seeds new ones from its stereo points (6). Once its labels arrive, the keyframe is optimized until the next one is selected (7): the rendered image and the opacity-normalized class map are supervised by L1+SSIM and cross-entropy, and an optional class budget (dashed) constrains refinement. A helper process lifts the class probabilities to the stereo points, discards trunk observations lying behind monocular depth (8), votes in 10 cm voxels (9), and relabels as ground any voxel within 0.15 m of the local ground (10), updating the semantic point cloud after every keyframe. 
+
+mapping, yet only by separating targets from background, not by reserving capacity for several classes at once. 
+
+Semantic fusion for thin structures. In agriculture, semantic mapping has addressed fruit monitoring [17] and tree mapping [18], and orchard SLAM models trees as landmarks [19]. Semantic point clouds are typically built by projecting image predictions onto 3D points, aggregating them across views [7], and discarding points the camera cannot see [20]; this assumes that each pixel and its 3D point share a surface. Thin trunks and trellis posts violate this assumption: their pixels can take depth from the surface behind them, yielding wrong labels that visibility filtering cannot detect and multi-view agreement may reinforce. III. METHOD ArborSplat addresses these gaps in a single online pipeline. As shown in Fig. 1, camera poses are provided by LiDAR odometry based on scan-to-submap registration [21], with keyframes selected by translation and rotation thresh-olds (steps 1–2); the Gaussian map does not feed back into tracking, so semantic processing cannot affect the trajectory. The Gaussian map G = {gi}Ni=1 represents each primi-tive as gi = ( μi, Σi, σ i, ci, si), with position, covariance, opacity, appearance, and a view-independent semantic logit vector si ∈ RC over C = 6 classes: sky, ground, canopy, trunk, trellis, and fruit. Sky is assigned to pixels with no value in the precomputed monocular depth maps [22], and pixels that no class prompt explains receive an ignore index. Segmentation runs in a separate process, and each keyframe is optimized once its prediction is available, with a semantic target that depends only on its own image, stereo points, monocular depth, and the ground planes of earlier keyframes. Past keyframes are never optimized again. 
+
+A. Geometry-Constrained Semantic Supervision 
+
+Open-vocabulary segmentation can serve every species and phenological stage without retraining, but it predicts from the image alone and does not explicitly account for orchard geometry. We use a frozen promptable model [2] (step 3 in Fig. 1) with classes supplied as text prompts: each class is scored by the maximum, over its prompt’s detections, of detection score times mask probability, and the top-scoring class is selected without thresholding. We therefore constrain these scores with a simple height prior (step 4) at two levels: pixels and connected components. 
+
+Pixel level. For each keyframe, we fit a ground plane by RANSAC to its stereo point cloud, accepting only plausible tilt and camera height and refitting or falling back to the running median of earlier keyframes when the camera height deviates from it. Pixel heights above this plane must respect class-specific bands, a minimum for canopy and a crown ceiling for trunk: where stereo depth is valid and in range, a class outside its band has its score set to −∞ , so the pixel takes its best remaining class instead of being discarded. 
+
+Component level. The segmenter can read bare trunks as trellis posts, and no per-pixel height band can reliably separate the two, since both start at the ground; posts, however, typically reach much higher. A connected trellis 2component therefore keeps its predicted class only if its tallest valid pixel reaches a minimum height, and components without valid in-range depth abstain. Sky is assigned last, overriding every other label, and the segmenter sees the full image before sky masking, preserving thin backlit structures. 
+
+B. Semantic Gaussian Mapping 
+
+Memory management (steps 5–6 in Fig. 1) follows AgriGS-SLAM [6], with fixed 0.1 m voxels: only Gaussians sharing a voxel with the current keyframe’s stereo points stay active on the GPU, the others being kept dormant on the CPU. Learning semantics on this map (step 7) raises two issues, addressed here: rendered logits fade on thin structures, and learned loss weights downweight the semantic term. 
+
+Semantic field. As in semantic Gaussian representations [13], [14] and SLAM [9], every Gaussian carries a semantic state; unlike a distilled feature, si costs only C floats per primitive and yields a class field by rendering, without a decoder. The class field is rendered by a second rasterization pass over the same positions, covariances, and opacities, without spherical harmonics. For pixel u, let (i1, . . . , i Ku )
+
+denote the Gaussians covering u front-to-back and Gi(u)
+
+the projected 2D Gaussian. Defining the compositing weight 
+
+wik (u) = σik Gik (u) Q 
+
+> ℓ<k
+
+(1 − σiℓ Giℓ (u)) , the semantic field and accumulated opacity are 
+
+S(u) = 
+
+> Ku
+
+X
+
+> k=1
+
+wik (u)sik , A(u) = 
+
+> Ku
+
+X
+
+> k=1
+
+wik (u). (1) Low accumulated opacity attenuates the logits toward zero and their softmax toward uniform, particularly on thin or incomplete structures such as trunks and trellis. We therefore normalize the composited logits before the softmax, 
+
+ˆp(u) = softmax 
+
+ S(u)max ( A(u), ϵ )
+
+
+
+, ϵ = 10 −3, (2) which leaves fully opaque pixels unchanged. With y(u)
+
+the segmenter’s prediction after the geometric constraints of Sec. III-A and Ω the pixels without the ignore index, the semantic loss is 
+
+Lsem = − 1
+
+|Ω|
+
+X
+
+> u∈Ω
+
+wy(u) log ˆ py(u)(u), (3) where the class weights wc are uniform in all reported runs. 
+
+Loss balancing. The photometric term of [6], Lc =0.8 L1 + 0 .2 (1 − SSIM) , and Lsem are combined by ho-moscedastic uncertainty weighting [23], 
+
+L = X
+
+> k
+
+ 12 e−vk Lk + 12 vk
+
+ , (4) where each vk is a learnable scalar log-variance initialized at zero. Left free, (4) downweights whichever term carries the larger residual, and a semantic field supervised only through an alpha-composited render never competes with the photometric term on that basis. We therefore pin the semantic log-variance at vsem = −2.5, a weight of 12 e2.5 ≈ 6.1, while the photometric one stays learnable. The logit vector si is updated only through Lsem while its Gaussian is active and visible from the optimized keyframe; the fusion algorithm described later in Sec. III-D never modifies it. 
+
+C. Semantics-Aware Map Refinement 
+
+An incremental mapper introduces a finite number of prim-itives at each refinement, and conventional densification [3], [6] ranks candidates by reconstruction gradients, so large, textured regions such as ground and canopy can dominate the budget while thin but important classes receive too little capacity. We therefore condition refinement on class (dashed box in Fig. 1), taking a candidate’s class not from its logits, whose alpha-composited supervision makes their argmax too diffuse, but from its projection in the current keyframe’s corrected label map, available because only visible primitives accumulate densification gradients. 
+
+Class-budgeted allocation. Let B be the refinement bud-get and Dc the candidates (demand) of class c, with optional cap κc ∈ [0 , 1] and floor share ϕc ≥ 0. First, each class is bounded by ac = min( |D c|, ⌊κcB⌋), or ac = |D c| without a cap, retaining the highest-gradient candidates within capped classes. Second, floors reserve 
+
+qc = min  ⌊B ¯ϕc⌋, a c
+
+, ¯ϕc = ϕc
+
+P 
+
+> c′
+
+ϕc′
+
+. (5) Finally, the remaining B − P 
+
+> c
+
+qc slots are filled by global gradient rank within the bounds ac, and unused reservations return to this pool; a cap may leave the refinement below B
+
+if the other classes lack demand. Since (5) depends only on the ratios between ϕc, the floor policy is scale-invariant and independent of B. Under reduced budgets, floors increase training-view accuracy on tree classes, whereas at the full budget they reduce it (Sec. V-C), so the main configuration, which uses the full budget, allocates without constraints. 
+
+D. 3D Label Transfer 
+
+Alongside the Gaussian map, a helper process builds the semantic point cloud (label transfer in Fig. 1). Naive transfer labels a stereo point x by its first observation, 
+
+c(x) = arg max c pi(c | x), with pi the height-constrained class posterior at its pixel in keyframe i; this is unreliable on thin structures, whose pixels may take depth from the surface behind them. After every keyframe, the helper thus relabels the cloud in three steps: an overshoot gate first discards trunk observations lying behind monocular depth (step 8), a vote then fuses the remaining ones per voxel (step 9), and a height gate finally relabels near-ground voxels as ground (step 10), fixing errors that views agree on. 
+
+Overshoot gate. In each view, monocular depth [22] is first mapped to the stereo depths by a trimmed least-squares affine fit, and trunk observations more than t = 0 .5 m behind the estimated surface are discarded; t is the value most frequently selected by two-fold temporal cross-validation on the reference frames of Sec. IV in earlier experimental runs. 
+
+Evidence-weighted multi-view voting. Points in the same cell of a fixed 10 cm voxel grid are treated as observations of the same surface. For a voxel x with observations V(x),
+
+c⋆(x) = arg max  
+
+> c
+
+π−βc
+
+X
+
+> i∈V (x)
+
+wi pi(c | x), β = 12 , (6) 3where wi increases with segmentation confidence and de-creases with range beyond 3 m, and πc is class c’s share of accumulated evidence, so that π−βc partially offsets how often dominant classes are observed, since β = 1 can overemphasize rare classes. 
+
+Height gate. Each voxel’s height h(x) is measured above the local ground, the median height of the ground-labeled voxels in its 1 m 2 horizontal cell: 
+
+c(x) ← GND if c(x)̸ = GND , h (x) < τ h = 0 .15 m . (7) The threshold separates trunk labels projected onto the ground behind the tree row from those on the row itself; cells with fewer than ten ground-labeled voxels remain unchanged. IV. EXPERIMENTAL SETUP 
+
+A. Data and protocol 
+
+We use the field dataset of [6], whose six sequences cover apple and pear orchards at dormancy, flowering, and harvesting, each with a training and a validation traversal and ground-truth poses. All experiments use only its inline cam-era; adding the platform’s two side cameras did not improve semantics in any test. The monocular depth maps [22] come precomputed with the dataset, and our timings do not include computing them. Sky pixels are black in the photometric target, and their LiDAR returns are discarded. 
+
+Semantic evaluation reference. Semantics are evalu-ated against an offline reference produced by the same segmenter [2] and height bands as our system, but with prompts and post-processing tuned per species on separate manually annotated frames. Held-out scores use 157 inline-camera reference frames of the validation traversals (17 to 36 per sequence), at least 1 s and 0.5 m apart, disjoint from the tuning portion of each row, and rendered at their odometry poses without registration to the ground truth; training views use a reference produced identically for every training keyframe. Except for the segments of Sec. IV-C, results come from full-length runs. 
+
+B. Metrics 
+
+Rendering. We report PSNR, SSIM, and LPIPS (AlexNet) over the full image, averaged over training keyframes right after their last optimization step ( training view ) and over validation keyframes (5 to 20 per sequence) rendered from the completed map without prior optimization ( novel view ). Since sky is black in the photometric target, rendered content there is penalized. 
+
+Semantics. Pixel labels are the argmax of the rendered semantic channels (for the baselines, their released decod-ing), with pixels of opacity below 0.1 assigned to sky. Per-class IoU comes from a confusion matrix pooled over all evaluated pixels of a sequence, excluding reference pixels of structures outside the orchard. We report mIoU over all six classes and structural mIoU over ground, canopy, trunk, and trellis, leaving out classes absent from both reference and prediction. The semantic cloud is scored at the same frames by projecting voxel centers with a z-buffer onto the covered pixels. 
+
+Trajectory. Absolute trajectory error (ATE) is the RMSE of estimated positions against the ground truth after SE(3) Umeyama alignment [24] without scale correction, over robot positions at keyframes for our system and AgriGS-SLAM and over inline-camera positions at every frame for the semantic baselines; training and validation traversals are aligned separately, and odometry stalls remain in the error. 
+
+Variability. Three repeats of the main configuration on pear harvesting on the same machine give a per-metric noise floor (e.g., 36% of the mean for held-out trunk IoU versus 1.6% for ground); ablation changes beyond three standard deviations are treated as effects, and trajectories are deterministic across repeats. 
+
+C. Baselines and ablations 
+
+Photometric orchard SLAM. We run AgriGS-SLAM [6] (A GRI GS) on all six sequences from its released code with two changes: adaptive keyframing is disabled, so both systems insert a keyframe every 1.0 m or 15 ◦, and a logging fault that otherwise skips keyframes is guarded. It keeps its budget of 50k new Gaussians per refinement (ours: 75k) and its arrival-driven scheduler: like ours, it optimizes each keyframe until odometry provides the next, so step counts depend on hardware and workload (medians of 10 to 15 per keyframe, ours 9 to 15). Its maps are scored with our protocol, since its own evaluation masks the sky; apart from the trajectory errors reported in [6], all AgriGS results are our re-runs. Unlike the baseline, our DLO registers every LiDAR scan rather than only camera-synchronized ones and uses a second-order motion prior. For Photo-SLAM [25], Splat-SLAM [26], PINGS [27], OpenGS-SLAM [28], and DLO [21] with 3DGS [3], we use the trajectory errors and, for the first four, the PSNR that [6] reports on the same six sequences. 
+
+Semantic Gaussian SLAM. We also run SGS-SLAM [8], GS3LAM [10], and SemGauss-SLAM [9] from their released code and configurations, changing only data loading, the GPU build, and the export of training-view renders. All three receive the inline images at 960 × 600 , stereo depth, and per-frame labels from our segmenter and prompts, but not our height prior, fusion, or gates, and each estimates its own poses. Because their per-frame optimization makes full routes costly, all methods process the same 301 consecutive frames of each sequence (40.4 to 48.6 m of path), placed where the most held-out reference frames lie within 0.75 m and 30 ◦ of a segment camera. Held-out scores use those reference frames, and training-view scores use the keyframes of our segment runs, rendered by every method right after it optimizes that frame. Where our truncated run drifts on the validation traversal (apple segments and pear flowering), held-out frames are rendered at the poses of our full-route run, registered to the segment map on shared training frames without ground truth. 95% confidence intervals come from 10,000 paired bootstrap resamples over the 14 to 26 held-out frames and 39 to 47 training views of each segment. 
+
+Ablations. On pear harvesting, each variant of Table IV changes one component: no height prior ; no opacity nor-
+
+4TABLE I COMPARISON WITH SEMANTIC GAUSSIAN SLAM ON A 301-FRAME SEGMENT OF EACH SEQUENCE (INLINE CAMERA ), EVERY SYSTEM ESTIMATING ITS OWN POSES : MIOU/ STRUCTURAL M IOU ON TRAINING VIEWS (TV) AND HELD -OUT FRAMES (HO), TRAINING ATE, AND WALL -CLOCK TIME .ALL METHODS RECEIVE THE SAME IMAGES , STEREO DEPTH , AND SEGMENTER LABELS . B OLD : BEST ; –: NO COMPLETED RUN .                                                                                                    
+
+> Pear Apple Dormancy Flowering Harvesting Dormancy Flowering Harvesting Method TV HO TV HO TV HO TV HO TV HO TV HO
+> mIoU/structural mIoU ↑
+> SemGauss-SLAM [9] out of memory, frame 256 out of memory, frame 224 out of memory, frame 256 out of memory, frame 256 out of memory, frame 224 out of memory, frame 192 SGS-SLAM [8] .334/.291 .056/.021 .372/.364 .080/.023 .438/.457 .144/.125 out of memory, frame 258 .318/.327 .115/.110 .394/.431 .182/.193 GS3LAM [10] .247/.193 .090/.009 .314/.288 .114/.050 .323/.329 .206/.196 .356/.298 .166/.123 .293/.307 .109/.063 .319/.340 .187/.210 ArborSplat .742/.687 .407/.328 .775/.729 .435/.371 .665/.734 .421/.457 .756/.730 .409/.368 .748/.712 .397/.371 .630/.657 .339/.373
+> ATE [m] ↓/time [min] ↓
+> SemGauss-SLAM ––––––SGS-SLAM 7.99 / 112 17.42 / 150 3.48 / 130 –5.28 / 133 5.00 / 129 GS3LAM 22.15 / 58 8.09 / 64 3.06 / 48 5.17 / 39 8.31 / 57 3.72 / 54 ArborSplat 0.06 /16 0.07 /20 0.06 /19 0.12 /22 0.06 /23 0.14 /26
+
+malization (2); learned vsem instead of the pinned value; and no semantic loss , which leaves segmentation running. OURS -NS (no semantics), run on all six sequences, disables segmentation, the semantic loss, and the semantic point cloud. Class-budgeted refinement is evaluated at B = 75 kwith a 15% ground cap, trunk and trellis floors (5), or both (one run each), and at B = 6 k and 12 k with a 2% sky cap, with and without floor shares of 0.17, 0.35, 0.25, 0.17, and 0.06 for ground, canopy, trunk, trellis, and fruit (three paired runs each). 
+
+D. Implementation details 
+
+The segmenter [2] runs in a separate process on the same GPU with a 1008 ×1008 input and one text prompt per class for both species and all stages (“grassy orchard ground”, “tree branches and leaves”, “tree trunk”, “vertical pole and wire”, and “round fruit”); its class scores supervise the map at 240 ×150 . Ground planes fitted to the stereo points allow at most 25 ◦ of tilt and 0.7 to 2.0 m of camera height. The bands are canopy ≥ 0.7 m and trunk ≤ 1.0 m for pear and canopy 
+
+≥ 0.6 m and trunk ≤ 0.9 m for apple, the latter derived from row geometry, and trellis components must reach 0.8 m. Each step adds up to B = 75 k Gaussians while fewer than 3.6 ×
+
+10 6 are active. The helper fuses every keyframe, including validation keyframes, as soon as it is uploaded. All systems run on NVIDIA GeForce RTX 4090 GPUs and AMD EPYC 7763 CPUs; variants are only compared with runs on the same machine. Code will be released upon acceptance. V. RESULTS We compare ArborSplat with semantic Gaussian SLAM (Sec. V-A), evaluate it over full routes (Sec. V-B), and ablate its components (Sec. V-C). 
+
+A. Comparison with Semantic Gaussian SLAM 
+
+Held-out views. The baselines struggle with orchard-scale mapping (Table I). SemGauss-SLAM exhausts the 24 GB GPU in bundle adjustment on all six segments, and SGS-SLAM during mapping on one. Where GS3LAM and SGS-SLAM complete, their RGB-D tracking, designed for indoor scenes, drifts by 3.06 to 22.15 m, against 0.06 to 0.14 m for our LiDAR odometry. In Fig. 3, the robot drives down one alley, turns at the row end, and returns along the next: ArborSplat retraces this path, including the turn, whereas both baselines cut through tree rows, and SGS-SLAM ends inside a row in both segments. ArborSplat therefore leads on the held-out frames of every completed segment by 0.15 to 0.36 mIoU and 0.16 to 0.35 structural mIoU, with all 95% intervals excluding zero. Thin structures account for much of this margin: on the held-out frames of the pear harvesting segment, ArborSplat reaches trunk and trellis IoU of 0.12 and 0.28, while neither baseline exceeds 0.01. 
+
+Training views. Drift alone does not explain this gap: on views rendered right after their optimization, where tracking errors matter least, ArborSplat surpasses the baselines on every completed segment by +0 .23 to +0 .50 mIoU and 
+
++0 .23 to +0 .49 structural mIoU, with all 95% intervals excluding zero, and reaches trunk IoU of 0.44 to 0.62 against at most 0.12 for any baseline, whose maps lose most thin structures. In Fig. 2, ArborSplat keeps each pear trunk as a continuous line from canopy to ground and recovers both apple trunks in the zoom, where SGS-SLAM leaves only fragments and the render of GS3LAM breaks into speckles; it still misses the thin trellis stake beside them. 
+
+Efficiency. This accuracy does not cost time: ArborSplat is also the fastest system, 1.7 to 3.7 times faster than GS3LAM and 5.0 to 7.5 times faster than SGS-SLAM where they complete (Table I), although only its time includes segmentation, the validation traversal, and the semantic point cloud. 
+
+B. Full-Route Mapping across Species and Seasons 
+
+Tracking. Over full routes, LiDAR odometry keeps Ar-borSplat below 0.5 m ATE on all 12 traversals, and dis-abling semantics leaves all trajectories unchanged. Arbor-Splat achieves lower ATE than AgriGS-SLAM on all six training traversals of Table II and on four of six valida-tion traversals, and AgriGS-SLAM loses track on apple harvesting in our replay. The general-purpose 3DGS-SLAM systems evaluated in [6] reach 5.3 to 171.5 m (Table III), and our training ATE is lower than the values reported for DLO+3DGS and AgriGS-SLAM on all six sequences. 5TABLE II FULL -ROUTE RESULTS (INLINE CAMERA ): ATE, PSNR OF TRAINING KEYFRAMES AFTER THEIR LAST STEP AND OF VALIDATION KEYFRAMES ,
+
+SEMANTIC ACCURACY ON TRAINING VIEWS (TV) AND HELD -OUT FRAMES (HO), AND STRUCTURAL M IOU OF THE SEMANTIC POINT CLOUD WITH NAIVE TRANSFER AND OUR FUSION . A GRI GS: A GRI GS-SLAM [6] SCORED WITH OUR PROTOCOL ; O URS -NS: A RBOR SPLAT WITHOUT SEMANTICS .BOLD : LOWER ATE; MORE ACCURATE POINT CLOUD . † ARBOR SPLAT : MEAN OF THREE RUNS .ATE train [m] ↓ ATE val [m] ↓ PSNR train [dB] ↑ PSNR val [dB] ↑ Semantics ↑ Point cloud ↑
+
+Sequence AGRI GS Ours AGRI GS Ours AGRI GS OURS -NS Ours AGRI GS OURS -NS Ours TV mIoU HO mIoU HO struct. naive fused Apple dormancy 0.392 0.389 0.306 0.481 21.60 21.34 19.91 14.60 14.32 13.70 0.698 0.341 0.311 0.183 0.195 
+
+Apple flowering 4.404 0.264 0.706 0.163 23.09 22.09 20.63 14.78 14.17 13.50 0.680 0.345 0.329 0.181 0.192 
+
+Apple harvesting 7.983 0.444 0.306 0.344 22.94 22.74 21.29 15.99 15.65 14.61 0.614 0.338 0.396 0.167 0.174 
+
+Pear dormancy 0.252 0.082 0.258 0.068 22.47 23.13 21.60 16.30 17.08 16.76 0.709 0.346 0.269 0.140 0.149 
+
+Pear flowering 0.280 0.088 0.290 0.055 22.96 23.76 22.50 18.74 18.79 18.72 0.758 0.356 0.299 0.174 0.185 
+
+Pear harvesting † 0.332 0.161 0.229 0.111 23.21 22.73 21.54 16.61 16.31 15.27 0.655 0.317 0.346 0.185 0.196 
+
+Mean 2.274 0.238 0.349 0.204 22.71 22.63 21.25 16.17 16.05 15.43 0.686 0.340 0.325 0.172 0.182 
+
+Fig. 2. Selected training views of the harvesting segments of Table I, rendered right after each method optimizes the frame, with zooms of the dashed boxes. The baselines lose most thin structures, which ArborSplat largely recovers. 
+
+Fig. 3. Trajectories of the runs in Fig. 2 after SE(3) Umeyama alignment to the ground truth, over the semantic point cloud built online by ArborSplat (highest voxel per 0.1 m cell), whose canopy rows and trellis posts outline the orchard. Squares: start; dots: end of each trajectory. 
+
+Rendering. Semantics costs some image quality, but Ar-borSplat still renders better than the general-purpose systems of [6]. Without semantics, our mapper matches AgriGS-SLAM in mean PSNR at comparable step budgets (Table II) 6Fig. 4. Selected training views of ArborSplat on full routes across species and stages, with one set of text prompts. TABLE III SINGLE -CAMERA ATE PER SEQUENCE AND MEAN PSNR ON TRAINING 
+
+(TV) AND NOVEL VIEWS (NV). † REPORTED IN [6], WHOSE PSNR 
+
+> EXCLUDES SKY ERROR
+
+; ∗ PARTIAL TRAJECTORY .                                                                          
+
+> ATE [m] ↓PSNR [dB] ↑
+> Apple Pear Method Dorm. Flow. Harv. Dorm. Flow. Harv. TV NV Photo-SLAM †[25] 18.95 15.16 19.10 16.24 23.72 19.00 8.42 8.67 Splat-SLAM †[26] 5.26 28.14 21.89 6.64 ∗20.85 18.29 20.45 12.78 PINGS †[27] 171.50 132.94 89.44 157.23 87.35 97.76 9.39 9.07 OpenGS-SLAM †[28] 20.70 20.95 20.22 21.07 10.93 20.82 14.04 14.93 DLO+3DGS †0.576 0.408 0.658 0.440 0.448 0.755 AgriGS-SLAM †0.519 0.354 0.737 0.426 0.440 0.720 ArborSplat, training 0.389 0.264 0.444 0.082 0.088 0.161 21.25
+> ArborSplat, validation 0.481 0.163 0.344 0.068 0.055 0.111 15.43
+
+but trails it in LPIPS (0.44 against 0.41 on training and 0.57 against 0.54 on validation keyframes) and training SSIM (0.64 against 0.69). Learning semantics costs 1.39 dB of training PSNR on average and 0.63 dB on validation keyframes, on pear harvesting mostly through the semantic loss itself (Sec. V-C). Those systems report lower PSNR than ours on 44 of their 48 per-sequence values (Table III), although their evaluation excludes sky error. 
+
+Semantics. One set of text prompts serves both species and all stages, but novel views remain much harder than training views: held-out mIoU stays between 0.317 and 0.356, while training views reach 0.614 to 0.758. Across the stages of Fig. 4, from bare branches and posts in dormancy to fruit on canopy and ground at harvest, trellis posts stay intact, while isolated fruit and thin branch tips are where the renders lose most detail. Label fusion helps consistently but modestly: the online semantic point cloud is more accurate than naive first-view transfer on every sequence, with structural mIoU gains of +0 .007 to +0 .013 on the 4.5 to 5.8% of reference pixels covered by projected voxels. 
+
+TABLE IV ABLATIONS ON PEAR HARVESTING . F IRST ROW : A RBOR SPLAT , MEAN AND STANDARD DEVIATION (SD ) OF THREE RUNS ; OTHER ROWS : 
+
+> CHANGE FROM THAT MEAN
+
+(ONE RUN EACH ). TV: TRAINING VIEWS ;HO: HELD -OUT FRAMES ; STRUCT .: STRUCTURAL M IOU. B OLD :
+
+> CHANGE BEYOND THREE SD
+
+.                                              
+
+> TV ↑HO ↑PSNR ↑
+> Variant struct. trunk struct. canopy trellis train [dB] ArborSplat 0.733 0.539 0.346 0.429 0.121 21.54 sd 0.002 0.004 0.007 0.004 0.010 0.06 No height prior −0.040 −0.103 −0.015 −0.041 +0.002 +0.10 No opacity norm. −0.005 −0.005 −0.040 −0.046 −0.043 +0.21
+> Learned vsem −0.033 −0.104 0.000 +0.015 −0.010 +0.94
+> No semantic loss no semantic field is learned +0.91
+> OURS -NS no semantics +1.19
+
+C. Ablation Study 
+
+Each component of ArborSplat protects a different part of the map (Table IV). Opacity normalization matters most on held-out views: removing it lowers structural mIoU by 0.040, while training views barely change. The height prior 
+
+is essential for canopy and trunk: without it, held-out canopy IoU drops by 0.041 and training-view trunk IoU by 0.103. 
+
+Pinning the semantic weight protects thin structures: when learned, the weight decays to 0.28, about one sixth of the color weight, and the 0.94 dB of PSNR gained is paid for with 0.104 of training-view trunk IoU. The semantic loss 
+
+causes most of the photometric cost of semantics: disabling it recovers 0.91 of the 1.19 dB separating ArborSplat from OURS -NS. 
+
+Class-budgeted refinement allocates primitives as spec-ified but helps only under reduced budgets. With floors at 
+
+B = 12 k, the shares of new Gaussians granted to trunk and trellis rise by 0.17 and 0.10 in all three runs. Since floors take capacity from ground and sky, which dominate the image, we assess them by tree mIoU , over canopy, trunk, trellis, and fruit. Under reduced budgets, floors raise training-view tree mIoU in two of three paired runs at both 6k (mean +0 .05 )and 12k (mean +0 .03 ), and fruit IoU in all six pairs (mean 7+0 .05 ), while mean held-out tree mIoU changes by +0 .001 
+
+and −0.006 . At the full budget of 75k, floors lower training-view tree mIoU by 0.024, so ArborSplat uses unconstrained allocation. 
+
+Cost of semantics. Semantics adds no measurable wall-clock time: on the same machines, ArborSplat and O URS -NS differ in run time by −7.2% to +2 .6% (mean −0.9% ), as the mapper optimizes each keyframe until odometry releases the next. The cost appears instead in optimization: with semantics, the mapper completes 8 to 28% fewer steps in the same time, and the final maps are 1.16 to 1.57 times smaller, holding 68 to 95 million Gaussians. In an instrumented pear harvesting run, keyframes start every 5.96 s, segmentation is available after 0.56 s, and the helper fuses a keyframe in 250 ms without blocking the mapper (medians). VI. CONCLUSIONS Orchard robots need maps that are semantic as well as spatial, in every season. We presented ArborSplat, an online semantic Gaussian Splatting SLAM system that builds such maps with one set of text prompts and without post-run refinement, and our experiments support each of its con-tributions. First, among the semantic Gaussian SLAM sys-tems evaluated, only ArborSplat maps orchard rows reliably, exceeding SGS-SLAM and GS3LAM on every completed segment by 0.15 to 0.36 held-out and 0.23 to 0.50 training-view mIoU while running 1.7 to 7.5 times faster. Second, its semantic point cloud is more accurate than naive transfer on all six sequences. Third, under reduced budgets, class-budgeted refinement raises training-view fruit IoU in all six paired runs and tree mIoU in four. Finally, our class-resolved evaluation across two species and three stages locates the remaining gap in thin structures: on full routes, held-out trunk IoU stays below 0.07 on every sequence, against 0.41 to 0.56 on training views. Future work will target their novel-view semantics by revisiting past keyframes and closing loops, so that robots returning to a row can rely on the map from new viewpoints. REFERENCES [1] G. Kootstra, X. Wang, P. M. Blok, J. Hemming, and E. van Henten, “Selective harvesting robotics: Current research, trends, and future directions,” Current Robotics Reports , vol. 2, no. 1, pp. 95–104, 2021. [2] N. Carion, et al. , “SAM 3: Segment anything with concepts,” in 
+
+International Conference on Learning Representations (ICLR) , 2026. [3] B. Kerbl, G. Kopanas, T. Leimk¨ uhler, and G. Drettakis, “3D Gaussian splatting for real-time radiance field rendering,” ACM Transactions on Graphics , vol. 42, no. 4, pp. 139:1–139:14, 2023. [4] H. Matsuki, R. Murai, P. H. J. Kelly, and A. J. Davison, “Gaussian splatting SLAM,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024, pp. 18 039–18 048. [5] N. Keetha, et al. , “SplaTAM: Splat, track & map 3D Gaussians for dense RGB-D SLAM,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024, pp. 21 357–21 366. [6] M. Usuelli, D. Rapado-Rincon, G. Kootstra, and M. Matteucci, “AgriGS-SLAM: Orchard mapping across seasons via multi-view Gaussian splatting SLAM,” IEEE Robotics and Automation Letters ,vol. 11, no. 6, pp. 7102–7109, 2026. [7] T. Peters, C. Brenner, and K. Schindler, “Semantic segmentation of mobile mapping point clouds via multi-view label transfer,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 202, pp. 30–39, 2023. [8] M. Li, et al. , “SGS-SLAM: Semantic Gaussian splatting for neural dense SLAM,” in European Conference on Computer Vision (ECCV) ,2024, pp. 163–179. [9] S. Zhu, R. Qin, G. Wang, J. Liu, and H. Wang, “SemGauss-SLAM: Dense semantic Gaussian splatting SLAM,” in IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) , 2025, pp. 21 174–21 181. [10] L. Li, L. Zhang, Z. Wang, and Y. Shen, “GS 3LAM: Gaussian semantic splatting SLAM,” in 32nd ACM International Conference on Multimedia , 2024, pp. 3019–3027. [11] V. Yugay, Y. Li, T. Gevers, and M. R. Oswald, “Gaussian-SLAM: Photo-realistic dense SLAM with Gaussian splatting,” arXiv preprint arXiv:2312.10070 , 2023. [12] S. Zhi, T. Laidlow, S. Leutenegger, and A. J. Davison, “In-place scene labelling and understanding with implicit scene representation,” in IEEE/CVF International Conference on Computer Vision (ICCV) ,2021, pp. 15 818–15 827. [13] S. Zhou, et al. , “Feature 3DGS: Supercharging 3D Gaussian splat-ting to enable distilled feature fields,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024, pp. 21 676– 21 685. [14] M. Ye, M. Danelljan, F. Yu, and L. Ke, “Gaussian Grouping: Segment and edit anything in 3D scenes,” in European Conference on Computer Vision (ECCV) , 2024, pp. 162–179. [15] A. Thomas, M. Peterson, and J. P. How, “GaussLite: Online task-conditioned 3D Gaussian splatting for real-time robotic mapping,” 
+
+arXiv preprint arXiv:2606.30809 , 2026. [16] J. Cuaran, N. K. Uppalapati, and G. Chowdhary, “OctoSplat: Hybrid OctoMap-Gaussian splatting for active semantic mapping and phe-notyping with horticultural robots,” arXiv preprint arXiv:2601.12122 ,2026. [17] L. Lobefaro, et al. , “Spatio-temporal consistent semantic mapping for robotics fruit growth monitoring,” IEEE Robotics and Automation Letters , vol. 10, no. 9, pp. 9470–9477, 2025. [18] D. Cheng, et al. , “TreeScope: An agricultural robotics dataset for LiDAR-based mapping of trees in forests and orchards,” in IEEE International Conference on Robotics and Automation (ICRA) , 2024, pp. 14 860–14 866. [19] D. Rapado-Rincon and G. Kootstra, “Tree-SLAM: Semantic object SLAM for efficient mapping of individual trees in orchards,” Smart Agricultural Technology , vol. 12, 2025, Art. no. 101439. [20] J. S. Berrio, M. Shan, S. Worrall, and E. Nebot, “Camera-LIDAR integration: Probabilistic sensor fusion for semantic mapping,” IEEE Transactions on Intelligent Transportation Systems , vol. 23, no. 7, pp. 7637–7652, 2022. [21] K. Chen, B. T. Lopez, A.-a. Agha-mohammadi, and A. Mehta, “Direct LiDAR odometry: Fast localization with dense point clouds,” IEEE Robotics and Automation Letters , vol. 7, no. 2, pp. 2000–2007, 2022. [22] L. Yang, B. Kang, Z. Huang, X. Xu, J. Feng, and H. Zhao, “Depth Anything: Unleashing the power of large-scale unlabeled data,” in 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024, pp. 10 371–10 381. [23] A. Kendall, Y. Gal, and R. Cipolla, “Multi-task learning using uncertainty to weigh losses for scene geometry and semantics,” in 
+
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2018, pp. 7482–7491. [24] S. Umeyama, “Least-squares estimation of transformation parameters between two point patterns,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 13, no. 4, pp. 376–380, 1991. [25] H. Huang, L. Li, H. Cheng, and S.-K. Yeung, “Photo-SLAM: Real-time simultaneous localization and photorealistic mapping for monoc-ular, stereo, and RGB-D cameras,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2024, pp. 21 584– 21 593. [26] E. Sandstr¨ om, et al. , “Splat-SLAM: Globally optimized RGB-only SLAM with 3D Gaussians,” in IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW) , 2025, pp. 1671– 1682. [27] Y. Pan, et al. , “PINGS: Gaussian splatting meets distance fields within a point-based implicit neural map,” in Robotics: Science and Systems (RSS) , 2025. [28] S. Yu, C. Cheng, Y. Zhou, X. Yang, and H. Wang, “RGB-only Gaussian splatting SLAM for unbounded outdoor scenes,” in IEEE International Conference on Robotics and Automation (ICRA) , 2025, pp. 11 068–11 074. 
+
+8
