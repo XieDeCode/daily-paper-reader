@@ -6,35 +6,43 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-27
-- 运行时间：2026-09-27 22:28:27 UTC
+- 最新运行日期：2026-09-28
+- 运行时间：2026-09-28 23:40:32 UTC
 - 运行状态：成功
-- 本次总论文数：4
+- 本次总论文数：6
 - 精读区：0
-- 速读区：4
+- 速读区：6
 
 ### 今日简报（AI）
-今日速读4篇、精读0篇，3D高斯溅射仍是焦点，其中质量评估综述以7.0分领跑。  
-最值得看的是3DGS的失真、基准与开放挑战，以及轻量纹理、果园语义SLAM这两个落地方向。  
-普通读者可先读7.0分那篇建立全局认识，再按兴趣速览LiteTex-GS或ArborSplat。
-- 详情：[/202609/27/README](/202609/27/README)
+今日速读6篇，焦点落在3D高斯泼溅与多模态新视角合成两条线上。
+
+最值得看的是评分最高（7.0）的《Gauss What You Need》，主打跨场景尺度的紧凑高斯泼溅；其次是 LiTe-GS 的下一最佳视角选择与 M3GD 的相机—LiDAR 几何扩散。
+
+普通读者可先从最高分那篇的摘要和结论读起，理解"压缩+跨尺度"这个思路，再按需补视角选择或多模态融合方向。
+- 详情：[/202609/28/README](/202609/28/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Quality Assessment of 3D Gaussian Splatting: Distortions, Benchmarks, and Open Challenges](/202609/27/2609.23027v1-quality-assessment-of-3d-gaussian-splatting-distortions-benchmarks-and-open-challenges)  
+1. [Gauss What You Need: Compact Gaussian Splatting Across Scene Scales](/202609/28/2609.31248v1-gauss-what-you-need-compact-gaussian-splatting-across-scene-scales)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：关于三维高斯泼溅场景表示与渲染的综述
-2. [LiteTex-GS: Fast and Lightweight Texturing for Gaussian Splatting](/202609/27/2609.23380v1-litetex-gs-fast-and-lightweight-texturing-for-gaussian-splatting)  
+   evidence：跨采集尺度的紧凑三维高斯泼溅重建
+2. [M3GD: Multi-Modal Multi-View Geometric Diffusion for Camera--LiDAR Novel View Synthesis](/202609/28/2609.30056v1-m3gd-multi-modal-multi-view-geometric-diffusion-for-camera--lidar-novel-view-synthesis)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：高斯泼溅的纹理化与表示渲染
-3. [ArborSplat: Online Semantic Gaussian Splatting SLAM for Orchards](/202609/27/2609.26315v1-arborsplat-online-semantic-gaussian-splatting-slam-for-orchards)  
+   evidence：融合相机与LiDAR互补数据的多模态多视角神经新视角合成
+3. [LiTe-GS: Oracle-Efficient Next Best View Selection for 3D Gaussian Splatting](/202609/28/2609.30393v1-lite-gs-oracle-efficient-next-best-view-selection-for-3d-gaussian-splatting)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：在线语义三维高斯泼溅SLAM与多视角融合
-4. [PePESeg3D: Perception Prior Enhances Multi-Scale Segmentation for 3D Gaussian Splatting](/202609/27/2609.28645v1-pepeseg3d-perception-prior-enhances-multi-scale-segmentation-for-3d-gaussian-splatting)  
+   evidence：3D高斯泼溅训练的多视角选择
+4. [Reliability-Regulated Trajectory Optimization for Progressive COLMAP-Free 3D Gaussian Splatting](/202609/28/2609.30865v1-reliability-regulated-trajectory-optimization-for-progressive-colmap-free-3d-gaussian-splatting)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向分割的三维高斯泼溅场景表示
+   evidence：结合渐进相机位姿跟踪的多视角三维高斯优化
+5. [ChronoFuseGS: Multi-Temporal Gaussian Fusion with Per-Splat Persistence and Change Visualization](/202609/28/2609.31339v1-chronofusegs-multi-temporal-gaussian-fusion-with-per-splat-persistence-and-change-visualization)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：将多个地理范围部分重叠的独立高斯泼溅模型融合为单一模型
+6. [ClearGS: Reliability-Aware Gaussian Splatting from Handheld Videos](/202609/28/2609.31509v1-cleargs-reliability-aware-gaussian-splatting-from-handheld-videos)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：基于多视角手持视频的三维高斯泼溅重建
 
 
 <div class="dpr-home-promo-card">
