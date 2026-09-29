@@ -1,0 +1,747 @@
+Title: AGILE-GS: Anchor-Guided Fast Next-Best-View Selection for Active 3D Gaussian Splatting
+
+URL Source: https://arxiv.org/pdf/2609.34176v1
+
+Published Time: Tue, 29 Sep 2026 02:51:09 GMT
+
+Number of Pages: 10
+
+Markdown Content:
+# AGILE-GS: Anchor-Guided Fast Next-Best-View Selection for Active 3D Gaussian Splatting *
+
+## Amirhossein Mollaei Khass †, Nader Motee †
+
+## Abstract 
+
+Radiance fields need hundreds of views, and their place-ment matters as much as their number. Next-best-view (NBV) selection for 3D Gaussian Splatting (3DGS) usually scores every candidate in the pool and keeps one. Searching for information and choosing a camera, however, are sep-arable problems. We present AGILE-GS, an anchor-guided NBV method that separates the two. A virtual anchor pose is optimized on SE(3) by Riemannian gradient ascent on ex-pected information gain. It need not be reachable or in the pool; it marks where the model is most uncertain. Can-didates are scored against the anchor’s viewing geometry, and a greedy ridge-leverage step distills the pool into a small, non-redundant shortlist without rendering any can-didate. The shortlist can be used in two ways. AGILE-GS takes the first view on it as the next view, so no Fisher infor-mation is computed for any candidate. AGILE-GS+ com-putes the Fisher information gain of each shortlisted view and picks the best, so the expensive evaluation runs on a handful of views rather than the whole pool. On standard benchmarks and in closed-loop embodied acquisition, both match or exceed existing baselines while cutting selection latency by one to two orders of magnitude. 
+
+## 1. Introduction 
+
+Volumetric radiance fields have become the dominant rep-resentation for novel view synthesis and 3D reconstruc-tion. 3D Gaussian Splatting (3DGS) [13] represents a scene with an explicit set of anisotropic Gaussian primitives. It matches the fidelity of neural radiance fields and renders in real time. Deciding where a sensor should look next is a long-standing problem in computer vision. It goes back to early work on active perception [1, 2] and next-best-view plan-ning [8], where the goal is to build a complete and accu-
+
+> *This work was supported in part by the ONR under grants numbers N00014-23-1-2779 and N00014-26-1-2246.
+> †A.M. Khass and N. Motee are with the Department of Mechanical Engi-neering and Mechanics, Lehigh University, Bethlehem, PA, 18015, USA.
+
+{ammb231,motee }@lehigh.edu .
+
+Figure 1. A simulated robot manipulator autonomously selects informative viewpoints for 3D Gaussian Splatting reconstruction. 
+
+rate model from as few observations as possible [25]. Radi-ance fields have made this problem pressing again. 3DGS needs hundreds of posed views, and reconstruction quality depends strongly on how those views are distributed. Re-dundant or poorly placed observations leave parts of the scene weakly constrained and produce geometric and pho-tometric artifacts [14, 21, 26]. For a robot, every additional capture also costs time and motion, so views must be cho-sen rather than collected. Next-best-view (NBV) selection addresses this by repeatedly choosing the observation ex-pected to most improve the current model [4, 6, 11, 27]. Existing NBV criteria trade fidelity against cost. Fish-erRF [11] and POp-GS [27] estimate the expected un-certainty reduction directly in parameter space. This is accurate, but it requires a differentiable render–backward pass for every candidate, so the cost grows with both the map size and the candidate pool. COVER [6] avoids per-candidate rendering, but it captures parameter uncertainty only indirectly. A further inefficiency is shared by all of them. Densely sampled pools contain many near-duplicate views, so a large fraction of any per-candidate evaluation is spent telling apart observations that are effectively redun-dant. We take a different route. The most informative view-point may be neither reachable nor present in the candidate pool, yet it can still guide the choice among the views that are available. We therefore replace per-candidate evalua-tion with a fast search for informative candidates. A virtual arXiv:2609.34176v1 [cs.CV] 28 Sep 2026 anchor pose is first optimized on SE(3) by Riemannian gra-dient ascent to maximize expected information gain. This steers the anchor toward the region of pose space that most reduces uncertainty in the current 3DGS model. Each can-didate then receives an anchor leverage score that measures how well it reproduces the anchor’s viewing geometry. A fast subset selection step keeps the highest-scoring candi-dates and suppresses those that are redundant with views already selected. The result is a compact shortlist, ob-tained without rendering a single candidate. AGILE-GS (Anchor-Guided Fast Next Best V iew Se lection for Activ e
+
+3D Gaussian Splatting) returns the leading proposal from this shortlist directly. No Fisher information is computed for any candidate, which gives the lowest latency. AGILE-GS+ instead reranks the shortlist by expected information gain. It recovers model-aware accuracy at a fraction of the full-pool cost, since the expensive evaluation runs on a handful of views rather than all of them. This work makes three contributions. First, we give a continuous-to-discrete NBV formulation that optimizes a view pose on SE(3) to maximize expected information gain and uses it to guide discrete view selection. Second, we in-troduce an anchor leverage score and a fast subset selection procedure that return a compact, non-redundant proposal set without rendering any candidate. Third, we present two al-gorithms, AGILE-GS and AGILE-GS+, that pair anchor-guided geometric selection with optional Fisher reranking over the shortlist. They match the reconstruction accuracy of parameter-space methods at one to two orders of magni-tude lower selection latency. 
+
+## 2. Related Work 
+
+View planning has a long history in computer vision and robotics. Connolly [8] used a partial octree model to pick the view that uncovers the most unseen volume, and the sur-vey by Scott et al. [25] covers the model-based and non-model-based methods that followed. These methods target range sensors and explicit geometry. Radiance fields change the problem. The model being improved is a set of contin-uous parameters rather than an occupancy grid, so uncer-tainty has to be measured in that parameter space. Recent NBV methods do exactly this. ActiveNeRF [24] propagates predictive uncertainty through a NeRF. Fish-erRF [11] approximates the uncertainty reduction with Fisher information. POp-GS [27] casts 3DGS acquisition as optimal experimental design. These objectives are prin-cipled, but each candidate needs its own rendering or differ-entiation pass, so the cost scales with both the model size and the candidate pool. COVER [6] takes a geometric route instead. It favors cameras that observe under-constrained regions and scores views through an anisotropic visibility field. This avoids per-candidate rendering, but it captures parameter uncertainty only indirectly. None of these meth-ods addresses a further inefficiency. Dense pools contain many near-duplicate views, so much of the candidate eval-uation is spent telling apart observations that are effectively redundant. A second line of work brings active 3DGS mapping onto robots. RT-GuIDE [26] couples incremental Gaussian map-ping with an information heuristic. VISTA [21] adds se-mantics to plan task-relevant trajectories. Splat-Nav [5] plans safe corridors inside Gaussian maps. Conflict-Aware Active Perception [20] and Splat-CBF [15] couples infor-mation acquisition with a safety control barrier function. Closest to our anchor step, Active next-best-view [14] op-timizes expected information gain over continuous camera poses on SE(3) under risk-aware path constraints. We build on this continuous formulation, but we use the optimum to guide selection from a discrete pool rather than as the target itself. Our framework sits between these two groups. It keeps the model-aware SE(3) guidance of parameter-space meth-ods, but it renders no candidate. Candidates are scored by an anchor leverage score and pruned by fast subset selec-tion. The result has the low cost of geometric criteria while staying tied to an information-theoretic optimum. 
+
+## 3. Preliminaries 
+
+3.1. 3D Gaussian Splatting 
+
+3D Gaussian Splatting [13] represents a scene as an explicit set of anisotropic primitives, 
+
+G = {gi}Ni=1 , gi =  μi, Ri, si, o i, ci
+
+, (1) with center μi ∈ R3, rotation Ri ∈ SO(3) , and scale 
+
+si ∈ R3+, which together define the covariance Σi =
+
+Ri diag( s2 
+
+> i
+
+)R⊤ 
+
+> i
+
+, opacity oi, and spherical-harmonic coeffi-cients ci encoding view-dependent appearance. For a view 
+
+v, the visible primitives are projected, depth-ordered, and alpha-composited at each pixel u,
+
+fv (u; θ) = X 
+
+> i∈N v(u)
+
+τv,i (u) αv,i (u) ci
+
+ dv,i 
+
+, (2) where θ collects the Gaussian parameters and Nv (u) is the ordered set of primitives contributing to u. Given the ac-quired views At with reference images {f ref  
+
+> v
+
+}v∈A t , the pa-rameters are estimated by minimizing a photometric objec-tive, ˆθt = arg min 
+
+> θ
+
+X
+
+> v∈A t
+
+Lphoto 
+
+ f ref  
+
+> v
+
+, f v (θ). (3) Rasterization is differentiable, so each view contributes gra-dients only to the subset of primitives it observes [18]. 
+
+3.2. Expected Information Gain for View Selection 
+
+Active acquisition selects the view whose observation is ex-pected to most reduce uncertainty in the estimated scene 1. Candidate View Pool Set  
+
+> 2. Information Field Computation
+> Uncertainty heatmap
+> 3. Information subset view selection 4. Selected Next Best View
+
+Figure 2. System overview. Given a candidate view pool Rt (red) around the active views At (blue), a virtual anchor is optimized to locate a maximally informative region of pose space (uncertainty heatmap). Candidates are scored against the anchor’s frustum sample geometry to form a score matrix, from which fast greedy ridge-leverage selection extracts a compact, non-redundant subset views. 
+
+parameters [10, 16]. Let Yv denote the image predicted at candidate v through fv (θ), and let ˆθt be the current esti-mate. The utility of v is the mutual information between the map parameters and Yv , which equals the expected re-duction in posterior entropy H[·] after acquiring Yv [16], 
+
+I(θ; Yv ) = H[θ] − H[θ | Yv ]. (4) The observed information at view v is the negative Hessian of the rendering log-likelihood evaluated at ˆθt,
+
+Hv = − ∇ 2 
+
+> θ
+
+log p(Yv | θ) θ=ˆθt
+
+, (5) and the accumulated information over the acquired set is ˆHt := P 
+
+> v∈A t
+
+Hv + λI ≻ 0. Under the Laplace approximation, the entropy reduction admits the closed form [11, 14] 
+
+log det  I + Hv ˆH−1
+
+> t
+
+, (6) where ˆH−1 
+
+> t
+
+encodes the uncertainty remaining in the cur-rent map and Hv quantifies how strongly the candidate con-strains it. For the differentiable rendering model fv (θ), the observed information reduces to its Gauss–Newton form, and the diagonal approximation [11, 14] yields 
+
+Hv ≈ diag  J⊤ 
+
+> v
+
+Jv
+
+, Jv := ∇θ fv (θ) ˆθt
+
+. (7) The next-best view maximizes the EIG over the candidate pool Rt with cardinality Dt = |R t|,
+
+vbest  
+
+> t
+
+= arg max 
+
+> v∈R t
+
+log det  I + Hv ˆH−1
+
+> t
+
+. (8) Approximating Eq. (6) recovers the trace surrogate 
+
+tr 
+
+
+
+Hv ˆH−1
+
+> t
+
+
+
+≥ log det  I + Hv ˆH−1
+
+> t
+
+ [16], which we use as a smooth objective for continuous anchor optimization. 
+
+## 4. Efficient Next Best View Selection 
+
+Direct maximization of Eq. (8) over the full candidate pool 
+
+Rt is accurate but expensive; each evaluation of Eq. (6) re-quires a differentiable render–backward pass over the com-plete camera pool, and this cost grows with both the model size and the pool size Dt = |R t|. Densely sampled im-age collections further contain many cameras with strongly overlapping fields of view, so a large fraction of this compu-tation is spent distinguishing nearly redundant observations. The proposed framework addresses both limitations by de-coupling the search for an informative region of pose space from the selection of executable cameras. The information gain objective is maximized over SE(3) , and its local ob-servation geometry is then used to extract a compact set of relevant, non-redundant candidates. This reduces the effec-tive search from Dt cameras to N ≪ Dt proposals while retaining the views most consistent with the continuous in-formation optimum. 
+
+4.1. Virtual Anchor Optimization 
+
+At selection event t, let Rt = {Tv }Dt 
+
+> v=1
+
+denote the remain-ing candidate poses and let ˆHt ≻ 0 denote the accumulated information from the active train set At. Rather than scor-ing each discrete candidate, a virtual pose T ⋆t ∈ SE(3) is optimized directly on the pose manifold to mark a locally informative region. For a view pose T , let HT ⪰ 0 denote the Fisher infor-mation contributed by its predicted observation. Under the Laplace approximation, we adopt the expected information gain of pose T from Eq. (6) by the first-order trace surrogate 
+
+ψt(T ) := tr  HT ˆH−1
+
+> t
+
+. (9) Since the diagonal Fisher term is differentiable in the ren-dering parameters [14, 18], and the rendering is differen-tiable in the camera pose, ψt(T ) is differentiable with re-spect to T and can be optimized directly over the pose man-ifold. The continuous information anchor is, 
+
+T ⋆t = arg max   
+
+> T∈SE(3)
+
+ψt(T ) (10) which steers the virtual camera toward observations ex-pected to resolve the current model uncertainty. Eq. (10) is solved by the Riemannian gradient ascent method [14]. At iteration k, the Euclidean gradient of ψt is mapped to a twist ξk ∈ se (3) ∼= R6 in the local tangent space at Tk, and the pose is updated through the exponential map retraction, 
+
+T k+1 = T k exp  η ξ∧
+
+> k
+
+, ξk = ∇T ψt(T ) T k , (11) with step size η > 0, (·)∧ : R6 → se (3) the twist hat map, and exp : se (3) → SE(3) the matrix exponential. The re-traction keeps every iterate on the manifold and preserves the coupling between translational and rotational compo-nents. The resulting T ⋆t is an information anchor, not the selected view. In general it might not coincide with a cam-era in Rt, which motivates a principled association between the continuous optimum and the discrete candidate pool. 
+
+4.2. Candidate View Scoring 
+
+Associating the anchor T ⋆t with its nearest camera is inad-equate; pose distance is a property of the manifold alone and carries no information about the scene content a cam-era observes. Two candidates equidistant from T ⋆t may see disjoint regions of the map, while distinct poses may induce nearly identical observations. Each candidate is therefore represented not by its pose, but by how faithfully it repro-duces the viewing geometry of the information anchor. The anchor viewing volume is discretized into K frus-tum support samples, 
+
+Xt = {xk}Kk=1 , xk ∈ F (T ⋆t ), (12) where F(T ⋆t ) denotes the viewing frustum of the anchor pose. These samples act as a shared spatial basis against which every remaining camera is evaluated. For a candi-date v ∈ R t with pose Tv = ( Rv , pv ) and optical axis dv ,sample xk is frustum contained when xk ∈ F (Tv ), and the corresponding viewing direction from the camera center is 
+
+χvk = 1F(Tv )(xk), ˆrvk = xk − pv
+
+∥xk − pv ∥2
+
+. (13) where χvk ∈ { 0, 1} marks whether candidate v observes 
+
+xk, and ˆrvk is the viewing direction. The global consistency of candidate v with the anchor is summarized by a scalar weight ρv ∈ [0 , 1] , defined as the product of positional, orientational, and coverage factors, 
+
+ρv = exp 
+
+
+
+− ∥pv − p⋆t ∥22
+
+2σ2
+
+> p
+
+| {z }
+
+> position
+
+· d⊤ 
+
+> v
+
+d⋆t
+
+2+
+
+| {z }
+
+> orientation
+
+· 1
+
+K
+
+> K
+
+X
+
+> k=1
+
+χvk 
+
+| {z }
+
+> coverage
+
+,
+
+(14) with σp a positional tolerance and [ · ]+ = max( ·, 0) . The orientation factor [d⊤ 
+
+> v
+
+d⋆t ]2+ assigns zero weight to back fac-ing cameras and grows quadratically as orientations align. Combining the global consistency weight ρv with per-sample geometry yields the anchor coverage matrix Mt ∈
+
+RDt×K , whose entries are 
+
+[Mt]vk = ργv χvk 
+
+d⊤ 
+
+> v
+
+ˆrvk 
+
+
+
+> +
+
+∥xk − pv ∥2 + ϵ
+
+| {z }
+
+κvk 
+
+, (15) where γ > 0 controls the sharpness of anchor weighting and ϵ > 0 is a small numerical regularizer. The per-sample observation kernel κvk is nonzero only for visible sam-ples ( χvk = 1 ), rewards well centered viewing directions through the rectified alignment [d⊤ 
+
+> v
+
+ˆrvk ]+, and downweights distant or oblique baselines through the inverse range. The row weight ργv scales the entire profile of candidate v, sup-pressing cameras that do not preserve the position, orienta-tion, or spatial support of the anchor. Each row of Mt is the observation profile of one candi-date over the Xt, and each column describes how the pool candidate views observe a single location xk. The entry 
+
+[Mt]vk therefore measures how effectively candidate view 
+
+v observes the anchor viewing volume, jointly accounting for visibility, viewing direction, range, and anchor consis-tency. Candidates with similar rows induce redundant ob-servation geometry, whereas dissimilar rows provide com-plementary coverage of the anchor volume. 
+
+4.3. Fast Subset Selection via Ridge Leverage 
+
+Selecting a compact proposal set from the anchor coverage matrix Mt ∈ RDt×K requires comparing candidate profiles that live in a K-dimensional support space. Since the num-ber of frustum support samples K can be large, the rows of 
+
+M are first embedded into a d-dimensional space through a fixed Johnson–Lindenstrauss projection [12, 22], 
+
+Bt = Mt Π, Π ∈ RK×d, d ≪ K. (16) Let bv ∈ Rd denote the row of Bt associated with can-didate v ∈ R t. Ranking candidates by profile magnitude 
+
+∥bv ∥2 alone can return several cameras that all encode the same dominant observation direction; each is informative in isolation, yet together they leave the remaining directions of the anchor volume unconstrained. The proposal set must therefore reward informativeness and penalize overlap with already selected candidate views. Therefore we employ the candidate view set selection objective as 
+
+L⋆t = arg max   
+
+> L⊆R t,|L|≤ N
+
+Ft(L), (17) 
+
+Ft(L) = log det 
+
+
+
+λGId +X
+
+> v∈L
+
+bv b⊤
+
+> v
+
+
+
+− d log λG, (18) where λG > 0. Hence, a candidate aligned with a well represented direction expands volume Ft(L) little, whereas one contributing a new direction expands it substantially. Maximizing Ft thus selects the most informative cameras subject to mutual complementarity and candidate diversity. Algorithm 1 AGILE-GS: Anchor-Guided Fast Next-Best-View Selection for Active 3D Gaussian Splatting  
+
+> 1:
+
+Input: Active views At, candidate pool Rt, accumu-lated information ˆHt, proposal budget N 
+
+> 2:
+
+Output: Next-best view v⋆t and proposal set Lt 
+
+> 3:
+
+Optimize the continuous information anchor on SE(3) :
+
+T ⋆t ← arg max   
+
+> T∈SE(3)
+
+ψt(T ) 
+
+> 4:
+
+Build the coverage matrix Mt 
+
+> 5:
+
+Project the profiles to Bt ← MtΠ, with rows {bv } 
+
+> 6:
+
+Initialize L0 and S−10 ← λ−1 
+
+> G
+
+Id 
+
+> 7:
+
+for q = 1 , . . . , min( N, D t) do  
+
+> 8:
+
+Select the highest conditional ridge-leverage candi-date: v⋆q ← arg max v / ∈L q−1 b⊤ 
+
+> v
+
+S−1
+
+> q−1
+
+bv 
+
+> 9:
+
+Append v⋆q to the proposal set: Lq ← L q−1 ∪ { v⋆q } 
+
+> 10:
+
+Update S−1 
+
+> q
+
+by a rank-one Sherman–Morrison  
+
+> 11:
+
+end for  
+
+> 12:
+
+Lt ← { v⋆ 
+
+> 1
+
+, . . . , v ⋆N } 
+
+> 13:
+
+return leading proposal v⋆t ← v⋆ 
+
+> 1
+
+and Lt
+
+Let Lq−1 be the first q − 1 selections and 
+
+Sq−1 = λGId + X
+
+> v∈L q−1
+
+bv b⊤ 
+
+> v
+
+. (19) By the matrix determinant lemma, the marginal gain of adding candidate v is 
+
+Ft(Lq−1 ∪{ v})−Ft(Lq−1) = log  1+ b⊤ 
+
+> v
+
+S−1
+
+> q−1
+
+bv
+
+. (20) Since log(1 + x) is strictly increasing, the greedy step re-duces to maximizing the conditional quadratic score 
+
+v⋆q = arg max 
+
+> v / ∈L q−1
+
+b⊤ 
+
+> v
+
+S−1
+
+> q−1
+
+bv
+
+| {z } 
+
+> ℓv(Lq−1)
+
+, Lq = Lq−1 ∪ { v⋆q },
+
+(21) where ℓv (Lq−1) is a conditional ridge-leverage score [7]. The inverse is maintained without needing recomputation in each step through the Sherman–Morrison identity, 
+
+S−1 
+
+> q
+
+= S−1 
+
+> q−1
+
+− zq z⊤
+
+> q
+
+1 + b⊤ 
+
+> v⋆q
+
+zq
+
+, zq = S−1
+
+> q−1
+
+bv⋆q . (22) Eq. (21) explains the redundancy suppression directly. At the first iteration S0 = λGId and ℓv = ∥bv ∥22/λ G, so the leading proposal is the candidate with the strongest an-chor observation profile. Each subsequent selection con-tracts S−1 
+
+> q
+
+along the chosen direction, so the score of any later candidate is attenuated in proportion to its alignment with the already selected subspace; a camera that is nearly collinear with a chosen one collapses to a small score re-gardless of its raw magnitude. Each greedy step selects the candidate with the highest conditional score, which rewards a view only when it is both informative and complementary to the current selection. Redundant candidates are passed over but remain in Rt and stay eligible at later events. After N iterations, the ordered proposal set is 
+
+Lt = v⋆ 
+
+> 1
+
+, . . . , v ⋆N , N ≪ Dt. (23) The AGILE-GS algorithm returns the leading proposal v⋆
+
+> 1
+
+directly as the next best view, since it maximizes the marginal gain with respect to the regularized feature space at zero per-candidate Fisher cost. With the accuracy ori-ented strategy, AGILE-GS+ algorithm instead reranks the full shortlist Lt by expected information gain (Sec. 5). 
+
+## 5. model aware Reranking 
+
+The AGILE-GS algorithm (1) in Sec. 4.3 maximizes the marginal gain of the geometric objective in Eq. (18). This objective operates in the projected observation space and quantifies how faithfully a candidate preserves and comple-ments the anchor’s viewing geometry, but does not measure its effect on the uncertainty of individual 3DGS parameters. Two views with comparable geometric scores may constrain disjoint subsets of Gaussians and induce markedly different reductions in posterior uncertainty. AGILE-GS+ addresses this by reranking the compact proposal set by expected information gain evaluation. Let 
+
+Lt = {v⋆ 
+
+> 1
+
+, . . . , v ⋆N } ⊆ R t, N ≪ Dt, (24) denote the ordered proposal set returned by algorithm (1). By construction, Lt is aligned with the continuous anchor and spans distinct directions of its observation space, so the model-space evaluation is confined to a small set of geomet-rically informative, non-redundant candidates rather than the full pool. We quantify the utility of a candidate view v by the re-duction in posterior entropy introduced in Sec. 3.2, 
+
+ϕt(v) := log det 
+
+
+
+I + Hv ˆH−1
+
+> t
+
+
+
+, (25) where ˆHt = P 
+
+> ℓ∈A t
+
+Hℓ + λI ≻ 0 denotes the informa-tion accumulated from the acquired views. Hence, ϕt(v)
+
+measures the information contributed by v relative to pa-rameter space that are already constrained by At. Since, under the diagonal Gauss–Newton approximation, both 
+
+Hv ≈ diag( J⊤ 
+
+> v
+
+Jv ) and ˆHt are diagonal, the determinant in Eq. (25) factorizes over its entries and 
+
+ϕt(v) = log det 
+
+
+
+I + Hv ˆH−1
+
+> t
+
+
+
+≈ log Y
+
+> q
+
+1 + [Hv ]qq 
+
+[ ˆHt]qq 
+
+!
+
+= X
+
+> q
+
+log 1 + [Hv ]qq 
+
+[ ˆHt]qq 
+
+!
+
+,
+
+(26) Algorithm 2 AGILE-GS+:Model Aware NBV Selection on Anchor Shortlist  
+
+> 1:
+
+Input: At, Rt, accumulated information ˆHt, budget N 
+
+> 2:
+
+Output: Next-best view v⋆⋆ t 
+
+> 3:
+
+Lt ← AGILE-GS  At, Rt, ˆHt, N  ▷ Algorithm. 1;  
+
+> 4:
+
+for all v ∈ L t do  
+
+> 5:
+
+Hv ← diag( J⊤ 
+
+> v
+
+Jv ) 
+
+> 6:
+
+ϕt(v) ← X
+
+> q
+
+log  1 + [ Hv ]qq /[ ˆHt]qq 
+
+ 
+
+> 7:
+
+end for  
+
+> 8:
+
+v⋆⋆ t ← arg max v∈L t ϕt(v) 
+
+> 9:
+
+At+1 ← A t ∪ { v⋆t }, Rt+1 ← R t \ { v⋆⋆ t }, 
+
+> 10:
+
+ˆHt+1 ← ˆHt + Hv⋆⋆ t 
+
+> 11:
+
+return v⋆⋆ t
+
+where q indexes the Gaussian parameters and [ · ]qq denotes the q-th diagonal entry. AGILE-GS+ algorithm selects the maximizer of Eq. (26) over the proposal set, 
+
+v⋆⋆ t = arg max 
+
+> v∈L t
+
+ϕt(v), ˆHt+1 = ˆHt + Hv⋆t (27) after which the view sets and accumulated information are updated: 
+
+At+1 = At ∪ { v⋆⋆ t }, Rt+1 = Rt \ { v⋆⋆ t }. (28) The two methods therefore differ only in how they exploit 
+
+Lt set. AGILE-GS returns the leading proposal v⋆ 
+
+> 1
+
+, whereas AGILE-GS+ performs N Fisher evaluations, one per pro-posal. 
+
+## 6. Experiments 
+
+We evaluate our proposed algorithms on progressive next-best-view selection for 3DGS. We first compare recon-struction quality and selection efficiency against existing NBV baseline methods, then evaluate the methods under an embodied acquisition protocol, and finally ablate the candidate-selection strategy and the shortlist view pool size. 
+
+6.1. Experimental Setup 
+
+Datasets. We evaluate on three standard reconstruction benchmarks: Mip-NeRF 360 [3], Tanks and Temples [17], and Deep Blending [9], which cover diverse indoor and out-door scenes, object scales, camera distributions, and geo-metric complexity. We additionally report embodied acqui-sition on our custom scenes. All experiments were run on a workstation with an NVIDIA RTX A2000 GPU, an Intel Core i9-13900K CPU. 
+
+Baselines. We compare against three baselines: Ran-dom uniformly samples, FisherRF [11] scores every can-didate by information gain; and COVER [6] approximates Fisher information through geometric view coverage, fa-voring viewpoints that observe under-constrained regions. Our two variants differ in how Lt is used; AGILE-GS pri-oritizes selection efficiency by returning the leading ridge-leverage candidate to select an informative, non-redundant view without exhaustive Fisher evaluation, while AGILE-GS+ evaluates expected information gain only over the compact shortlist Lt, retaining the accuracy of Fisher-based selection while avoiding its cost over the full pool. 
+
+Metrics. Reconstruction quality is measured with PSNR (↑), SSIM ( ↑), and LPIPS ( ↓). Since the shared 3DGS op-timization is identical across methods, the computational overhead of view selection is isolated by reporting the se-lection latency per acquisition event (s/event). 
+
+Setup. Each scene is initialized with 10 training views. During progressive training, every 200 gradient steps a view is selected from the remaining candidate pool Rt and added to the active training set At. All methods are trained for 30 Kgradient steps under an identical acquisition budget and re-construction configuration, so the only computational dif-ference lies in the NBV decision itself. 
+
+6.2. Results 
+
+Table 2 reports reconstruction quality and average selection latency across the three benchmarks. AGILE-GS+ achieves the best or second-best average reconstruction metrics, while the efficiency-oriented AGILE-GS also maintains strong reconstruction quality despite avoiding candidate-level Fisher reranking. The representative reconstructions in Fig. 3 are consistent with these quantitative results. The efficiency gap is substantially larger than the re-maining differences in reconstruction accuracy. AGILE-GS is approximately 126 × faster than COVER and 379 ×
+
+faster than FisherRF per selection event, while AGILE-GS+ is 5.8× and 17 .6× faster respectively and still attains higher average PSNR than both. Fig. 4 makes this trade-off explicit by normalizing accuracy and selection speed to COVER. AGILE-GS+ lies above and to the right of the ref-erence, improving PSNR while increasing selection speed, and AGILE-GS extends a further 21 .6× speedup at only a small PSNR cost. Together, AGILE-GS and AGILE-GS+ provide two complementary operating modes. AGILE-GS for maximum selection speed and AGILE-GS+ for higher reconstruction quality while remaining substantially faster than existing baselines. 1 Random is exceeding Fisher-RF on Mip-NeRF 360; the same ordering is reported by COVER, since human captured benchmark are already well distributed and uniform sampling inherits that feature [6]. We further evaluate the methods under the embodied ac-           
+
+> 1COVER [6] originally reports 3.5s per selection and 23 .9s for Fish-erRF on undisclosed hardware, which may be more capable than ours. Still, AGILE-GS+ is 2.2×and AGILE-GS is approximately 47 ×faster than COVER. AGILE-GS+ Ground truth AGILE-GS FisherRF COVER
+
+Figure 3. Qualitative evaluation renders of the 3DGS comparison on representative views from different view selection methods. 
+
+Figure 4. Accuracy–efficiency trade-off relative to COVER, nor-malized to 1× selection speed and 0 dB PSNR difference.                                      
+
+> Embodied Method Mip-NeRF 360 Custom
+> PSNR ↑SSIM ↑LPIPS ↓PSNR ↑SSIM ↑LPIPS ↓
+> Random 24.786 0.6712 0.2071 20.186 0.5441 0.2633 FisherRF 24.672 0.6712 0.2083 20.400 0.5550 0.2512 COVER 26.571 0.8158 0.1838 22.629 0.6912 0.2186 AGILE-GS 26.134 0.7960 0.1882 22.373 0.6514 0.2385 AGILE-GS+ 26.431 0.8073 0.1895 23.835 0.7657 0.1962
+
+Table 1. Embodied view selection restricted to the K=5 nearest candidate frames. 
+
+quisition protocol of COVER [6], in which each acquisition is restricted to the K=5 nearest candidate frames around the current view rather than the full pool. As shown in Table 1, AGILE-GS+ remains competitive with COVER under these motion constraints and outperforms Random and FisherRF on both the Mip-NeRF 360 and custom evaluations. Beyond reconstruction accuracy, Fig. 5 exposes a struc-AGILE-GS+ 
+
+> PSNR 31.07 / SSIM 0.946 / LPIPS 0.036
+> AGILE-GS PSNR 30.46 / SSIM 0.946 / LPIPS 0.038
+> COVER PSNR 28.89 / SSIM 0.929 / LPIPS 0.046
+
+Figure 5. Selected views and reconstruction quality. The colored camera trajectories visualize the ordering of acquired views. 
+
+tural difference in the acquisition trajectories. Although the trajectories themselves differ considerably, the methods largely agree on which views are informative. Over the 150 selected views, AGILE-GS+ and AGILE-GS share 72 .3% 
+
+and 69 .3% of their selections with COVER, respectively. The principal difference is not the informative support re-covered from the scene, but the order in which that support is acquired. Successive AGILE-GS selections remain more local in the camera sequence, reducing the mean frame-index transition by approximately 41% relative to COVER. Next best view selection policy for a physical robot can-not be considered independently of the motion required between consecutive observations; widely separated NBV decisions introduce additional travel, trajectory planning, and execution cost even when the selected views are indi-vidually informative. Such continuity reduces the discrep-ancy between discrete NBV optimization and physically ex-ecutable sensing, making the selected views better suited to continuous robotic acquisition. Method Mip-NeRF 360 Tanks & Temples Deep Blending PSNR ↑ SSIM ↑ LPIPS ↓ PSNR ↑ SSIM ↑ LPIPS ↓ PSNR ↑ SSIM ↑ LPIPS ↓
+
+Random 26.977 0.8306 0.1165 20.820 0.7693 0.1932 24.264 0.6245 0.2834 FisherRF 26.515 0.8225 0.1312 21.214 0.7816 0.1795 24.578 0.6856 0.2246 COVER 27.231 0.8283 0.1145 22.161 0.8028 0.1587 26.154 0.7196 0.1977 AGILE-GS 26.996 0.8310 0.1159 21.823 0.7872 0.1743 26.412 0.8344 0.1704 AGILE-GS+ 27.523 0.8467 0.1112 22.003 0.7986 0.1683 27.328 0.8450 0.1632 
+
+Avg. PSNR ↑
+
+Avg. Selection Time (s) ↓
+
+24.020 0.002 24.103 28.030 25.182 9.330 25.077 0.074 
+
+25.618 1.596 
+
+Table 2. Reconstruction quality and next-view selection efficiency on Mip-NeRF 360, Tanks & Temples, and Deep Blending. Reconstruc-tion metrics are averaged over the evaluated scenes in each benchmark; selection time denotes the average latency per acquisition event. Best and second-best reconstruction results are shown in bold and underlined, respectively. 
+
+6.3. Ablation Studies 
+
+Table 3 compares AGILE-GS against three alternative strategies for selecting the proposal set from Rt: K-nearest retains the N candidates closest to T ⋆t under an SE(3) met-ric; top independent norm keeps the N rows of Bt with the largest ∥bv ∥2; and online row sampling which is a stream-ing baseline that processes candidate view descriptors se-quentially and makes an immediate keep-or-discard deci-sion without access to the complete candidate pool. Specif-ically, it uses the online λ-ridge leverage score [7], 
+
+ℓi = a⊤
+
+> i
+
+ A⊤
+
+> i−1
+
+Ai−1 + λI −1ai,
+
+to retain views that contribute directions not already well represented by previously accepted samples. This makes it particularly attractive for robotic settings, where observa-tions arrive online, and future viewpoints are not available in advance. Nevertheless, Table 3 shows that AGILE-GS achieves stronger reconstruction quality by explicitly se-lecting a compact batch of informative and complementary views. The result indicates that the proposed conditional ridge-leverage objective not only reduces selection cost, but also suppresses redundant observations that contribute little additional information to the reconstructed map. Table 4 varies the proposal budget N used by AGILE-GS+ algorithm. Reconstruction quality remains nearly un-changed over a broad range of shortlist sizes, while the se-lection cost increases as more candidates are passed to the Fisher reranking stage. A compact shortlist therefore cap-tures most of the useful information required for accurate selection, validating the central design of AGILE-GS+. Ex-pensive model aware evaluation is needed only over a small subset of the original candidate pool. We use N = 10 as the default setting, providing a strong balance between re-construction quality and selection efficiency. 
+
+6.4. Embodied Acquisition in Simulation 
+
+We evaluate AGILE-GS in a closed-loop embodied set-ting where the view selector drives a robot arm to recon-                     
+
+> Dataset Method PSNR ↑SSIM ↑LPIPS ↓Speed up Mip-NeRF 360 and Custom
+> K-nearest Views 26.545 0.8603 0.2081 1.52 ×
+> Online Row Sampling 27.202 0.8840 0.1600 1.48 ×
+> Top independent norm 26.883 0.8845 0.1639 1.12 ×
+> AGILE-GS (Ours) 27.692 0.9155 0.1413 1×
+
+Table 3. Batch view selection ablation averaged over Mip-NeRF 360 and the custom dataset. AGILE-GS+ Budget N
+
+Avg Mip-NeRF 360–Custom Speed up selection ↑
+
+PSNR ↑ SSIM ↑ LPIPS ↓
+
+5 27.518 0.8339 0.1110 1.1 ×
+
+10 27.523 0.8467 0.1112 1×
+
+20 27.538 0.8471 0.1109 0.56 ×
+
+50 27.520 0.8463 0.1110 0.34 ×
+
+Table 4. Effect of the AGILE-GS+ shortlist candidate view set N .
+
+struct the map online. The primary platform is an NVIDIA Isaac Sim [23] digital twin of a robotic lab, built from a textured Scaniverse capture and grounded in real-robot data from a Kinova Gen3 manipulator with an Intel RealSense D435I. Two auxiliary Isaac Sim scenes are also evaluated; a compact kitchen with YCB objects on a textured table, and a Warehouse with multiple shelves and reachable YCB grocery items. At each selection event, candidate cam-era poses are sampled around the workspace and filtered by inverse-kinematics feasibility, joint limits, and motion continuity. The robot executes the selected trajectory and streams synchronized RGB, depth, and ground-truth pose to an i3DGS [19] mapper, which incrementally integrates each observation without resetting the model between view-points, a property essential for fast, closed-loop map recon-struction. Airlab Kitchen Figure 6. Embodied selection in Isaac Sim. Left: candidate views (green) and the NBV by A GILE -GS (yellow). Right: the NBV T ⋆t
+
+recovered by Riemannian ascent (yellow), concentrating on the least-constrained region of the scene.                             
+
+> Environment Method PSNR ↑SSIM ↑LPIPS ↓Views / Time (s) Warehouse Random 17.07 0.622 0.537 AGILE-GS 18.34 0.724 0.457 9 / 144.5 (s) Kitchen Random 19.70 0.782 0.481 AGILE-GS 20.44 0.823 0.472 11 / 621.8 (s) Airlab Random 21.94 0.811 0.324 AGILE-GS 26.36 0.900 0.245 100 / 998.6 (s)
+
+Table 5. Embodied reconstruction in Isaac Sim environments. 
+
+Table 5 compares AGILE-GS against random view sam-pling under an identical acquisition budget in each envi-ronment. AGILE-GS improves reconstruction quality over the random baseline. This evaluation combines a real-robot simulation Isaac Sim with a closed-loop active 3DGS ac-quisition pipeline, bridging offline benchmark selection and executable robotic acquisition under physically consistent online 3DGS mapping and kinematic conditions. 
+
+## 7. Conclusion 
+
+This work introduced AGILE-GS, a framework for next-best-view selection in 3D Gaussian Splatting that decouples model-aware guidance from per-candidate evaluation. Avirtual anchor, optimized on SE(3) by Riemannian gradient ascent, supplies the information direction that previously came from Fisher scoring over the full pool. A fast greedy ridge-leverage step then extracts a compact, non-redundant proposal set without rendering any candidate. The short-list supports two operating modes. AGILE-GS commits to the leading proposal for minimum latency, and AGILE-GS+ reranks the shortlist by information gain for higher accu-racy. Together they give a controllable accuracy–efficiency trade-off. Across standard benchmarks and an embodied evaluation on a manipulator robot, both modes match or exceed baseline selection at substantially lower cost. This narrows the gap between offline NBV benchmarks and exe-cutable robotic sensing. Extending the framework to multi-agent coordination and to safety-constrained online acqui-sition are natural next steps. 
+
+## References 
+
+[1] John Aloimonos, Isaac Weiss, and Amit Bandyopadhyay. Active vision. International Journal of Computer Vision , 1 (4):333–356, 1988. 1 [2] Ruzena Bajcsy. Active perception. Proceedings of the IEEE ,76(8):996–1005, 1988. 1 [3] Jonathan T. Barron, Ben Mildenhall, Dor Verbin, Pratul P. Srinivasan, and Peter Hedman. Mip-nerf 360: Unbounded anti-aliased neural radiance fields. CVPR , 2022. 6 [4] Liyan Chen, Huangying Zhan, Kevin Chen, Xiangyu Xu, Qingan Yan, Changjiang Cai, and Yi Xu. Activegamer: Active gaussian mapping through efficient rendering. In 
+
+2025 IEEE/CVF Conference on Computer Vision and Pat-tern Recognition (CVPR) , pages 16486–16497, 2025. 1 [5] Timothy Chen, Ola Shorinwa, Joseph Bruno, Aiden Swann, Javier Yu, Weijia Zeng, Keiko Nagami, Philip Dames, and Mac Schwager. Splat-nav: Safe real-time robot navigation in gaussian splatting maps. IEEE Transactions on Robotics ,2025. 2 [6] Timothy Chen, Adam Dai, Maximilian Adang, Grace Gao, and Mac Schwager. Coverage optimization for camera view selection. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2026. 1, 2, 6, 7 [7] Michael B Cohen, Cameron Musco, and Jakub Pachocki. Online row sampling. arXiv preprint arXiv:1604.05448 ,2016. 5, 8 [8] C. Connolly. The determination of next best views. In Pro-ceedings of the IEEE International Conference on Robotics and Automation (ICRA) , pages 432–435, 1985. 1, 2 [9] Peter Hedman, Julien Philip, True Price, Jan-Michael Frahm, George Drettakis, and Gabriel Brostow. Deep blending for free-viewpoint image-based rendering. 37(6):257:1–257:15, 2018. 6 [10] Neil Houlsby, Ferenc Husz´ ar, Zoubin Ghahramani, and M´ at´ eLengyel. Bayesian active learning for classification and pref-erence learning. arXiv preprint arXiv:1112.5745 , 2011. 3 [11] Wen Jiang, Boshu Lei, and Kostas Daniilidis. Fisherrf: Ac-tive view selection and uncertainty quantification for radi-ance fields using fisher information. arXiv , 2023. 1, 2, 3, 6[12] William B Johnson and Joram Lindenstrauss. Extensions of lipschitz mappings into a hilbert space. Contemporary math-ematics , 26(189-206):1, 1984. 4 [13] Bernhard Kerbl, Georgios Kopanas, Thomas Leimk¨ uhler, and George Drettakis. 3d gaussian splatting for real-time radiance field rendering. ACM Transactions on Graphics , 42 (4), 2023. 1, 2 [14] Amirhossein Mollaei Khass, Guangyi Liu, Vivek Pandey, Wen Jiang, Boshu Lei, Kostas Daniilidis, and Nader Motee. Active next-best-view optimization for risk-averse path plan-ning. arXiv preprint arXiv:2510.06481 , 2025. 1, 2, 3 [15] Amirhossein Mollaei Khass, Athanasios Cosse, and Nader Motee. Splat-cbf: Safe next-best-view control in 3d gaussian-splat maps. arXiv preprint arXiv:2609.23100 ,2026. 2 [16] Andreas Kirsch and Yarin Gal. Unifying approaches in active learning and active sampling via fisher informa-tion and information-theoretic quantities. arXiv preprint arXiv:2208.00549 , 2022. 3 [17] Arno Knapitsch, Jaesik Park, Qian-Yi Zhou, and Vladlen Koltun. Tanks and temples: Benchmarking large-scale scene reconstruction. ACM Transactions on Graphics , 36(4), 2017. 6[18] Hidenobu Matsuki, Riku Murai, Paul HJ Kelly, and An-drew J Davison. Gaussian splatting slam. In Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , pages 18039–18048, 2024. 2, 3 [19] Andreas Meuleman, Linus Franke, Boris Zhestiankin, Camille Montemagni, and George Drettakis. Immediate 3d gaussian splat reconstruction of unordered input with global consistency. In SIGGRAPH Conference Papers , 2026. 8 [20] Amirhossein Mollaei Khass, Athanasios Cosse, Vivek Pandey, and Nader Motee. Conflict-aware active perception and control in 3d gaussian splatting fields via control barrier functions. arXiv preprint arXiv:2605.20566 , 2026. 2 [21] Keiko Nagami, Timothy Chen, Javier Yu, Ola Shorinwa, Maximilian Adang, Carlyn Dougherty, Eric Cristofalo, and Mac Schwager. Vista: Open-vocabulary, task-relevant robot exploration with online semantic gaussian splatting. IEEE Robotics and Automation Letters , 2026. 1, 2 [22] Jelani Nelson. Dimensionality reduction in euclidean space. 
+
+Notices of the American Mathematical Society , 67(10): 1498–1507, 2020. 4 [23] NVIDIA. Isaac Sim. 8 [24] Xuran Pan, Zihang Lai, Shiji Song, and Gao Huang. Ac-tivenerf: Learning where to see with uncertainty estimation. In European Conference on Computer Vision , pages 230– 246. Springer, 2022. 2 [25] William R. Scott, Gerhard Roth, and Jean-Franc ¸ois Rivest. View planning for automated three-dimensional object re-construction and inspection. ACM Computing Surveys , 35 (1):64–96, 2003. 1, 2 [26] Yuezhan Tao, Dexter Ong, Varun Murali, Igor Spasoje-vic, Pratik Chaudhari, and Vijay Kumar. Rt-guide: Real-time gaussian splatting for information-driven exploration. 
+
+IEEE Robotics and Automation Letters , 10(11):11594– 11601, 2025. 1, 2 [27] Joey Wilson, Marcelino Almeida, Sachit Mahajan, Martin Labrie, Maani Ghaffari, Omid Ghasemalizadeh, Min Sun, Cheng-Hao Kuo, and Arnab Sen. Pop-gs: Next best view in 3d-gaussian splatting with p-optimality. In Proceedings of the Computer Vision and Pattern Recognition Conference ,pages 3646–3655, 2025. 1, 2

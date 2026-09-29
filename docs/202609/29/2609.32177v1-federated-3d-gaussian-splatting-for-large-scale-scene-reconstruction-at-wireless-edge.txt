@@ -1,0 +1,1752 @@
+Title: Federated 3D Gaussian Splatting for Large-Scale Scene Reconstruction at Wireless Edge
+
+URL Source: https://arxiv.org/pdf/2609.32177v1
+
+Published Time: Tue, 29 Sep 2026 00:43:38 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+> 1
+
+# Federated 3D Gaussian Splatting for Large-Scale Scene Reconstruction at Wireless Edge 
+
+Guanlin Wu, Chao Hu, Pu Chen, Juyong Zhang, Han Hu, Shuguang Cui, Fellow, IEEE , and Jie Xu, Fellow, IEEE 
+
+Abstract —Three-dimensional (3D) Gaussian splatting (3D-GS) has emerged as a promising technique for large-scale scene reconstruction due to its high rendering efficiency and fidelity. However, the training of large-scale 3D-GS models at wireless edge faces various technical challenges including the limited com-munication, computation, and graphics processing unit (GPU) memory resources at edge devices, the structural inconsistency issue across local models hindering their effective aggregation, as well as privacy leakage risks associated with raw visual content and camera parameters. To address these challenges, this paper proposes a novel resource-efficient federated learning framework for efficiently training 3D-GS models of large scenes under severe resource constraints. First, we propose an on-device model lightweighting mechanism that adaptively selects and prunes Gaussian points to balance the rendering quality and training efficiency. In this mechanism, we quantitatively evaluate the importance of different Gaussian points at each device to facilitate the pruning, and use a novel importance-to-latency ratio criterion to determine the number of pruned Gaussian points under GPU memory and computation/communication latency constraints. Furthermore, we develop a 3D-GS model recovery mechanism that restores structural consistency across local 3D-GS models without accessing private camera param-eters, enabling their effective aggregation towards a global model. Finally, extensive experiments show that our approach significantly accelerates convergence, maintains high rendering quality, and reduces training latency compared to state-of-the-art federated 3D-GS baselines. 
+
+Index Terms —Federated learning, 3D Gaussian splatting, large-scale scene reconstruction, wireless edge. 
+
+I. I NTRODUCTION 
+
+Large-scale three-dimensional (3D) scene reconstruction has recently garnered rapidly growing interest, which aims at generating high-fidelity 3D models of large-scale real-world environments from multi-view two-dimensional (2D) images captured from disparate viewpoints. By enabling accurate and immersive representations of complex settings, this technology plays a critical role in facilitating a wide range of advanced applications, such as extended reality [2], autonomous driv-ing [3], and embodied intelligence [4]. Among various 3D 
+
+Part of this paper was presented at the IEEE Wireless Commun. Netw. Conf. Workshops (WCNCW), Kuala Lumpur, Malaysia, in Apr. 2026 [1]. G. Wu, C. Hu, S. Cui, and J. Xu are with the School of Sci-ence and Engineering, the Shenzhen Future Network of Intelligence In-stitute, and the Guangdong Provincial Key Laboratory of Future Net-works of Intelligence, The Chinese University of Hong Kong (Shenzhen), Longgang, Shenzhen 518172, China (e-mail: guanlinwu1@link.cuhk.edu.cn, chaohu@link.cuhk.edu.cn, shuguangcui@cuhk.edu.cn, xujie@cuhk.edu.cn). J. Xu is the corresponding author. P. Chen is with the Department of Computer Science, University of Liverpool, Liverpool, L697ZX, UK (e-mail: sgpchen4@liverpool.ac.uk). J. Zhang is with the School of Mathematical Science, University of Science and Technology of China, Hefei 230026, China (e-mail: juyong@ustc.edu.cn). H. Hu is with the School of Information and Electronics, Beijing Institute of Technology, Beijing 100081, China (e-mail: hhu@bit.edu.cn). 
+
+reconstruction techniques, 3D Gaussian splatting (3D-GS) has emerged as a highly promising approach for large-scale scene reconstruction [5]. Its strength lies in representing scenes using a collection of learnable 3D Gaussian primitives, which facilitate highly efficient, real-time rendering while achieving photorealistic quality, significantly surpassing conventional methods in both rendering speed and visual fidelity [6], [7]. Recent works further improve the reconstruction quality of 3D-GS, for instance, by leveraging a neural radiance field (NeRF) as an assistant to guide Gaussian optimization [8]. However, as the scene scale increases, 3D-GS models grow substantially in size, introducing considerable challenges in graphics processing unit (GPU) memory consumption, training latency, and computational overhead. To alleviate these issues, several works compress 3D-GS by evaluating the importance of individual Gaussian points and pruning the redundant points [9], [10]. Driven by advancements in the Artificial Intelligence of Things (AIoT) and wireless networks, a multitude of spa-tially distributed devices such as autonomous vehicles, virtual reality (VR) headsets, smartphones, and smart cameras are now equipped with enhanced sensing, communication, com-putation, and artificial intelligence (AI) capabilities. These devices can collectively capture multi-view 2D images for 3D-GS model reconstruction. Conventionally, the training of large-scale 3D-GS models relies on cloud computing, re-quiring distributed devices to transmit raw image data to a centralized data center. This approach, however, introduces significant challenges, including communication bottlenecks, privacy leakage risks, and under-utilization of the growing computational power available at the network edge [11], [12]. Consequently, instead of centralized training, distributed large-scale 3D-GS training has emerged as a promising alterna-tive paradigm. In this paradigm, distributed nodes leverage their collective communication and computational resources to collaborate on training 3D-GS models while preserving data privacy [13]. In the literature, only a handful of prior works have explored distributed 3D-GS training for large-scale scene reconstruction [14]–[19]. First, some works focused on dividing a large-scale scene into smaller sub-scenes, enabling each distributed device to handle the computational load associated with training a sub-scene independently [14], [15]. In [14], the authors pro-posed VastGaussian, a distributed 3D-GS training framework that utilizes the position and the visibility of the camera to divide the large-scale scene for training. In [15], the authors adopted a recursive scene partitioning strategy to balance the computational workload across distributed devices. Sim-ilarly, CityGaussian [20] adopts a divide-and-conquer training arXiv:2609.32177v1 [cs.CV] 26 Sep 2026 2
+
+scheme together with a level-of-detail strategy to enable real-time rendering of city-scale scenes. Next, some other works investigated how to merge the local models trained by different devices into a complete large global model [16], [17]. These approaches merge all local models on a central node and perform global model refinement via model distillation to mitigate boundary artifact points. Furthermore, to enhance system scalability and flexibility, the authors in [18] further investigated hierarchical cloud–edge–device training architec-tures, enabling centralized coordination through a small num-ber of intermediate edge nodes. In another line of research, federated learning (FL) has recently emerged as a privacy-preserving and communication-efficient solution for 3D-GS training at the wireless edge [19]. By allowing edge devices to perform on-device training and exchange only model up-dates, FL enables efficient coordination and accurate scene reconstruction without transmitting raw multi-view data to the server. In summary, compared to centralized 3D-GS training that gathers all raw multi-view data at a single node (e.g., cloud and edge server), the above distributed and federated learning approaches instead train models over communication rounds. The two paradigms trade off differently: centralized raw-data upload incurs a single large transmission and concentrates the full training workload on the server, whereas repeated model synchronization spreads communication across rounds while exploiting distributed on-device computation. The latter is more favorable in the large-scale edge scenarios considered in this paper, where raw image-camera records are numerous and ubiquitous edge devices provide abundant distributed computing resources that can be leveraged for training. Despite the merits, existing distributed/federated 3D-GS training approaches still exhibit critical limitations that hin-der their practical deployment. First, existing works fail to consider the resource limitations at wireless edge devices. In particular, limited GPU memory, computation, and communi-cation capabilities of devices make it challenging to train and frequently upload large 3D-GS models, but existing design approaches lack mechanisms to adapt model size and training workload accordingly. Second, effective aggregation of large-scale 3D-GS models is a challenging task. As the locally trained models may differ significantly in 3D structure and size, directly merging them at the central server can result in severe visual artifacts such as blurring or ghosting. Third, prior works heavily rely on a central server or network node to co-ordinate the devices for collecting the multi-view data and for global model refinement. However, this design deviates from practical edge scenarios, in which distributed devices need to acquire data independently based on local observations. Meanwhile, the central refinement leads to underutilization of local computational resources and raises significant privacy concerns as it often requires access to sensitive visual data (e.g., camera parameters) of local devices. In this paper, we develop a resource-efficient federated 3D-GS learning framework for large-scale scene reconstruction at wireless edge, where edge devices are constrained by computation, GPU memory, and communication resources. In this framework, each edge device in the wireless network performs local training based on its independently collected multi-view data and periodically uploads the model updates to the edge server without sharing raw images or camera parameters. To accommodate the constrained GPU memory, computation, and communication resources at devices for 3D-GS training, the framework incorporates a latency- and memory-aware model lightweighting mechanism and an on-server structure-consistent model recovery strategy, enabling efficient local training, privacy preservation, and effective global aggregation under constrained resources.  
+
+> •
+
+In the latency- and memory-aware model lightweighting mechanism, we quantitatively evaluate the importance of different Gaussian points for each device to facilitate the pruning, and propose analytic memory consumption and end-to-end training latency models as functions of the number of Gaussian points. Then, we exploit anovel importance-to-latency ratio criterion to determine the optimal number of retained Gaussian points under GPU memory and computation/communication latency constraints, thereby maximizing the training efficiency without compromising the rendering quality.  
+
+> •
+
+Furthermore, we propose a structure-consistent recovery mechanism to handle the structural mismatch among local 3D-GS models. This mismatch occurs because different devices select different subsets of Gaussian points and update them independently, leading to divergent local-model point positions and distributions. To support con-sistent aggregation, we introduce a binary mask to record the selected points for each device. These masks are then uploaded to the server to facilitate the recovery of complete models and gradient fields. This strategy allows the pruned Gaussian points to continue participating in future optimization, rather than being permanently excluded after pruning at any local device, ensuring a fairer contribution of each point to the global model. It preserves visual quality and mitigates visual artifacts such as ghosting and floaters.  
+
+> •
+
+Finally, we conduct comprehensive experiments on large-scale outdoor datasets to validate the effectiveness of our framework. The results show that our method achieves faster convergence, lower training latency, and higher ren-dering fidelity compared with state-of-the-art federated 3D-GS benchmark schemes under constrained computa-tion, communication, and memory budgets. The remainder of this paper is organized as follows. Section II introduces the preliminaries of 3D-GS for scene reconstruc-tion. Section III introduces the system model and the federated 3D-GS learning pipeline. Section IV presents the latency- and memory-aware model lightweighting mechanism. Section V proposes the model recovery strategy. Section VI presents numerical results to show the effectiveness of the proposed framework. Section VII concludes this paper. II. P RELIMINARIES 
+
+This section provides a brief overview of the 3D-GS rep-resentation, including its model representation, splatting and rendering processes, training loss formulation, and Gaussian point density control, which serve as the foundations of our framework. 3
+
+A. 3D-GS Model Representation 
+
+3D-GS is a point-based scene representation method that models a 3D scene as a collection of Gaussian points with attributes such as position, scale, rotation, opacity, and color. Its key principle is to render novel views by projecting these 3D Gaussian points onto the 2D image plane and blending their contributions. Specifically, each 3D Gaussian point is characterized by five attributes, including 3D position x = ( x, y, z ) ∈ R3, scaling factor s ∈ R3, rotation factor r ∈ R4, opacity α ∈ R with 
+
+0 ≤ α ≤ 1, and color information encoded using spherical harmonics coefficients h ∈ R3( v+1) 2
+
+, where v denotes the degree of the spherical harmonics basis. In this case, a single Gaussian point is denoted by g = (x, s, r, α, h). A 3D scene is represented by a set of Gaussian points, and the corresponding 3D-GS model is given by G = {g1, . . . , gU },where U denotes the total number of Gaussian points. 
+
+B. 3D-GS Workflow and Optimization 
+
+To render a 2D image from a specific viewpoint, the camera parameters are needed to specify the projection configuration. Let K ∈ R3×3 and E ∈ R4×4 denote the intrinsic and extrinsic matrices of the camera, respectively [21]. The camera configuration is then compactly represented as ψ = ( K, E).
+
+1) Splatting: In the splatting stage, each 3D Gaussian point is projected onto the 2D image plane. The resulting 2D covariance matrix Σ′ is computed as Σ′ = JW ΣW ⊤J⊤,where J ∈ R3×3 is the Jacobian matrix obtained from an affine approximation of the projective transformation [22], and W ∈ R3×3 corresponds to the rotation component of the camera extrinsic matrix. The 3D covariance Σ is constructed by Σ = RSS ⊤R⊤, where R is obtained from rotation factor r using the standard quaternion-to-matrix con-version [23], and S is a positive diagonal matrix given by 
+
+S = diag (exp (sx), exp (sy ), exp (sz )) . Here, sx, sy , sz are the three components of the scaling vector s, exp (·) denotes the element-wise exponential function, and diag (·) constructs a diagonal matrix from its arguments. 
+
+2) Rendering: In the rendering stage, the color of each pixel p ∈ R2 is computed by blending the contributions of nearby Gaussian points. Let J denote the set of Gaussian points whose 2D projections overlap with p. The effective opacity ˜αi of the i-th Gaussian is defined by ˜αi = αi ·
+
+exp  − 12 (p − ˜xi)⊤Σ′− 1 
+
+> i
+
+(p − ˜xi) , i ∈ J , where αi is the opacity, and ˜xi is the 2D projection of the Gaussian’s center. The final color C(p) is obtained via α-blending: 
+
+C(p) = X
+
+> i∈J
+
+ci ˜αii−1Y
+
+> j=1
+
+(1 − ˜αj ), (1) where ci ∈ R3 corresponds to the Red-Green-Blue (RGB) color space of the i-th Gaussian, computed using spherical harmonics coefficients hi [24]. 
+
+3) Training Loss Formulation: To optimize the model, 3D-GS employs a loss function that combines photometric accuracy and structural similarity. Specifically, it uses the L1
+
+loss to measure the pixel-wise color error and a structural dissimilarity loss transformed from the structural similarity index measure (SSIM) [25] to capture perceptual quality. Following the standard 3D-GS training objective [5], this structural dissimilarity loss is defined as LD-SSIM = 1 − SSIM. Therefore, the overall loss is defined as 
+
+L(I, ˜I) = (1 − λ) L1(I, ˜I) + λ LD-SSIM (I, ˜I), (2) where I is the ground-truth image, ˜I is the rendered image, and λ ∈ [0 , 1] is a given parameter balancing the two loss terms. Model parameters can be optimized via gradient-based methods such as stochastic gradient descent (SGD) [5]. 
+
+4) Point Density Control: 3D-GS dynamically applies gradient-based densification and pruning during training to improve scene fidelity [5]. 
+
+Densification: This process increases point density in under-represented regions by duplicating or splitting Gaussians with large reconstruction gradients. 
+
+(
+
+Clone , if ∂L  
+
+> ∂x2
+
+≥ τp and ∥S∥2 ≤ τs,
+
+Split , if ∂L  
+
+> ∂x2
+
+≥ τp and ∥S∥2 ≥ τs, (3) where ∂L 
+
+> ∂x
+
+is the gradient of the loss with respect to (w.r.t.) the 3D position, S is the scaling matrix, and τp and τs are pre-defined thresholds. 
+
+Pruning: This removes low-contributing Gaussian points whose opacity falls below a threshold τopa (i.e., α < τ opa ), or whose scale is large than threshold τs (i.e., ∥S∥2 ≫ τs). III. S YSTEM DESIGN AND OVERALL PIPELINE OF 
+
+FEDERATED 3D-GS L EARNING 
+
+This section introduces the system model and the overall learning pipeline for federated 3D-GS model training. 
+
+A. System Model 
+
+We consider a federated 3D-GS system composed of a single edge server and a set of K > 1 distributed edge devices, denoted by K = {1, . . . , K }, as illustrated in Fig. 1. The K
+
+edge devices aim to collaboratively reconstruct a large-scale 3D scene with the coordination of the edge server, under their constrained communication and computation resources. Specifically, each device k ∈ K maintains a local 3D-GS model denoted by ˆGk, whereas the edge server aggregates and maintains a global model G. Device k independently collects a local multi-view image dataset Dk = ( Ik,i , ψk,i )Dk
+
+> i=1
+
+, where 
+
+Ik,i ∈ RL×W ×3 represents the i-th RGB image of resolution 
+
+L × W and three color channels, and ψk,i ∈ R11 denotes the corresponding camera parameters. We assume that each device can obtain the camera extrinsic matrices in {ψk,i } with respect to a common global coordinate system. 1 The dataset size is Dk = |D k|. Note that data owned by different devices can be partially overlapping, i.e., Dk ∩ D k′̸ = ∅ for some 
+
+k, k ′ ∈ K with k′̸ = k, where ∅ denotes the empty set. In this 
+
+> 1This assumption follows related federated 3D works such as FedNeRF [26] and Fed3D-GS [19]. In practice, a device may first establish a local coordinate system for its observed region and then register it to the global coordinate system through device-side alignment, e.g., global navigation satellite system (GNSS)-based positioning [27], anchor-aided visual-inertial localization [28], map-based relocalization [29], or landmark alignment [30]. In online scenar-ios, newly captured images are registered by the same device-side module before being appended to the local dataset.
+
+4( )nGlobal model at round n       
+
+> Edge server Device k
+> Device K
+> ... 4）Local model uploading
+> 2）Global model lightweighting
+> Point selection
+> Parameters
+> optimization
+> 3）Local 3D-GS model training
+> Importance evaluation wn
+> (x1,s 1,r 1,α1,h1)
+> (x2,s 2,r 2,α2,h2)
+> (x3,s 3,r 3,α3,h3)
+> (x4,s 4,r 4,α4,h4)
+> …
+> w1
+> Visible Gaussian points
+> w2
+> w3
+> w4()n
+> Global model Local model
+> Local model Local model
+> epochs
+
+M( ) ( ),1 ,2 , ,..., n nk k
+
+  f f      
+
+> Position gradient ()nkFx
+> Dataset k5）Local 3D-GS model and gradient recovery
+> Recovery
+> Local model Recovered model ()(),1 ,2
+
+, ,..., n nk k
+
+  f f( ) nkFx    
+
+> Position gradient ()(),1 ,2
+
+, 0, 0, ,..., n nk k
+
+  f f Recovered gradient ( )ˆ nkFx                        
+
+> 6）Global model aggregation and update
+> …( ) 1
+> ˆn
+> Fx()()1,1 1,2 ,0,0, ,..., nn
+> ff2( ) ˆn
+> Fx( ) ( ) 2,1 2,2 ,0, ,0,..., nn
+> ff
+> …
+> Aggregation
+> Aggregation ( ) ˆn
+> FxDensity control (1) n+
+> Device 1
+> ... 1）Global model broadcasting ()1,
+> njf
+> is the j-th column of matrix ( ) 1
+> ˆn
+> Fx
+> Similarly for other gradient expressions
+
+Fig. 1. Illustration of the proposed federated 3D-GS learning framework. At each communication round, the edge server broadcasts the global 3D-GS model to distributed devices; each device then performs importance-to-latency ratio-based point selection, local lightweighted training, and uploads the updated local model, position gradients, and binary mask to the server for recovery and aggregation. 
+
+case, the training objective at each device k is to minimize the local rendering error between the ground-truth images and the images rendered from the current 3D-GS model. Accordingly, the local loss function for device k is defined as 
+
+Fk(G) ≜ 1
+
+Dk
+
+X
+
+(Ik,i ,ψk,i )∈D k
+
+f (G, Ik,i , ψk,i ), ∀k ∈ K , (4) where f (G, Ik,i , ψk,i ) denotes the per-sample loss, computed by rendering an image from model G using the camera parameters ψk,i , and comparing it with the ground-truth image 
+
+Ik,i . The loss formulation follows the one defined in (2). Accordingly, the global loss function on all the distributed datasets among devices is given by 
+
+F (G) = 1
+
+P
+
+k∈K Dk
+
+X
+
+k∈K 
+
+DkFk(G). (5) The objective of federated 3D-GS learning is to minimize the global loss function in (5) to obtain an optimized 3D-GS model as 
+
+G∗ = arg min 
+
+G F (G). (6) 
+
+B. Learning Pipeline 
+
+We consider the federated learning protocol based on the federated averaging (FedAvg) algorithm [31]. The training process proceeds over N communication rounds between the edge server and the edge devices, with each device performing 
+
+M local training epochs per communication round. We use the index sets N = {0, . . . , N − 1} and M = {0, . . . , M − 1}
+
+to denote those of the communication rounds and local epochs, respectively. In this pipeline, we incorporate model lightweighting and recovery procedures, whose detailed de-signs are presented in Sections IV and V, respectively. The step-by-step pipeline is summarized as follows. 
+
+1) Global Model Broadcasting: At the beginning of each round n ∈ N , the edge server broadcasts a global 3D-GS model G(n) = {g(n)
+
+i } ¯U (n)
+
+i=1 to all devices, where ¯U (n) denotes the total number of Gaussian points. Each g(n)
+
+i contains the attributes of the i-th Gaussian point. This model contains a complete set of points representing the complete 3D scene. 
+
+2) On-Device Model Lightweighting: Directly training the full-size global model on edge devices is often impractical due to their limited GPU memory, high computational latency, and communication constraints. To tackle this, each device k
+
+applies a local lightweighting procedure to construct a reduced model ˆG(n, 0) 
+
+k where 0 denotes initial lightweighted state by selecting a subset of Gaussian points from G(n) . In addition, each device k generates a binary mask m(n)
+
+k ∈ { 0, 1} ¯U (n)
+
+,where each element mj = 1 indicates that the j-th Gaussian point is retained, and mj = 0 indicates that it is pruned. The lightweighting operation is defined as 
+
+( ˆG(n, 0) 
+
+k , m(n)
+
+k ) = F(G(n), {ψk,i }Dk
+
+i=1 ), (7) where F(·) denotes the lightweighting function. Its design is detailed in Section IV-C. 
+
+3) Local Model Training: Let ˆG(n,m )
+
+k denote the local model on device k in epoch m at round n, with the initial lightweighted model ˆG(n, 0) 
+
+k . Each device k performs local training over M epochs using its lightweighted model ˆG(n, 0) 
+
+k
+
+and dataset Dk. At each epoch, an image and its corresponding camera parameter are sampled and processed, 2 and thus the local gradient is computed by 
+
+∇F (n,m )
+
+k = ∇f
+
+ ˆG(n,m )
+
+k , Ij , ψj 
+
+, (8) where (Ij , ψj ) ∼ D k. The model is then updated by 
+
+ˆG(n,m +1) 
+
+k = ˆG(n,m )
+
+k − η∇F (n,m )
+
+k , (9) where η is the learning rate. Meanwhile, each device accumu-lates the gradients w.r.t. the 3D positions of retained Gaussians across all epochs: 
+
+∇xF (n)
+
+k =
+
+M −1X
+
+m=0 
+
+∇xF (n,m )
+
+k . (10) These spatial gradients reflect the intensity of local geometric updates and are later used by the server to perform point 
+
+> 2
+
+Following the original 3D-GS training framework [5], at each epoch only one data sample (i.e., an image and its corresponding camera parameters) is processed due to the GPU memory limitations. Consequently, the default batch size is set to 1. Note that the design can be extended to other batch size to improve training efficiency (e.g., [32]), which is left for future work. 5
+
+density control. Note that these spatial gradient parameters do not contain raw visual data such as RGB images, viewpoint trajectories, or calibrated camera metadata, so the design reduces the direct exposure of privacy-sensitive raw records at the server. 3
+
+4) Local Update Uploading: Upon completing local train-ing, each device uploads three items to the server, including the updated lightweighted model ˆG(n,M −1)  
+
+> k
+
+, the accumulated position gradients ∇xF (n) 
+
+> k
+
+, and the binary mask m(n) 
+
+> k
+
+.
+
+5) On-Server Model Recovery: Next, the edge server im-plements a model recovery process on the uploaded local 3D-GS models before aggregating them. A key challenge in feder-ated 3D-GS learning lies in the inconsistent model structures across devices, due to heterogeneous lightweighting strategies. Unlike conventional FL where all devices share the same model architecture, in our case, each device selects a different subset of Gaussian points and independently optimizes their parameters. As a result, even shared points may undergo diver-gent spatial updates, making direct aggregation infeasible. To address this, the server employs a model recovery mechanism that reconstructs each device’s local models into a unified structure aligned with the global model. Specifically, the server restores both the updated local model and the corresponding position gradients based on the uploaded mask. The recovery is defined as 
+
+( ˜G(n,M −1)  
+
+> k
+
+, ∇x ˆF (n) 
+
+> k
+
+) = R(G(n), ˆG(n,M −1)  
+
+> k
+
+, ∇xF (n) 
+
+> k
+
+, m(n) 
+
+> k
+
+),
+
+(11) where R(·) denotes the recovery function, for which the details are provided in Section V. 
+
+6) Global Model Aggregation and Update: After recovery, the server performs weighted averaging across the recovered models and gradients, which is given by 
+
+˜G(n) = X
+
+> k∈K
+
+ Dk
+
+P 
+
+> k∈K
+
+Dk
+
+˜G(n,M −1) 
+
+> k
+
+
+
+. (12) Similarly, the aggregated global position gradient is given by 
+
+∇x ˆF (n) = X
+
+> k∈K
+
+ Dk
+
+P 
+
+> k∈K
+
+Dk
+
+
+
+∇x ˆF (n)
+
+> k
+
+
+
+. (13) Then, the server applies density control based on ∇x ˆF (n) to either prune or densify Gaussians, yielding the updated global model G(n+1) for the next round. The previous global model is discarded, and the new one is broadcast to all devices, for local model update and aggregation in round n + 1 .IV. L ATENCY - AND MEMORY -A WARE 3D-GS M ODEL 
+
+LIGHTWEIGHTING 
+
+To enable efficient large-scale 3D-GS model training subject to resource constraints at edge devices, we design a model lightweighting mechanism to adaptively select and remove un-necessary Gaussian points before each round of local training. 
+
+> 3Since 3D-GS is an explicit scene representation, the uploaded parameters may still encode scene geometry and appearance. Hence, the privacy benefit here is relative rather than absolute, and does not mean that the scene content is completely hidden from the server. Achieving more complete protection against information leakage from the explicit 3D-GS representation is beyond the scope of this work and is left as a promising direction for future research.
+
+This design is motivated by the observation that only a portion of the Gaussian points significantly contribute to the rendered images due to the viewpoint diversity across local datasets, and as a result, pruning the low-contributing points helps reduce memory usage and training latency overhead without compromising the rendering quality. To guide the Gaussian point selection strategy in the lightweighting design, we introduce a novel metric termed importance-to-latency ratio, which evaluates rendering utility relative to training latency cost. To clearly establish the quan-titative relationship between the number of Gaussian points and the resource cost, we provide a concrete model on the GPU memory consumption and the latency, based on low-level GPU execution behaviors. As such, the lightweighting pipeline follows three steps: (i) estimating per-point importance from local viewpoints, (ii) modeling memory and latency overhead during training, and (iii) selecting a subset of Gaussian points that maximizes the importance-to-latency ratio under memory and latency constraints. 
+
+A. Importance Score Estimation 
+
+To assess the contribution of each Gaussian point to the final rendered output, we compute a device-specific importance score for every point based on local viewpoints 4. The core idea is that the points frequently observed and actively contributing to the rendering quality from a device’s camera views should be prioritized during training, while those with minimal visual impact or being frequently occluded can be safely removed. Recall that, at the beginning of communication round 
+
+n, the broadcasted global model is denoted by G(n) =
+
+{x(n) 
+
+> j
+
+, s(n) 
+
+> j
+
+, r(n) 
+
+> j
+
+, α (n) 
+
+> j
+
+, h(n) 
+
+> j
+
+} ¯U (n) 
+
+> j=1
+
+. Each device k has its local dataset with camera parameters (ψk,i )Dk
+
+> i=1
+
+, where each ψk,i 
+
+defines an imaging plane. A Gaussian point is said to intersect a view if it is projected onto the associated imaging plane and contributes to at least one pixel. Let Pd denote the set of pixels in the d-th imaging plane, and S(n) 
+
+> d
+
+⊆ { 1, . . . , ¯U (n)} represent the indices of Gaussian points that intersect this view. Inspired by importance-based Gaussian evaluation [9], [10], [33], for a given Gaussian point j, its influence on the d-th view is quantified as 
+
+wdj =
+
+X
+
+> i∈P d
+
+α(n)
+
+> j,i
+
+Y
+
+> l∈S (n)
+> d
+> dis (l)<dis (j)
+
+
+
+1 − α(n)
+
+> l,i
+
+
+
+if j ∈ S (n) 
+
+> d
+
+,
+
+0 if j / ∈ S (n) 
+
+> d
+
+,
+
+(14) where α(n) 
+
+> j,i
+
+denotes the opacity contribution of point j to pixel i, and dis (j) is its depth relative to that pixel. The product term accounts for occlusion by front-facing points, i.e., only unoccluded contributions are aggregated. In essence, 
+
+wdj measures the impact of point j on the d-th image after  
+
+> 4Here, local viewpoints refer to the camera parameters of the images already available in the local dataset at device k. If new images are later collected from different viewpoints, they can be incorporated into the local dataset, and the importance scores and selected Gaussian subset can be recomputed in subsequent communication rounds. For novel rendering within the observed scene, the aggregated 3D-GS model can render unseen viewpoints, while completely unobserved regions require additional visual observations and subsequent federated updates. 6
+
+occlusion handling. If the point does not project onto this view, its contribution is set to zero. In our work, the importance score is computed from the same forward rasterization quantities used by 3D-GS training. On the splatting side, the score requires the projected Gaussian footprint, intersected pixels, and depth ordering, which are also used in the splatting stage. On the rendering side, it uses the opacity contribution and front-to-back transmittance product in the standard α-blending process. Thus, importance estimation can reuse the same splatting/rendering pipeline and, when the model state and view are unchanged, the corresponding intermediate values/caches. The additional operation is mainly the accumulation of per-pixel contributions into a per-Gaussian score vector, without an additional backward pass, optimizer update, or communication step. In our latency accounting, this forward-only pre-lightweighting cost is covered by the same splatting/rendering latency model and is much smaller than the repeated forward-backward local training and model synchronization costs. Next, we define the overall importance score of point j
+
+across the entire local dataset as the sum of its contributions over all camera views: 
+
+wj =
+
+> Dk
+
+X
+
+> d=1
+
+wdj . (15) As a result, we obtain a per-device importance score wk ∈
+
+R ¯U (n)
+
+for device k, where the j-th entry wj represents the importance score for the j-th point. Intuitively, this score quantifies the visible rendering contri-bution of a Gaussian point from the local viewpoints available to device k. A high score indicates that the point is frequently visible, contributes to many pixels with non-negligible opacity, and is not heavily occluded, whereas a low score indicates that the point is rarely observed, weakly contributes to the rendered pixels, or is frequently occluded. Besides, the absolute score values may vary with the density of local camera views, device deployment, and Gaussian points. First, increasing the density of local camera views at device k adds more view-wise terms to wj = PDk 
+
+> d=1
+
+wdj , so points that are repeatedly visible from these views tend to receive larger scores. Second, since the score is computed locally, increasing the device density does not change the score at any single device; instead, a point that is invisible or occluded at one device may still be visible and receive a high score at another, so scores from different devices reflect their own local viewpoints and are not directly com-parable across devices. Third, when the same scene region is represented by more Gaussians, its nearly conserved per-pixel rendering contribution is shared among more primitives, so the score of each individual Gaussian tends to decrease. In all these cases, however, only the numerical values of the scores change, whereas the meaning and role of the importance score stay the same: it always measures how much each Gaussian point contributes to rendering the local views of its device, and is used to rank points within the same global model. For this reason, the score is meaningful as a relative ranking on each device, rather than as an absolute value that can be compared across different models or scenes. These scores are then used 0-0.001 0.001-0.01 0.01-0.1 0.1-1 1-10 10-100 100-1000 >1000 
+
+> Importance score range
+> 0510 15 20 25 30 35 40
+> Percentage (%)
+> Device 0 Device 1 Device 2 Device 3 Device 4
+> Fig. 2. Distribution and range of importance scores for Gaussian points in an example from experiments with 5 devices and a total of 3,222,794 Gaussian points.
+
+to guide point selection under memory and latency constraints. An example of the computed importance score distribution across devices is illustrated in Fig. 2. It is observed that the majority of points have extremely low importance scores, implying their minimal influence on the rendering result. This demonstrates that a substantial portion of the points is visually redundant and can be removed without affecting rendering fidelity. 
+
+B. GPU Memory and Latency Modeling 
+
+In this subsection, we model the GPU memory and end-to-end latency cost of 3D-GS training as explicit functions w.r.t the number of selected Gaussian points by considering low-level GPU execution behaviors, establishing a clear quan-titative relationship between the number of retained points and the associated resource overhead. 
+
+1) GPU Memory Consumption Modeling: We begin with a memory consumption model that characterizes the peak GPU usage during local training. This model is used to avoid out-of-memory failures and ensure safe execution on edge devices. Based on the memory consumption model in [34], [35], we decompose the peak memory usage during the n-th communication round on device k into four major components, including base memory consumption, as well as usage for model parameters, optimizer states, and input/output tensors, respectively. First, we consider the base memory consumption Obase  
+
+> k
+
+,which accounts for the memory occupied by the GPU runtime system, such as CUDA context and kernel management [36]. This component is independent of the model or data and remains constant throughout training. Then, the memory consumption from model parameters is given by 
+
+O(n),para  
+
+> k
+
+(U (n) 
+
+> k
+
+) = zpara qpara U (n) 
+
+> k
+
+, (16) where U (n) 
+
+> k
+
+is the number of selected Gaussian points, zpara is the number of parameters per point, and qpara is the number of Bytes per parameter (e.g., 4 Bytes for FP32). Next, we consider the memory consumption from the optimizer. In this work, we consider the SGD optimizer. Accordingly, the memory consumption by optimizer is 
+
+O(n),opt  
+
+> k
+
+(U (n) 
+
+> k
+
+) = zopt qopt U (n) 
+
+> k
+
+, (17) where zopt = zpara denotes the required number of gradients for one single Gaussian point, that equals to the number of parameters, and qopt is the required Bytes per gradient entry. 7                           
+
+> TABLE I VALIDATION OF THE ANALYTICAL PEAK -M EMORY MODEL IN (19) AGAINST THE MEASURED PEAK GPU M EMORY DURING LOCAL 3D-GS TRAINING .
+> Uk(×10 6)DkPredicted [GB] Measured [GB] Rel. err. [%] 0.756472 320 5.309 5.265 0.84 0.934897 320 5.392 5.329 1.18 1.132375 320 5.484 5.426 1.07
+
+Finally, we analyze the memory consumption of input and output tensors during training, including input data samples, 5
+
+intermediate outputs, and predicted data samples [35]. The memory consumption of the tensors is given by 
+
+On, ten  
+
+> k
+
+(U (n) 
+
+> k
+
+) = Dk(zψ qpara + 3 |I|qpara ) + ztemp qpara U (n) 
+
+> k
+
+,
+
+(18) where zψ denotes the number of elements in the camera parameter matrix, which serve as input, |I| is the number of pixels in the ground-truth image and ztemp is the number of the elements of the temporary intermediate variables (e.g., covariance matrices) used during rendering. Combining the above components, the peak memory model of device k at the n-th communication round is expressed by 
+
+O(n),peak  
+
+> k
+
+(U (n) 
+
+> k
+
+) = O(n),para  
+
+> k
+
++ O(n),opt  
+
+> k
+
++ O(n),ten  
+
+> k
+
++ Obase 
+
+> k
+
+= ( zpara qpara + zopt qopt + ztemp qpara )U (n)
+
+> k
+
++ Dk(zψ qpara + 3 |I|qpara ) + Obase  
+
+> k
+
+.
+
+(19) To prevent out-of-memory issues, we enforce the following constraint: 
+
+O(n),peak  
+
+> k
+
+(U (n) 
+
+> k
+
+) ≤ Omax  
+
+> k
+
+, (20) where Omax  
+
+> k
+
+denotes the maximum GPU memory of device k.We compare the peak-memory model in (19) with the measured peak GPU memory. As reported in Table I, the prediction matches the measurement within about 1.2% (mean absolute percentage error 1.0% ), showing that our memory model provides an accurate estimate with an acceptable error. 
+
+2) End-to-End Latency Modeling: We next model the end-to-end latency of federated 3D-GS training, which consists of computation latency and transmission latency. 6
+
+First, we consider the computation latency, which stems from the execution of GPU kernels during local training. Unlike conventional latency estimations that rely solely on floating-point operation counts (FLOPs), our analysis captures the unique data access patterns and parallel execution charac-teristics of 3D-GS with low-level GPU behaviors. Specifically, the computation latency is determined by the two stages of the 3D-GS framework: splatting and rendering.           
+
+> 5Following the official 3D-GS implementation [5], the entire local dataset is preloaded into GPU memory at the beginning of training and kept resident throughout, so as to avoid frequent host-to-GPU data transfers at each iteration.
+> 6We do not include the latency of the sparse point cloud initialization (e.g., via COLMAP [37]), as we focus on analyzing the latency during training. Efficient and federated-friendly initialization methods are considered out of the scope of this work and can be explored in future research.
+
+In the splatting stage, as presented in Section II-B1, each Gaussian point undergoes 3D-to-2D projection with covari-ance transformation. This is implemented using a point-parallel execution pattern, where each GPU thread indepen-dently processes a single Gaussian point across both forward and backward processes during training. Based on the GPU execution model in [38], the latency for the splatting stage for device k in epoch m at communication round n is given by 
+
+T (n,m ) 
+
+> k, splat
+
+(U (n) 
+
+> k
+
+) = 
+
+&
+
+U (n)
+
+> k
+
+βk
+
+'
+
+γk, (21) where βk is the maximum number of GPU threads that can be run in parallel, and γk is a device-specific latency coefficient that encapsulates the arithmetic cost and throughput of processing one block of Gaussian points. This formulation captures the linear growth of latency with the number of points in the 3D-GS model. 
+
+Remark 1. The coefficient γk in (21) is derived from the GPU execution and roofline performance model [38], given by 
+
+γk = NFLOPs 
+
+ϵkN roofline 
+
+> k
+
+, N roofline  
+
+> k
+
+= min 
+
+ NFLOPs 
+
+B Bk, φ k
+
+
+
+, (22) where NFLOPs denotes the FLOPs for a single thread block (e.g., 256 Gaussian points), ϵk is the effective computational efficiency, B is the volume of access data per block, Bk and φk
+
+denote the maximum memory bandwidth and the peak FLOP throughput of device k, respectively. This formulation captures both the computational demands of the 3D-GS algorithm and the hardware capabilities of the GPU. Since all the involved parameters can be profiled during training, the model is readily applicable for estimating in practice. In the rendering stage, as presented in Section II-B2, each image pixel is computed by accumulating the contributions of overlapping Gaussian points using the α-blending technique [5]. This process adopts a different pattern: each GPU thread computes the color of a single pixel in parallel. Accordingly, the latency of the rendering stage is computed by 
+
+T (n,m )
+
+> k, render
+
+(U (n) 
+
+> k
+
+) = 
+
+ |I|
+
+βk
+
+
+
+δ(U (n) 
+
+> k
+
+)˜ γk, (23) where ˜γk = ˜NFLOPs   
+
+> ˜ϵk˜Nroofline
+> k
+
+denotes the latency coefficient for the rendering stage and ˜ϵk is the efficiency during rendering. The term ˜N roofline  
+
+> k
+
+= min 
+
+ ˜NFLOPs  
+
+> ˜B
+
+Bk, φ k
+
+
+
+follows the same roofline model as in the splatting stage, but varies in rendering-specific FLOPs ˜NFLOPs and memory volume ˜B. To account for the increased computational burden when rendering denser point set in one pixel, we introduce a scaling factor δ(U (n) 
+
+> k
+
+) = ϕ1 +
+
+ϕ2  
+
+> U(n)
+> k
+> |I|
+
+, where ϕ1 and ϕ2 are empirically fitted constants. This term captures the linear growth in per-pixel computation as the number of visible Gaussian points increases. Therefore, the total computation latency after M local epochs is calculated by T (n)
+
+> k, comp
+
+(U (n) 
+
+> k
+
+) = M (T (n,m ) 
+
+> k, splat
+
+(U (n) 
+
+> k
+
+) + T (n,m )
+
+> k, render
+
+(U (n) 
+
+> k
+
+)) .To validate the training latency models presented in (21) and (23), we conduct experiments to compare the estimated latency against the actual measurements obtained using the NVIDIA Nsight Profiler [39] on two different GPU devices, as shown 8                    
+
+> TABLE II ESTIMATION AND MEASUREMENT OF LATENCY FOR TWO STAGES
+> (S PLATTING AND RENDERING )FOR 100 L OCAL EPOCHS .
+> Tsplat (s)Trender (s)
+> Measured Estimated Measured Estimated RTX 3090 1.5530 2.4728 41.3355 43.8591 RTX 3060 4.1076 5.9211 72.3471 75.9602
+
+in Table II. The results suggest that the proposed computation latency model provides a reasonably accurate estimation of the actual 3D-GS training latency. Next, we consider the communication latency, which in-cludes downlink and uplink latency. The downlink latency corresponds to the time duration for broadcasting the global model G(n) from the edge server to device k, which is calculated by T (n),d 
+
+> k
+
+= H(n)
+
+> r(n),d
+> k
+
+, where H(n) = zpara qpara ¯U (n) is the total number of Bytes required to transmit the model, and 
+
+r(n),d 
+
+> k
+
+denotes the downlink data rate. Here, ¯U (n) is the known number of Gaussian points of the global model, which is fixed within each communication round, and the communication rate is constant per round. The uplink latency accounts for the transmission of the local model G(n,M −1)  
+
+> k
+
+, the binary mask m(n) 
+
+> k
+
+, and the accumulated position gradients ∇xF (n) 
+
+> k
+
+. Since the binary mask introduces negligible overhead, it is omitted in the size calculation. The total required number of Bytes for uplink transmission are H(n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) = zpara qpara U (n) 
+
+> k
+
++ dim (x)qopt U (n) 
+
+> k
+
+, where dim (x) = 3 represents the dimensionality of the 3D position parameters. The corresponding uplink latency is T (n),u 
+
+> k
+
+=   
+
+> H(n)
+> k(U(n)
+> k)
+> r(n),u
+> k
+
+, with r(n),u 
+
+> k
+
+denoting the uplink rate for device k.By combining the above components, the total latency for device k at the n-th communication round is given by 
+
+T (n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) = T (n)
+
+> k, comp
+
+(U (n) 
+
+> k
+
+) + T (n),d 
+
+> k
+
++ T (n),u 
+
+> k
+
+(U (n) 
+
+> k
+
+)= M
+
+&
+
+U (n)
+
+> k
+
+βk
+
+'
+
+NFLOPs 
+
+ϵkN roofline 
+
+> k
+
++
+
+ |I|
+
+βk
+
+
+
+δ(U (n) 
+
+> k
+
+) ˜NFLOPs 
+
+˜ϵk ˜N roofline 
+
+> k
+
+!
+
++ zpara qpara ¯U (n)
+
+r(n),d
+
+> k
+
++U (n)
+
+> k
+
+zpara qpara + dim (x)qopt 
+
+r(n),u
+
+> k
+
+.
+
+(24) 
+
+Remark 2. It is worth noting that the number of local epochs 
+
+M is another important factor affecting the end-to-end latency, as shown in (24). Under a fixed latency budget, there exists a tradeoff between retaining more Gaussian points for fewer local epochs and retaining fewer Gaussian points for more local epochs. The former improves the coverage of the current global 3D-GS model but provides fewer optimization steps for each retained point, whereas the latter enables more sufficient local refinement of the selected important points but may exclude some less highly ranked points that are still useful for global reconstruction. In this work, we fix M across all compared methods and focus on optimizing the number of retained Gaussian points U (n) 
+
+> k
+
+, so as to isolate the effect of the proposed latency- and memory-aware lightweighting design. Jointly optimizing M and U (n) 
+
+> k
+
+would require modeling the long-term convergence behavior across communication rounds and is left as an interesting direction for future work. 
+
+C. Importance-to-Latency Ratio-Based Point Selection 
+
+We now develop a point selection strategy that leverages the per-point importance scores and the models of memory and latency cost. The objective is to select a subset of Gaussian points that provides the greatest rendering benefit while incurring the least latency overhead under the device’s resource constraints. In particular, we present a novel metric, named the importance-to-latency ratio, which is designed to maximize the rendering contribution per unit of end-to-end training latency. Let U (n) 
+
+> k
+
+denote the number of Gaussian points selected for training on device k at the n-th communication round. We define the importance-to-latency ratio as 
+
+ρ(n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) = 
+
+PU (n) 
+
+> k
+> j=1
+
+˜wj
+
+T (n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) , (25) where { ˜w} ¯U (n) 
+
+> j=1
+
+is the sequence of importance scores sorted in descending order, i.e., ˜w1 ≥ ˜w2 ≥ . . . ≥ ˜w ¯U (n) > 0, the term PU (n) 
+
+> k
+> j=1
+
+˜wj represents the cumulative importance of the top-U (n) 
+
+> k
+
+points, and T (n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) denotes the corresponding end-to-end latency, as given in (24). We now leverage the importance-to-latency ratio ρ(n) 
+
+> k
+
+(U (n) 
+
+> k
+
+)
+
+to guide resource-efficient Gaussian point selection. Intuitively, maximizing this ratio allows each device to select the subset of points that offers the highest cumulative rendering benefit per unit of training cost. This leads to the following optimization problem, which determines the optimal number of selected points under device-specific memory and latency constraints: 
+
+max   
+
+> U(n)
+> k∈Z+
+
+ρ(n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) (26) 
+
+s.t. 0 ≤ O(n),peak  
+
+> k
+
+(U (n) 
+
+> k
+
+) ≤ Omax  
+
+> k
+
+, (27) 
+
+0 ≤ T (n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) ≤ Tmax , (28) where the constraint in (27) corresponds to the GPU memory constraint, and the constraint in (28) is the end-to-end training latency constraint. In (28), Tmax represents the maximum tolerable per-device latency, which is introduced to ensure that the training is completed within an acceptable duration. 
+
+Remark 3. The optimization problem in (26)–(28) is solved online by each device at each communication round, rather than as a global optimization over the entire training horizon that pre-determines the retained Gaussian configuration of all rounds. This per-round adaptation is adopted because the Gaussian importance scores, the feasible memory and latency budgets, and the wireless channel conditions are all round-dependent and not available in advance. Due to the monotonicity of O(n),peak  
+
+> k
+
+(U (n) 
+
+> k
+
+) and T (n) 
+
+> k
+
+(U (n) 
+
+> k
+
+)
+
+w.r.t. the number of selected points U (n) 
+
+> k
+
+, the constraints in (27) and (28) can be equivalently translated into two upper bounds on U (n) 
+
+> k
+
+. Let ˜Uk and U lat  
+
+> k
+
+denote the maximum 9
+
+number of Gaussian points satisfying the memory and latency constraints, respectively. Both of them can be efficiently ob-tained by binary search. Then, the feasible range of U (n) 
+
+> k
+
+is transformed to 1 ≤ U (n) 
+
+> k
+
+≤ ˆUk ≜ min 
+
+n ˜Uk, U lat 
+
+> k
+
+o
+
+.Notice that the latency function in (24) contains a ceiling operator, which introduces stepwise changes in latency func-tion and disrupts the regularity of ρ(n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) over the entire feasible domain. To tackle this issue, we partition the candidate set of Gaussian point counts into smaller intervals and bound-ary points. Within each interval, ρ(n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) behaves more smoothly and can be characterized efficiently. Specifically, we define 
+
+Bb ≜ { U (n) 
+
+> k
+
+∈ Z+ :
+
+bβ k + 1 ≤ U (n) 
+
+> k
+
+≤ min {(b + 1) βk − 1, ˆUk}} ,b = 0 , 1, . . . , ⌊ ˆUk − 1
+
+βk
+
+⌋, (29) and 
+
+Bedge = {U (n) 
+
+> k
+
+∈ Z+ : U (n) 
+
+> k
+
+= ( ˜b + 1) βk},
+
+˜b = 0 , 1, . . . , ⌊ ˆUk
+
+βk
+
+⌋ − 1. (30) For each interval Bb, we aim to find the locally optimal number of selected points, denoted by U (n)∗ 
+
+> k,b
+
+, which maximizes the importance-to-latency ratio. 
+
+Theorem 1. For each set Bb, there exists at least one optimal solution U (n)∗ 
+
+> k,b
+
+∈ B b, such that 
+
+∆ρ(n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) ≥ 0, ∀U (n) 
+
+> k
+
+∈ B b with U (n) 
+
+> k
+
+< U (n)∗ 
+
+> k,b
+
+, (31) and 
+
+∆ρ(n) 
+
+> k
+
+(U (n) 
+
+> k
+
+) ≤ 0, ∀U (n) 
+
+> k
+
++ 1 ∈ B b with U (n) 
+
+> k
+
+≥ U (n)∗ 
+
+> k,b
+
+,
+
+(32) where ∆ρ(n) 
+
+> k
+
+(U ) ≜ ρ(n) 
+
+> k
+
+(U + 1) − ρ(n) 
+
+> k
+
+(U ).
+
+Proof. See Appendix A. Theorem 1 implies that within each Bb, the ratio ρ(n) 
+
+> k
+
+(U (n) 
+
+> k
+
+)
+
+should be entirely non-decreasing, entirely non-increasing, or first increasing to a maximum and then decreasing. This allows us to efficiently find U (n)∗ 
+
+> k,b
+
+via discrete binary search. After identifying the locally optimal U (n)∗ 
+
+> k,b
+
+for each block Bb and evaluating the endpoints in Bedge , the global optimum is given by 
+
+U (n)∗ 
+
+> k
+
+= arg max {ρ(n) 
+
+> k
+
+(U (n)∗ 
+
+> k,b
+
+), ρ (n) 
+
+> k
+
+(( ˜b + 1) βk)},b = 0 , 1, . . . , ⌊ ˆUk − 1
+
+βk
+
+⌋, ˜b = 0 , 1, . . . , ⌊ ˆUk
+
+βk
+
+⌋ − 1. (33) To track Gaussian points, we employ a binary mask vector 
+
+m(n) 
+
+> k
+
+= [m1, m 2, . . . , m ¯U (n) ] ∈ {0, 1} ¯U (n)
+
+, where mj =1 indicates that the j-th Gaussian point is retained, and 
+
+mj = 0 otherwise. The number of selected points satisfies 
+
+∥m(n) 
+
+> k
+
+∥0 = U (n) 
+
+> k
+
+, where ∥ · ∥ 0 denotes the l0-norm. The mask is then transmitted from each device to the edge server, facilitating global model aggregation. Notably, the use of such a compact mask offers a communication-efficient and structure-preserving approach for model pruning, which is particularly advantageous for large-scale models. In summary, the proposed model lightweighting mechanism enables each device to only retain a subset of Gaussian points that balance the rendering quality and training latency cost. This is achieved by maximizing the importance-to-latency ratio under per-device memory and latency constraints. The optimization problem can be solved efficiently via block-wise search, and the selected subset is encoded using a binary mask to facilitate the aggregation on server. V. M ODEL AND GRADIENT RECOVERY FOR 
+
+STRUCTURE -C ONSISTENT AGGREGATION 
+
+In this section, we present the model and gradient recov-ery mechanism to address the structural inconsistency issue across locally trained 3D-GS models caused by heterogeneous lightweighting strategies of devices. Since each device selects and updates a distinct subset of Gaussian points, the number and structure of Gaussian points vary across devices, breaking the structural alignment required for standard aggregation methods such as parameter-wise averaging. Directly merging the uploaded models would lead to severe visual artifacts (e.g., ghosting or blurring), particularly near object boundaries [40]. To address this, we propose a recovery mechanism that re-stores both the local model parameters and the associated position gradients to unified structures before aggregation, thereby ensuring consistent indexing and alignment across all devices. In particular, after completing local training, device k
+
+uploads the following parameters to the edge server: (i) its updated local 3D-GS model ˆG(n,M −1)  
+
+> k
+
+, (ii) the binary mask 
+
+m(n) 
+
+> k
+
+indicating which Gaussians were retained, and (iii) the accumulated gradients ∇xF (n) 
+
+> k
+
+for 3D positions. Denote 
+
+m(n) 
+
+> k
+
+∈ { 0, 1} ¯U (n)
+
+as the binary mask uploaded by device 
+
+k, where mi = 1 indicates that the i-th Gaussian point was locally retained and uploaded. Let g(n) 
+
+> k,j
+
+denote the j-th point in the uploaded local model (after lightweighting), and 
+
+g(n) 
+
+> i
+
+denote the i-th point in the global model distributed at the beginning of the current communication round. Since the retained Gaussians form a sparse subset of the global model, we define the prefix sum j = Piℓ=1 mℓ to map the global index i to the corresponding local index j in the uploaded model. As such, the parameters of the recovered point at index 
+
+i for device k are given by 
+
+˜g(n) 
+
+> k,i
+
+=
+
+(
+
+ˆg(n) 
+
+> k,j
+
+, if mi = 1 ,
+
+g(n) 
+
+> i
+
+, if mi = 0 . (34) This mechanism implies:  
+
+> •
+
+If the point was selected during lightweighting and has been updated via local training, we reuse the correspond-ing entry from the uploaded model.  
+
+> •
+
+If the point was pruned and not updated locally, we recover it by copying the original Gaussian from the global model at the same index. Similarly, f (n) 
+
+> k,j
+
+is the accumulated gradient of the j-th point in the uploaded gradient. To reconstruct the complete gradient 10 
+
+for global aggregation, the recovered gradient for the point at index i is constructed by 
+
+ˆf (n) 
+
+> k,i
+
+=
+
+(
+
+f (n) 
+
+> k,j
+
+, if mi = 1 ,
+
+0, if mi = 0 , (35) where 0 denotes the zero vector. After recovery, the server performs weighted averaging across the recovered models and gradients for aggregation, and thus obtains the updated global model and gradients. This recovery mechanism ensures that the model of each device is fully aligned with the structure of the global model, enabling consistent aggregation across heterogeneous devices. In particular, this recovery step prevents the local lightweight-ing from permanently excluding any Gaussian point from training: although a device prunes part of its points during local training, the recovery reinstates them from the global model before aggregation. Hence, even if a point is pruned by all devices in the same round, the recovery preserves its parameters intact through the zero-gradient inactive entries, so a temporarily low importance score leads at worst to a missed update in that round rather than an irreversible removal. Whether a point is ultimately densified or pruned is instead governed by the standard server-side adaptive density control, which operates on the aggregated global gradient field rather than on any single device’s transient local score. These points remain eligible for future updates, which avoids the irreversible loss of structural or semantic information in the scene. Moreover, by restoring the full gradient field across all Gaussian points (including zero-filled gradients for inactive points), the recovery mechanism supports the later procedures (i.e., density control), which rely on global gradient information to refine and regenerate scene geometry across rounds. VI. E XPERIMENT RESULTS 
+
+In this section, we present experimental results to evaluate the effectiveness of the proposed framework. 
+
+A. Experimental Setup 1) System Configurations: We conduct all experiments in a simulated environment using a single NVIDIA A100 GPU. To emulate the computation characteristics of edge devices, we profile GPU-specific computational parameters through repeated measurements on an NVIDIA RTX 3090 using the NVIDIA Nsight Profiler [39]. These profiled parameters are then used to simulate on-device training behaviors. The pro-posed design and all benchmark schemes are simulated under this unified simulation setup. 
+
+2) Learning Datasets: We adopt a real-world large-scale dataset from Mill19 [41], which captures two outdoor environ-ments using drone cameras: (1) the Building scene: contains 1,940 RGB images at a resolution of 4608 × 3456 ; and (2) the Rubble scene: contains 1,678 RGB images at the same resolution. The dataset also provides accurate per-frame intrinsic and extrinsic camera parameters. We also adopt (3) the Polytech scene from the UrbanScene3D dataset [42], which contains 999 RGB images at a resolution of 5472 × 3648 .To simulate a realistic setting, we assign multi-view images to devices in an unbalanced manner, such that each device receives a different number of images with varying scene coverage. Following the strategy used in Fed3D-GS [19], we first randomly sample a viewpoint anchor for each device within the scene, and then assign a random number of images captured from nearby camera poses around the anchor. This results in heterogeneous data distributions across devices. 
+
+3) Implementation: Experiments are implemented using the PyTorch deep learning framework. Our federated 3D-GS learning framework is developed based on the Flower framework [43], while the local training is built based on the official 3D-GS implementation [5]. To ensure fair comparison and reproducibility, all local training hyperparameters are kept consistent with the official 3D-GS. A key modification is that the density control mechanism is disabled during local training and instead is executed centrally on the server during global model aggregation, as presented in Section III-B. For the federated learning setup, we consider K = 5 edge devices, each performing M = 150 local training epochs per communication round, with a total of N = 200 global communication rounds. In the GPU memory model, we assume 32-bit floating-point precision, leading to 4 Bytes per parameter and gradient, i.e., qpara = qopt = 4. The dataset is downsampled by a factor of four, resulting in |I| = 1152 × 864 = 9 .95 × 10 5
+
+pixels per image. The Polytech scene is downsampled by the same factor, giving |I| = 1368 × 912 = 1 .25 × 10 6
+
+pixels per image. We adopt a spherical harmonic degree of 
+
+v = 3 , consistent with the 3D-GS configuration [5], yielding 59 parameters per Gaussian point and corresponding optimizer state (i.e., zpara = zopt = 59 ). We also set ztemp = 7 for intermediate tensors and zψ = 51 for camera parameters. For memory-constrained edge devices, we set the maximum GPU memory to 6 Gigabytes, with a base memory consumption of 
+
+1.5 Gigabytes. According to official NVIDIA documentation [44]–[46], the GPU supports up to 3.558 × 10 13 FLOPs/s computation throughput, a peak memory bandwidth of 9.36 ×
+
+10 11 Bytes/s, and 125,952 threads for parallel execution. The computation efficiency coefficients are set as ϵ = 0 .38 
+
+and ˜ϵ = 0.74 . In the computation latency model, we set 
+
+NFLOPs = 657408 FLOPs and B = 550400 Bytes for the splatting stage, and ˜NFLOPs = 12 MFLOPs, ˜B = 0 .35 MBytes for the rendering stage. The scale factor parameters are set as 
+
+ϕ1 = 1 .67 and ϕ2 = 0 .7.In the communication model, we utilize real-world 5G measurement datasets [47], [48] to simulate practical large-scale wireless conditions. Specifically, the downlink communi-cation rate is obtained from a commercial 5G dataset reported in [48], while uplink communication rates are derived from two distinct scenarios in the 5G measurement dataset [47], cor-responding to mobile (driving) and static user environments. During simulation, each device independently samples one of the two uplink environments as its communication setting. 
+
+4) Benchmark Schemes: We consider six benchmark schemes for performance comparison.  
+
+> •
+
+3D-GS [5]: This scheme represents the centralized train-ing setup, where all training images and their corre-11 
+
+sponding camera parameters are aggregated at a single computing node. The standard 3D-GS training pipeline is executed without any data or model distribution.  
+
+> •
+
+Fed3D-GS [19]: This state-of-the-art benchmark per-forms independent 3D-GS training on each device, where the entire local model is trained without any intermedi-ate model exchange. After local training is completed, each device uploads its model to the server in a one-shot communication manner. The server then conducts a refinement stage to construct the global model, which also follows the standard 3D-GS training pipeline (i.e., splatting and rendering). As such, the communication latency consists of only a single communication round. However, the overall computation latency includes both local training and server-side retraining, which can be also estimated using our latency model.  
+
+> •
+
+Full memory load with recovery design: Each de-vice selects the maximum allowable number of Gaus-sian points determined by its GPU memory and latency constraints in each communication round, i.e., U (n) 
+
+> k
+
+=ˆUk, ∀n ∈ N , and the recovery mechanism is used to restore the model and gradients on the server.  
+
+> •
+
+Lightweighting only design: Each device first selects the optimal number of Gaussian points U (n)∗ 
+
+> k
+
+by solv-ing problem (26), and then performs local training. The resulting local models are uploaded to the server and directly merged without parameter averaging, i.e., 
+
+G(n+1) = SKi=1 G(n) 
+
+> i
+
+. 
+
+> •
+
+Full model training design: We deactivate the memory and latency constraints of edge device in this scheme. At each communication round, each device locally trains on the complete set of Gaussian points based on its dataset and uploads the entire model to the server, where param-eter averaging is applied to update the global model.  
+
+> •
+
+DOGS [15]: This distributed 3D-GS benchmark recur-sively partitions a large-scale scene into balanced blocks and trains the corresponding local models in parallel through Gaussian consensus. We retain its original train-ing and consensus framework without algorithmic modifi-cations. To align its local training budget with our setting, we set the number of local training epochs between two consecutive consensus operations to M = 150 . We further add a latency-accounting module based on the computation and transmission latency models in Sec-tion IV to evaluate its end-to-end training latency for comparison. 
+
+5) Performance Metrics: We adopt the following three widely adopted performance metrics in 3D reconstruction tasks: a) peak signal-to-noise ratio (PSNR), which measures pixel-wise reconstruction error, where higher values indicate better reconstruction quality; b) SSIM [25], which evaluates the similarity between ground truth and rendered images, where a higher SSIM indicates better preservation of structural content; and c) learned perceptual image patch similarity (LPIPS) [49], which assesses perceptual similarity, with lower values indicating closer to the ground truth. 
+
+B. Simulation Results 1) Convergence Behavior: Fig. 3 illustrates the conver-gence behavior in terms of the training loss versus the overall latency in Building and Rubble scenes. The proposed method consistently demonstrates the fastest convergence, achiev-ing rapid loss reduction under constrained latency budgets. Specifically, the full model training design shows the slowest convergence due to significant per-round training and uplink transmission overhead, as each device must train and upload a complete 3D-GS model. While this avoids performance loss from pruning and yields smooth convergence, its exces-sive latency makes it impractical for deployment at wireless edge. The full memory load training with recovery design leverages the maximum allowed memory capacity for local training, which leads to faster convergence than the full model scheme. However, it still suffers from notable overhead in local training time compared to the proposed method. In comparison, the lightweighting only design adopts the same lightweighting strategy as our method and exhibits similar early-stage convergence. Nevertheless, due to the absence of a recovery mechanism, it suffers from performance degrada-tion during model aggregation. As training progresses, our method progressively outperforms the lightweighting only design. Moreover, since the lightweighting only design directly merges local models without parameter averaging, the global model size grows rapidly, increasing downlink communication latency. Furthermore, compared with the DOGS scheme, the proposed method also achieves faster convergence under the same latency budget. This is because DOGS trains full block-wise models and periodically enforces Gaussian consensus across blocks without resource-aware lightweighting, which incurs heavier per-round local training and synchronization overhead and thus slows down its training. These results validate that our design achieves faster convergence with significantly reduced training latency cost. For the Polytech scene, the loss curves exhibit a similar convergence trend. The proposed method rapidly reduces the training loss under constrained latency budgets and reaches a stable loss level comparable to the lightweighting only, full memory load with recovery, and full model training designs, whereas DOGS exhibits a higher and more fluctuating loss over most of the latency range. 
+
+2) Learning Performance: Fig. 4 and Fig. 5 present the test performance in terms of PSNR, SSIM, and LPIPS versus total latency. It is observed that the proposed method outperforms all baseline schemes across all three metrics, achieving higher PSNR and SSIM, and lower LPIPS throughout the training process. In the early training stages, our method and the lightweighting only design exhibit comparable performance due to the same model lightweighting strategy. However, the lightweighting only design exhibits slower improvement in reconstruction quality during training compared to the pro-posed method, particularly in terms of perceptual similarity as reflected by LPIPS. In contrast, the proposed method achieves faster and more consistent improvement in all metrics. Com-pared with the full model training and full memory load with recovery designs, in which those Gaussian points that contribute little to the rendering also spend substantial com-putation and communication resources, our approach better 12 0 250 500 750 1000 1250 1500 1750 2000 
+
+Latency (s) 
+
+> 0.18 0.20 0.22 0.24 0.26 0.28 0.30
+> Loss
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS 
+
+(a) Building scene 0 250 500 750 1000 1250 1500 1750 
+
+Latency (s) 
+
+> 0.150 0.175 0.200 0.225 0.250 0.275 0.300 0.325
+> Loss
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS (b) Rubble scene 0 250 500 750 
+
+Latency (s) 
+
+> 0.15 0.20 0.25 0.30 0.35 0.40
+> Loss
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS (c) Polytech scene Fig. 3. Comparison of training loss convergence versus latency on (a) the Building scene, (b) the Rubble scene, and (c) the Polytech scene. 0 250 500 750 1000 1250 1500 1750 2000 
+
+Latency (s) 
+
+> 13 14 15 16 17
+> PSNR (dB)
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS 
+
+(a) PSNR versus total latency 0 250 500 750 1000 1250 1500 1750 2000 
+
+Latency (s) 
+
+> 0.35 0.40 0.45 0.50
+> SSIM
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS (b) SSIM versus total latency 0 250 500 750 1000 1250 1500 1750 2000 
+
+Latency (s) 
+
+> 0.45 0.50 0.55 0.60 0.65 0.70
+> LPIPS
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS (c) LPIPS versus total latency Fig. 4. Comparison of different training designs in terms of PSNR, SSIM, and LPIPS w.r.t. total latency in the Building scene. 0 250 500 750 1000 1250 1500 1750 
+
+Latency (s) 
+
+> 12 14 16 18 20
+> PSNR (dB)
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS 
+
+(a) PSNR versus total latency 0 250 500 750 1000 1250 1500 1750 
+
+Latency (s) 
+
+> 0.30 0.35 0.40 0.45 0.50 0.55 0.60
+> SSIM
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS (b) SSIM versus total latency 0 250 500 750 1000 1250 1500 1750 
+
+Latency (s) 
+
+> 0.45 0.50 0.55 0.60 0.65 0.70
+> LPIPS
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS (c) LPIPS versus total latency Fig. 5. Comparison of different training designs in terms of PSNR, SSIM, and LPIPS w.r.t. total latency in the Rubble scene. 0 250 500 750 
+
+Latency (s) 
+
+> 10 12 14 16 18
+> PSNR (dB)
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS 
+
+(a) PSNR versus total latency 0 250 500 750 
+
+Latency (s) 
+
+> 0.30 0.35 0.40 0.45 0.50 0.55 0.60
+> SSIM
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS (b) SSIM versus total latency 0 250 500 750 
+
+Latency (s) 
+
+> 0.45 0.50 0.55 0.60 0.65 0.70
+> LPIPS
+
+Proposed Lightweighting only design Full memory load with recovery design Full model training design DOGS (c) LPIPS versus total latency Fig. 6. Comparison of different training designs in terms of PSNR, SSIM, and LPIPS w.r.t. total latency in the Polytech scene. 
+
+balances training cost and visual fidelity by selecting the most important points under constrained GPU memory and latency. Compared with the DOGS scheme, the proposed method achieves higher PSNR and SSIM and lower LPIPS under the same total latency in both scenes. It is observed from Fig. 6 that the proposed method achieves the best overall reconstruction quality on the Polytech scene. Under a small latency budget, it rapidly improves all three quality metrics, achieving the highest PSNR and SSIM and the lowest LPIPS over most of the evaluated latency range, consistent with the trend observed on the Building and Rubble 
+
+scenes. In contrast, DOGS shows lower PSNR and SSIM for most of the range, with substantially larger fluctuations. Table III compares the proposed method with the state-of-13 
+
+TABLE III COMPARISON OF RECONSTRUCTION QUALITY WITH FED 3D-GS. Scenes Building Rubble 
+
+PSNR ↑ SSIM ↑ LPIPS ↓ PSNR ↑ SSIM ↑ LPIPS ↓
+
+Fed3D-GS 17.21 0.567 0.375 19.18 0.552 0.429 Proposed 17.91 0.554 0.363 20.74 0.628 0.438 TABLE IV COMPARISON OF TOTAL LATENCY (IN HOURS ), N UMBER OF GAUSSIAN 
+
+POINTS IN LOCAL MODEL , AND PEAK GPU M EMORY CONSUMPTION (IN 
+
+GB) FOR ONE DEVICE AFTER 30,000 T RAINING EPOCHS .Method Building Rubble 
+
+Latency Points Memory Latency Points Memory 3D-GS 9.27 4330717 7.18 7.71 3154812 6.59 Fed3D-GS 1.83 1967079 5.93 1.69 1001575 4.68 Proposed 1.51 1358773 5.69 1.39 1260379 4.81 
+
+the-art federated 3D-GS learning framework Fed3D-GS [19] on the Building and Rubble scenes. It is observed that our method achieves better performance in PSNR and LPIPS in the Building scene, while achieves a significant PSNR improvement and higher SSIM in the Rubble scene. Table IV compares the latency and GPU memory consumption of dif-ferent training designs for one device after 30,000 training epochs. It is observed that the proposed design achieves the lowest training latency, Gaussian point count, and the peak memory consumption in the Building scene, while also maintains the lowest training latency in the Rubble scene, with slightly higher model size and memory usage compared to Fed3D-GS. These results highlight the advantages of our method in improving training efficiency while maintaining high reconstruction quality under resource constraints. 
+
+3) Robustness to Heterogeneous Devices: To evaluate the robustness of the proposed training framework under heteroge-neous acquisition devices, we simulate five federated devices that capture the Building scene using cameras of different types and intrinsic parameters. The cameras are heterogeneous along three practical axes, i.e., image resolution, focal length (and thus field of view), and sensor noise, so that the five devices range from a high-quality reference camera to low-resolution, telephoto, and noisy ones. Each device keeps its own camera parameters ψk,i while jointly reconstructing the same scene. To study different degrees of heterogeneity, we consider two controlled levels, i.e., a moderate level and a more challenging severe level that further enlarges these differences. We compare the homogeneous-camera setting with the moderate and severe heterogeneity settings in terms of both the training behavior and the converged rendering quality after 30,000 training iterations. It is observed from Fig. 7 that the proposed framework remains effective under heterogeneous devices: even when the five devices use inconsistent camera types and intrinsic parameters, the training still converges normally, closely following the homogeneous convergence trajectory in the early stage and reaching a comparable stable plateau. This confirms that mixing heterogeneous cameras does not destabilize local training, recovery, or aggregation, 0 400 800 1200 1600 2000 
+
+> Latency (s)
+> 13 14 15 16 17
+> PSNR (dB)
+> PSNR vs Latency
+> Homogeneous ours Moderate heterogeneity Severe heterogeneity
+
+(a) PSNR 0 400 800 1200 1600 2000  
+
+> Latency (s)
+> 0.35 0.40 0.45 0.50
+> SSIM
+> SSIM vs Latency
+> Homogeneous ours Moderate heterogeneity Severe heterogeneity
+
+(b) SSIM 0 400 800 1200 1600 2000 
+
+> Latency (s)
+> 0.45 0.50 0.55 0.60 0.65 0.70
+> LPIPS
+> LPIPS vs Latency
+> Homogeneous ours Moderate heterogeneity Severe heterogeneity
+
+(c) LPIPS 0 400 800 1200 1600 2000  
+
+> Latency (s)
+> 0.18 0.20 0.22 0.24 0.26 0.28 0.30
+> Loss
+> Loss vs Latency
+> Homogeneous ours Moderate heterogeneity Severe heterogeneity
+
+(d) Training loss Fig. 7. Rendering quality and training loss w.r.t. total latency on the Building 
+
+scene under moderate/severe camera heterogeneity. TABLE V RECONSTRUCTION QUALITY UNDER DEVICE HETEROGENEITY ON THE 
+
+Building SCENE .Setting PSNR ↑ SSIM ↑ LPIPS ↓
+
+Homogeneous (ours) 17.91 0.554 0.363 
+
+Moderate heterogeneity 16.92 0.525 0.466 Severe heterogeneity 16.88 0.518 0.471 
+
+and a high-quality global model can still be learned. It is further observed from Table V that the framework is robust to the degree of heterogeneity: compared with the homoge-neous case, all three metrics degrade only slightly and non-catastrophically, with the PSNR dropping by about 1 dB even under severe heterogeneity. Moreover, when the heterogeneity is further intensified from the moderate to the severe level, the PSNR decreases slightly, which reflects the stability of the proposed framework as the degree of heterogeneity grows. 
+
+4) Effect of Low-Precision Communication: We compare how transmitting the exchanged 3D-GS parameters at different numerical precisions affects the reconstruction quality. All local training, aggregation, and rendering are kept in FP32, while at each communication round the outgoing Gaussian pa-rameters are converted to FP16, or quantized to 8-bit integers (INT8) through a simple linear mapping, before transmission and converted back to FP32 after reception, so that the ablation reflects the cumulative effect of low-precision communication over the whole training process. It is observed from Table VI that FP16 communication incurs only a modest quality loss, with the PSNR and SSIM decreasing by merely 0.72 dB and 
+
+0.018 and the LPIPS increasing by only 0.085 relative to FP32, indicating that FP16 is a practical format for model exchange. In contrast, directly compressing the exchanged models to INT8 degrades the quality substantially, since its much larger rounding error is repeatedly injected into the global and local models and accumulates over training. 14 
+
+TABLE VI ROUND -W ISE COMMUNICATION -P RECISION ABLATION ON THE Building 
+
+SCENE .Communication format PSNR ↑ SSIM ↑ LPIPS ↓
+
+FP32 (ours) 17.91 0.554 0.363 
+
+FP16 17.19 0.536 0.448 INT8 11.03 0.290 0.766 (a) (b) (c) (d) (e)        
+
+> 0200 400 600 800 1000 1200 1400 1600
+> Total latency (s)  1254.7 1402.3 854.5 539.0 469.2
+> Building
+> (a) (b) (c) (d) (e)
+> 0100 200 300 400 500 600
+> Total latency (s)
+> 555.4 201.4 184.6 150.8 100.3
+> Rubble
+> Communication latency Local training latency Retraining latency
+
+Fig. 8. Comparison of total latency required to first reach a PSNR of 17 dB in the Building scene and 19 dB in the Rubble scene. Each bar is decomposed into communication latency, local training latency, and retraining latency (if applicable). Schemes (a)–(d) correspond to benchmark methods: (a) Fed3D-GS, (b) full model training design, (c) full memory load with recovery design, and (d) lightweighting only design, while (e) denotes the proposed design. 
+
+5) Analysis of Latency Overhead: Fig. 8 presents the total latency required to achieve a PSNR of 17 dB on the Build-ing scene and 19 dB on the Rubble scene. It is observed that the proposed design consistently achieves the lowest latency in both scenes, demonstrating the highest training efficiency. Among the benchmark schemes, Fed3D-GS attains the smallest communication latency owing to its one-shot upload of local models, but suffers from a high retraining latency because it relies on server computation resource to refine the global model. The full model training design incurs the highest communication and second-highest local training latency, since each device repeatedly trains and uploads the complete model in every communication round. The full mem-ory load with recovery design reduces the number of Gaussian points compared to the full model design, thereby slightly lowering both local training and communication latency. The lightweighting only design adopts an optimal strategy to select the number of Gaussian points, resulting in local training latency comparable to our design. However, since it directly merges local models without using recovery mechanism, the global model size increases rapidly over rounds, which leads to higher downlink communication overhead. In comparison, the proposed design effectively lowers both local training and communication latency, and thus achieves the fastest convergence. Fig. 9 shows the total latency required to reach a target PSNR of 17 dB in the building scene under different peak FLOP throughput φk and memory bandwidth Bk in (21) and (23). The scale factors 1×, 2×, and 5× indicate that both φk and Bk of the server are jointly multiplied by the same factor. It is observed that the proposed design achieves consistently lower latency. In particular, the latency achieved by the proposed design is invariant when the server capability increases. This is because our proposed design fully exploits 1× 2× 5×     
+
+> Peak FLOP throughput φkand memory bandwidth Bkscale on the server
+> 400 600 800 1000 1200 1400
+> Total latency (s)
+> Proposed design Fed3D-GS with 30k local epochs Fed3D-GS with 20k local epochs Fed3D-GS with 15k local epochs
+
+Fig. 9. Comparison of the proposed method and Fed3D-GS (with different numbers of local training epochs) in terms of total latency w.r.t. varying server computation resource. 
+
+distributed computation at edge devices for training instead of relying on the server. In contrast, the total latency achieved by Fed3D-GS decreases when the server becomes stronger, since the retraining latency shrinks with increased computational resources. In addition, a stronger server allows Fed3D-GS to reduce the total latency by decreasing the local epochs and relying more on centralized retraining. For instance, when the number of local epochs is reduced from 30k to 20k, the local latency decreases, and although the uploaded models are de-graded and require longer retraining, this additional overhead can be compensated by enhanced server resources, leading to a lower total latency. However, when the local epochs are reduced to 15k and below, the uploaded local model becomes too poor to support effective retraining, causing the retraining time to grow rapidly and the total latency to increase again. In particular, when local epochs are very small, the target PSNR cannot be achieved even with the strongest server setting, such that the training becomes infeasible. This demonstrates that our proposed design maintains its effectiveness and advantage in reducing latency when server computation resource varies. 
+
+6) Visualization Results: Fig. 10 compares novel view rendering results of our method against centralized 3D-GS, Fed3D-GS, and the lightweighting only design. The evaluation is conducted using camera parameters corresponding to unseen viewpoints that are excluded from the training sets. It is observed that the proposed method achieves visual fidelity comparable to centralized 3D-GS, although the latter is trained centrally using all views. As shown in the third row, our method reconstructs the scene structure more completely and preserves finer details than Fed3D-GS and the lightweighting only design, while remaining competitive with centralized 3D-GS. In addition, our method provides more accurate rendering in fine-grained regions, e.g., it better preserves the shadow contours along the sidewalk in the Building scene. More importantly, this result also demonstrates the impact of our proposed structure-consistent recovery mechanism. Both the Fed3D-GS and the lightweighting only design suffer from visual artifacts such as floaters, which are highlighted with red boxes in the figure. In comparison, our method effectively suppresses these artifacts. This improvement is attributed to the proposed recovery mechanism, which ensures that each Gaus-sian point retains the opportunity to participate in parameter averaging during global model aggregation, rather than being permanently excluded after pruning in model lightweighting. By integrating contributions from diverse device viewpoints, the recovered 3D-GS model avoids overfitting to the local 15 
+
+3D-GS  Fed3D-GS  Lightweighting only  Our proposed design 
+
+Fig. 10. Qualitative comparison of novel view rendering among 3D-GS, Fed3D-GS, the lightweighting only design, and the proposed method. Our proposed design efficiently suppresses visual artifacts and achieves better reconstruction quality compared with the other benchmark schemes. The first row shows the results on the building scene, while the second and third rows show the results on the rubble scene. 
+
+dataset and thus mitigates the emergence of floaters when rendering from novel views. VII. C ONCLUSION 
+
+This paper proposed a resource-efficient federated 3D-GS framework for large-scale scene reconstruction at the wireless edge under constrained memory, computation, and communi-cation resources. We proposed a latency- and memory-aware lightweighting mechanism to adaptively select and prune Gaussian points based on a novel importance-to-latency ratio, maximizing training efficiency adhering to resource limitations at each device. Additionally, a structure-consistent recovery mechanism was introduced to enable effective model aggrega-tion. Experiments on outdoor large-scale scenes demonstrated that our framework significantly accelerated convergence, re-duced overall latency, and preserved rendering fidelity com-pared to benchmark schemes. APPENDIX 
+
+PROOF OF THEOREM 1For notational simplicity, we omit the communication round index n and device index k in the following proof. We focus on a subset of candidate Gaussian point counts defined in (29). By letting S(U ) = PUj=1 ˜wj , U ∈ B b, the optimization objective is defined as ρ(U ) = S(U )   
+
+> T(U)
+
+. The latency function 
+
+T (U ) can be formulated by T (U ) = α0 + α1U + α2
+
+l Uβ
+
+m
+
+,where α0 = M
+
+l |I|
+
+> βk
+
+m
+
+ϕ1˜NFLOPs    
+
+> ˜ϵ˜Nroofline
+
++ zpara qpara ¯Urd > 0, α1 =
+
+M
+
+l |I|
+
+> βk
+
+m  ϕ2
+
+> |I|
+
+ ˜NFLOPs    
+
+> ˜ϵ˜Nroofline
+
++ zpara qpara +dim( x)qopt  
+
+> ru
+
+> 0, and α2 =
+
+M NFLOPs   
+
+> ϵN roofline
+
+> 0. Then, we analyze how the objective ρ(U )
+
+changes when U increases. For any U ∈ B b with U + 1 ∈ B b,we have ∆T (U ) = T (U + 1) − T (U ) = α1 + α2χ(U ), where 
+
+χ(U ) = 
+
+l U +1 
+
+> β
+
+m
+
+−
+
+l Uβ
+
+m
+
+. As such, ∆ρ(U ) is given by 
+
+∆ρ(U ) = ρ(U + 1) − ρ(U ) = ˜wU +1 T (U ) − S(U )∆ T (U )
+
+T (U )( T (U ) + ∆ T (U )) .
+
+(36) It is observed that the denominator term T (U )( T (U ) + ∆T (U )) > 0 due to the fact that ∆T (U ) and T (U ) > 0. Con-sequently, the sign of ∆ρ(U ) is fully determined by the numer-ator, which is denoted as Λ( U ) = ˜ wU +1 T (U ) − S(U )∆ T (U ).Next, we analyze the monotonicity of Λ( U ). For any U ∈
+
+Z+ satisfying bβ + 1 ≤ U ≤ min {(b + 1) β − 3, bU − 2}, we have U, U + 1 , U + 2 ∈ B b. We have 
+
+Λ( U + 1) − Λ( U ) = ( ewU +2 − ewU +1 )T (U + 1) 
+
+− S(U + 1)  ∆T (U + 1) − ∆T (U ).
+
+(37) For any U in the above range, 
+
+l Uβ
+
+m
+
+=
+
+l U +1 
+
+> β
+
+m
+
+=
+
+l U +2 
+
+> β
+
+m
+
+=
+
+b + 1 . Therefore, ∆T (U + 1) − ∆T (U ) = 0 . Together with 
+
+ewU +2 ≤ ewU +1 and T (U +1) > 0, we have Λ( U +1) −Λ( U ) ≤
+
+0. Hence, Λ( U ) is non-increasing over its valid indices within each block Bb. Accordingly, ∆ρ(U ) can change its sign at most once from non-negative to non-positive. This completes the proof. REFERENCES [1] G. Wu, C. Hu, P. Chen, J. Zhang, H. Hu, S. Cui, and J. Xu, “Resource-aware federated 3D Gaussian splatting for large-scale scene recon-struction,” in Proc. IEEE Wireless Commun. Netw. Conf. Workshops (WCNCW) , Kuala Lumpur, Malaysia, Apr. 2026, pp. 1–6. [2] M. G. Bevilacqua, M. Russo, A. Giordano, and R. Spallone, “3D re-construction, digital twinning, and virtual reality: Architectural heritage applications,” in Proc. IEEE Conf. Virtual Reality 3D User Interfaces Abstracts Workshops (VRW) , 2022, pp. 92–96. [3] X. Zhou, Z. Lin, X. Shan, Y. Wang, D. Sun, and M.-H. Yang, “Driv-ingGaussian: Composite Gaussian splatting for surrounding dynamic autonomous driving scenes,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , June 2024, pp. 21 634–21 643. [4] T. Chen, O. Shorinwa, J. Bruno, A. Swann, J. Yu, W. Zeng, K. Nagami, P. Dames, and M. Schwager, “Splat-Nav: Safe real-time robot navigation in Gaussian splatting maps,” IEEE Trans. Rob. , vol. 41, pp. 2765–2784, Mar. 2025. [5] B. Kerbl, G. Kopanas, T. Leimkuehler, and G. Drettakis, “3D Gaussian splatting for real-time radiance field rendering,” ACM Trans. Graph. ,vol. 42, no. 4, July 2023. [6] Y. Bao, T. Ding, J. Huo, Y. Liu, Y. Li, W. Li, Y. Gao, and J. Luo, “3D Gaussian splatting: Survey, technologies, challenges, and opportunities,” 
+
+IEEE Trans. Circuits Syst. Video Technol. , pp. 1–1, 2025. 16 
+
+[7] G. Chen and W. Wang, “A survey on 3D Gaussian splatting,” 2025. [Online]. Available: https://arxiv.org/abs/2401.03890 [8] S. Fang, I.-C. Shen, T. Igarashi, Y. Wang, Z. Wang, Y. Yang, W. Ding, and S. Zhou, “NeRF is a valuable assistant for 3D Gaussian splatting,” in Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV) , 2025, pp. 26 230– 26 240. [9] Z. Fan, K. Wang, K. Wen, Z. Zhu, D. Xu, and Z. Wang, “LightGaussian: Unbounded 3D Gaussian compression with 15x reduction and 200+ FPS,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS) , vol. 37, 2024, pp. 140 138–140 158. [10] G. Fang and B. Wang, “Mini-Splatting: Representing scenes with a constrained number of Gaussians,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2024, pp. 165–181. [11] G. Zhu, Z. Lyu, X. Jiao, P. Liu, M. Chen, J. Xu, S. Cui, and P. Zhang, “Pushing AI to wireless network edge: An overview on integrated sensing, communication, and computation towards 6G,” Sci. China Inf. Sciences , vol. 66, no. 3, February 2023. [12] K. B. Letaief, Y. Shi, J. Lu, and J. Lu, “Edge artificial intelligence for 6G: Vision, enabling technologies, and applications,” IEEE J. Sel. Areas Commun. , vol. 40, no. 1, pp. 5–36, 2022. [13] G. Wu, Z. Lyu, J. Zhang, and J. Xu, “Embracing radiance field rendering in 6G: Over-the-air training and inference with 3-D contents,” IEEE Open J. Commun. Soc. , vol. 5, pp. 4275–4292, 2024. [14] J. Lin, Z. Li, X. Tang, J. Liu, S. Liu, J. Liu, Y. Lu, X. Wu, S. Xu, Y. Yan, and W. Yang, “VastGaussian: Vast 3D Gaussians for large scene reconstruction,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , June 2024, pp. 5166–5175. [15] Y. Chen and G. H. Lee, “DOGS: Distributed-oriented Gaussian splatting for large-scale 3D reconstruction via Gaussian consensus,” in Proc. Adv. Neural Inf. Process. Syst. (NeurIPS) , vol. 37, 2024, pp. 34 487–34 512. [16] Y. Gao, Y. Dai, H. Li, W. Ye, J. Chen, D. Chen, D. Zhang, T. He, G. Zhang, and J. Han, “Cosurfgs: Collaborative 3D surface Gaussian splatting with distributed learning for large scene reconstruction,” 2024. [Online]. Available: https://arxiv.org/abs/2412.17612 [17] H. Li, Y. Gao, H. Peng, C. Wu, W. Ye, Y. Zhan, C. Zhao, D. Zhang, J. Wang, and J. Han, “DGTR: Distributed Gaussian turbo-reconstruction for sparse-view vast scenes,” 2024. [Online]. Available: https://arxiv.org/abs/2411.12309 [18] H. Peng, T. Qi, Y. Zhan, H. Li, Y. Dai, and Y. Xia, “Radiant: Large-scale 3D Gaussian rendering based on hierarchical framework,” 2024. [Online]. Available: https://arxiv.org/abs/2412.05546 [19] T. Suzuki, “Fed3DGS: Scalable 3D Gaussian splatting with federated learning,” 2024. [Online]. Available: https://arxiv.org/abs/2403.11460 [20] Y. Liu, C. Luo, L. Fan, N. Wang, J. Peng, and Z. Zhang, “CityGaussian: Real-time high-quality large-scale scene rendering with Gaussians,” in 
+
+Proc. Eur. Conf. Comput. Vis. (ECCV) , 2024, pp. 265–282. [21] R. Hartley and A. Zisserman, Multiple View Geometry in Computer Vision . Cambridge, U.K.: Cambridge University Press, 2004. [22] M. Zwicker, H. Pfister, J. van Baar, and M. Gross, “Ewa splatting,” IEEE Trans. Visual Comput. Graphics , vol. 8, no. 3, pp. 223–238, 2002. [23] K. Shoemake, “Animating rotation with quaternion curves,” in Proc. 12th Annu. Conf. Comput. Graphics Interact. Tech. (SIGGRAPH) , 1985, p. 245–254. [24] P.-P. Sloan, J. Kautz, and J. Snyder, “Precomputed radiance transfer for real-time rendering in dynamic, low-frequency lighting environments,” 
+
+ACM Trans. Graph. , vol. 21, no. 3, p. 527–536, July 2002. [25] Z. Wang, A. Bovik, H. Sheikh, and E. Simoncelli, “Image quality assessment: from error visibility to structural similarity,” IEEE Trans. Image Process. , vol. 13, no. 4, pp. 600–612, Apr. 2004. [26] T. Suzuki, “Federated learning for large-scale scene modeling with neural radiance fields,” 2023. [Online]. Available: https: //arxiv.org/abs/2309.06030 [27] X. Li, Z. Qin, Z. Shen, X. Li, Y. Zhou, and B. Song, “A high-precision vehicle navigation system based on tightly coupled PPP-RTK/INS/odometer integration,” IEEE Trans. Intell. Transp. Syst. ,vol. 24, no. 2, pp. 1855–1866, 2023. [28] H. Xu, Y. Zhang, B. Zhou, L. Wang, X. Yao, G. Meng, and S. Shen, “Omni-swarm: A decentralized omnidirectional visual-inertial-UWB state estimation system for aerial swarms,” IEEE Trans. Robot. , vol. 38, no. 6, pp. 3374–3394, 2022. [29] C. Campos, R. Elvira, J. J. G´ omez Rodr´ ıguez, J. M. M. Montiel, and J. D. Tard´ os, “ORB-SLAM3: An accurate open-source library for visual, visual-inertial, and multi-map SLAM,” IEEE Trans. Robot. , vol. 37, no. 6, pp. 1874–1890, 2021. [30] S. Umeyama, “Least-squares estimation of transformation parameters between two point patterns,” IEEE Trans. Pattern Anal. Mach. Intell. ,vol. 13, no. 4, pp. 376–380, 1991. [31] B. McMahan, E. Moore, D. Ramage, S. Hampson, and B. A. y. Arcas, “Communication-efficient learning of deep networks from decentralized data,” in Proc. Artif. Intell. Statist. , vol. 54, Apr. 2017, pp. 1273–1282. [32] H. Zhao, H. Weng, D. Lu, A. Li, J. Li, A. Panda, and S. Xie, “On scaling up 3D Gaussian splatting training,” 2024. [Online]. Available: https://arxiv.org/abs/2406.18533 [33] S. Girish, K. Gupta, and A. Shrivastava, “EAGLES: Efficient accelerated 3D Gaussians with lightweight EncodingS,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2024, pp. 54–71. [34] T. Kim, Y. Wang, V. Chaturvedi, L. Gupta, S. Kim, Y. Kwon, and S. Ha, “LLMem: Estimating GPU memory usage for fine-tuning pre-trained llms,” 2024. [Online]. Available: https://arxiv.org/abs/2404.10933 [35] Y. Gao, Y. Liu, H. Zhang, Z. Li, Y. Zhu, H. Lin, and M. Yang, “Estimating GPU memory consumption of deep learning models,” in 
+
+Proc. 28th ACM Joint Meeting Eur. Softw. Eng. Conf. Symp. Found. Softw. Eng. (ESEC/FSE) , 2020, p. 1342–1352. [36] J. Fang, Z. Zhu, S. Li, H. Su, Y. Yu, J. Zhou, and Y. You, “Paral-lel training of pre-trained models via chunk-based dynamic memory management,” IEEE Trans. Parallel Distrib. Syst. , vol. 34, no. 1, pp. 304–315, 2023. [37] J. L. Sch¨ onberger and J.-M. Frahm, “Structure-from-motion revisited,” in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2016, pp. 4104–4113. [38] S. Lee, A. Phanishayee, and D. Mahajan, “Forecasting GPU performance for deep learning training and inference,” in Proc. 30th ACM Int. Conf. Architectural Support Program. Lang. Oper. Syst. (ASPLOS) , vol. 1, 2025, p. 493–508. [39] Nvidia. Nsight systems 2023. Accessed: May 15, 2023. [Online]. Available: https://developer.nvidia.com/nsight-systems [40] J. Lin, Z. Li, X. Tang, J. Liu, S. Liu, J. Liu, Y. Lu, X. Wu, S. Xu, Y. Yan, and W. Yang, “Vastgaussian: Vast 3D Gaussians for large scene reconstruction,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , June 2024, pp. 5166–5175. [41] H. Turki, D. Ramanan, and M. Satyanarayanan, “Mega-NERF: Scalable construction of large-scale NeRFs for virtual fly-throughs,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , June 2022, pp. 12 922–12 931. [42] L. Lin, Y. Liu, Y. Hu, X. Yan, K. Xie, and H. Huang, “Capturing, reconstructing, and simulating: The UrbanScene3D dataset,” in Proc. Eur. Conf. Comput. Vis. (ECCV) , 2022. [43] D. J. Beutel, T. Topal, A. Mathur, X. Qiu, J. Fernandez-Marques, Y. Gao, L. Sani, H. L. Kwing, T. Parcollet, P. P. d. Gusm˜ ao, and N. D. Lane, “Flower: A friendly federated learning research framework,” arXiv preprint arXiv:2007.14390 , 2020. [Online]. Available: https://arxiv.org/pdf/2007.14390 [44] NVIDIA Corporation, “NVIDIA Ampere GPU Architecture Tuning Guide,” 2023. [Online]. Available: https://docs.nvidia.com/cuda/archive/ 12.5.0/pdf/Ampere Tuning Guide.pdf [45] ——, “NVIDIA Ampere GA102 GPU Architecture Whitepaper, Version 2,” 2020. [Online]. Available: https://www.nvidia.com/content/ PDF/nvidia-ampere-ga-102-gpu-architecture-whitepaper-v2.pdf [46] ——, “NVIDIA Ampere GA106 GPU Architecture Whitepaper,” 2021. [Online]. Available: https://www.nvidia.com/content/PDF/ nvidia-ampere-ga-106-gpu-architecture-whitepaper.pdf [47] M. Ghoshal, Z. J. Kong, Q. Xu, Z. Lu, S. Aggarwal, I. Khan, Y. Li, Y. C. Hu, and D. Koutsonikolas, “An in-depth study of uplink performance of 5G mmwave networks,” in Proc. ACM SIGCOMM Workshop 5G Beyond Netw. Meas., Model., Use Cases (5G-MeMU) , 2022, p. 29–35. [48] M. I. Rochman, V. Sathya, N. Nunez, D. Fernandez, M. Ghosh, A. S. Ibrahim, and W. Payne, “A comparison study of cellular deployments in chicago and miami using apps on smartphones,” in Proc. 15th ACM Workshop Wireless Netw. Testbeds, Exp. Eval. Characterization (WiNTECH) , 2021, p. 61–68. [49] R. Zhang, P. Isola, A. A. Efros, E. Shechtman, and O. Wang, “The unreasonable effectiveness of deep features as a perceptual metric,” in 
+
+Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , June 2018.
