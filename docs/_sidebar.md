@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-10-01 <!--dpr-date:20261001-->
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202610/01/2609.35658v1-many-eyes-one-world-feed-forward-3d-reconstruction-from-mixed-cameras" data-sidebar-item="{&quot;title&quot;: &quot;Many Eyes, One World: Feed-Forward 3D Reconstruction from Mixed Cameras&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.35658v1-many-eyes-one-world-feed-forward-3d-reconstruction-from-mixed-cameras&quot;, &quot;score&quot;: &quot;6.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;aerial-dgs&quot;}], &quot;evidence&quot;: &quot;从异构混合相机影像进行联合前馈重建&quot;}">Many Eyes, One World: Feed-Forward 3D Reconstruction from Mixed Cameras</a>
   * 2026-09-30 <!--dpr-date:20260930-->
     * 速读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202609/30/2609.30245v1-towards-practical-compression-of-3d-gaussian-splatting" data-sidebar-item="{&quot;title&quot;: &quot;Towards Practical Compression of 3D Gaussian Splatting&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2609.30245v1-towards-practical-compression-of-3d-gaussian-splatting&quot;, &quot;score&quot;: &quot;6.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;aerial-dgs&quot;}], &quot;evidence&quot;: &quot;面向3D高斯泼溅场景表示的实用压缩&quot;}">Towards Practical Compression of 3D Gaussian Splatting</a>
