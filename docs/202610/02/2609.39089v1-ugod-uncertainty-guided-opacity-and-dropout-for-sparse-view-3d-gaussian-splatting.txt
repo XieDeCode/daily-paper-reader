@@ -1,0 +1,959 @@
+Title: UGOD: Uncertainty-Guided Opacity and Dropout for Sparse-View 3D Gaussian Splatting
+
+URL Source: https://arxiv.org/pdf/2609.39089v1
+
+Published Time: Thu, 01 Oct 2026 01:15:15 GMT
+
+Number of Pages: 31
+
+Markdown Content:
+# UGOD: Uncertainty-Guided Opacity and Dropout for Sparse-View 3D Gaussian Splatting 
+
+Zhihao Guo 1, Peng Wang 2* , Zidong Chen 3, Xiangyu Kong 4,Yan Lyu 5, Guanyu Gao 6, Chenghao Qian 7, Ziyang Wang 8,Xinqi Fan 1, Liangxiu Han 1
+
+> 1
+
+Manchester Metropolitan University, Manchester, United Kingdom. 
+
+> 2*
+
+University of Surrey, Guildford, United Kingdom. 
+
+> 3
+
+Imperial College London, London, United Kingdom. 
+
+> 4
+
+University of Exeter, Exeter, United Kingdom. 
+
+> 5
+
+Southeast University, Nanjing, China. 
+
+> 6
+
+Nanjing University of Science and Technology, Nanjing, China. 
+
+> 7
+
+University of Leeds, Leeds, United Kingdom. 
+
+> 8
+
+Aston University, Birmingham, United Kingdom. *Corresponding author(s). E-mail(s): pw0038@surrey.ac.uk; 
+
+Abstract 
+
+Sparse-view 3D Gaussian Splatting is prone to overfitting because limited observations leave many Gaussian primitives weakly constrained, yet their contributions are still accumulated through alpha blending. Without uncer-tainty estimation, the renderer cannot distinguish unreliable primitives from well-constrained ones, allowing their erroneous contributions to corrupt novel-view synthesis. We introduce UGOD , an uncertainty-guided framework that estimates a view-dependent uncertainty score for each Gaussian and uses it to reg-ulate its rendering contribution. A lightweight uncertainty head conditioned on Gaussian attributes and viewing direction predicts this score, which then drives a differentiable opacity-modulation mechanism that attenuates high-uncertainty primitives before compositing. During training, a detached soft-dropout branch applies an uncertainty-controlled continuous keep mask to discourage the model from relying on poorly constrained Gaussians and thereby reduce overfitting. Crucially, detaching the uncertainty score prevents gradients from this stochas-tic regulariser from biasing or collapsing the uncertainty prediction. Experiments on Mip-NeRF 360 and LLFF show that UGOD improves sparse-view novel-view 
+
+1arXiv:2609.39089v1 [cs.CV] 30 Sep 2026 synthesis while producing more compact Gaussian representations than the com-pared methods. These results demonstrate that Gaussian uncertainty provides an effective rendering-time control for sparse-view reconstruction.  
+
+> Keywords: 3D Gaussian Splatting, sparse-view reconstruction, uncertainty estimation, novel-view synthesis, opacity modulation
+
+# 1 Introduction 
+
+Novel-view synthesis (NVS) from a limited collection of images underpins applications such as digital twinning, augmented and virtual reality, and embodied robotics. 3D Gaussian Splatting (3DGS) [7] has become an attractive representation for this task because it models a scene as anisotropic Gaussian primitives that are projected, depth sorted, and alpha blended by a rasteriser. This design avoids the dense ray sampling required by many neural volumetric methods and enables high-quality real-time ren-dering. Its effectiveness nevertheless depends on the coverage, geometric accuracy, and appearance diversity provided by the input views. These requirements are difficult to satisfy in sparse-view reconstruction. Structure-from-Motion (SfM) initialisation may contain only a limited set of points, and those points can be incomplete or inaccurate in weakly textured, occluded, or poorly observed regions. The resulting Gaussians receive insufficient multi-view supervision while their geometry and appearance are optimised to explain the available images. Critically, the failure is not only that geometry is incomplete: once a primitive is instantiated, its learned opacity still determines how strongly it participates in alpha blending. An unreliable Gaussian can therefore retain a large compositing weight, inject incorrect colour into the accumulated ray, and reinforce a training-view explana-tion that does not generalise. In other words, sparse-view artefacts arise when weakly supported contributions are repeatedly accumulated by the renderer. Existing sparse-view 3DGS methods address this setting from complementary but incomplete angles. Depth or other priors strengthen geometric guidance when image evidence is scarce [20, 28]. Densification increases point coverage when SfM initialisa-tion is too sparse [28]. Dropout- and pruning-based regularisers reduce the influence of selected primitives during optimisation [13, 24]. These strategies improve recon-struction by adding constraints, growing the representation, or filtering primitives in training. They do not, however, explicitly ask whether a Gaussian is uncertain for the 
+
+current viewing direction at the moment of alpha compositing, nor do they provide a differentiable mechanism that attenuates its opacity before blending. This gap motivates a rendering-centric view of sparse-view overfitting. Opacity in conventional 3DGS is a view-agnostic scalar jointly optimised with geometry and appearance; it does not separate a reliable contribution from one that is poorly sup-ported under the present camera. Because alpha blending is order-dependent and cumulative, even a modest number of over-confident primitives can dominate transmit-tance and colour along a ray. Regulating opacity with a view-dependent uncertainty signal therefore targets the failure mode directly: unreliable contributions should be 2300 600 900         
+
+> #Gaussians (K)
+> 18.6 18.8 19.0 19.2
+> Average PSNR (dB)  Mip-NeRF 360 (24 views)
+> 250 500 750
+> #Gaussians (K)
+> 12.0 12.6 13.2 13.8 14.4
+> Mip-NeRF 360 (8 views)
+> 100 150 200 250
+> #Gaussians (K)
+> 15.0 16.5 18.0 19.5
+> LLFF (3 views)
+> 3DGS DropGS FSGS Ours
+
+Fig. 1: Average PSNR and final-Gaussian reduction versus 3DGS* across MiP-NeRF 360 (24/8 views) and LLFF (3 views). Higher is better on every axis; UGOD leads all six. down-weighted before they enter compositing, rather than corrected only indirectly through denser geometry or training-time dropping. We introduce UGOD , an uncertainty-guided framework for sparse-view 3DGS. UGOD employs a lightweight per-Gaussian uncertainty head conditioned on Gaus-sian attributes, appearance features, and viewing direction to estimate view-dependent uncertainty. The normalised uncertainty drives a differentiable opacity-modulation function that attenuates the learned opacity of high-uncertainty primitives before compositing. During training, a detached soft-dropout branch converts the same uncer-tainty signal into a continuous keep mask, further regularising ambiguous Gaussians without allowing this stochastic branch to distort the uncertainty prediction. Across Mip-NeRF 360 and LLFF sparse-view protocols, UGOD improves novel-view synthesis quality while producing compact Gaussian representations. These results indicate that regulating compositing with view-dependent uncertainty is an effective strategy for sparse-view 3DGS. The contributions of this work are: 
+
+• A view-dependent, per-Gaussian uncertainty prediction that combines Gaussian attributes, appearance features, and viewing direction. 
+
+• A differentiable opacity gate that attenuates high-uncertainty primitives before alpha compositing. 
+
+• A gradient-detached soft-dropout regulariser that uses the learned uncertainty to stochastically regularise high-uncertainty primitives during training without directly updating the uncertainty estimator. 
+
+• Extensive sparse-view evaluation demonstrating improved novel-view synthesis quality and Gaussian compactness relative to the compared methods. 
+
+# 2 Related Work 
+
+2.1 3D Gaussian Splatting 
+
+3D Gaussian Splatting (3DGS) represents a scene using anisotropic Gaussian prim-itives that are projected, depth sorted, and alpha blended in image space. Its 3rasterisation-based renderer provides an attractive balance between rendering qual-ity and speed [7]. Subsequent studies have improved camera handling [23], point management, and rendering quality [2, 21, 26]. These advances make 3DGS effective for dense-view reconstruction, but the quality of the learned representation remains sensitive to the coverage and accuracy of its initialisation and observations. Opacity is optimised jointly with geometry and appearance, and determines each primitive’s contribution to alpha compositing. Existing studies have examined the distinction between opacity and extinction formulations [3], volumetrically consistent Gaussian rasterisation [16], and material-aware opacity modelling [22]. These direc-tions improve the physical interpretation or material dependence of the rendering weights. They do not, however, explicitly ask whether a Gaussian is reliable for a particular viewing direction when the scene is weakly constrained. Our work instead models this view-dependent uncertainty and uses it to regulate opacity before alpha compositing. 
+
+2.2 Sparse 3DGS Reconstruction 
+
+Sparse-view reconstruction has been addressed through complementary forms of geo-metric guidance and regularisation. Prior-based methods use additional signals to compensate for incomplete image observations: SparseGS [20], for example, combines depth and diffusion priors. A second line of work seeks to improve the representation before or during optimisation. FSGS [28] densifies the initial point cloud to increase geometric coverage, which is particularly helpful when SfM produces only a small or unevenly distributed set of initial points. PcdGS [27] similarly densifies sparse SfM initialisation using mask and monocular-depth cues, whereas LiDAR-3DGS [10] sup-plements it with an aligned LiDAR point cloud when an additional sensor is available. These approaches improve the geometric support available at initialisation. Other approaches act directly on the Gaussian primitives. DropGaussian [13] reg-ularises optimisation by selectively dropping Gaussians, allowing the remaining primi-tives to receive more informative gradients. CoR-GS [24] uses geometric and rendering disagreement to guide co-pruning and pseudo-view co-regularisation. SuraGS [15] uses surface-aware primitives for few-shot synthesis, while HR-2DGS [17] combines depth and normal regularisation in a 2DGS representation. StruGS [12] instead targets structural consistency through multi-view guidance and depth-balanced optimisation. Together, these methods show that sparse-view performance depends not only on improving initial geometry but also on controlling which primitives are retained and how they contribute during learning. Their regularisation criteria, however, do not provide a view-dependent estimate of each primitive’s uncertainty at the point of ren-dering. Consequently, the renderer cannot distinguish well-supported primitives from those unreliable in the current view: both are assigned comparable importance during compositing. Under cumulative alpha blending, an unreliable primitive can then incor-rectly consume transmittance or occlude reliable evidence, producing view-dependent artefacts in the rendered image. 42.3 Uncertainty Estimation in Gaussian Splatting 
+
+Recent uncertainty-estimation methods for Gaussian splatting pursue objectives that differ from sparse-view reconstruction control. Stochastic formulations, such as vari-ational multi-scale 3DGS [9], model distributions over Gaussian parameters and estimate uncertainty from the resulting samples. Parameter-space methods instead use information measures: FisherRF [6] derives uncertainty from Fisher information, while POp-GS [19] uses P-optimality for next-best-view selection. PRIMU [5] predicts novel-view uncertainty from primitive-based error and coverage features. These meth-ods principally estimate uncertainty for view selection or uncertainty-map prediction, rather than using it to control the contribution of primitives during reconstruction. Most closely related, Galappaththige et al. [4] propose a post-hoc predictive-photometric uncertainty method. They freeze a trained 3DGS representation and fit view-dependent per-primitive uncertainty channels to training-view reconstruction residuals using a regularised least-squares objective; the learned channels are rasterised into pixel-wise uncertainty maps. UGOD has a different purpose and learning mech-anism. We learn the uncertainty head jointly with sparse-view reconstruction from Gaussian attributes and the viewing direction, rather than fitting residuals after train-ing. Its uncertainty is then used online to modulate opacity before alpha compositing and to drive detached soft dropout during training. Consequently, UGOD targets the quality–compactness trade-off of sparse-view reconstruction, whereas post-hoc predic-tive uncertainty methods preserve a fixed renderer and target uncertainty estimation for downstream decisions. 
+
+# 3 Method 
+
+3.1 Preliminaries 
+
+3D Gaussian Splatting. 3DGS initialises a set of anisotropic Gaussians from an SfM point cloud. Each Gaussian is parameterised by its position, rotation, scale, opacity, and appearance. For a spatial location x ∈ R3, a Gaussian with mean μ and covariance 
+
+Σ is 
+
+G(x) = exp 
+
+
+
+− 12 (x − μ)⊤Σ−1(x − μ)
+
+
+
+. (1) Here μ ∈ R3 is the mean and Σ ∈ R3×3 is a positive semi-definite covariance matrix parameterised as Σ = RSS ⊤R⊤, where R is an orthogonal rotation matrix and S is a diagonal scale matrix. In the implementation, Ri is parameterised by a unit quaternion 
+
+qi, and Si by a scale vector si. We use these compact per-Gaussian parameterisations below. The Gaussians are projected to the image plane by splatting-based rasterisa-tion [29]. A first-order approximation of the projection at the Gaussian mean gives the projected covariance 
+
+Σ′ = JWΣW ⊤J⊤, (2) where J is the Jacobian of the local projective transformation and W is the view trans-formation matrix. For pixel coordinate x, let G2D  
+
+> i
+
+(x) denote the projected footprint 5of the i-th Gaussian and oi ∈ (0 , 1) its learned opacity. Its screen-space compositing weight and transmittance are 
+
+αi(x) = oiG2D  
+
+> i
+
+(x), Ti(x) = Y
+
+> j<i
+
+ 1 − αj (x), (3) where Gaussians are ordered from front to back. The rendered RGB colour is 
+
+C(x) = 
+
+> n
+
+X
+
+> i=1
+
+Ti(x) αi(x) ci. (4) 
+
+Opacity in 3DGS. The learned opacity oi is optimised jointly with the other Gaussian attributes. It determines the screen-space weight αi in Eq. 3 and influences density control during training: primitives with very low opacity are pruned, while the remaining primitives continue to refine the representation. Under sparse or noisy initialisation, however, this view-independent scalar cannot distinguish a reliably sup-ported contribution from one that is ambiguous for the current camera. The following section introduces view-dependent uncertainty to address this limitation. 
+
+3.2 Per-Gaussian Uncertainty Prediction 
+
+We augment 3D Gaussian Splatting (3DGS) [8] with a lightweight per-Gaussian uncer-tainty head Mθ. The predicted uncertainty serves two coupled but gradient-decoupled 
+
+roles: (i) a differentiable opacity-modulation function that attenuates the opacity of high-uncertainty Gaussians and trains the head through the photometric loss, and (ii) a detached, training-only soft dropout that acts as a tail regulariser on the least certain Gaussians. A PSNR-based early-stopping rule freezes the head once it stops help-ing, so the learned uncertainty stays meaningful and never destabilises the underlying geometry. 
+
+Notation and overview. 
+
+For each visible Gaussian i ∈ V , the uncertainty head predicts a raw uncertainty ui,which is robustly normalised to ˜ ui. We denote by ˘ ui the gradient-detached copy of ˜ ui:it equals ˜ ui in the forward pass but satisfies ∂ ˘ui/∂ ˜ui = 0 during back-propagation. The normalised value drives a differentiable opacity-modulation factor gi, while ˘ ui drives a training-only dropout probability pi and soft keep mask mi. Thus, the uncertainty pathway is ui → ˜ui → gi and ˘ ui → pi → mi.
+
+3.2.1 Uncertainty Head: Inputs and Architecture 
+
+Each Gaussian Gi carries a mean μi ∈ R3, a rotation quaternion qi ∈ R4, an (activated) scale si ∈ R3, a DC colour cdc  
+
+> i
+
+∈ R3, and higher-order spherical harmonic (SH) coeffi-cients. Concretely, for SH degree D we denote the (non-DC) coefficients as {c(ℓ) 
+
+> i
+
+}Lℓ=1 
+
+with c(ℓ) 
+
+> i
+
+∈ R3 and L = D(D + 2). 6Sparse Views 3D Gaussians 
+
+d s q SH 
+
+point clouds 
+
+M     
+
+> Input Feature Output
+> Uncertainty
+> For Per Gaussian Attributes View Direction Scaling Position Rotation SH Energy
+> Hash Encoding SH Compression
+
+𝐟 𝐢 = ⏟𝐝 𝐢 "
+
+, 𝛾 𝜇 #$% 
+
+, ⏟𝐪 𝐢 %
+
+, ⏟𝐬 𝐢 "
+
+, /𝐜 𝐢 𝐝𝐜 "
+
+, ⏟𝐞 𝐢 "
+
+∈ 𝑅 𝟜𝟘 
+
+e𝛾 𝜇 
+
+L P
+
+𝜇 
+
+u*
+
+u$
+
+u"
+
+u+
+
+3D Gaussians Initialisation Gaussians Uncertainty Learning Head Uncertainty Guided Opacity 
+
+cqsd
+
+u,
+
+𝛼 ,
+
+G,
+
+𝑔 : 𝑢 # = 𝛽 + 1 − 𝛽 𝜎 −𝜅 :𝑢 # − 𝜏 -
+
+> 𝛼 #. = 𝛼 # ⋅ 𝑔  :𝑢 #
+
+Certainty Gate G,
+
+Uncertainty Guided Dropout 
+
+G, Soft Dropout Probability          
+
+> After ADC SfM
+>       
+>            
+> GT Pseudo view
+> Depth Model
+> Gaussian Rendered
+> Depth Model
+> Gaussian Rendered
+> ℒ!"#$%
+> ℒ#&"'!(
+> GT Rendered Images
+> ℒ)ℒ&&*+
+
++
+
+> Output
+
+3D Gaussians Optimisation 
+
+3D Gaussians Fig. 2 : Overview of UGOD. Sparse input views are reconstructed by SfM and ini-tialise 3D Gaussian primitives (left). For each visible Gaussian, the uncertainty head combines the viewing direction, HashGrid position encoding, geometric attributes, and compressed SH appearance to predict a view-dependent uncertainty ui (lower left). This score drives two gradient-decoupled mechanisms (centre): normalised uncertainty differentiably gates opacity before compositing, whereas its detached copy deter-mines the training-only Concrete soft-dropout probability. The resulting Gaussians are jointly optimised using supervised depth, pseudo-view depth, and photometric losses (right). At inference, soft dropout and relative-uncertainty gating are disabled, and deterministic raw-uncertainty opacity modulation is used. 
+
+SH compression. 
+
+Directly feeding all SH coefficients to the uncertainty head would introduce a high-dimensional, highly correlated appearance input: the uncertainty prediction should depend on how “view-dependent” a Gaussian is, not on the specific orientation of its SH lobes. We therefore keep the DC colour cdc 
+
+i unchanged and summarise the remaining SH bands by a per-channel magnitude statistic. Specifically, we compute a rest-energy vector ei ∈ R3 by averaging the element-wise absolute values of the non-DC coefficients across all bands: 
+
+ei = 1
+
+L
+
+LX
+
+ℓ=1 
+
+c(ℓ)
+
+i , (5) where | · | is applied element-wise to the RGB channels. Intuitively, ei measures the overall strength of view-dependent effects per colour channel while discarding direc-tional details. This reduces the SH block from 3 L scalars (e.g., 3 × 15 = 45 values for 7degree D = 3) to 3 scalars. Together with the DC colour, we obtain a compact 6-D appearance descriptor [ cdc  
+
+> i
+
+, ei] used as part of the head input. 
+
+Input feature. 
+
+Given the camera centre o, we form the unit view direction di = ( μi − o)/∥μi − o∥
+
+and a multi-resolution hash encoding γ(μi) ∈ R24 of the position. The head input is the 40-dimensional concatenation 
+
+fi = di, γ (μi), qi, si, cdc  
+
+> i
+
+, ei
+
+ ∈ R40 . (6) The respective dimensions of these components are 3, 24, 4, 3, 3, and 3. 
+
+Network. 
+
+The position is encoded with a multi-resolution hash grid (6 levels, 4 features/level, base resolution 16, per-level scale 1 .5, log 2 hashmap size 15), yielding the 24-D code 
+
+γ(·). The 40-D feature is mapped to a scalar logit by a fully fused MLP Mθ : R40 →
+
+R, where θ denotes its learnable parameters. The MLP has two hidden layers of 32 neurons, each followed by a LeakyReLU activation. Let σ(x) = (1 + exp( −x)) −1
+
+denote the logistic sigmoid. We use a single-head configuration that emits one view-conditioned uncertainty score per visible Gaussian, 
+
+ui = σ Mθ(fi) ∈ (0 , 1) ,ui ← clip  ui, 10 −3, 1 − 10 −3 . (7) This score is not a calibrated epistemic-uncertainty estimate: it is learned only through the photometric objective via differentiable opacity modulation, without an uncertainty target or calibration loss. We robustly normalise the raw uncertainties over the visible Gaussian set V:˜ui = clip 
+
+ ui − med j∈V (uj )MAD j∈V (uj ) + δ , [−c, c ]
+
+
+
+, (8) where med denotes the median, and the median absolute deviation is MAD j∈V (uj ) = med j∈V |uj − med k∈V (uk)| . (9) This robust scale estimate limits the influence of a small number of high-uncertainty Gaussians; δ > 0 prevents division by zero and c = 2 bounds the relative uncertainty. Both the opacity-modulation function and the dropout module use ˜ ui.
+
+3.2.2 Uncertainty-Guided Opacity Modulation 
+
+We attenuate opacity rather than directly removing Gaussians, so that unreliable primitives contribute less to alpha compositing while still receiving photometric super-vision. We map relative uncertainty to a monotonically decreasing, differentiable 8gate: 
+
+gi = β + (1 − β) σ −κ(˜ ui − τg ), (10) where κ controls the transition sharpness, τg specifies the relative-uncertainty thresh-old, and β is the minimum gate value. Thus, low-uncertainty Gaussians have gi close to 1 and retain their learned opacity, whereas high-uncertainty Gaussians approach the floor β. The floor prevents modulation alone from fully removing a Gaussian. The gate modulates the learned opacity explicitly as 
+
+ogate  
+
+> i
+
+= oi gi, (11) so high uncertainty reduces the primitive’s screen-space alpha and hence its colour and transmittance contribution before compositing. The relative-uncertainty modulation is enabled only after a warm-up of Tg iterations. Before warm-up, and during evaluation, the implementation uses the base raw-uncertainty opacity operation 
+
+oraw  
+
+> i
+
+= (1 − ui)oi, αraw  
+
+> i
+
+(x) = oraw  
+
+> i
+
+G2D  
+
+> i
+
+(x). (12) The two formulations are intentionally assigned different roles. During optimisation, the relative gate is a distribution-adaptive regulariser: its median–MAD normalisation makes the threshold responsive to the relative reliability of currently visible Gaussians, even as densification and pruning change the scale of predicted uncertainties. The floor 
+
+β additionally prevents premature removal of primitives and preserves useful gradients. At inference, however, this normalisation would make a Gaussian’s opacity depend on which other primitives happen to be visible in the same view. We therefore replace the training-time relative gate with the raw-uncertainty rule in Eq. 12, which gives each Gaussian a deterministic, per-primitive attenuation independent of population statistics. Thus, relative gating stabilises optimisation, whereas the raw rule provides a well-defined deployed renderer for all reported evaluations. The modulated screen-space weight is 
+
+αgate  
+
+> i
+
+(x) = ogate  
+
+> i
+
+G2D  
+
+> i
+
+(x). (13) Crucially, ˜ ui is not detached on this branch, so the photometric gradient flows through 
+
+gi back into Mθ : this is the sole supervisory signal that teaches the head what “uncertain” means. The relative-uncertainty modulation is used during training after warm-up, evaluation uses Eq. 12. 
+
+Rasterised uncertainty map. 
+
+To visualise the learned per-Gaussian uncertainty in image space, we rasterise an uncertainty map U by projecting the predicted values {ui} with the same α-blending pipeline used for RGB, while keeping the Gaussian geometry fixed. Formally, for a pixel x,
+
+U (x) = X
+
+> i
+
+Ti(x) αi(x) ui, (14) where Ti and αi follow the standard 3DGS compositing (Eq. 3); thus, U uses unmod-ulated compositing weights and is distinct from the training and inference weights 9defined in Supplementary Eq. (11). This map is used only for analysis. During train-ing, opacity is modulated by the relative-uncertainty function after warm-up, whereas soft dropout remains training-only. 
+
+3.2.3 Detached Soft Dropout (Tail Regulariser) 
+
+Opacity modulation and soft dropout have complementary roles. The opacity gate is a deterministic rendering mechanism: on every training view, it continuously down-weights an uncertain Gaussian while preserving its contribution and the gradient that learns its uncertainty. This alone does not prevent the representation from repeatedly relying on the same weakly constrained Gaussians. Soft dropout instead acts as a stochastic training-only regulariser: occasionally suppressing these Gaussians forces the remaining, better-supported primitives to explain the observations and reduces co-adaptation to unreliable evidence. Accordingly, it assigns greater regularisation to high-uncertainty Gaussians. The per-Gaussian drop probability uses the gradient-detached uncertainty ˘ ui defined above, 
+
+pi = r(t) η σ (˘ ui − τd), (15) where η scales the uncertainty influence, τd is a drop threshold, and r(t) = clip  (t −
+
+Td)/R, 0, 1 is a linear ramp that starts dropout after a fixed warm-up at Td = 1200 and reaches its full value over R = 500 iterations. Before applying the logit, we clip 
+
+pi ← clip( pi, ε p, 1 − εp) with εp > 0. We then convert pi into a differentiable concrete 
+
+keep mask. We first form the perturbed logit 
+
+zi = logit( pi) + logit( εi),
+
+where εi ∼ U (εp, 1 − εp) is independent uniform noise. The keep mask is then 
+
+mi = clip [mmin , m max ]
+
+
+
+1 − σ
+
+ zi
+
+Tconc 
+
+ 
+
+, (16) where Tconc is the temperature. We apply the mask as αtrain  
+
+> i
+
+(x) = αgate  
+
+> i
+
+(x)mi.This stochastic masking is useful only during optimisation: by requiring the scene to remain explainable under occasional removal of uncertain primitives, it discourages co-adaptation and over-reliance on weakly constrained evidence. At test time, the objective is instead to render the best deterministic estimate of the complete scene. Consequently, we disable dropout and retain every primitive. This does not discard uncertainty: a high score indicates comparatively unreliable, rather than certainly invalid, evidence, so hard removal could eliminate useful detail. Rendering therefore uses αraw  
+
+> i
+
+(x) from Eq. 12 to deterministically attenuate each uncertain primitive in proportion to its score, rather than randomly dropping it. 
+
+Gradient flow. 
+
+The two mechanisms share one scalar ui but are deliberately decoupled: the opacity-modulation branch is differentiable and back-propagates the rendering loss into Mθ,10 whereas the dropout branch consumes ˘ ui and therefore never reshapes the uncertainty. This prevents the degenerate solution in which the head inflates ui merely to be dropped, and lets the head learn a photometrically useful uncertainty score while dropout remains a pure regulariser. Because ˘ ui is gradient-detached, the dropout-probability path does not update the uncertainty head; it does not detach the rendered mask from the Gaussian parameters. Consequently, the Concrete mask regularises Gaussian opacity, geometry, and appearance through the rendered photometric loss. 
+
+3.2.4 Training Objective 
+
+Following FSGS [28], Full UGOD adopts DPT-based monocular depth regularisa-tion [14] to stabilise geometry under sparse observations; it is an adopted training component rather than a contribution of UGOD. A frozen DPT-Hybrid estimator pre-dicts a depth prior D once for each training image during dataset loading. Let ˆD be the rasterised depth and ρ(·, ·) denote Pearson correlation. To accommodate the scale and sign ambiguity of monocular depth, we use 
+
+Ldepth = min 
+
+n
+
+1 − ρ(−D, ˆD),
+
+1 − ρ
+
+
+
+(D + 200) −1, ˆD
+
+o 
+
+. (17) Between iterations 500 and 5500, we additionally sample pseudo cameras, render RGB and depth, and apply the frozen DPT-Hybrid estimator to the rendered RGB. This provides a pseudo-view depth prior for regularising geometry beyond the observed training views. The pseudo-view depth loss is 
+
+Lpseudo = 1 − ρ
+
+ ˆDp, −Dp
+
+
+
+, (18) where Dp is the DPT prediction for the rendered pseudo view and ˆDp is its rasterised depth. This term is linearly ramped during its first 500 active iterations. DPT is a fixed target: gradients from Lpseudo flow through the rendered depth, not through the DPT preprocessing path. The Gaussians and uncertainty head are jointly optimised with 
+
+L = (1 − λ) L1 + λ  1 − SSIM 
+
++ βd(t)Ldepth + α(t)λpLpseudo , (19) where λ = 0.2, βd(t) = 0.05 through iteration 5500 and 0 .001 thereafter, and 
+
+α(t) is the pseudo-view ramp. We use λp = 0.5 by default and λp = 0.03 for outdoor MiP-NeRF 360 scenes. The uncertainty head is supervised implicitly through the differentiable opacity-modulation function in Eq. 10; we use no auxil-iary uncertainty-calibration loss in the reported experiments. The head uses its own Adam optimiser (cosine-annealed learning rate), independent of the 3DGS optimiser. We apply validation-based early stopping to the uncertainty head; its criterion and hyper-parameters are provided in the supplementary material. 11 The complete training and inference procedure is provided in Supplementary Algorithm 1. 
+
+Default hyper-parameters. 
+
+The complete uncertainty-head, gating, dropout, and early-stopping settings are reported in Supplementary Table 1. 
+
+# 4 Experiments 
+
+4.1 Experimental Setup 
+
+Datasets and protocols. We evaluate sparse-view NVS on MiP-NeRF 360 [1] and LLFF [11]. We follow FSGS [28] for its 24-view MiP-NeRF 360 and 3-view LLFF pro-tocols, and additionally evaluate the more challenging 8-view MiP-NeRF 360 setting. For MiP-NeRF 360, we use the six scenes reported in Supplementary Tables 2 and 3, using predefined disjoint training and evaluation cameras. For LLFF, we use three COLMAP-reconstructed training views per scene and eval-uate on the corresponding held-out views, as detailed in Supplementary Table 4. LLFF images are downsampled by a factor of eight along both spatial dimensions. For MiP-NeRF 360, images wider than 1600 pixels are resized to width 1600 while preserving aspect ratio, whereas smaller images retain their original resolution. These camera splits and image resolutions define our evaluation protocol; consequently, absolute metrics need not match prior reports that use different splits or input resolutions. 
+
+Implementation. We implement UGOD in PyTorch on an NVIDIA RTX A100 and train all benchmarked methods for 6,000 iterations. The uncertainty head uses the (6 , 0, 0, 0) HashGrid configuration selected by the ablation in Table 3; its remaining settings follow Supplementary Table 1. We reset opacity at iterations 2001 and 5001 for 6000-iteration training. The uncertainty head is frozen after two consecutive validation evaluations for which PSNR decreases relative to the preceding evaluation (∆PSNR <ϵ = 0); Gaussian parameters continue to be optimised. In tables and comparison figures only, 3DGS* denotes the official 3DGS baseline evaluated under the same sparse-view protocol. Each table specifies the compared variants: Ours (full) denotes the depth-assisted model with uncertainty-guided soft dropout. 
+
+Metrics. We report PSNR, SSIM [18], and LPIPS [25] on held-out views. We additionally report the final Gaussian count and its reduction relative to 3DGS* and DropGS where available, since sparse-view reconstruction requires a trade-off between rendering quality and representation compactness. 
+
+4.2 Quantitative Comparison 
+
+We quantitatively compare Full UGOD with 3DGS* [7], DropGS [13], and FSGS [28]. Table 1 first reports scene-averaged results, and Supplementary Tables 2, 3, and 4 provide the corresponding per-scene comparisons. 
+
+LLFF. On the more challenging 3-view protocol, Full UGOD achieves the best scene-average PSNR (19.33), SSIM (0.637), and LPIPS (0.245), while using 102,280 Gaussians on average 2 .5× fewer than 3DGS*. It obtains the highest PSNR on six of 12 Table 1 : Scene-average results on LLFF (3 views) and MiP-NeRF 360 (8/24 views). Reduction is relative to 3DGS*; best and second-best values are bold and underlined.                                                               
+
+> Setting Method PSNR ↑SSIM ↑LPIPS ↓#Gaussians vs 3DGS* LLFF (3-view) 3DGS* 14.6543 0.4379 0.3990 254,350 –DropGS 14.6443 0.4557 0.3894 210,414 1.2 ×
+> FSGS (w/ depth) 19.0457 0.6230 0.2514 151,173 1.7 ×
+> Ours (full) 19.3300 0.6370 0.2449 102,280 2.5 ×
+> Mip360 (8-view) 3DGS* 11.9591 0.2747 0.6095 864,393 –DropGS 12.7267 0.3193 0.6026 716,133 1.2 ×
+> FSGS (w/ depth) 13.0309 0.3588 0.6197 132,090 6.5 ×
+> Ours (full) 14.1435 0.3682 0.6179 95,662 9.0 ×
+> Mip360 (24-view) 3DGS* 18.6739 0.5614 0.4289 1,038,952 –DropGS 18.9911 0.5629 0.4520 775,653 1.3 ×
+> FSGS (w/ depth) 18.7833 0.5315 0.5245 148,296 7.0 ×
+> Ours (full) 19.0867 0.5365 0.5203 129,498 8.0 ×
+
+seven scenes and the smallest representation on six scenes. Orchids is the exception for rendering quality, where FSGS achieves the best PSNR and LPIPS (with tied best SSIM), while on Room FSGS uses fewer Gaussians and achieves the best SSIM and LPIPS. These per-scene results show that the gain remains scene dependent, but is most consistent under severe view sparsity. 
+
+MiP-NeRF 360. Under the 8-view protocol, Full UGOD obtains the highest average PSNR (14.14) and SSIM (0.368), with 95,662 final Gaussians on average. This is 9 .0× fewer Gaussians than 3DGS* and 7 .5× fewer than DropGS. The per-scene results show the highest PSNR on five of the six scenes and the smallest representation on three; on bicycle , for example, Full UGOD improves PSNR from 11.01 to 13.11 while reducing the Gaussian count from 1,460,812 to 59,483. DropGS achieves the best average LPIPS, and FSGS attains the best PSNR, SSIM, and LPIPS on counter ;therefore, the 8-view result is not a uniform improvement for every metric. With 24 views, Full UGOD still gives the highest average PSNR (19.09) and the smallest average representation (129,498 Gaussians, 8 .0× fewer than 3DGS*). It has the lowest Gaussian count on five of the six scenes and the highest PSNR on bicycle ,
+
+counter , and kitchen . The detailed per-scene analysis in Supplementary Table 3 indi-cates that, with more observations, uncertainty attenuation can trade fine detail for representation compactness. Thus, in this less-sparse setting, the results demonstrate a quality–compactness trade-off rather than across-the-board metric superiority. 
+
+4.3 Ablation Study 
+
+Component ablation. Table 2 summarises the component rows in Supplementary Tables 5, 6, and 7: for each sparse-view protocol, it compares uncertainty-guided opac-ity modulation with and without soft dropout, and the full configuration, in terms of scene-average PSNR, SSIM, LPIPS, and final Gaussian count. In the 8-view setting, the soft-dropout comparison is averaged over the five scenes where both variants are 13 Table 2 : Scene-average component ablation. N is the number of scenes averaged; the 8-view soft-dropout variants use five scenes, while the full model uses all six. Best and second-best values are bold and underlined.                                                  
+
+> Setting Variant NPSNR ↑SSIM ↑LPIPS ↓#Gaussians ↓
+> LLFF (3-view) Ours 718.2386 0.5989 0.2701 180,905 w/o soft dropout 717.9529 0.5700 0.2877 183,460 Ours (full) 719.3300 0.6370 0.2449 102,280
+> Mip360 (8-view) w/o soft dropout 513.9438 0.3672 0.6074 108,008 w/ soft dropout 512.9741 0.3475 0.6267 102,644 Ours (full) 614.1435 0.3682 0.6179 95,662
+> Mip360 (24-view) w/o soft dropout 619.0752 0.5521 0.4744 243,836 w/ soft dropout 618.7457 0.5429 0.4760 244,322 Ours (full) 619.0867 0.5365 0.5203 129,498
+
+available; the bicycle scene instead reports modulation-only and full results. Adding soft dropout alone reduces the average Gaussian count from 108,008 to 102,644 but also lowers PSNR from 13.94 to 12.97. The full model obtains the best 8-view average PSNR and SSIM while using 95,662 Gaussians; because it also includes depth super-vision, this comparison measures the complete system rather than an isolated dropout effect. At 24 views, the full model improves PSNR and compactness but not average SSIM or LPIPS. In contrast, under the LLFF 3-view protocol, the full configuration improves all three image metrics and reduces the average Gaussian count to 102,280. These results support using the complete configuration in the most severely sparse setting while making the quality–compactness trade-off explicit elsewhere. 
+
+HashGrid input configuration. We conduct a controlled ablation on the MiP-NeRF 360 kitchen scene with 24 training views, holding all non-encoding settings fixed (Table 3). P , S, R, and V denote the number of HashGrid levels assigned to position, scale, rotation, and view direction, respectively. Position-only encoding with six levels, namely ( P, S, R, V ) = (6 , 0, 0, 0), achieves the best PSNR (15.0757), SSIM (0.4628), and LPIPS (0.6396). Adding one view-direction level to the five-level position encoding improves the result over (5 , 0, 0, 0), but remains inferior to (6 , 0, 0, 0). Allocating levels to scale and rotation, or increasing the position encoding to seven levels, degrades all three metrics in this controlled setting. We therefore use ( P, S, R, V ) = (6 , 0, 0, 0): only position is HashGrid encoded, while the remaining attributes are concatenated in their raw form. 
+
+4.4 Qualitative Comparison 
+
+Figure 3 presents qualitative comparisons on Mip-NeRF 360 (24-view stump and 8-view bicycle ) and LLFF (3-view horns , flower , and fern ). Each rendered view is anno-tated with the displayed-view PSNR and the final Gaussian count of the corresponding model. 14 Ground Truth 3DGS* DropGS FSGS Ours        
+
+> PSNR: 11.69 dB PSNR: 10.34 dB PSNR: 17.85 dB PSNR: 18.31 dB Size: 325.3k Size: 245.4k Size: 117.4k Size: 93.8k PSNR: 17.68 dB Size: 233.6k PSNR: 17.51 dB Size: 168.1k PSNR: 21.47 dB Size: 244.6k PSNR: 21.98 dB Size: 93.4k
+> PSNR: 14.69 dB Size: 190.7k PSNR: 14.84 dB Size: 157.4k PSNR: 19.52 dB Size: 99.2k PSNR: 20.11 dB Size: 71.1k
+> PSNR: 11.01 dB Size: 1460.8k PSNR: 12.24 dB Size: 1000.2k PSNR: 11.05 dB Size: 142.1k PSNR: 13.11 dB Size: 59.5k
+> PSNR: 14.71 dB Size: 1223.6k PSNR: 16.17 dB Size: 953.0k PSNR: 18.03 dB Size: 149.3k PSNR: 18.11 dB Size: 142.8k
+> Mip NerF 24 View Mip NerF 8 View LLFF 3 View LLFF 3 View LLFF 3 View
+> Stump bicycle horns flower fern
+> bonsai PSNR: 19.65 dB Size: 686.8k PSNR: 19.60 dB Size: 600.1k PSNR: 19.70 dB Size: 341.9k PSNR: 20.87 dB Size: 154.2k
+> Mip NerF 24 View
+
+Fig. 3 : Qualitative comparison on MiP-NeRF 360 (24/8 views) and LLFF (3 views). Each non-GT panel reports the displayed-view PSNR and final Gaussian count. On the 8-view bicycle scene, 3DGS* and DropGS exhibit substantial floaters and blurred structures, whereas FSGS recovers more coherent geometry. Full UGOD more clearly recovers bicycle spokes and the background fence in this example, with a view-wise PSNR of 13.11 dB and 59.5K Gaussians, compared with 11.01 dB and 1460.8K for 3DGS*, 12.24 dB and 1000.2K for DropGS, and 11.05 dB and 142.1K for FSGS. The same quality–compactness pattern is visible in the LLFF examples. On horns ,
+
+flower , and fern , Full UGOD attains higher displayed-view PSNR than FSGS (20.11 vs. 19.52 dB, 21.98 vs. 21.47 dB, and 18.31 vs. 17.85 dB, respectively) while using fewer Gaussians (71.1K vs. 99.2K, 93.4K vs. 244.6K, and 93.8K vs. 117.4K, respec-tively). The 24-view stump example shows a smaller visual and numerical margin: Full UGOD reaches 18.11 dB with 142.8K Gaussians, compared with 18.03 dB and 149.3K for FSGS. These examples are consistent with the quantitative results: the proposed model can improve the quality–compactness trade-off under sparse-view supervision, although the margin varies across scenes. 15 Table 3 : Controlled HashGrid input-encoding ablation on MiP-NeRF 360 
+
+kitchen with 24 training views. P , S,
+
+R, and V are the numbers of encod-ing levels assigned to position, scale, rotation, and view direction. Bold 
+
+indicates the best result.                                        
+
+> PSRVPSNR ↑SSIM ↑LPIPS ↓
+> 500012.8370 0.4092 0.6619 500114.7173 0.4575 0.6400 600015.0757 0.4628 0.6396
+> 611014.6207 0.4508 0.6461 700010.9079 0.4070 0.6758
+
+4.5 Uncertainty Dynamics and Opacity Response 
+
+To characterise the signal learned through the photometric objective, we track the uncertainty head throughout a representative three-view training run on the fern scene from LLFF (Fig. 4). This analysis concerns the evolution and use of the predicted uncertainty, rather than calibration error. The raw uncertainty distribution initially has a broad mode near u = 0 .45, but progressively concentrates near u = 0 .1 while retaining a high-uncertainty tail (Fig. 4a). Thus, training does not uniformly reduce all uncertainty predictions: most Gaussians become low-uncertainty, whereas a subset remains uncertain. The proportion of relative uncertainties satisfying ˜ ui > 0.8 rises from approxi-mately 27% at 1k iterations to 40% at 2k, coinciding with the densification period, and then decreases to approximately 36% at 6k (Fig. 4b). This trajectory is consis-tent with densification introducing initially less-constrained Gaussians, after which photometric optimisation separates the low-uncertainty majority from a persistent uncertain tail. At 6k iterations, larger predicted uncertainties are associated with smaller gate multipliers (Fig. 4c). The response approaches the configured multiplier floor β = 0 .70 for high-uncertainty Gaussians, directly illustrating their attenuation through the differentiable opacity-modulation pathway in Eq. 10. 
+
+4.6 Photometric Residuals and Uncertainty Visualisation 
+
+Only UGOD contains the uncertainty head and can therefore produce the predicted uncertainty map U (x) in Eq. 14. Its scalar ui is a view-dependent signal predicted from Gaussian attributes and viewing direction, and is only indirectly supervised through the opacity-modulation pathway. For 3DGS*, DropGS, and FSGS, Figure 5 instead shows the photometric residual map 
+
+E(x) = ˆC(x) − CGT (x) 1
+
+. (20) 16 0.0 0.2 0.4 0.6 0.8 1.0                
+
+> Predicted uncertainty u
+> 01234
+> Density
+> (a) Uncertainty evolution
+> Iter. 1k 2k 3k 4.5k 6k
+> 1k 2k 3k 4.5k 6k
+> Training iteration
+> 25 30 35 40 45
+> Fraction with ̃  u > 0.80 (%)
+> 27.4 39.6 38.3 37.6 36.3
+> (b) High-uncertainty fraction
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Predicted uncertainty u
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Effective opacity
+> (c) Opacity response @ 6k
+> gate floor = 0.7
+> 200 400 600 800 1000 1200
+> Count
+
+Fig. 4 : Uncertainty dynamics for the LLFF fern scene with three training views: raw-uncertainty distributions (left), the fraction with ˜ ui > 0.8 (centre), and the uncertainty–opacity response at 6k iterations (right). 3DGS* DropGS FSGS Ours 
+
+> LLFF 3 View - fern  LLFF 3 View - horns  Mip NerF 24 View - bonsai
+
+Fig. 5 : Photometric residuals for 3DGS*, DropGS, and FSGS, and UGOD’s predicted uncertainty. Rows show MiP-NeRF 360 bonsai (24 views) and LLFF horns and fern 
+
+(3 views). These baseline heatmaps measure image-space reconstruction error, not predicted uncertainty. The visualisation consequently compares residual patterns for the base-lines with the predicted uncertainty pattern of UGOD on MiP-NeRF 360 bonsai (24 views) and LLFF horns and fern (three training views). The baseline residuals are concentrated around under-constrained structures and backgrounds, whereas UGOD’s predicted map assigns lower accumulated uncertainty to most retained scene content. 17 5 Conclusion 
+
+We introduced UGOD, an uncertainty-guided framework for sparse-view 3D Gaus-sian Splatting. UGOD learns view-dependent per-Gaussian uncertainty from Gaussian attributes and the viewing direction, then uses this signal in two complementary mechanisms. First, uncertainty-guided opacity modulation continuously attenuates high-uncertainty contributions before alpha compositing. Second, gradient-detached soft dropout regularises high-uncertainty primitives during training without directly altering the uncertainty estimator. Experiments on MiP-NeRF 360 and LLFF show that this design improves the quality–compactness trade-off in the evaluated sparse-view protocols, with the most consistent gains under severe view sparsity. The per-scene results further show that the benefit is metric and scene dependent, especially when additional input views reduce the reconstruction ambiguity. 
+
+Acknowledgements. This work was supported by Manchester Metropolitan Uni-versity Student Scholarship. 
+
+# References 
+
+[1] Barron JT, Mildenhall B, Verbin D, et al (2022) Mip-nerf 360: Unbounded anti-aliased neural radiance fields. In: Proceedings of the IEEE/CVF conference on computer vision and pattern recognition, pp 5470–5479 [2] Bul` o SR, Porzi L, Kontschieder P (2024) Revising densification in gaussian splatting. arXiv preprint arXiv:240406109 [3] Celarek A, Kopanas G, Drettakis G, et al (2025) Does 3d gaussian splatting need accurate volumetric rendering? arXiv preprint arXiv:250219318 [4] Galappaththige CJ, Gottwald T, Stehr P, et al (2026) Predictive photomet-ric uncertainty in gaussian splatting for novel view synthesis. In: European Conference on Computer Vision [5] Gottwald T, Heinert E, Stehr P, et al (2026) Primu: Uncertainty estimation for novel views in gaussian splatting from primitive-based representations of error and coverage. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp 11871–11880 [6] Jiang W, Lei B, Daniilidis K (2023) Fisherrf: Active view selection and uncer-tainty quantification for radiance fields using fisher information. arXiv preprint arXiv:231117874 [7] Kerbl B, Kopanas G, Leimk¨ uhler T, et al (2023) 3d gaussian splatting for real-time radiance field rendering. ACM Trans Graph 42(4):139–1 [8] Kerbl B, Kopanas G, Leimk¨ uhler T, et al (2023) 3d gaussian splatting for real-time radiance field rendering. ACM Transactions on Graphics 42(4). URL https: 18 //repo-sam.inria.fr/fungraph/3d-gaussian-splatting/ [9] Li R, Cheung Ym (2024) Variational multi-scale representation for estimating uncertainty in 3d gaussian splatting. Advances in Neural Information Processing Systems 37:87934–87958 [10] Lim H, Chang H, Choi JB, et al (2025) Lidar-3dgs: Lidar reinforcement for mul-timodal initialization of 3d gaussian splats. Computers & Graphics 132:104293. https://doi.org/10.1016/j.cag.2025.104293 [11] Mildenhall B, Srinivasan PP, Tancik M, et al (2019) Local light field fusion: Practical view synthesis with prescriptive sampling guidelines. In: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp 4759–4768 [12] Pang G, Li K, Zhang G, et al (2025) Strugs: Structurally consistent 3d gaus-sian splatting with targeted optimization strategies. Computers & Graphics 132:104440. https://doi.org/10.1016/j.cag.2025.104440 [13] Park H, Ryu G, Kim W (2025) Dropgaussian: Structural regularization for sparse-view gaussian splatting. In: Proceedings of the Computer Vision and Pattern Recognition Conference, pp 21600–21609 [14] Ranftl R, Bochkovskiy A, Koltun V (2021) Vision transformers for dense predic-tion. In: Proceedings of the IEEE/CVF International Conference on Computer Vision, pp 12179–12188 [15] Shen J, Feng T, Dong H, et al (2025) Surags: Toward efficient few-shot novel view synthesis via surface-aware gaussian splatting. Computers & Graphics 131:104349. https://doi.org/10.1016/j.cag.2025.104349 [16] Talegaonkar C, Belhe Y, Ramamoorthi R, et al (2024) Volumetrically consistent 3d gaussian rasterization. arXiv preprint arXiv:241203378 [17] Tang Y, Yan J, Li Y, et al (2025) Hr-2dgs: Hybrid regularization for sparse-view 3d reconstruction with 2d gaussian splatting. Computers & Graphics 133:104444. https://doi.org/10.1016/j.cag.2025.104444 [18] Wang Z, Bovik AC, Sheikh HR, et al (2004) Image quality assessment: from error visibility to structural similarity. IEEE transactions on image processing 13(4):600–612 [19] Wilson J, Almeida M, Mahajan S, et al (2025) Pop-gs: Next best view in 3d-gaussian splatting with p-optimality. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp 3646–3655 [20] Xiong H, Muttukuru S, Xiao H, et al (2025) Sparsegs: Sparse view synthesis using 3d gaussian splatting. In: International Conference on 3D Vision 19 [21] Yang H, Zhang C, Wang W, et al (2024) Gaussian splatting with localized points management. CoRR [22] Yong S, Manivannan VNP, Kerbl B, et al (2025) Omg: Opacity matters in material modeling with gaussian splatting. arXiv preprint arXiv:250210988 [23] Yu Z, Chen A, Huang B, et al (2024) Mip-splatting: Alias-free 3d gaussian splat-ting. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pp 19447–19456 [24] Zhang J, Li J, Yu X, et al (2024) Cor-gs: sparse-view 3d gaussian splatting via co-regularization. In: European Conference on Computer Vision, Springer, pp 335–352 [25] Zhang R, Isola P, Efros AA, et al (2018) The unreasonable effectiveness of deep features as a perceptual metric. In: Proceedings of the IEEE conference on computer vision and pattern recognition, pp 586–595 [26] Zhang Z, Hu W, Lao Y, et al (2024) Pixel-gs: Density control with pixel-aware gradient for 3d gaussian splatting. arXiv preprint arXiv:240315530 [27] Zhao J, Li C, Zhang S, et al (2025) Pcdgs: A point cloud densification method for gaussian splatting. Computers & Graphics 130:104241. https://doi.org/10.1016/ j.cag.2025.104241 [28] Zhu Z, Fan Z, Jiang Y, et al (2024) Fsgs: Real-time few-shot view synthesis using gaussian splatting. In: European conference on computer vision, Springer, pp 145–163 [29] Zwicker M, Pfister H, Van Baar J, et al (2001) Surface splatting. In: Proceedings of the 28th annual conference on Computer graphics and interactive techniques, pp 371–378 20 Supplementary Information 
+
+UGOD: Uncertainty-Guided Opacity and Dropout for Sparse-View 3D Gaussian Splatting 
+
+# S1 Supplementary Material 
+
+This appendix supplements the main paper with four blocks of material: supple-mentary mathematical derivations, implementation details, per-scene quantitative comparisons, and component-ablation tables for the uncertainty-guided operators in Sec. 3.2 of the main paper. We present the mathematical analysis first, followed by additional experimental results and implementation details. 
+
+S1.1 Supplementary Mathematical Analysis 
+
+This subsection provides supplementary derivations for the robust uncertainty nor-malisation, alpha-compositing sensitivity, opacity modulation, detached Concrete dropout, depth-regularisation schedule, and train–test opacity weighting. These details explain the behaviour of the operators used in the main method without introducing an additional training objective. 
+
+S1.1.1 SH Compression: Compact Appearance Descriptor 
+
+The rest-energy vector ei is defined in the main text as the channel-wise L1 mean of the non-DC SH coefficients. It is therefore a compact magnitude surrogate for view-dependent appearance, rather than an exact spectral-energy or Parseval-equivalent quantity. This summary retains the overall strength of the non-DC coefficients while avoiding a high-dimensional, orientation-specific appearance input to the uncertainty head. 
+
+S1.1.2 The Input Feature Vector: Manifold Coordinate Embedding 
+
+The feature vector fi is defined in the main text by concatenating view direction, hashed position, rotation, scale, DC colour, and rest-energy. The multi-resolution hash encoding γ(μi) provides a localised spatial descriptor, while the remaining attributes provide the Gaussian’s view- and appearance-dependent state. Thus, the head learns uncertainty from both local position and per-Gaussian attributes rather than from position alone. 
+
+S1.1.3 Robust Normalisation: Non-Parametric Order Statistics 
+
+Equation (8) of the main paper defines the median/MAD normalisation used in the main method. Denote its median and MAD terms by μu and MAD V (u), respectively. For an affine reparameterisation u′ 
+
+> i
+
+= au i + b with a > 0 and negligible δ, these terms 21 transform as μu′ = aμ u + b, 
+
+MAD( u′) = a MAD( u),
+
+¯u′ 
+
+> i
+
+= ¯ ui.
+
+(1) The modulation function and dropout therefore depend on relative uncertainty within the visible set rather than the arbitrary absolute scale of the head output. The positive 
+
+δ retains numerical stability when the visible uncertainties are nearly identical, while clipping limits the influence of extreme normalised values. 
+
+S1.1.4 Alpha-Compositing Sensitivity 
+
+For a fixed depth order and pixel x, denote the colour accumulated by the Gaussians behind i, conditional on unit incoming transmittance, by 
+
+C>i (x) = X
+
+> k>i
+
+ Y
+
+> i<j<k
+
+ 1 − αj (x) αk(x)ck. (2) Equation (4) of the main paper can then be written as 
+
+C(x) = Ti(x)αi(x)ci +  1 − αi(x)C>i (x) . (3) Differentiating with respect to αi gives 
+
+∂C(x)
+
+∂α i(x) = Ti(x) ci − C>i (x). (4) Thus, an opacity change affects both the primitive’s direct colour contribution and the transmittance available to all later Gaussians. This coupling explains why regulating an unreliable primitive before compositing can affect the rendered pixel even when its own colour is not dominant. 
+
+S1.1.5 Opacity-Modulation Bounds and Gradient 
+
+The opacity-modulation function in Eq. (10) of the main paper maps normalised uncertainty to a positive opacity multiplier. Because the sigmoid lies in (0 , 1) and 0 < β < 1, the modulation factor is bounded by β < g i < 1 (or β ≤ gi ≤ 1 in the limiting sense), and is monotone decreasing: 
+
+∂g i
+
+∂ ˜ui
+
+= −(1 − β)κ σ  −κ(˜ ui − τg )  1 − σ −κ(˜ ui − τg ) < 0. (5) For a fixed depth order and projected footprint, the direct gradient path is 
+
+∂L
+
+∂ ˜ui
+
+= ∂L
+
+∂o gate 
+
+> i
+
+∂o gate 
+
+> i
+
+∂g i
+
+∂g i
+
+∂ ˜ui
+
+= ∂L
+
+∂o gate 
+
+> i
+
+oi
+
+∂g i
+
+∂ ˜ui
+
+. (6) 22 The full rendering gradient additionally includes coupling through the transmittance factors in Eq. (4) of the main paper. Because the modulation derivative is negative, a gradient that favours reducing the modulated opacity increases the corresponding uncertainty. The floor β keeps the modulation factor positive so this direct gradient path is not removed entirely. 
+
+S1.1.6 Detached Soft Dropout 
+
+The dropout probability pi and the soft keep mask mi are given in Eqs. (15) and (16) of the main paper. The temperature Tconc controls the sharpness of the continuous keep-mask relaxation. Crucially, dropout consumes ˘ ui, so its stochastic regularisation does not directly update the uncertainty head. This prevents the head from increasing uncertainty merely to obtain a higher dropout probability. Since r(t) ∈ [0 , 1] and the sigmoid lies in (0 , 1), the probability satisfies 0 ≤ pi ≤ η r (t). (7) Writing zi = logit( pi) + logit( εi), the unclamped mask is mi = 1 − σ(zi/T conc ) ∈ (0 , 1). As Tconc → 0, this continuous relaxation approaches a binary keep decision; larger temperatures yield smoother gradients. Because pi is computed from ˘ ui,
+
+∂p i
+
+∂ ˜ui
+
+= 0 , ∂m i
+
+∂ ˜ui
+
+= 0 on the dropout branch . (8) The stochastic branch consequently cannot directly update the uncertainty head or incentivise it to inflate uncertainty merely to increase the drop probability. 
+
+S1.1.7 Depth-Regularisation Schedule 
+
+For completeness, the Pearson correlation used in Eqs. (17) and (18) of the main paper is computed over corresponding valid pixels Ω: 
+
+ρ(a, b) = 
+
+P
+
+> q∈Ω
+
+(aq − ¯a)( bq − ¯b)
+
+qP
+
+> q∈Ω
+
+(aq − ¯a)2
+
+qP
+
+> q∈Ω
+
+(bq − ¯b)2
+
+, (9) where ¯ a and ¯b are the respective pixel-wise means. The pseudo-view coefficient in Eq. (19) of the main paper is 
+
+α(t) = 
+
+
+
+0, t < 500 or t > 5500 ,
+
+(t − 500) /500 , 500 ≤ t < 1000 ,
+
+1, 1000 ≤ t ≤ 5500 .
+
+(10) Thus, pseudo-view depth regularisation is inactive outside its prescribed interval and reaches its full weight after a 500-iteration linear ramp. Pseudo cameras are drawn from a pre-generated candidate pool produced by the FSGS random-pose gen-erators for LLFF and 360 ◦ captures, respectively. Within the active window they 23 are not applied every iteration: one camera is sampled every S iterations accord-ing to sample pseudo interval , after which DPT-Hybrid is evaluated online on the rendered RGB to form Dp.
+
+S1.1.8 Training and Inference Weights 
+
+Combining the warm-up schedule with Eqs. (10) and (16) of the main paper, with dropout starting at Td = 1200 and ramping for R = 500 iterations, the rendering weight is 
+
+αtrain  
+
+> i
+
+(x) = 
+
+
+
+αraw  
+
+> i
+
+(x), t < T g ,αgate  
+
+> i
+
+(x), Tg ≤ t < T d,αgate  
+
+> i
+
+(x)mi, t ≥ Td,αtest  
+
+> i
+
+(x) = αraw  
+
+> i
+
+(x).
+
+(11) This expression makes the train–test distinction explicit: inference uses the raw-uncertainty opacity operation and disables both relative-uncertainty modulation and stochastic dropout. 
+
+S1.1.9 Validation-Based Early Stopping 
+
+∆k = PSNR k − PSNR prev ,ck =
+
+(
+
+ck−1 + 1 , ∆k < ϵ, 
+
+0, otherwise ,ck ≥ P =⇒ freeze Mθ.
+
+(12) The early-stopping rule freezes the uncertainty head after P consecutive validation evaluations with decreasing PSNR ( ϵ = 0), while the Gaussian parameters continue to be optimised. It prevents late-stage uncertainty updates from adapting to transient photometric residuals after the global scene structure has largely settled. 
+
+S1.2 Implementation Details 
+
+Table 1 lists the default hyper-parameters for the uncertainty head, opacity mod-ulation, detached soft dropout, and validation-based early stopping. Algorithm 1 summarises the full UGOD training and inference procedure used in all reported experiments. 24 Symbol Description Value 
+
+κ modulation slope 4.0
+
+τg modulation threshold 0.8
+
+β modulation floor (min. opacity multiplier) 0.70 
+
+Tg modulation warm-up (iters) 1200 
+
+η dropout scale 0.08 
+
+τd dropout threshold 0.0
+
+Td fixed dropout warm-up (iters) 1200 
+
+R dropout ramp duration (iters) 500 
+
+Tconc Concrete-mask temperature 0.1[mmin , m max ] keep-mask clamp [0 .05 , 1.0] 
+
+c relative-uncertainty clip 2.0
+
+ϵ PSNR-freeze tolerance 0
+
+P PSNR-freeze patience 2
+
+Table 1 : Default hyper-parameters for the uncertainty head, opacity modulation, detached soft dropout, and early stopping. 
+
+Algorithm 1 Full UGOD training and inference 
+
+Require: Training views I, Gaussians G, budget Tmax 
+
+Ensure: Optimised G and uncertainty head Mθ
+
+1: Precompute DPT priors D on GT training views; initialise G and Mθ
+
+2: Build pseudo-camera pool (LLFF / 360 ◦ random poses) 3: for t = 1 to Tmax do 
+
+4: Sample a training view; visible set V
+
+5: Form fi and predict ui = σ(Mθ (fi)) for i ∈ V 
+
+6: Compute αraw  
+
+> i
+
+using Eq. (12) of the main paper 7: if t < T g then 
+
+8: Render with αraw 
+
+> i
+
+9: else 
+
+10: Normalise {ui} (Eq. (8) of the main paper); compute αgate  
+
+> i
+
+(Eq. (10) of the main paper) 11: if t ≥ Td then 
+
+12: Render with detached soft dropout: αgate  
+
+> i
+
+mi
+
+13: else 
+
+14: Render with αgate 
+
+> i
+
+15: end if 
+
+16: end if 
+
+17: Compute photometric loss and Ldepth vs. cached prior (Eq. (17) of the main paper) 18: if 500 ≤ t ≤ 5500 and t hits the sampling interval S then 
+
+19: Sample a pseudo camera; render RGB and depth 20: Run frozen DPT-Hybrid online on rendered RGB to obtain Dp
+
+21: Add α(t)λpLpseudo (Eq. (18) of the main paper) 22: end if 
+
+23: Form L using Eq. (19) of the main paper 24: Update G and Mθ (unless frozen) 25: if evaluation step then 
+
+26: Freeze Mθ if ∆ k < ϵ for P consecutive checks 27: end if 
+
+28: end for 
+
+29: Inference: predict {ui} and render with αraw 
+
+> i
+
+S1.3 Per-Scene Quantitative Results 
+
+Tables 2, 3, and 4 report scene-wise PSNR, SSIM, LPIPS, and final Gaussian counts under the MiP-NeRF 360 8-view, MiP-NeRF 360 24-view, and LLFF 3-view protocols, respectively. These tables underlie the averages in Table 1 of the main paper and expose the scene-dependent quality–compactness trade-offs summarised in the main 25 text. Best and second-best values within each scene are in bold and underlined; our full model is shaded in blue. 
+
+S1.4 Component Ablation Details 
+
+Tables 5, 6, and 7 provide the per-scene component ablation underlying the averages in Table 2 of the main paper. We compare intermediate variants modulation only, with/without soft dropout, and the full configuration within each scene. Best and second-best values within each scene are in bold and underlined; the full model is shaded in blue. 26 Table 2 : Per-scene results on MiP-NeRF 360 (8 views). The full model is shaded; best and second-best values are bold and underlined. 
+
+Scene Method Init Metrics Final Gaussians Reduction PSNR ↑ SSIM ↑ LPIPS ↓ vs 3DGS* bicycle 8 3DGS* 3 11.01 0.173 0.592 1,460,812 -DropGS 3 12.24 0.208 0.597 1,000,235 1.5 × fewer FSGS (w/ depth) 3 11.05 0.202 0.626 142,066 10.3 × fewer Ours (full) 3 13.11 0.284 0.643 59,483 24.6 × fewer 
+
+bonsai 8 3DGS* 11 11.9641 0.3527 0.5958 565,053 -DropGS 11 12.2382 0.3840 0.5993 338,245 1.7 × fewer FSGS (w/ depth) 11 13.6536 0.4405 0.5828 160,428 3.5 × fewer Ours (full) 11 13.7776 0.4309 0.5643 111,546 5.1 × fewer 
+
+counter 8 3DGS* 51 13.9599 0.4334 0.5710 339,718 -DropGS 51 14.8654 0.5217 0.5454 343,141 1.0 × more FSGS (w/ depth) 51 13.7273 0.5148 0.5755 71,677 4.7 × fewer 
+
+Ours (full) 51 14.6130 0.5185 0.5565 77,324 4.4 × fewer garden 8 3DGS* 358 10.7374 0.1449 0.6499 1,219,741 -DropGS 358 12.6463 0.2033 0.6298 922,348 1.3 × fewer FSGS (w/ depth) 358 13.4074 0.2725 0.6949 123,253 9.9 × fewer 
+
+Ours (full) 358 14.3317 0.2592 0.6782 152,968 8.0 × fewer kitchen 8 3DGS* 22 12.9750 0.3761 0.6391 490,670 -DropGS 22 12.6709 0.3938 0.6349 803,427 1.6 × more FSGS (w/ depth) 22 13.0945 0.4510 0.6153 30,328 16.2 × fewer 
+
+Ours (full) 22 15.0121 0.4271 0.6292 40,950 12.0 × fewer stump 8 3DGS* 14 11.1085 0.1684 0.6094 1,110,366 -DropGS 14 11.6992 0.2049 0.6089 889,400 1.2 × fewer FSGS (w/ depth) 14 13.2528 0.2720 0.6237 264,785 4.2 × fewer Ours (full) 14 14.0165 0.2897 0.6363 131,701 8.4 × fewer 
+
+27 Table 3 : Per-scene results on MiP-NeRF 360 (24 views). The full model is shaded; best and second-best values are bold and underlined. 
+
+Scene Method Init Metrics Final Gaussians Reduction PSNR ↑ SSIM ↑ LPIPS ↓ vs 3DGS* bicycle 24 3DGS* 21 15.3990 0.2815 0.5713 1,292,646 -DropGS 21 15.8850 0.3172 0.5894 937,115 1.4 × fewer FSGS (w/ depth) 21 15.8226 0.3482 0.6068 155,215 8.3 × fewer Ours (full) 21 16.8980 0.3602 0.5954 141,530 9.1 × fewer 
+
+bonsai 24 3DGS* 5764 22.5979 0.8081 0.2986 686,826 -DropGS 5764 22.6805 0.8113 0.3001 600,128 1.1 × fewer FSGS (w/ depth) 5764 22.1688 0.7529 0.3903 176,229 3.9 × fewer Ours (full) 5764 20.1803 0.7038 0.4269 154,205 4.5 × fewer 
+
+counter 24 3DGS* 3572 20.7878 0.7505 0.3479 620,747 -DropGS 3572 20.9882 0.7470 0.3716 506,551 1.2 × fewer FSGS (w/ depth) 3572 20.4888 0.6933 0.4546 107,532 5.8 × fewer Ours (full) 3572 21.6592 0.7263 0.4288 93,907 6.6 × fewer 
+
+stump 24 3DGS* 1013 14.3681 0.3311 0.5889 1,223,612 -DropGS 1013 15.2976 0.3613 0.5823 952,989 1.3 × fewer FSGS (w/ depth) 1013 17.0636 0.4036 0.6088 149,268 8.2 × fewer Ours (full) 1013 16.7614 0.4100 0.6104 142,794 8.6 × fewer 
+
+garden 24 3DGS* 1343 19.6501 0.5328 0.3816 1,737,612 -DropGS 1343 19.9231 0.4966 0.4473 1,154,896 1.5 × fewer FSGS (w/ depth) 1343 19.6418 0.4337 0.5468 218,774 7.9 × fewer Ours (full) 1343 19.7033 0.4103 0.5647 154,324 11.3 × fewer 
+
+kitchen 24 3DGS* 268 19.2408 0.6644 0.3848 672,266 -DropGS 268 19.1724 0.6443 0.4212 502,238 1.3 × fewer FSGS (w/ depth) 268 17.5143 0.5576 0.5397 82,761 8.1 × fewer 
+
+Ours (full) 268 19.3180 0.6087 0.4956 90,226 7.5 × fewer 
+
+28 Table 4 : Per-scene results on LLFF (3 views). The full model is shaded; best and second-best values are bold and underlined. 
+
+Scene Method Init Metrics Final Compression Points PSNR ↑ SSIM ↑ LPIPS ↓ Gaussians vs 3DGS* Fern 3DGS* 1707 13.99 0.444 0.421 325,283 –DropGS 1707 13.69 0.448 0.425 245,406 1.3 × fewer FSGS (w/ depth) 1707 20.49 0.665 0.243 117,432 2.8 × fewer Ours (full) 1707 20.74 0.680 0.231 93,766 3.5 × fewer 
+
+Flower 3DGS* 1804 16.81 0.479 0.371 233,646 –DropGS 1804 16.94 0.479 0.375 168,128 1.4 × fewer FSGS (w/ depth) 1804 19.79 0.599 0.283 244,626 1.0 × more Ours (full) 1804 19.96 0.616 0.264 93,361 2.5 × fewer 
+
+Fortress 3DGS* 2744 18.74 0.605 0.251 153,393 –DropGS 2744 17.26 0.600 0.253 154,500 1.0 × more FSGS (w/ depth) 2744 21.96 0.687 0.195 61,502 2.5 × fewer Ours (full) 2744 22.98 0.697 0.190 54,545 2.8 × fewer 
+
+Horns 3DGS* 2643 15.25 0.470 0.390 190,676 –DropGS 2643 15.23 0.489 0.386 157,449 1.2 × fewer FSGS (w/ depth) 2643 19.07 0.644 0.276 99,171 1.9 × fewer Ours (full) 2643 19.12 0.661 0.273 71,057 2.7 × fewer 
+
+Leaves 3DGS* 726 12.23 0.280 0.441 565,899 –DropGS 726 12.77 0.306 0.412 459,942 1.2 × fewer FSGS (w/ depth) 726 16.10 0.522 0.257 403,301 1.4 × fewer Ours (full) 726 16.64 0.566 0.246 276,785 2.0 × fewer 
+
+Orchids 3DGS* 867 14.18 0.377 0.360 204,548 –DropGS 867 14.49 0.405 0.336 188,259 1.1 × fewer FSGS (w/ depth) 867 15.28 0.437 0.311 97,790 2.1 × fewer Ours (full) 867 15.21 0.437 0.313 89,302 2.3 × fewer 
+
+Room 3DGS* 1026 11.38 0.410 0.559 107,004 –DropGS 1026 12.13 0.463 0.539 99,216 1.1 × fewer FSGS (w/ depth) 1026 20.63 0.807 0.195 34,386 3.1 × fewer 
+
+Ours (full) 1026 20.66 0.802 0.197 37,146 2.9 × fewer 
+
+29 Table 5 : Per-scene component ablation on MiP-NeRF 360 (8 views). Best and second-best values are bold and underlined. 
+
+Scene Variant PSNR ↑ SSIM ↑ LPIPS ↓ Final Gaussians vs 3DGS* Ours (w/o soft dropout) 11.24 0.239 0.688 24,313 60.1 × fewer Ours (w/ soft dropout) 10.56 0.246 0.689 14,400 101.4 × fewer bicycle Ours (full) 13.11 0.284 0.643 59,483 24.6 × fewer Ours (w/o soft dropout) 13.9212 0.4432 0.5847 97,801 5.8 × fewer Ours (w/ soft dropout) 12.6963 0.4385 0.6108 52,688 10.7 × fewer bonsai Ours (full) 13.7776 0.4309 0.5643 111,546 5.1 × fewer Ours (w/o soft dropout) 14.0737 0.4916 0.5658 79,049 4.3 × fewer Ours (w/ soft dropout) 13.5822 0.4629 0.5947 85,530 4.0 × fewer counter Ours (full) 14.6130 0.5185 0.5565 77,324 4.4 × fewer 
+
+Ours (w/o soft dropout) 13.4690 0.2283 0.6510 239,534 5.1 × fewer Ours (w/ soft dropout) 12.6834 0.2135 0.6752 226,193 5.4 × fewer garden Ours (full) 14.3317 0.2592 0.6782 152,968 8.0 × fewer 
+
+Ours (w/o soft dropout) 14.4344 0.4102 0.6132 56,932 8.6 × fewer Ours (w/ soft dropout) 12.1802 0.3808 0.6454 56,480 8.7 × fewer kitchen Ours (full) 15.0121 0.4271 0.6292 40,950 12.0 × fewer 
+
+Ours (w/o soft dropout) 13.8207 0.2626 0.6225 66,723 16.6 × fewer 
+
+Ours (w/ soft dropout) 13.7282 0.2418 0.6072 92,331 12.0 × fewer stump Ours (full) 14.0165 0.2897 0.6363 131,701 8.4 × fewer 
+
+Table 6: Per-scene component ablation on MiP-NeRF 360 (24 views). Best and second-best values are bold and underlined. 
+
+Scene Variant PSNR ↑ SSIM ↑ LPIPS ↓ Final Gaussians vs 3DGS* bicycle Ours (w/o soft dropout) 16.6135 0.3429 0.6026 84,962 15.2 × fewer Ours (w/ soft dropout) 15.7267 0.3208 0.6139 76,494 16.9 × fewer 
+
+Ours (full) 16.8980 0.3602 0.5954 141,530 9.1 × fewer bonsai Ours (w/o soft dropout) 22.1005 0.7864 0.3320 337,290 2.0 × fewer Ours (w/ soft dropout) 21.7632 0.7790 0.3339 344,817 2.0 × fewer Ours (full) 20.1803 0.7038 0.4269 154,205 4.5 × fewer 
+
+counter Ours (w/o soft dropout) 21.6241 0.7449 0.3738 218,612 2.8 × fewer Ours (w/ soft dropout) 20.8360 0.7349 0.3767 215,300 2.9 × fewer Ours (full) 21.6592 0.7263 0.4288 93,907 6.6 × fewer 
+
+stump Ours (w/o soft dropout) 16.2540 0.3867 0.5827 273,927 4.5 × fewer Ours (w/ soft dropout) 16.4707 0.3691 0.5824 254,156 4.8 × fewer Ours (full) 16.7614 0.4100 0.6104 142,794 8.6 × fewer 
+
+garden Ours (w/o soft dropout) 19.1356 0.4345 0.5028 359,334 4.8 × fewer Ours (w/ soft dropout) 18.9934 0.4352 0.5019 385,015 4.5 × fewer Ours (full) 19.7033 0.4103 0.5647 154,324 11.3 × fewer 
+
+kitchen Ours (w/o soft dropout) 18.7236 0.6172 0.4525 188,888 3.6 × fewer Ours (w/ soft dropout) 18.6843 0.6184 0.4470 190,147 3.5 × fewer Ours (full) 19.3180 0.6087 0.4956 90,226 7.5 × fewer 
+
+30 Table 7 : Per-scene component ablation on LLFF (3 views). Best and second-best values are bold and underlined. 
+
+Scene Variant PSNR ↑ SSIM ↑ LPIPS ↓ Final Gaussians vs 3DGS* Fern Ours 20.09 0.649 0.248 198,554 1.6 × fewer Ours (w/o soft dropout) 19.06 0.605 0.277 204,963 1.6 × fewer Ours (full) 20.74 0.680 0.231 93,766 3.5 × fewer 
+
+Flower Ours 19.85 0.619 0.251 193,944 1.2 × fewer Ours (w/o soft dropout) 18.97 0.591 0.271 192,774 1.2 × fewer Ours (full) 19.96 0.616 0.264 93,361 2.5 × fewer 
+
+Fortress Ours 22.37 0.697 0.195 113,292 1.4 × fewer Ours (w/o soft dropout) 21.43 0.644 0.222 112,321 1.4 × fewer Ours (full) 22.98 0.697 0.190 54,545 2.8 × fewer 
+
+Horns Ours 17.59 0.585 0.309 135,013 1.4 × fewer Ours (w/o soft dropout) 17.30 0.541 0.339 136,915 1.4 × fewer Ours (full) 19.12 0.661 0.273 71,057 2.7 × fewer 
+
+Leaves Ours 15.31 0.491 0.289 382,086 1.5 × fewer Ours (w/o soft dropout) 15.09 0.464 0.310 387,407 1.5 × fewer Ours (full) 16.64 0.566 0.246 276,785 2.0 × fewer 
+
+Orchids Ours 14.76 0.412 0.327 175,424 1.2 × fewer Ours (w/o soft dropout) 14.44 0.394 0.344 177,430 1.2 × fewer Ours (full) 15.21 0.437 0.313 89,302 2.3 × fewer 
+
+Room Ours 17.70 0.739 0.272 68,023 1.6 × fewer Ours (w/o soft dropout) 19.38 0.751 0.251 72,410 1.5 × fewer Ours (full) 20.66 0.802 0.197 37,146 2.9 × fewer 
+
+31
