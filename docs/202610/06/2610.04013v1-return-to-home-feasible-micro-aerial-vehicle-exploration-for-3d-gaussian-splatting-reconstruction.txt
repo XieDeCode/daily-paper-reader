@@ -1,0 +1,307 @@
+Title: Return-to-Home Feasible Micro-Aerial Vehicle Exploration for 3D Gaussian Splatting Reconstruction
+
+URL Source: https://arxiv.org/pdf/2610.04013v1
+
+Published Time: Tue, 06 Oct 2026 00:21:27 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Return-to-Home Feasible Micro-Aerial Vehicle Exploration for 3D Gaussian Splatting Reconstruction 
+
+Prajit KrisshnaKumar, Fan Yang, and Koichiro Niinuma 
+
+Abstract — Micro aerial vehicles (MAVs) enable rapid indoor 3D reconstruction for inspection and time-critical situational awareness, but must operate under strict flight-time budgets and safety constraints that require explicit return-to-home (RTH) feasibility with a conservative margin. We present a topology-first active reconstruction framework that decouples high-fidelity rendering from navigation. A dense 3D Gaus-sian Splatting (3DGS) map is optimized as the reconstruc-tion target, while a lightweight Truncated Signed Distance Field (TSDF)/occupancy scaffold supports conservative collision checking and online construction of a sparse 3D Voronoi skeleton roadmap. Since directly extracting roadmaps from TSDF geometry can be unstable under noisy and incomplete online fusion, we validate nodes and edges using carved free-space consistency and dense visibility checks, which suppress behind-wall phantom structure and stabilize planning. View-points are selected on the roadmap using a flight-time-budget-aware objective and a lightweight receding-horizon lookahead to improve non-myopic exploration behavior. We evaluate on photorealistic indoor simulation benchmarks (ReplicaCAD, Gibson, and HM3D), reporting reconstruction coverage/error, RTH success, and computational cost. Results demonstrate improved or competitive performance relative to recent GS-based baselines under identical flight-time budgets. 
+
+I. I NTRODUCTION 
+
+Micro aerial vehicles (MAVs) are increasingly attractive for indoor search-and-rescue (SAR) and first-responder mis-sions because they can quickly enter confined or hazardous spaces and provide situational awareness before humans are deployed [1]. In these environments, autonomy must handle cluttered, GPS-denied navigation through narrow doorways and corridors under strict flight-time limits. If the MAV exhausts its battery deep inside a structure, safe recovery is not guaranteed and the mission may fail prematurely. Consequently, a central operational requirement is return-to-home (RTH) feasibility. In multi-room indoor layouts, return cost is highly non-Euclidean, and straight-line distance can severely underestimate the true time required to navigate around walls and through doorways. Therefore, viewpoint selection must trade off expected reconstruction gain against travel time while maintaining a conservative safety margin for possible interruptions during the return flight (Fig. 1). Beyond geometric coverage, responders often require 
+
+high-fidelity reconstructions that preserve appearance and 
+
+All authors are affiliated with Fujitsu Research. © 2026 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media, including reprinting/republishing this material for advertising or promotional purposes, creating new collective works, for resale or redistribution to servers or lists, or reuse of any copyrighted component of this work in other works. Safe Return Maintained ! No Return Path… Stranded? 
+
+> Home Base
+> Previous Exploration & Reconstruction w/o RTH Our Exploration & Reconstruction w/ RTH
+> Exploration Budget Strict RTH Reserve
+
+Fig. 1. Exploration and reconstruction of hazardous buildings must explicitly account for the return-to-home (RTH) constraint to ensure safe MAV recovery. 
+
+fine structure for inspection and decision making. 3D Gaus-sian Splatting (3DGS) [2] enables photorealistic reconstruc-tion by representing scenes with explicit Gaussian prim-itives and fast differentiable rasterization, making online refinement feasible at interactive rates. This has motivated active reconstruction systems that couple viewpoint planning with online map updates. However, bringing 3DGS-based active reconstruction to MAVs is challenging because in-formative viewpoint selection must remain execution-aware 
+
+under the above non-Euclidean travel and RTH constraints, and because a 3DGS map is rendering-centric and does not directly provide watertight surfaces or conservative free-space semantics for collision checking. Practical autonomy therefore typically requires an auxiliary geometric scaffold for safe navigation and feasibility reasoning. While recent work has begun coupling Gaussian splatting with active viewpoint planning, reliably integrating high-fidelity mapping with an execution-ready navigation abstrac-tion under budget constraints in multi-room indoor scenes remains challenging. ActiveGS [3] uses a voxel scaffold to represent unexplored space and guide exploration, which can become costly to maintain and query as the explored 3D vol-ume grows. ActiveSplat [4] enables efficient planning using a planar topological abstraction, but this 2D workspace does not explicitly capture the 3D connectivity and occlusions that arise in indoor flight. To bridge these gaps, we take a topology-first approach that decouples photorealistic reconstruction from conserva-tive navigation reasoning. The MAV incrementally optimizes a dense 3DGS map as the reconstruction output, while simultaneously fusing the same posed RGB-D observations into a lightweight TSDF and occupancy grid that provide explicit surfaces and conservative free-space evidence for planning. From this evolving geometric scaffold, we con-arXiv:2610.04013v1 [cs.RO] 2 Oct 2026 struct a sparse 3D Voronoi skeleton roadmap whose ver-tices lie near the medial axis of free space and naturally provide high-clearance waypoint candidates, similar in spirit to classical Voronoi-graph roadmaps used for sensor-based exploration [5]. Since online TSDF geometry is incomplete early in exploration and can contain holes and transient artifacts, directly extracting a roadmap can introduce behind-wall phantom nodes that waste flight time and jeopardize safe return. We therefore apply conservative validation using carved free-space consistency and dense visibility checks to keep the roadmap stable for MAV execution. On the resulting roadmap, we formulate viewpoint actions as (node, yaw) pairs and select goals using a budget-aware objective that trades off information gain against shortest-path travel time while enforcing an explicit RTH safety margin. Finally, to reduce myopic oscillations, we use a lightweight two-step receding-horizon selection, motivated by receding-horizon next-best-view planning for aerial exploration [6]. In summary, our main contributions are as follows:  
+
+> •
+
+We introduce a drone-centric hybrid planning architec-ture that decouples photorealistic reconstruction from conservative navigation: a dense 3DGS map is opti-mized as the reconstruction target, while a lightweight TSDF occupancy scaffold enables collision check-ing and stable online extraction of a sparse 3D Voronoi skeleton roadmap via carved-free-space vali-dation, behind-wall suppression, and free-space node injection.  
+
+> •
+
+We propose a budget-aware flight-time mechanism that couples structural awareness (information gain and fron-tier cues) with a travel-cost model. The resulting objec-tive explicitly enforces a return-to-home safety margin and adaptively trades off information gain against travel time as remaining flight-time budget decreases.  
+
+> •
+
+We provide evaluation under continuous-time MAV ex-ecution in photorealistic simulation, including compar-isons to recent GS-based active reconstruction baselines and ablations isolating the effect of roadmap construc-tion and non-myopic selection. II. R ELATED WORK 
+
+a) Autonomous Exploration and Informative Path Plan-ning: Informative Path Planning (IPP) selects sensing actions to maximize information gain or coverage under constraints such as time, range, or energy [7]. In unknown environments, IPP is commonly solved online using an evolving map so that viewpoint selection adapts to newly observed structure. For UAV exploration in large 3D spaces, scalable representations and clearance-aware planning are important; examples in-clude low-memory mapping for exploration [8] and Voronoi-guided planning with adaptive layering [9]. Complementary work targets robust state estimation and globally consistent geometric mapping, such as GO-SLAM [10], Voxgraph [11], and Kimera [12]. 
+
+b) High-Fidelity Scene Reconstruction: NeRF-based methods produce high-quality view synthesis but rely on ex-pensive volume rendering, which limits real-time closed-loop use. 3D Gaussian Splatting (3DGS) [2] provides an efficient alternative via explicit Gaussian primitives and fast rasteri-zation, enabling interactive rendering and online refinement and motivating NBV-style active reconstruction [6], [13]. Recent systems estimate view utility from renderability or uncertainty cues [14]–[16]. Since 3DGS is rendering-centric and does not provide conservative free-space semantics, many approaches pair it with auxiliary geometric scaffolds or sparse navigation abstractions for safe planning, such as ActiveGS [3], ActiveSplat [4], and neural-map exploration methods [17]. 
+
+c) UAV-Based Indoor Reconstruction and Unresolved Gaps: Indoor UAV reconstruction systems study exploration and mapping under practical sensing and execution con-straints [18], [19]. Recent 3DGS-focused planners also target quadrotor autonomy, including GS-Planner [20] and HGS-Planner [21]. Despite progress, robust autonomous recon-struction in cluttered multi-room indoor scenes remains chal-lenging. Dense voxel scaffolds for unknown-space reasoning can become expensive as explored volume grows, while planar abstractions can miss 3D connectivity and occlusions important for indoor flight. Moreover, return-to-home feasi-bility is inherently non-Euclidean indoors because return cost must respect doors and walls, and sparse roadmaps extracted from online fusion can become unstable early in exploration without conservative validation. These limitations motivate hybrid architectures that optimize 3DGS as the reconstruc-tion target while planning and safety reasoning are performed on a lightweight geometric scaffold under explicit budget and RTH feasibility constraints. III. M ETHODOLOGY 
+
+A. Method Overview 
+
+We address edge-assisted budgeted autonomous explo-ration for high-fidelity indoor reconstruction using an RGB-D equipped micro aerial vehicle. A fundamental challenge in active radiance-field mapping is that representations op-timized for photorealistic rendering (e.g., 3DGS) lack the explicit, conservative free-space semantics required for safe navigation. To resolve this, our framework (Fig. 2) adopts a hybrid perception–action loop. Specifically, the system: (i) incrementally optimizes a dense 3DGS map as the primary reconstruction target, while concurrently (ii) fusing depth into a lightweight TSDF to serve as a geometric scaffold for extracting a sparse 3D topological roadmap. Using this roadmap, (iii) a budget-aware planner selects and executes next-best viewpoints to maximize coverage while enforcing return-to-home (RTH) feasibility. 
+
+B. Gaussian Splatting 
+
+We represent the scene as a set of explicit 3D Gaussian primitives [2]. Each Gaussian i is parameterized by a mean 
+
+μi, an anisotropic covariance Σi, a color ci, and an opac-ity oi. Given a camera pose, the per-pixel contribution of Gaussian i at pixel u can be written as 
+
+αi(u) = oi exp 
+
+
+
+− 12
+
+ x(u) − μi
+
+⊤Σ−1
+
+> i
+
+ x(u) − μi
+
+
+
+, (1) Fig. 2. System Overview . Our proposed framework integrates Online 3D Gaussian Splatting (3DGS) for high-fidelity reconstruction with a Voronoi-based roadmap for efficient navigation. The Budgeted Next-Best-View (NBV) Planner dynamically balances information gain against remaining budget to ensure feasible, long-horizon exploration. 
+
+where x(u) denotes the 3D point associated with pixel u in the camera coordinate frame. Rendered color is obtained by standard front-to-back α-compositing: 
+
+ˆC(u) = X
+
+> i
+
+ci αi(u) Y
+
+> j<i
+
+ 1 − αj (u), (2) with Gaussians ordered by increasing depth. Depth and accumulated opacity are computed analogously using the same compositing rule (inherited from [4]). 
+
+C. 3D Voronoi Roadmap Construction 
+
+We construct a sparse, topologically meaningful abstrac-tion of the environment: a 3D Voronoi roadmap whose nodes approximate the medial axis of free space and whose edges maximize obstacle clearance. To ensure the roadmap remains stable under continuous map updates, we employ a pipeline that fuses depth into a TSDF, extracts temporally smoothed obstacle sites, computes a 3D Voronoi tessellation, and rigorously filters the resulting graph using explicit volumetric carving. 
+
+1) Volumetric Fusion and Space Carving: At each timestep k, the drone captures a posed RGB-D observation, denoted as the tuple (Ik, D k, TW ←C,k ). Here, Ik is the RGB image, Dk is the aligned depth map, and TW ←C,k ∈ SE (3) 
+
+is the rigid camera pose mapping points from the camera frame C to the world frame W . Using the camera’s known intrinsic parameters, we back-project each pixel u from the depth map Dk to obtain a 3D point cloud Pk in world coordinates: 
+
+pW (u) = TW ←C,k π−1 u, D k(u), (3) where π−1(·) denotes the pinhole back-projection function. Often, these depth measurements contain noise, incom-plete information, floating outliers, and view-dependent missing regions. To obtain a stable geometric estimate suit-able for topology extraction, we apply voxel-grid downsam-pling to remove duplicates and reduce fusion cost. We then integrate this filtered point cloud into a sparse volumetric TSDF [22]. The TSDF stores a signed distance ϕ(x) and weight w(x) per voxel center x, which are updated iteratively as a weighted average of the truncated distance observations. In addition to the TSDF surface, we maintain a conser-vative notion of free versus occupied space for fast wall-crossing checks [23]. For each depth endpoint pW,k (u), we ray-march from the camera origin ok to the endpoint. Voxels along the ray before the endpoint are marked free , and the endpoint voxel is marked occupied . Let F be the set of free voxels and O the set of occupied voxels at a fixed resolution 
+
+r (e.g., r = 0 .20 m). Because noisy depth endpoints can temporarily mark a previously carved free voxel as occupied (creating phantom geometry or "floaters"), we define an effective occupied set using Oeff = O \ F which prevents these “disputed” voxels from incorrectly blocking doorways or corridors. 
+
+2) Obstacle Sites: We extract a surface mesh from the TSDF zero-level set using marching cubes [24]. The Voronoi tessellation is computed from a discrete set of generator points; if these generators change slightly between cycles, Voronoi vertices and edges can change disproportionately. To reduce this sensitivity, we convert the extracted mesh into a persistent set of obstacle sites S = {(si, ni)} with associated surface normals. Sites are stored in a coarse voxel-hash map and updated with an exponential moving average (EMA): 
+
+si ← (1 − η)si + η ˜si, ni ← (1 − η)ni + η ˜ni
+
+∥(1 − η)ni + η ˜ni∥ , (4) where (˜ si, ˜ni) denotes the current cycle’s measurement in the corresponding hash cell and η ∈ (0 , 1) is a small smoothing factor. This update acts as a spatial low-pass filter and reduces roadmap jitter under incremental map updates. 
+
+3) Voronoi Tessellation: Given obstacle site positions 
+
+{si}, the Voronoi cell of site si is 
+
+Vi = x ∈ R3 ∥x − si∥ ≤ ∥ x − sj ∥, ∀j . (5) Finite Voronoi vertices (intersections of multiple cells) are equidistant to several nearby obstacle sites and therefore lie near the medial axis of free space. We take all finite Voronoi vertices as candidate nodes and attach a clearance attribute 
+
+clr( v) = min  
+
+> i
+
+∥v − si∥, (6) computed by nearest-neighbor queries in the site set. Candi-date edges are induced by finite Voronoi ridges connecting pairs of surviving vertices where each edge is weighted by Euclidean length. These raw Voronoi vertices include many invalid candidates, such as points outside the explored volume, points inside walls, points in unobserved void, and points behind walls that appear only due to sparse sampling or holes. To overcome this, we apply the below filters that each targets a specific failure mode.  
+
+> •
+
+Minimum safety distance. We reject vertices with 
+
+clr( v) < d safe to enforce a collision margin compatible with drone size and control uncertainty.  
+
+> •
+
+Proximity to carved free space. We reject vertices that are not near any confirmed free voxel in F (within ra-dius rF ), preventing the selection of nodes in unknown space that are not connected to exploration.  
+
+> •
+
+Dense occupancy line-of-sight (behind-wall suppres-sion). For vertices that still pass the above checks, we ray-march the segment from v to a few nearest camera centers through Oeff . If all such rays intersect occupied voxels, the vertex is behind a wall relative to the explored free space and is removed [25]. These filtering strategies prioritize removing unreachable “phantom” nodes over retaining every possible candidate near tight geometry; the TSDF resolution affects surface-site extraction, while traversability is ultimately checked through carved free-space, occupancy traversal, and the safety mar-gin. 
+
+4) Graph Sparsification: Even if two vertices are individ-ually valid, the straight segment between them may cross a wall. For each candidate edge e = ( va, vb) we sample points along the segment following x(t) = (1 − t)va + tvb, t ∈
+
+(0 , 1) and reject the edge if either (i) any sample violates a minimum clearance threshold with respect to the obstacle sites, or (ii) any sample voxel falls in Oeff (dense occupancy traversal). Finally, we remove tiny disconnected components, sparsify the graph (e.g., contracting near-collinear degree-2 chains and merging nearby nodes to bound computation). 
+
+5) Free-Space Node Injection and Bridging: The raw 3D Voronoi graph can under-sample wide-open regions because Voronoi vertices tend to concentrate near obstacle boundaries. To improve coverage and connectivity, we inject additional waypoint nodes directly from the carved free-space grid F and connect them to the existing roadmap using the same clearance and Oeff collision checks as for standard edges. This augmentation fills coverage gaps in open areas and provides safe “bridges” between weakly connected components. Figure 3 visualizes the carved free space and the resulting augmented roadmap. The output of this stage is a sparse, collision-checked roadmap G =(V, E) with per-node attributes (position, clearance), which is then used for viewpoint scoring and planning in subsequent sections. 
+
+D. Viewpoint Selection 
+
+At each planning iteration, the planner requests a snapshot of the current 3D Voronoi roadmap G = ( V, E) from the previous step. Each node n ∈ V stores its 3D position pn and per-node attributes (e.g., clearance), and the snapshot also provides two per-view gain tensors: GainV scores garea (n, h )
+
+and frontier-surface scores gsurf (n, h ) for a discrete set of yaw headings h ∈ { 0, . . . , H − 1} (we use H = 8 headings, spaced by 45 ◦). An action or the next waypoint is defined as 
+
+a = ( n, h ): moving to node n and observing with heading 
+
+h.
+
+1) Return-to-Home Feasibility Filters: To ensure safe recovery, we enforce a hard return-to-home (RTH) constraint: a candidate goal is admissible only if the MAV can reach it and still return to the takeoff location with a conservative time reserve. We compute shortest-path travel times on the roadmap G using two Dijkstra passes [26]: cgo (n) is the travel time from the current state to node n, and chome (n) is the travel time from n back to the home node. Let B denote the total flight-time budget and let t be the elapsed flight time. We define the remaining budget Trem = B − t and require 
+
+cgo (n) + chome (n) + Tres ≤ Trem , (7) where Tres is a fixed safety reserve (time margin). 
+
+2) Frontier Indicator: Each candidate node is assigned a frontier strength score derived from two signals: (i) an 
+
+obstacle-frontier count, computed by counting surface points that have only been observed from far camera ranges in the neighborhood of the node, and (ii) a free-space frontier 
+
+count, computed from classic occupancy-grid frontiers within a search radius [27]. 
+
+3) Information Gain: We have primarily two scoring methods to calculate the potential information gain for se-lecting an action a. Area discovery gain, termed as GainV (garea (n, h )) estimates how much new space a depth camera would reveal from action a = ( n, h ) by raycasting a camera frustum from pn at heading h through a voxel grid that clas-sifies cells as free, occupied, or unknown. It is essentially the number of unknown voxels observed before occlusion. While this term prioritizes new area, another term, frontier surface gain ( gsurf (n, h ) ) improves the reconstruction quality. This is achieved through clustering frontier obstacle points and scoring clusters that (i) are visible from the node (line-of-sight in the occupancy grid) and (ii) fall inside the view’s field of view. 
+
+4) Objective Function: We score each action a = ( n, h )
+
+using 
+
+U (n, h ) = G(n, h ) · P (n), (8) where the gain term uses log-compression to stabilize scale:    
+
+> G(n, h ) = α(t) ln(1+ garea (n, h ))+(1 −α(t)) ln(1+ gsurf (n, h )) .(9)
+
+We use a linear schedule α(t) = clip(1 − t/B, 0.2, 0.9) 
+
+where B is the total flight-time budget. It decays from a high value early in the mission (prioritizing rapid area discovery) to a lower value late in the mission (prioritizing refinement of incomplete surfaces). Together with the budget-adaptive travel penalty P (n), this induces a natural behavior where the MAV expands aggressively early on and gradually contracts its operational radius as the remaining budget decreases, facilitating safe return while refining nearby geometry. Fig. 3. Free-space node injection. (a) Volumetric visualization of the explicitly carved free-space grid F in a wide-open environment. (b) The resulting 3D Voronoi roadmap, where orange segments show the raw Voronoi graph clustered near perimeter walls, and black segments show synthetically injected nodes and bridging edges that use F to safely reduce coverage gaps. 
+
+The travel penalty is an exponential discount in travel time: 
+
+P (n) = exp( −λk cgo (n)) , λk = ln 2 
+
+τk
+
+. (10) Crucially, rather than using a fixed penalty rate, we param-eterize the decay using a budget-adaptive half-life τk. Let 
+
+Trem = B − t denote the remaining flight-time budget. We set: 
+
+τk = max 
+
+
+
+βk · Trem 
+
+2 , τ floor 
+
+
+
+, (11) where k ∈ {frontier , non-frontier } selects βk based on whether the node lies on an exploration frontier (we use 
+
+βfrontier = 1 and βnon-frontier = 13 ), and τfloor is a small positive constant. This dynamic scaling makes long-distance travel competitive early in the flight but increasingly suppresses distant goals as the battery depletes. 
+
+5) Receding-Horizon Next-Best-View (NBP) Search: Apurely greedy selection strategy (GainMax) that optimizes only U (n, h ) suffers from information myopia [6]. It fre-quently drives the MAV into dead ends or isolated corners that offer a momentary spike in gain, forcing the drone to waste significant flight time backtracking to the main frontier. To prevent the MAV from falling into these local information maxima, we employ a lightweight two-step receding-horizon search. Let AK be the top-K actions ranked by U (n, h ).For each first-step action a1 = ( n1, h 1) ∈ A K and potential second-step action a2 = ( n2, h 2) ∈ A K , we evaluate their joint utility:        
+
+> J(a1, a 2) = U(a1)+ γ U (a2) exp( −λstep c(n1→n2)) (1 −βoverlap) ,
+> (12)
+
+where c(n1 → n2) is the Dijkstra travel time between the nodes. We parameterize the second-step discount using a half-life, λstep = ln 2 /τ step , with τstep = 20 s (Ta-ble I). We use a cheap redundancy indicator overlap =
+
+I[∥pn1 − pn2 ∥ < r ov ] with rov = 3 .0 m, so that two-step pairs that remain in the same local region are down-weighted by (1 −β overlap) . We select the pair maximizing J but exe-cute only the first action a1, replanning at the next iteration. This ensures the chosen immediate action not only provides high current gain, but also positions the drone favorably for a high-value subsequent observation, maintaining continuous forward momentum through the environment. IV. E XPERIMENTS AND RESULTS 
+
+To validate the proposed exploration framework, we eval-uate our MAV-based active reconstruction system in photo-realistic indoor simulation to quantify reconstruction quality, safety (return-to-home feasibility), and computational cost. 
+
+A. Simulation Setup and Execution Model 
+
+All experiments are conducted in the Habitat simulator, which provides photorealistic indoor environments, synchro-nized RGB-D observations, and a simulation clock. We evaluate on datasets with increasing layout complexity: (i) compact apartment-style scenes (ReplicaCAD), and (ii) multi-room residential scenes with narrow doorways and long corridors (Gibson and HM3D). For Gibson [28] we use the same scene set as prior work [29], for Replica-CAD [30] we select three one-bedroom apartments, and for HM3D [31] we evaluate on two scenes (HaxA7YrQdEC, TEEsavR23oF). We target an edge-assisted MAV setting: the MAV executes sensing and waypoint control, while 3DGS optimization, roadmap construction, and viewpoint selection run on a workstation/base-station computer equipped with an NVIDIA RTX 3080 GPU and an AMD Ryzen 5950 CPU with 32 GB RAM. Planned actions are defined on the roadmap as a target node position and a discrete yaw heading (Sec. III-D.5). The MAV executes the resulting roadmap path with a simple velocity controller (position P-control with a yaw-rate controller). To improve robustness in cluttered indoor layouts, we use a depth-triggered safety check that performs short recovery behaviors (e.g., skipping a blocked intermediate waypoint or aborting the current segment) be-fore replanning. Prior to exploration, the MAV performs an initialization scan (a slow 360 ◦ yaw rotation) at the start location to stabilize the initial map for all methods. We use Habitat ground-truth poses and simulated RGB-D sensing to isolate viewpoint planning and mapping; thus, the reported RTH feasibility is map-relative and does not model VIO drift, real sensor noise, or aerodynamic disturbances. Table I shows the key parameters used in our experiments. Roadmap travel times cgo (·) and chome (·) are computed by Dijkstra on G with edge weights given by nominal translational time, 
+
+w(u, v ) = ∥pu − pv ∥/v nom (we use vnom = 0 .5 m/s). We do not explicitly model acceleration/deceleration, short safety recoveries, or final in-place yaw alignment inside cgo /c home ;these effects are execution-dependent and are handled by the simulator clock and absorbed by the safety margin Tres .
+
+B. Baseline Comparison 
+
+To evaluate the effectiveness of our proposed system, we compare it against state-of-the-art active 3DGS methods and a naive exploration strategy. We do not include GS-Planner [20] or HGS-Planner [21] because we were unable to obtain a runnable setup compatible with our evaluation environment and sensing/execution interface at submission time. Across all experiments, the flight-time budget ( B) varies by scene TABLE I KEY PARAMETERS USED IN ALL EXPERIMENTS .                    
+
+> Parameter Value
+> Safety distance dsafe 0.30 m Free-space proximity radius rF0.12 m TSDF voxel size rtsdf 0.30 m Occupancy/Gain voxel size rocc 0.20 m Roadmap update period 2.0 s NBP parameters (K, γ, τ step , r ov , β )(15 ,0.7,20 s,3.0m,0.3)
+> RTH safety margin Tres 0.1B
+
+complexity: 80 s for ReplicaCAD, 120 s for Gibson scenes with ≤ 4 rooms, 180 s for Gibson scenes with ≥ 6 rooms, and 240 s for HM3D. 
+
+1) ActiveSplat: ActiveSplat [4] is a Gaussian-splatting-based active reconstruction system that plans over a sparse topological graph using discrete motion primitives (e.g., 
+
+MOVE_FORWARD d=6 .5 cm and yaw turns of ∆ψ=10 ◦, with optional pitch turns). To compare against our continuous-time MAV execution under a total flight time budget, we nor-malize ActiveSplat trajectories using a simple time proxy de-rived from the number of forward and turn actions (mapped to time using nominal translational and yaw rates in our sim-ulator). Importantly, we do not modify ActiveSplat’s planner or objectives. We only align the sensing and actuation inter-face by using the same rigid, forward-facing RGB-D camera model for all methods. To map ActiveSplat’s discrete action sequence to a flight-time budget, we compute a proxy exe-cution time Tproxy = NF (d/v nom ) + NT (∆ ψ/ω nom ), where 
+
+NF is the number of forward steps of length d = 0 .065 mand NT is the number of yaw turns of size ∆ψ = 10 ◦.We use the same nominal rates as our simulator controller, 
+
+vnom = 0 .5 m/s and ωnom such that a 10 ◦ turn corresponds to 0.07 s. We evaluate the baseline under the same flight-time budget B by truncating the discrete sequence at the largest prefix satisfying Tproxy ≤ B.
+
+2) ActiveGS: ActiveGS [3] selects viewpoints to improve Gaussian reconstruction under an execution model where motion cost is computed from Euclidean travel distance (i.e., t ≈ ∥ ∆x∥/v ) without explicitly modeling yaw rotation time, local collision avoidance, or recovery behaviors. We reproduce this baseline following its published motion-cost model and evaluate it under the same flight-time budget normalization described above. This baseline therefore serves as a reference for performance under an optimistic kinematic assumption, whereas our method executes viewpoints with a physically constrained controller. 
+
+3) Ours (with and without RTH constraint): We report two variants of our method: (i) Ours (w/ RTH) , which enforces the return-to-home feasibility constraint (Eq. 7) with a fixed safety margin ( Tres set to 10% of the total budget), and (ii) Ours (w/o RTH) , which disables the RTH filter. 
+
+4) Metrics: We evaluate geometric reconstruction via Coverage (Cov) and Error (Err) between point sets sam-pled from the ground-truth ( Pgt ) and reconstructed ( Prec )surfaces. Using the nearest-neighbor distance d(p, Prec ) = min q∈P rec ∥p − q∥2 for p ∈ P gt , Coverage is the percent-age of ground-truth samples within a threshold δ: Cov = 
+
+> 100
+> |P gt |
+
+P 
+
+> p
+
+1[d(p, Prec ) < δ]. Error is the mean distance: 
+
+Err = 100 
+
+> |P gt |
+
+P 
+
+> p
+
+d(p, Prec ), reported in cm. We set δ = 5 cm for all experiments.                                     
+
+> TABLE II MEAN PERFORMANCE SUMMARY . G IBSON /HM3D: SCENE -LEVEL
+> MEANS ; R EPLICA CAD: OBJECT -LEVEL MEAN . C OV (%), E RR (CM ).
+> Method Gibson (scene) HM3D (scene) ReplicaCAD (object) Cov. Err. Cov. Err Cov. Err. ActiveGS 70.4 13.12 47.5 27.50 42.9 10.90
+> ActiveSplat 89.6 4.85 67.2 17.77 77.3 4.27
+> Ours (w/o RTH) 88.7 6.23 68.7 18.64 90.5 3.04
+> Ours (w/ RTH) 88.8 6.27 66.2 18.14 91.0 2.93
+
+5) Baseline Results: Table II summarizes mean recon-struction coverage (Cov, ↑) and error (Err, cm, ↓). Gibson and HM3D are reported as scene-level means (averaged over scenes), while ReplicaCAD is reported as an object-level 
+
+mean (averaged over annotated object instances). We use object-level evaluation for ReplicaCAD because it provides instance-level geometry and labels, and object coverage better reflects reconstruction fidelity in cluttered indoor en-vironments where a MAV can exploit 3D viewpoints to observe occluded objects. For methods executed through a continuous-time drone controller (ActiveGS and our vari-ants), each setting is run five times and we report the mean. ActiveSplat achieves the best mean performance on Gib-son, which is consistent with its efficient planar abstraction working well in compact, largely single-floor apartment-style layouts. On HM3D, our no-RTH variant attains the highest mean coverage, and both of our variants remain competitive in error relative to ActiveSplat. On ReplicaCAD, our method improves both object coverage and error, highlighting the benefit of 3D viewpoints and clearance-aware planning for observing occluded objects beyond a purely ground-centric perspective. Finally, enforcing the RTH feasibility constraint has a small effect on reconstruction quality and can slightly improve it in some settings, since the return trajectory con-tributes additional observations and the feasibility constraint regularizes late-stage goal selection. Fig. 4 qualitatively illustrates this behavior: the MAV rapidly expands coverage early in the mission and then shifts toward refining remaining incomplete surfaces as the flight-time budget depletes. Ac-tiveGS is designed to optimize surface reconstruction quality using Gaussian confidence rather than explicitly maximizing global coverage. In multi-room layouts this can bias selection toward local refinement and limit traversal into new rooms under a fixed flight-time budget, resulting in lower coverage in our evaluation. 
+
+6) Return-to-Home Budget Utilization: Since RTH feasi-bility is a primary design goal, we additionally quantify how the flight-time budget is allocated between exploration and the final return segment for Ours (w/ RTH) . We define RTH success as the MAV reaching within rhome = 1 .0 m of the takeoff position before the flight-time budget expires. The other baseline methods dont have RTH criteria and are not Fig. 4. Qualitative 3DGS map snapshots over mission time, showing how the flight-time-aware planner first prioritizes rapid global exploration and later shifts toward local surface refinement as the time budget decreases. TABLE III RTH BUDGET UTILIZATION FOR OURS (W/ RTH) . Texp IS THE TIME SPENT EXPLORING BEFORE THE RTH TRIGGER ; Trth IS THE TIME SPENT RETURNING HOME AFTER THE TRIGGER .Metric Overall Gibson HM3D Mean exploration time Texp (s) 124.6 110.5 188.2 Mean RTH time Trth (s) 20.3 17.8 31.3 Exploration fraction Texp /B (%) 79.3 79.4 78.4 RTH fraction Trth /B (%) 12.2 12.1 13.0 Other overhead (%) † 8.5 8.5 8.6 
+
+> †Includes initialization scan and brief safety recovery behaviors.
+
+applicable here. We measure Texp as the time spent executing exploration waypoints before switching into RTH mode, and 
+
+Trth as the time spent returning to the home position after the RTH trigger. We report both absolute times and normalized fractions ( Texp /B and Trth /B ). Table III shows that the return segment consumes only 
+
+≈ 12 –13% of the budget on average, leaving ≈ 78 –79% 
+
+for exploration; the remaining fraction corresponds to fixed and safety-related overhead (e.g., brief obstacle recovery maneuvers). This helps explain why enforcing an RTH safety margin does not degrade reconstruction performance in our experiments. RTH failures typically arise from execution-level blockage in cluttered regions, where the depth-triggered safety policy repeatedly performs recovery maneuvers near narrow passages and consumes the remaining budget. In a smaller number of cases, the current roadmap becomes temporarily disconnected due to incomplete online carving around doorways, so the planner cannot find a feasible return path even though the true environment remains connected. 
+
+C. Ablation Study 
+
+We conduct an ablation study to isolate the contribution of the key components in our exploration pipeline. Each ablation removes or replaces exactly one module while keep-ing all other settings fixed. (i) Greedy viewpoint selection: 
+
+Our method selects viewpoints using a lightweight two-step receding-horizon lookahead (NBP) over the top-K candi-dates. Here, we disable NBP and select the next action greed-ily by the single-step score U (n, h ). (ii) Free-space filtering: 
+
+We disable the free-space proximity explained in section III-C.3 filter and rely only on TSDF-derived geometry (mesh and distance-to-surface) for node and edge validation. (iii) 
+
+Dense occupancy line-of-sight filter. To quantify how much                                
+
+> TABLE IV ABLATIONS . C OV . (%) ↑, E RR . ( CM )↓, RTH (%) ↑.Dataset Method Cov. Err. RTH Gibson Ours (RTH) 88.81 6.27 82.2 w/o NBP (Greedy) 86.45 7.96 81.8 w/o Free-space filter 85.07 7.76 66.7 w/o Dense LoS filter 88.00 6.08 75.6 HM3D Ours (RTH) 66.27 18.14 90.0 w/o NBP (Greedy) 67.24 18.07 70.0 w/o Free-space filter 67.05 18.60 30.0 w/o Dense LoS filter 66.36 18.67 80.0
+
+the LoS filter contributes to suppressing “phantom” behind-wall nodes, we also ablate this filter. Table IV shows that each component contributes either to exploration efficiency (Cov/Err) or to execution robustness (RTH). Replacing NBP with greedy selection consistently reduces reconstruction quality on Gibson and lowers RTH success in more complex HM3D layouts, indicating that short-horizon lookahead helps avoid myopic dead-ends and stabilizes long-range decisions. Disabling the free-space proximity filter causes the largest RTH drop, especially on HM3D, because incomplete online geometry near doorways and corridors can create TSDF-derived medial-axis nodes in uncarved voids or behind walls; these nodes can pass distance checks but are not safely reach-able. Finally, removing the dense occupancy line-of-sight filter produces a smaller change in mean coverage but still reduces RTH success, consistent with its role in suppressing behind-wall candidates that otherwise trigger repeated safety stops and wasted time. Overall, NBP improves non-myopic exploration behavior, while the free-space and LoS filters are critical for maintaining a reachable, collision-consistent roadmap in multi-room indoor scenes. 
+
+D. Computational Cost Analysis 
+
+We profile wall-clock overhead for mapping and planning, excluding these from the simulated flight budget. During flight, our dense 3DGS backend continuously processes RGB-D frames at ∼4 FPS. Between these continuous way-point traversals, our intermittent replanning cycles average 
+
+0.93 s for planning and 0.84 s for mapping. While Ac-tiveGS has a lower per-step planning latency ( 0.42 s), its myopic actions force excessive replanning, accumulating massive per-episode totals ( 81 .5 s planning, 90 .1 s mapping). In contrast, our hybrid architecture decouples 3DGS from a lightweight topological scaffold. This enables long-range waypoint actions that collect data continuously, drastically reducing the required number of replanning interventions and yielding highly efficient episodic totals of just 16 .4 sfor planning and 12 .8 s for mapping. V. C ONCLUSION 
+
+We present a budget-aware active reconstruction frame-work for micro aerial vehicles that targets high-fidelity 3DGS while explicitly enforcing return-to-home (RTH) feasibility. Our approach decouples rendering from navigation by op-timizing a dense 3DGS map as the reconstruction output and maintaining a lightweight TSDF/occupancy scaffold for conservative collision checking and online construction of a sparse 3D Voronoi skeleton roadmap. Viewpoints are selected as (node, yaw) actions using a budget-adaptive objective and a lightweight two-step receding-horizon looka-head to reduce myopic decisions under limited flight time. Across photorealistic indoor simulation benchmarks, our method achieves strong reconstruction performance while maintaining safe recovery behavior, attaining high RTH success and outperforming a 2D/topological Voronoi-based planner and a surface-centric 3DGS baseline in mean cov-erage and/or reconstruction error under identical flight-time budgets. Limitations include a simple depth-triggered reac-tive safety policy that can waste time in cluttered scenes and a roadmap update procedure that rebuilds the 3D Voronoi graph periodically, contributing non-trivial computation. Fu-ture work includes more efficient incremental/event-driven roadmap maintenance and improved execution robustness. REFERENCES [1] V. Kumar and N. Michael, “Opportunities and challenges with au-tonomous micro aerial vehicles,” The International Journal of Robotics Research , vol. 31, no. 11, pp. 1279–1291, 2012. [2] B. Kerbl, G. Kopanas, T. Leimkühler, and G. Drettakis, “3d gaussian splatting for real-time radiance field rendering,” ACM Transactions on Graphics , vol. 42, no. 4, pp. 1–14, 2023. [3] L. Jin, X. Zhong, Y. Pan, J. Behley, C. Stachniss, and M. Popovi´ c, “Activegs: Active scene reconstruction using gaussian splatting,” IEEE Robotics and Automation Letters , 2025. [4] Y. Li, Z. Kuang, T. Li, Q. Hao, Z. Yan, G. Zhou, and S. Zhang, “Ac-tivesplat: High-fidelity scene reconstruction through active gaussian splatting,” IEEE Robotics and Automation Letters , 2025. [5] H. Choset and J. Burdick, “Sensor-based exploration: The hierarchical generalized voronoi graph,” The International Journal of Robotics Research , vol. 19, no. 2, pp. 96–125, 2000. [6] A. Bircher, M. Kamel, K. Alexis, H. Oleynikova, and R. Siegwart, “Receding horizon “next-best-view” planner for 3d exploration,” in 
+
+2016 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2016, pp. 1462–1468. [7] H. Zhu, J. J. Chung, N. R. Lawrance, R. Siegwart, and J. Alonso-Mora, “Online informative path planning for active information gathering of a 3d surface,” in 2021 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2021, pp. 1488–1494. [8] J. Huang, Z. Fan, Z. Yan, P. Duan, R. Mei, and H. Cheng, “Efficient uav exploration for large-scale 3d environments using low-memory map,” Drones , vol. 8, no. 9, p. 443, 2024. [9] B. Dong, G. Zhang, Y. Yang, P. Yuan, and S. Lu, “A voronoi–a* fusion algorithm with adaptive layering for efficient uav path planning in complex terrain,” Drones , vol. 9, no. 8, p. 542, 2025. [10] Y. Zhang, F. Tosi, S. Mattoccia, and M. Poggi, “Go-slam: Global optimization for consistent 3d instant reconstruction,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 3727–3737. [11] V. Reijgwart, A. Millane, H. Oleynikova, R. Siegwart, C. Cadena, and J. Nieto, “Voxgraph: Globally consistent, volumetric mapping using signed distance function submaps,” IEEE Robotics and Automation Letters , vol. 5, no. 1, pp. 227–234, 2019. [12] A. Rosinol, M. Abate, Y. Chang, and L. Carlone, “Kimera: An open-source library for real-time metric-semantic localization and mapping,” in 2020 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2020. [13] B. Charrow, G. Kahn, S. Patil, S. Liu, K. Goldberg, P. Abbeel, N. Michael, and V. Kumar, “Information-theoretic planning with trajectory optimization for dense 3d mapping.” in Robotics: Science and Systems , vol. 11, Rome, Italy, 2015. [14] L. Chen, H. Zhan, K. Chen, X. Xu, Q. Yan, C. Cai, and Y. Xu, “Activegamer: Active gaussian mapping through efficient rendering,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR) , 2025. [15] Y. Xie, Y. Cai, Y. Zhang, L. Yang, and J. Pan, “Gauss-mi: Gaussian splatting shannon mutual information for active 3d reconstruction,” in 
+
+Robotics: Science and Systems (RSS) , 2025. [16] Y. Li, Y. Li, and G. H. Lee, “Active3d: Active high-fidelity 3d recon-struction via hierarchical uncertainty quantification,” arXiv preprint arXiv:2511.20050 , 2025. [17] Z. Kuang, Z. Yan, H. Zhao, G. Zhou, and H. Zha, “Active neural mapping at scale,” in 2024 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS) . IEEE, 2024, pp. 7152–7159. [18] H. X. Zhang, Y. Yang, and Z. Zou, “Autonomous unmanned aerial vehicles exploration for semantic indoor reconstruction using 3d gaussian splatting,” Data-Centric Engineering , vol. 6, p. e38, 2025. [19] C.-Y. Wu, Y.-C. Sun, C.-T. Lee, and C.-H. Hsu, “Optimally planning drone trajectories to capture 3d gaussian splatting objects,” in Inter-national Conference on Multimedia Modeling . Springer, 2024, pp. 171–185. [20] R. Jin, Y. Gao, Y. Wang, Y. Wu, H. Lu, C. Xu, and F. Gao, “Gs-planner: A gaussian-splatting-based planning framework for active high-fidelity reconstruction,” in 2024 IEEE/RSJ International Conference on Intel-ligent Robots and Systems (IROS) . IEEE, 2024, pp. 11 202–11 209. [21] Z. Xu, R. Jin, K. Wu, Y. Zhao, Z. Zhang, J. Zhao, F. Gao, Z. Gan, and W. Ding, “Hgs-planner: Hierarchical planning framework for active scene reconstruction using 3d gaussian splatting,” arXiv preprint arXiv:2409.17624 , 2024. [22] B. Curless and M. Levoy, “A volumetric method for building complex models from range images,” in Proceedings of the 23rd annual conference on Computer graphics and interactive techniques , 1996, pp. 303–312. [23] A. Hornung, K. M. Wurm, M. Bennewitz, C. Stachniss, and W. Bur-gard, “Octomap: An efficient probabilistic 3d mapping framework based on octrees,” Autonomous robots , vol. 34, no. 3, pp. 189–206, 2013. [24] W. E. Lorensen and H. E. Cline, “Marching cubes: A high resolution 3d surface construction algorithm,” in Seminal graphics: pioneering efforts that shaped the field , 1998, pp. 347–353. [25] J. Amanatides, A. Woo, et al. , “A fast voxel traversal algorithm for ray tracing.” in Eurographics , vol. 87, no. 3, 1987, pp. 3–10. [26] N. Jasika, N. Alispahic, A. Elma, K. Ilvana, L. Elma, and N. Noso-vic, “Dijkstra’s shortest path algorithm serial and parallel execution performance analysis,” in 2012 proceedings of the 35th international convention MIPRO . IEEE, 2012, pp. 1811–1815. [27] B. Yamauchi, “A frontier-based approach for autonomous exploration,” in Proceedings 1997 IEEE International Symposium on Computational Intelligence in Robotics and Automation CIRA’97.’Towards New Com-putational Principles for Robotics and Automation’ . IEEE, 1997, pp. 146–151. [28] F. Xia, A. R. Zamir, Z. He, A. Sax, J. Malik, and S. Savarese, “Gibson Env: real-world perception for embodied agents,” in Computer Vision and Pattern Recognition (CVPR), 2018 IEEE Conference on . IEEE, 2018. [29] Z. Yan, H. Yang, and H. Zha, “Active neural mapping,” in Proceedings of the IEEE/CVF International Conference on Computer Vision , 2023, pp. 10 981–10 992. [30] A. Szot, A. Clegg, E. Undersander, E. Wijmans, Y. Zhao, J. Turner, N. Maestre, M. Mukadam, D. Chaplot, O. Maksymets, A. Gokaslan, V. Vondrus, S. Dharur, F. Meier, W. Galuba, A. Chang, Z. Kira, V. Koltun, J. Malik, M. Savva, and D. Batra, “Habitat 2.0: Training home assistants to rearrange their habitat,” in Advances in Neural Information Processing Systems (NeurIPS) , 2021. [31] S. K. Ramakrishnan, A. Gokaslan, E. Wijmans, O. Maksymets, A. Clegg, J. M. Turner, E. Undersander, W. Galuba, A. Westbury, A. X. Chang, M. Savva, Y. Zhao, and D. Batra, “Habitat-matterport 3d dataset (HM3d): 1000 large-scale 3d environments for embodied AI,” in Thirty-fifth Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2021.
