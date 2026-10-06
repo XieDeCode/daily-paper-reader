@@ -1,0 +1,725 @@
+TSGL: TEACHER-STUDENT GRAPH LEARNING FOR 3DGS COMPRESSION
+Matin Bani Saedi, Matthew Kyan, Gene Cheung
+York University, Canada
+ABSTRACT
+3D Gaussian Splatting (3DGS) is a popular representation for novel
+view synthesis.
+However, 3DGS contains millions of Gaussian
+primitives, each with rich attributes, resulting in large file sizes. We
+propose a novel 3DGS compression method based on Teacher-Student
+Graph Learning (TSGL) that operates directly on a trained model,
+without 3DGS retraining or access to training images. Specifically,
+for each block of Gaussian primitives, using decoded positions and
+DC spherical harmonic (SH) coefficients as predictors, we learn a
+signal-dependent geometry graph G encoding the pairwise similarities
+between neighbouring Gaussians via a teacher-student model. Given
+G, we perform Graph Fourier Transform (GFT) on the remaining
+attributes, so that signal energies are predominantly projected into
+the low-frequency coefficients for compact representation. On three
+standard benchmarks, the method reaches 27× to 33× compression
+with less than 0.6 dB of PSNR loss, improving on recent post-training
+compression methods in both size and rendering quality.
+Index Terms— 3D Gaussian splatting, graph signal processing,
+graph learning, post-training compression
+1. INTRODUCTION
+Novel view synthesis reconstructs a scene from a set of reference
+images so that it can be viewed from any viewpoint, supporting
+applications in virtual reality, robotics, and digital twins. The field
+has progressed rapidly, moving from implicit neural representations
+such as Neural Radiance Fields (NeRF) [1] to explicit primitive-based
+models such as 3D Gaussian Splatting (3DGS) [2]. A 3DGS model
+consists of millions of Gaussian primitives, each defined by position,
+rotation and scale vectors, an opacity scalar, and spherical harmonic
+(SH) coefficients that encode view-dependent colour. Despite its
+rendering quality and speed, the large number of primitives makes
+3DGS costly to store and transmit.
+To tackle this challenge, methods either build a compact
+representation during training [3, 4, 5, 6] or compress an already-
+trained model [7, 8, 9, 10, 11]. In the first category, Scaffold-GS [4]
+learns anchor points with associated features and offsets, then
+uses small neural networks to predict local Gaussian attributes.
+HAC [3] builds on Scaffold-GS by adding a learned spatial
+hash grid that provides contextual information for each anchor.
+Compact3DGS [5] reduces storage through learnable Gaussian masks
+and a shared neural field for view-dependent colour. In the second
+category, LightGaussian [7] combines importance-based pruning
+with knowledge distillation to learn a lower-degree SH representation
+while preserving the original appearance. MesonGS [9] employs the
+region-adaptive hierarchical transform (RAHT) on selected Gaussian
+attributes for more efficient coding. EntropyGS [10] uses statistical
+models of Gaussian attributes to design an entropy-coding scheme
+tailored to the characteristics of 3DGS data.
+Unlike previous works, we focus on designing transform coding
+for 3DGS attribute compression. Standard transforms such as the
+PSNR: 24.94 / Size: 601 MB
+PSNR: 24.65 / Size: 19.3 MB
+31.1×  
+Compression
+Fig. 1: Qualitative comparison between the original 3DGS model
+(left) and our compressed model (right). Our method achieves 31.1×
+compression with only a small decrease in PSNR.
+discrete cosine transform (DCT) used in JPEG [12] assume data
+are sampled on a regular 2D grid. In contrast, Gaussian primitives
+are irregularly distributed in 3D space, making the graph Fourier
+transform (GFT) [13]—where transformation is defined for discrete
+signals on an irregular kernel described by a graph—a suitable choice.
+GGSC [14] introduces a graph-based compression baseline for 3DGS:
+i) partition the scene into local blocks, ii) construct a graph for each
+block using a Gaussian kernel based on primitive positions, and iii)
+apply GFT to Gaussian attributes for compression. L-GGSC [15]
+extends this baseline by introducing a parameterized graph shift
+operator, while retaining the same position-based graph. However,
+the effectiveness of GFT in energy compaction strongly depends on
+the underlying graph that encodes pairwise similarities / correlations.
+Edge weights based solely on spatial positions are clearly insufficient:
+close primitive neighbours can have attributes that differ greatly.
+In response, we propose Teacher-Student Graph Learning
+(TSGL) for 3DGS compression, which operates directly on a trained
+model without retraining or access to the training images. The key
+idea is the following:
+Given a teacher graph that encodes the ground-truth
+signal geometry—i.e., a large (small) edge weight
+wi,j when target attribute difference |xi −xj| is small
+(large)—we learn a student graph via a lightweight
+network to mimic the teacher graph using only available
+information at the decoder (decoded Gaussian positions
+and DC SH coefficients) as predictors.
+Using the constructed student graph, we apply the corresponding GFT
+to encode the remaining attributes for compression. Note that unlike
+Karhunen-Lo`eve Transform (KLT) that optimally decorrelates signals
+statistically in the aggregate [16], our TSGL constructs one graph of
+signal geometry deterministically for each individual signal x for low-
+frequency concentration and therefore compact representation. To our
+arXiv:2609.38635v1  [eess.IV]  29 Sep 2026
+
+
+① Pruning
+④ KD-Tree 
+Partitioning
+② G-PCC 
+(Position)
+Input 3DGS Primitives
+⑤ Teacher-Student Graph Learning
+Teacher
+Student
+Learned Graph
+Loss
+⑦ Channel KLT
+⑧ Quantization
+⑨ Entropy 
+Coding
+③ VQ 
+(DC SH)
+Colour 
+Codebook
+⑥ GFT
+Fig. 2: Overview of the proposed 3DGS compression pipeline.
+knowledge, this is the first method to directly learn a graph of signal-
+dependent geometry for 3DGS compression rather than a generic
+similarity graph based on spatial locations. Experiments on 13 scenes
+from three standard benchmarks show 27× to 33× compression
+within 0.6 dB of the original models in PSNR, improving upon the
+rate-distortion performance of recent post-training methods.
+2. PRELIMINARIES
+2.1. 3D Gaussian Splatting
+Each 3DGS primitive i is represented by
+gi = (pi, oi, ri, si, SHi),
+(1)
+where pi ∈R3 is the position, oi ∈R is the opacity, ri ∈R4 is
+the rotation quaternion, si ∈R3 is the scale, and SHi ∈R48 is the
+spherical harmonic (SH) coefficient vector. SHi is composed of a
+DC component SHDC
+i
+∈R3, which represents the base colour of the
+Gaussian, and higher-order AC components SHAC
+i
+∈R45, which
+capture colour variations with viewing direction.
+2.2. Graph Signal Processing
+Following notations in [13], an undirected weighted graph is defined
+as G = (V, E, W), where V = {1, . . . , N} is the set of N nodes,
+E = {(i, j)} is the set of edges, and W ∈RN×N is the adjacency
+matrix. Each entry wi,j ≥0 represents the weight of an edge
+connecting nodes i and j if ∃(i, j) ∈E, with wi,j = 0 if̸ ∃(i, j) ∈E.
+W is symmetric, i.e., wi,j = wj,i, ∀i, j, since G is undirected. A
+multi-channel graph signal is represented by X ∈RN×c, where each
+column assigns one value to every node. The combinatorial graph
+Laplacian matrix L ∈RN×N is defined as L ≜D −W, where
+D ∈RN×N is the diagonal degree matrix with diagonal entries
+Di,i = P
+j wi,j.
+2.3. Graph Fourier Transform
+Since L is symmetric, by the Spectral Theorem [17] it can be
+eigen-decomposed into L = UΛU⊤, where the columns of U are
+the eigenvectors of L, and Λ = diag(λ1, . . . , λN) contains the
+corresponding eigenvalues in ascending order, λ1 ≤· · · ≤λN. The
+eigenvectors form the graph Fourier basis, while the eigenvalues
+represent the associated graph frequencies. The GFT of a signal X
+and its inverse are then given by
+Y = U⊤X,
+X = UY,
+(2)
+where Y ∈RN×c contains the GFT coefficients.
+3. PROPOSED CODING FRAMEWORK
+Our proposed coding framework is shown in Figure 2. It begins with
+opacity- and importance-based pruning, followed by coding of the
+positions and DC SH coefficients, and spatial partitioning into local
+blocks. For each block, our proposed teacher-student graph learning
+method in Section 4 estimates the graph edge weights among the
+primitives, and the learned graph defines the GFT basis. The GFT is
+applied to the remaining attributes, namely the AC SH coefficients,
+scale, opacity, and rotation. A channel-wise KLT is then applied
+to the transformed AC SH coefficients to decorrelate inter-channel
+information, followed by quantization and entropy coding.
+3.1. Pruning, Base Attribute Coding, and Spatial Partitioning
+The pipeline begins with two pruning stages.
+We first remove
+Gaussian primitives whose activated opacity values are below a fixed
+threshold of 0.01. We then rank the remaining primitives by the
+importance score introduced in LightGaussian [7] and discard 20% of
+those with the lowest scores. This score accumulates each Gaussian’s
+contribution to the rendered views and only requires the camera
+poses, not the original training images or any parameter updates.
+Subsequently, the Gaussian positions are coded using G-PCC [18]
+and the DC SH coefficients using k-means vector quantization with a
+scene-level codebook of k = 16384 clusters. These two attributes
+are decoded at the decoder before graph construction and serve as
+inputs to the graph learning method in Section 4.
+The pruned primitives are then partitioned into local blocks using
+a KD-tree built on the decoded positions, as in GGSC [14], so that
+the partition is reproduced at the decoder without requiring any
+side information. Since constructing the GFT basis requires eigen-
+decomposition of the graph Laplacian, which has a computational
+complexity of O(N 3) for a block of N primitives, operating on the
+entire scene would be computationally impractical. We therefore
+limit each KD-tree block to at most 200 primitives.
+3.2. Transform Coding, Quantization, and Entropy Coding
+For each block, the graph learning method described in Section 4
+produces a weighted adjacency matrix W. The corresponding graph
+Laplacian and GFT basis are then constructed as defined in Section 2.
+The GFT is applied independently to the AC SH coefficients, scale,
+opacity, and rotation along the primitive dimension.
+The GFT exploits the relationships among Gaussian primitives
+but leaves the correlations across channels untouched. To decorrelate
+across channels, we compute a KLT basis from the covariance of the
+
+
+AC SH channels and apply it to the GFT coefficients. Let M denote
+the total number of primitives in the scene and SH
+AC the mean of
+SHAC
+i
+over the scene. The channel covariance is
+C = 1
+M
+M
+X
+i=1
+ SHAC
+i
+−SH
+AC SHAC
+i
+−SH
+AC⊤∈R45×45,
+(3)
+whose eigenvectors, ordered by decreasing eigenvalue, form the KLT
+basis V. The basis is computed once per scene and transmitted as
+side information. Let Xac ∈RN×45 denote the AC SH coefficients
+of a block. Its transformed coefficients are
+Yac = U⊤XacV,
+(4)
+where U operates along the primitive dimension while V operates
+along the channel dimension.
+Finally, all transformed coefficients are uniformly quantized as
+q = sign(Y )
+|Y |
+∆a + θa
+
+,
+ˆY = ∆a q,
+(5)
+where q is the resulting integer index, ∆a the quantization step for
+attribute a, θa the rounding offset, and ˆY the reconstructed coefficient.
+The quantized values are finally coded with a static rANS entropy
+coder [19], whose frequency tables are transmitted alongside the
+bitstream.
+4. TEACHER-STUDENT GRAPH LEARNING
+The crux of our proposal is the signal-dependent construction of the
+underlying graph G on which the GFT is defined. Unlike the KLT that
+decorrelates a signal x statistically on the aggregate, our GFT—one
+constructed for individual x—concentrates the energy of x in the
+low-frequency coefficients.
+Mathematically, low-frequency representation of x on graph
+G with Laplacian L = UΛU⊤means that only GFT coefficients
+y = U⊤x associated with small eigenvalues λk are large in
+magnitude. In other words, projection of x into the eigen-space of
+L lies predominantly in the low-frequency subspace, resulting in a
+small Rayleigh quotient RL(x) for a unit-norm signal x:
+RL(x) ≜x⊤Lx =
+X
+(i,j)∈E
+wi,j(xi −xj)2 =
+X
+k
+λky2
+k.
+(6)
+Looking at (6), a graph G that induces a low-frequency representation
+of x is one where edge weight wi,j is small (large) when |xi −xj|
+is large (small). Unlike the statistically derived KLT, such a graph
+G encodes the deterministic geometry of signal x. The purpose of
+our teacher-student graph learning module is to estimate this signal
+geometry given limited available information at the decoder.
+4.1. Candidate Set
+The proposed graph is learned in two stages. A fixed design rule
+determines the edge set E, and then the student network assigns
+weights to edges in E. For each primitive i in a block, we form a
+candidate set N(i) as its k = 16 nearest neighbours in position plus
+its k = 16 nearest neighbours in DC colour. Both position and DC
+colour are available at the decoder, so N(i) is reconstructed there
+without side information.
+4.2. Teacher Graph
+Denote by x(a)
+i
+the vector of attribute a of primitive i, with a ranging
+over the AC SH coefficients, scale, opacity, and rotation. Since
+one graph per block serves all four attributes, we replace the scalar
+difference |xi −xj| in (6) with a distance over the attributes jointly,
+di,j =
+X
+a
+1
+σ2a
+x(a)
+i
+−x(a)
+j
+2,
+(7)
+where σ2
+a is the total variance of attribute a. This normalization
+allows attributes of different scales to contribute comparably. By (6),
+a graph that induces a low-frequency representation of the attributes
+assigns a large (small) weight to an edge with small (large) di,j.
+Following this criterion, we construct a teacher graph over each
+block from the true attributes at the encoder, whose edge weights are
+Ti,j =
+exp(−di,j/τ)
+P
+l∈N (i) exp(−di,l/τ),
+j ∈N(i),
+(8)
+where τ is a hyperparameter controlling how sharply the distribution
+concentrates on the nearest candidates. The teacher thus provides an
+attribute-informed representation of the signal geometry of the block,
+which serves as the target that the student learns to estimate.
+4.3. Student Network
+While the teacher is constructed directly from (8) and requires no
+training, the student is computed by a small network trained per scene
+to estimate the signal geometry captured by the teacher graph, using
+only information available at the decoder. In other words, the student
+must infer signal geometry from position and DC colour alone.
+Denote by fi = (pi, SHDC
+i
+) the combination of decoded
+position and DC colour of primitive i, both normalized over the
+scene. Denote by K(i) its 16 nearest neighbours in position, and
+ei,j = (fi, fj −fi) describes neighbour j relative to i. Inspired
+by local aggregation in PointNet++ [20], the student encodes each
+primitive from its neighbourhood into an embedding
+zi = ψ
+
+fi, max
+j∈K(i) ϕ(ei,j), mean
+j∈K(i) ϕ(ei,j)
+
+,
+(9)
+where ϕ and ψ are shared MLPs.
+Given the embeddings, the student assigns a score to each
+candidate pair (i, j) as:
+ri,j = MLP
+ zi + zj, |zi −zj|, zi ⊙zj
+
+,
+(10)
+where the inputs are constructed to be symmetric in i and j so that
+ri,j = rj,i. The pairwise scores are then normalized over each
+primitive’s candidate set to give the student’s distribution:
+Si,j =
+exp(ri,j)
+P
+l∈N (i) exp(ri,l),
+j ∈N(i).
+(11)
+Since the training objective is for the student to match the teacher,
+we minimize the cross-entropy between the two distributions,
+J = −1
+M
+X
+i
+X
+j∈N (i)
+Ti,j log Si,j,
+(12)
+where M is the total number of primitives in the scene.
+At decode time, the same student network produces S from the
+decoded position and DC colour. Since the graph must be undirected,
+we average the two directions to obtain the adjacency matrix:
+
+
+Table 1: Comparison with post-training 3DGS compression methods on the three standard benchmarks. Best is shown in bold and second best
+is underlined. The 3DGS row is the uncompressed reference and is not ranked.
+Mip-NeRF 360
+Tanks & Temples
+Deep Blending
+Method
+PSNR↑
+SSIM↑
+LPIPS↓
+Size (MB)↓
+PSNR↑
+SSIM↑
+LPIPS↓
+Size (MB)↓
+PSNR↑
+SSIM↑
+LPIPS↓
+Size (MB)↓
+3DGS [2]
+27.29
+0.812
+0.221
+795.26
+23.36
+0.838
+0.186
+421.91
+29.43
+0.898
+0.246
+703.77
+GGSC [14]
+18.42
+0.449
+0.498
+71.21
+16.43
+0.480
+0.489
+29.29
+25.67
+0.807
+0.386
+109.85
+MesonGS [9]
+26.45
+0.791
+0.244
+34.41
+22.95
+0.825
+0.202
+17.56
+29.13
+0.894
+0.255
+29.52
+EntropyGS [10]
+25.66
+0.783
+0.246
+28.46
+22.33
+0.806
+0.217
+15.23
+27.48
+0.882
+0.266
+25.95
+FlexGaussian [11]
+26.38
+0.780
+0.251
+40.80
+22.44
+0.804
+0.219
+16.30
+28.61
+0.884
+0.269
+25.48
+Ours
+26.74
+0.796
+0.241
+29.32
+23.09
+0.825
+0.202
+14.25
+29.07
+0.892
+0.259
+21.55
+wi,j = Si,j + Sj,i
+2
+.
+(13)
+This adjacency matrix yields the graph Laplacian L, whose
+eigenvectors give the GFT basis used in (2).
+Since the student
+network is trained per scene, we transmit its parameters as side
+information.
+5. EXPERIMENTS
+5.1. Experimental Settings
+We evaluate our method on 13 scenes from three datasets, Mip-NeRF
+360 [21], Tanks and Temples [22], and Deep Blending [23], and
+report the average PSNR, SSIM, LPIPS and file size for each dataset.
+We compare against four recent post-training compression methods,
+GGSC [14], MesonGS [9], EntropyGS [10], and FlexGaussian [11],
+and include the uncompressed 3DGS models as a reference. GGSC,
+MesonGS, and EntropyGS are re-evaluated with our renderer on
+the same test views and at the same resolution, using their reported
+operating points, while the FlexGaussian numbers are quoted from
+the original paper. Since our method does not perform any 3DGS
+fine-tuning, we disable the corresponding re-optimization stages in
+the reproduced competing methods to ensure a fair comparison under
+the same post-training setting.
+All sizes reported for our method correspond to the complete
+bitstream, including the G-PCC coded positions, the DC codebook
+and its per-primitive indices, the quantized and entropy-coded AC SH,
+scale, rotation and opacity coefficients, the student network weights,
+the KLT basis, and the rANS frequency tables.
+The student network is trained independently for each scene for
+20 epochs using Adam optimizer with a learning rate of 10−3 and
+a batch size of 32 blocks. The network contains 50,945 parameters,
+corresponding to 204 KB of side information, or approximately 0.7%
+of the average compressed Mip-NeRF 360 bitstream. Finally, for
+attribute quantization, we use ∆a = (0.15, 0.15, 0.3, 0.04) and
+θa = (0.35, 0.5, 0.5, 0.5) for AC SH, scale, opacity, and rotation,
+respectively.
+5.2. Experimental Results
+Table 1 reports the compression performance of our method and the
+competing techniques, averaged separately over the scenes of each
+dataset. Our method achieves the best rendering quality among the
+compressed methods on Mip-NeRF 360 and Tanks and Temples, with
+the highest PSNR and SSIM and the lowest LPIPS. On Mip-NeRF
+360, our average bitstream size is 29.32 MB compared with 34.41
+MB for MesonGS, while improving PSNR by 0.29 dB. On Tanks and
+Temples, our method matches or improves all three quality metrics
+while also producing the smallest bitstream among all compared
+methods, 6.4% below EntropyGS, the second smallest. On Deep
+Table 2: Contribution of each pipeline stage, per dataset. Each row
+adds one stage to the row above. Sizes are in MB.
+Stage
+Mip-NeRF 360
+T&T
+Deep Blending
+PSNR↑Size↓PSNR↑Size↓PSNR↑Size↓
+Original 3DGS [2]
+27.29
+795.26
+23.36
+421.91
+29.43
+703.77
++ Opacity pruning
+27.29
+679.49
+23.35
+333.49
+29.43
+599.18
++ Importance pruning
+27.28
+543.59
+23.35
+266.79
+29.43
+479.34
++ G-PCC, VQ DC
+27.27
+476.37
+23.34
+234.02
+29.41
+419.51
++ Coding (no transform)
+25.70
+33.07
+22.44
+15.95
+28.13
+22.35
++ GFT (learned graph)
+26.39
+30.43
+22.90
+14.57
+28.91
+21.13
++ Channel KLT
+26.74
+29.32
+23.09
+14.25
+29.07
+21.55
+Blending, MesonGS achieves a slightly higher PSNR by 0.06 dB,
+but requires 7.97 MB more storage on average. Our method also
+maintains higher quality than GGSC, EntropyGS, and FlexGaussian
+across all three datasets. On Mip-NeRF 360, for instance, EntropyGS
+is only 0.86 MB smaller on average, but has 1.08 dB lower PSNR.
+Overall, our compressed models are approximately 27× to 33×
+smaller than the original 3DGS representations, while the average
+PSNR degradation remains below 0.6 dB on all three datasets.
+Ablation Studies: Table 2 presents a cumulative ablation of our
+compression pipeline across the datasets, where each row adds one
+stage to the configuration above it. The results show that opacity and
+importance pruning, G-PCC, and vector quantization of the DC SH
+coefficients have negligible impact on visual quality, while reducing
+the original model size by approximately 40-45%. To evaluate the
+contribution of the graph-based GFT stage, we include a baseline
+in which the remaining attributes are quantized and entropy coded
+directly, without graph construction or transformation. Adding the
+learned-graph GFT consistently improves both rate and quality. The
+average file size decreases from 33.07 to 30.43 MB, 15.95 to 14.57
+MB, and 22.35 to 21.13 MB on Mip-NeRF 360, Tanks and Temples,
+and Deep Blending, respectively, while PSNR improves by 0.69, 0.46
+and 0.78 dB. The channel KLT improves PSNR by a further 0.35,
+0.19 and 0.16 dB. It also reduces the bitstream by 3.6% and 2.2% on
+the first two datasets, while on Deep Blending it costs 2.0% in size.
+6. CONCLUSION
+We proposed a novel compression technique for 3DGS based on
+Teacher-Student Graph Learning (TSGL). Our method trains a small
+student network to reproduce a teacher graph built from the true
+attributes using only decoder-available inputs, so that the GFT basis
+reflects the signal geometry without transmitting the graph itself.
+A scene-level channel-wise KLT is further applied to the AC SH
+coefficients, removing the correlation across channels. Experiments
+reveal that our proposed method outperforms recent post-training
+compression methods on most quality and size measurements across
+three standard benchmarks.
+
+
+7. REFERENCES
+[1] Ben Mildenhall,
+Pratul P. Srinivasan,
+Matthew Tancik,
+Jonathan T. Barron, Ravi Ramamoorthi, and Ren Ng, “NeRF:
+Representing scenes as neural radiance fields for view synthesis,”
+in Proc. Eur. Conf. Comput. Vis. (ECCV), 2020.
+[2] Bernhard Kerbl, Georgios Kopanas, Thomas Leimk¨uhler, and
+George Drettakis, “3d gaussian splatting for real-time radiance
+field rendering,” ACM Transactions on Graphics, vol. 42, no. 4,
+2023.
+[3] Yihang Chen, Qianyi Wu, Weiyao Lin, Mehrtash Harandi,
+and Jianfei Cai,
+“HAC: Hash-grid assisted context for 3d
+Gaussian splatting compression,” in Proc. Eur. Conf. Comput.
+Vis. (ECCV), 2024, pp. 422–438.
+[4] Tao Lu, Mulin Yu, Linning Xu, Yuanbo Xiangli, Limin Wang,
+Dahua Lin, and Bo Dai, “Scaffold-GS: Structured 3d Gaussians
+for view-adaptive rendering,” in Proc. IEEE/CVF Conf. Comput.
+Vis. Pattern Recognit. (CVPR), 2024, pp. 20654–20664.
+[5] Joo Chan Lee, Daniel Rho, Xiangyu Sun, Jong Hwan Ko, and
+Eunbyung Park,
+“Compact 3d Gaussian representation for
+radiance field,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern
+Recognit. (CVPR), 2024, pp. 21719–21728.
+[6] Wieland Morgenstern, Florian Barthel, Anna Hilsmann, and
+Peter Eisert,
+“Compact 3d scene representation via self-
+organizing Gaussian grids,” in Proc. Eur. Conf. Comput. Vis.
+(ECCV), 2024, pp. 18–34.
+[7] Zhiwen Fan, Kevin Wang, Kairun Wen, Zehao Zhu, Dejia Xu,
+and Zhangyang Wang, “Lightgaussian: Unbounded 3d Gaussian
+compression with 15x reduction and 200+ FPS,” arXiv preprint
+arXiv:2311.17245, 2023.
+[8] Simon
+Niedermayr,
+Josef
+Stumpfegger,
+and
+R¨udiger
+Westermann,
+“Compressed 3d Gaussian splatting for
+accelerated novel view synthesis,” in Proc. IEEE/CVF Conf.
+Comput. Vis. Pattern Recognit. (CVPR), 2024.
+[9] Shuzhao Xie, Weixiang Zhang, Chen Tang, Yunpeng Bai,
+Rongwei Lu, Shijia Ge, and Zhi Wang,
+“Mesongs: Post-
+training compression of 3d gaussians via efficient attribute
+transformation,” in European Conference on Computer Vision.
+Springer, 2024.
+[10] Yuning Huang, Jiahao Pang, Fengqing Zhu, and Dong Tian,
+“Entropygs:
+An efficient entropy coding on 3d gaussian
+splatting,”
+in ICASSP 2026 - 2026 IEEE International
+Conference on Acoustics, Speech and Signal Processing
+(ICASSP), 2026, pp. 11732–11736.
+[11] Boyuan Tian, Qizhe Gao, Siran Xianyu, Xiaotong Cui, and
+Minjia Zhang,
+“Flexgaussian: Flexible and cost-effective
+training-free compression for 3d gaussian splatting,”
+in
+Proceedings of the 33rd ACM International Conference on
+Multimedia, 2025.
+[12] Gregory K. Wallace,
+“The jpeg still picture compression
+standard,” IEEE Transactions on Consumer Electronics, vol.
+38, no. 1, pp. xviii–xxxiv, 1992.
+[13] Antonio Ortega, Pascal Frossard, Jelena Kovacevic, Jos´e M. F.
+Moura, and Pierre Vandergheynst, “Graph signal processing:
+Overview, challenges, and applications,” Proceedings of the
+IEEE, vol. 106, no. 5, pp. 808–828, 2018.
+[14] Qi Yang, Kaifa Yang, Yuke Xing, Yiling Xu, and Zhu Li,
+“A benchmark for gaussian splatting compression and quality
+assessment study,” in Proceedings of the 6th ACM International
+Conference on Multimedia in Asia, New York, NY, USA, 2024,
+MMAsia ’24, Association for Computing Machinery.
+[15] Akihiro Kuwabara, Hinata Kirihara, Sorachi Kato, Toshiaki
+Koike-Akino, and Takuya Fujihashi,
+“L-GGSC: Learnable
+graph-based Gaussian splatting compression,”
+in Proc.
+IEEE/CVF Int. Conf. Comput. Vis. Workshops (ICCVW), 2025.
+[16] Vivek K. Goyal, “Theoretical foundations of transform coding,”
+IEEE Signal Processing Magazine, vol. 18, no. 5, pp. 9–21,
+2001.
+[17] Roger A. Horn and Charles R. Johnson,
+Matrix Analysis,
+Cambridge University Press, 2 edition, 2012.
+[18] Sebastian Schwarz, Marius Preda, Vittorio Baroncini, Madhukar
+Budagavi, Pablo Cesar, Philip A. Chou, Robert A. Cohen,
+Maja Krivoku´ca, S´ebastien Lasserre, Zhu Li, Joan Llach,
+Khaled Mammou, Rufael Mekuria, Ohji Nakagami, Ernestasia
+Siahaan, Ali Tabatabai, Alexis M. Tourapis, and Vladyslav
+Zakharchenko, “Emerging MPEG standards for point cloud
+compression,” IEEE J. Emerg. Sel. Topics Circuits Syst., vol. 9,
+no. 1, pp. 133–148, 2019.
+[19] Jarek Duda, “Asymmetric numeral systems: entropy coding
+combining speed of Huffman coding with compression rate of
+arithmetic coding,” arXiv preprint arXiv:1311.2540, 2013.
+[20] Charles Ruizhongtai Qi, Li Yi, Hao Su, and Leonidas J. Guibas,
+“PointNet++: Deep hierarchical feature learning on point sets in
+a metric space,” in Advances in Neural Information Processing
+Systems (NeurIPS), 2017, vol. 30.
+[21] Jonathan T. Barron, Ben Mildenhall, Dor Verbin, Pratul P.
+Srinivasan, and Peter Hedman, “Mip-nerf 360: Unbounded anti-
+aliased neural radiance fields,” in Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition
+(CVPR), 2022, pp. 5470–5479.
+[22] Arno Knapitsch, Jaesik Park, Qian-Yi Zhou, and Vladlen
+Koltun, “Tanks and temples: Benchmarking large-scale scene
+reconstruction,” ACM Transactions on Graphics, vol. 36, no. 4,
+2017.
+[23] Peter Hedman, Julien Philip, True Price, Jan-Michael Frahm,
+George Drettakis, and Gabriel Brostow, “Deep blending for
+free-viewpoint image-based rendering,” ACM Transactions on
+Graphics, vol. 37, no. 6, 2018.

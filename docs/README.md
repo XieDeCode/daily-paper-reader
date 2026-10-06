@@ -6,37 +6,30 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-10-04
-- 运行时间：2026-10-04 21:52:54 UTC
+- 最新运行日期：2026-10-06
+- 运行时间：2026-10-06 01:01:59 UTC
 - 运行状态：成功
-- 本次总论文数：4
+- 本次总论文数：3
 - 精读区：0
-- 速读区：4
+- 速读区：3
 
 ### 今日简报（AI）
-2026-10-04 日报共速读 4 篇、精读 0 篇，全部聚焦高斯泼溅与 SLAM 方向。
-
-其中评分最高的是《ProDyGS: Dynamic Gaussian Splatting from a Single Static Monocular Camera》（7.0/10），用一台固定单目相机做动态高斯重建，最值得先看；《RRG-SLAM》的室内反射感知思路也适合顺带关注。
-
-普通读者建议先从 ProDyGS 入手理解单目动态重建，再按兴趣翻阅全景压缩与反射 SLAM 两篇即可。
-- 详情：[/202610/04/README](/202610/04/README)
+2026-10-06 日报速读 3 篇 3DGS 压缩与渲染论文，均获 6.0 分。三篇分别聚焦师生图学习压缩、实例化神经基元场景合成、以及分解 LOD 实现大规模实时渲染，可优先关注压缩与实时化的结合思路。普通读者若想跟进，建议先从 Budgeted-GS 了解 LOD 分解如何撑起大场景实时性。
+- 详情：[/202610/06/README](/202610/06/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [ProDyGS: Dynamic Gaussian Splatting from a Single Static Monocular Camera](/202610/04/2609.32711v1-prodygs-dynamic-gaussian-splatting-from-a-single-static-monocular-camera)  
-   标签：评分：7.0/10、query:aerial-dgs
-   evidence：动态3D高斯泼溅框架，通过代理多视角监督实现新视角合成
-2. [Rate-Distortion Adaptive Primitive Selection for Omnidirectional Gaussian Splatting](/202610/04/2609.34367v2-rate-distortion-adaptive-primitive-selection-for-omnidirectional-gaussian-splatting)  
+1. [TSGL: Teacher-Student Graph Learning for 3DGS Compression](/202610/06/2609.38635v1-tsgl-teacher-student-graph-learning-for-3dgs-compression)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：基于分层HEALPix基元网格的全向高斯泼溅编码
-3. [RRG-SLAM: Real-time Reflection-aware Gaussian SLAM for Indoor Scenes](/202610/04/2609.34527v1-rrg-slam-real-time-reflection-aware-gaussian-slam-for-indoor-scenes)  
+   evidence：面向3D高斯泼溅表示的压缩方法
+2. [SCION: Scene Composition with Instanced Neural Primitives](/202610/06/2610.02322v1-scion-scene-composition-with-instanced-neural-primitives)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向高斯SLAM的反射感知TSDF-高斯混合表示与多通道渲染
-4. [Affine-Aligned Atlas for Canonical Gaussian Construction in Video Representation](/202610/04/2610.01114v1-affine-aligned-atlas-for-canonical-gaussian-construction-in-video-representation)  
+   evidence：以可复用基元构建组合式3D高斯场景表示
+3. [Budgeted-GS: Real-Time Large-Scale Gaussian Splatting via Factoring LOD](/202610/06/2610.03162v1-budgeted-gs-real-time-large-scale-gaussian-splatting-via-factoring-lod)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：在仿射对齐图集空间中构建的视频规范高斯表示
+   evidence：面向城市级大规模场景的实时高斯泼溅LOD分解
 
 
 <div class="dpr-home-promo-card">
