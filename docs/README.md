@@ -6,49 +6,36 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-10-06
-- 运行时间：2026-10-06 23:05:40 UTC
+- 最新运行日期：2026-10-07
+- 运行时间：2026-10-08 00:02:43 UTC
 - 运行状态：成功
-- 本次总论文数：9
-- 精读区：2
-- 速读区：7
+- 本次总论文数：5
+- 精读区：0
+- 速读区：5
 
 ### 今日简报（AI）
-今日从9篇3D高斯泼溅相关论文中精读2篇、速读7篇，聚焦实时渲染与场景重建。
-最值得看的是两篇8.0分精读：Budgeted-GS用LOD分解实现实时大规模渲染，以及微型无人机返航探索完成3DGS重建。
-普通读者可先读这两篇抓主线，再顺着LoCoSplat等速读论文了解实时前馈与场景组合的进展。
-- 详情：[/202610/06/README](/202610/06/README)
+今日速读5篇3D高斯泼溅论文，聚焦稀疏视角与移动端重建。最值得看的是7.0分的DensiTok，用前馈方式让模型"看到"比输入更多的视角；PocketSplat和4D稀疏视角两篇也提供了移动端与时空先验思路。普通读者可优先从DensiTok入手，理解稀疏输入下的重建突破。
+- 详情：[/202610/07/README](/202610/07/README)
 
 ### 精读区论文标签
-1. [Budgeted-GS: Real-Time Large-Scale Gaussian Splatting via Factoring LOD](/202610/06/2610.03162v1-budgeted-gs-real-time-large-scale-gaussian-splatting-via-factoring-lod)  
-   标签：评分：8.0/10、query:aerial-dgs
-   evidence：实时城市级大规模高斯泼溅
-2. [Return-to-Home Feasible Micro-Aerial Vehicle Exploration for 3D Gaussian Splatting Reconstruction](/202610/06/2610.04013v1-return-to-home-feasible-micro-aerial-vehicle-exploration-for-3d-gaussian-splatting-reconstruction)  
-   标签：评分：8.0/10、query:aerial-dgs
-   evidence：无人机影像用于三维高斯泼溅重建
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [LoCoSplat: Real-Time Feed-Forward 3D Gaussian Splatting with Minimal 3D Reasoning](/202610/06/2610.04351v1-locosplat-real-time-feed-forward-3d-gaussian-splatting-with-minimal-3d-reasoning)  
+1. [DensiTok: Making Feed-Forward 3D Gaussian Splatting See More Views Than It Is Given](/202610/07/2610.07958v1-densitok-making-feed-forward-3d-gaussian-splatting-see-more-views-than-it-is-given)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：以极简3D推理实现前馈多视图3D高斯泼溅
-2. [SCION: Scene Composition with Instanced Neural Primitives](/202610/06/2610.02322v1-scion-scene-composition-with-instanced-neural-primitives)  
+   evidence：前馈式三维高斯泼溅重建模块
+2. [PocketSplat: Mobile Gaussian Reconstruction via World-Space Latent Allocatio](/202610/07/2610.03192v1-pocketsplat-mobile-gaussian-reconstruction-via-world-space-latent-allocatio)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：基于3D高斯泼溅的层次化可组合场景表示
-3. [SCION: Scene Composition with Instanced Neural Primitives](/202610/06/2610.02322v2-scion-scene-composition-with-instanced-neural-primitives)  
+   evidence：前馈高斯重建与预算化高斯资产表示
+3. [Sparse-View 4D Gaussian Splatting via Spatiotemporal Priors and Generative Assistance](/202610/07/2610.04606v1-sparse-view-4d-gaussian-splatting-via-spatiotemporal-priors-and-generative-assistance)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：层次化可组合的3D高斯场景表示
-4. [ByteSplat: Efficient Distributed 3D Gaussian Splatting Training via Intra- and Inter-GPU communication reduction](/202610/06/2610.02851v1-bytesplat-efficient-distributed-3d-gaussian-splatting-training-via-intra--and-inter-gpu-communication-reduction)  
+   evidence：稀疏宽基线视角下的多视角高斯优化
+4. [MaRO-GS: Mask-Robust Object-Centric Gaussian Splatting from Inconsistent Multi-view Masks](/202610/07/2610.06472v1-maro-gs-mask-robust-object-centric-gaussian-splatting-from-inconsistent-multi-view-masks)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向大规模场景的分布式3D高斯泼溅训练
-5. [Sparse-GS2Mesh: 3D Gaussian Splatting Guided by Novel Stereo Views and 2DGS for Sparse View Surface Reconstruction}](/202610/06/2610.04203v1-sparse-gs2mesh-3d-gaussian-splatting-guided-by-novel-stereo-views-and-2dgs-for-sparse-view-surface-reconstruction)  
+   evidence：基于不一致多视图掩码的对象级高斯泼溅
+5. [MoonGS: High-quality Representation of the Lunar Surface via Gaussian Splatting Using Robust Depth Features from Image Pairs](/202610/07/2610.07110v1-moongs-high-quality-representation-of-the-lunar-surface-via-gaussian-splatting-using-robust-depth-features-from-image-pairs)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：由新立体视角与2DGS引导的稀疏视角3D高斯重建
-6. [Mobile-4DGS: Unified Static-Dynamic Real-time Mobile Gaussian Splatting](/202610/06/2610.05289v1-mobile-4dgs-unified-static-dynamic-real-time-mobile-gaussian-splatting)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：统一的静态-动态实时高斯泼溅渲染
-7. [SteadySplats: Resampling of Low-Variance Gaussians for High-Fidelity Stochastic Rendering](/202610/06/2610.05576v1-steadysplats-resampling-of-low-variance-gaussians-for-high-fidelity-stochastic-rendering)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向3D高斯泼溅辐射场的随机渲染与重采样
+   evidence：稀疏多视角图像的三维高斯重建
 
 
 <div class="dpr-home-promo-card">

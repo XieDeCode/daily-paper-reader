@@ -1,0 +1,455 @@
+Title: MoonGS: High-quality Representation of the Lunar Surface via Gaussian Splatting Using Robust Depth Features from Image Pairs
+
+URL Source: https://arxiv.org/pdf/2610.07110v1
+
+Published Time: Wed, 07 Oct 2026 00:09:26 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+> 1
+
+# MoonGS: High-quality Representation of the Lunar Surface via Gaussian Splatting Using Robust Depth Features from Image Pairs 
+
+Yun Jiang, Bo Zheng, Yingying Zhang, Xueming Xiao, Tao Hu, Hutao Cui, Zhiguo Meng, Ke Gao, Yang Gao, and Meibao Yao 
+
+Abstract —High-quality 3D reconstruction of lunar terrain from sparse rover images is indispensable for autonomous lunar exploration, but remains challenging because viewpoint overlap is insufficient, surface textures are weak, and data volume is limited. We propose MoonGS, the first feed-forward 3D Gaussian Splatting framework tailored to lunar scenes. Given only two input images, MoonGS predicts pixel-aligned Gaussian primitives in a single forward pass and renders photorealistic novel views without any per-scene optimization. MoonGS (i) adopts an adaptable backbone design that seamlessly integrates advanced vision foundation models to extract robust depth features; (ii) integrates semantic priors in two manners: merging semantic cues with visual features to refine Gaussian parameter estimation, and adopting a semantic ranking loss that regularizes background depth; (iii) employs an entropy-guided heuristic resampling strategy to augment sparse observations by selecting the most informative distant viewpoints with negligible overhead. Experiments on the LuSNAR benchmark and our synthetic weak-texture MoonBlenderdataset show that MoonGS surpasses state-of-the-art feed-forward NeRF/3DGS baselines by +4.9 dB PSNR, +0.29 SSIM, and ↓40% LPIPS while maintaining sub-second inference. Furthermore, we validate the broad applicability of our framework by demonstrating that it effectively leverages state-of-the-art backbones, including VGGT, to significantly boost perfor-mance. Qualitative evaluations on Chang’e mission imagery also show best visual quality among compared methods, indicating robustness on real lunar data. The source code and dataset are publicly available at https://github.com/InRobots/MoonBlender. 
+
+Index Terms —Lunar Exploration, Novel View Synthesis, Feed-forward Gaussian Splatting, Vision Foundation Model. 
+
+I. INTRODUCTION Lunar exploration through robotic rovers is a cornerstone for future long term lunar residency activities. We investigate the problem of high-fidelity novel view synthesis from sparse image observations in lunar environments with higher real-time performance, as shown in Fig. 1, which can enable rovers to achieve comprehensive terrain understanding [3], precise vi-sual localization [4], and improved real-time decision-making. 
+
+Corresponding author: Meibao Yao. Yun Jiang, Meibao Yao, Zhiguo Meng, and Ke Gao are with Jilin University, Changchun, China. Yingying Zhang is with Beijing Institute of Control Engineering, Beijing, China. Xueming Xiao is with Changchun University of Science and Technology, Changchun, China. Tao Hu and Bo Zheng are with Shanghai Aerospace Control Technology Institute, Shanghai, China. Hutao Cui is with Harbin Institute of Technology, Heilongjiang, China. Yang Gao is with The Hong Kong University of Science and Technology, Hong Kong, China. 
+
+Ref.1 #2 #1 Ref.2 #2 #1 Ground Truth #2 #1 
+
+pixelSplat [1] MVSplat [2] Ours Fig. 1: Novel view synthesis comparison. Compared to existing 3DGS-based methods, our approach provides higher-fidelity novel view synthesis results. As an integral part of 3D scene reconstruction, novel view synthesis is a task dedicated to inferring previously unseen viewpoints of a scene from partial observations. Classical dense 3D reconstruction methods, including point cloud or voxel representations [5]–[7], typically depend on local image similarity metrics. However, these approaches can hardly han-dle scenes containing repetitive textures or limited overlapping regions, resulting in poor-quality novel view synthesis. Recent advances in neural rendering, such as Neural Radiance Fields (NeRFs) [8], have the ability to model complex scenes and render realistic images. 3D Gaussian Splatting (3DGS) [9], an emerging method extending NeRF, significantly accelerates rendering speed and improves efficiency, while still maintain-ing high fidelity. However, since 3DGS requires training from scratch for each new scene, it currently cannot meet real-time application requirements. Additionally, it requires densely captured images to ensure quality, making it unsuitable for common scenarios with extremely sparse observations in lunar exploration missions. Feed-forward radiance field methods partially address the challenges posed by sparse data and limited real-time capa-bility. For instance, NeRF-based approaches (e.g., MuRF [10] and PixelNeRF [11]) address these challenges by perform-arXiv:2610.07110v1 [cs.CV] 5 Oct 2026 2MoonGS 𝜶, 𝜮, 𝑺𝑯  
+
+> unproject splatting
+> movement direction
+> Novel View Ref. 1 Ref . 2
+
+Fig. 2: Overview of MoonGS. From a pair of input images and their associated semantic information, MoonGS performs forward inference to obtain the parameters of Gaussian prim-itives that represent the lunar surface scene. It then utilizes a camera with a known pose to unproject these Gaussian primitives onto the reliable depth positions. With this explicit representation, images can be rendered from camera view-points that have not been directly observed. ing efficient inference directly from sparse observations. In comparison, feed-forward 3DGS methods enable more pho-torealistic and efficient novel view synthesis by explicitly utilizing 3D Gaussian scene representations. Leading scalable reconstruction models in this category (e.g., pixelSplat [1] and MVSplat [2]) employ feed-forward architectures to ef-ficiently generate Gaussian primitives for scene representa-tion. Despite recent progress, lunar scene reconstruction still faces several distinct and unresolved challenges: (i) limited viewpoint overlap during exploration often invalidates tra-ditional epipolar constraints, hindering accurate cross-view feature matching; (ii) lunar background regions exhibit weaker textures compared to foreground objects, complicating depth estimation and geometric reconstruction due to sparse visual cues; (iii) mission-imposed resource constraints severely limit the number and quality of observations, further challenging the accurate representation of lunar surfaces. To overcome these critical challenges, we propose MoonGS, a feed-forward 3DGS framework that synthesizes novel views from sparse lunar surface images and rich semantic informa-tion with high fidelity, while achieving real-time performance, as illustrated in Fig. 2. To begin with, (i) MoonGS leverages robust cross-view depth features provided by an off-the-shelf vision foundation model to achieve a reliable scene repre-sentation, particularly in regions lacking sufficient viewpoint overlap. Moreover, (ii) to further enhance performance, we integrate semantic information into our method in two critical ways: firstly, semantic priors are used to improve the predic-tion of Gaussian parameters, resulting in more stable scene geometry; secondly, a semantic ranking loss is introduced to regularize depth estimation in weak-textured background regions (e.g., the sky), significantly reducing geometric errors. In addition, (iii) we propose a heuristic resampling strategy to effectively augment sparse lunar surface observations, sub-stantially enhancing the fidelity of synthesized novel views. Meanwhile, (iv) we also introduce a new synthetic lunar dataset as an extension to existing lunar datasets, deliberately designed with extremely sparse sky textures to specifically evaluate reconstruction performance under weakly textured conditions. In summary, our main contributions are as follows: 1) We introduce MoonGS, a feed-forward 3DGS frame-work specifically designed for the Moon, which repre-sents scenes using Gaussian primitives and enables high-quality synthesis of novel views from sparse viewpoints in real time. 2) We fully exploit robust depth features from an off-the-shelf vision foundation model to address insufficient viewpoint overlap, effectively integrate semantic priors and a semantic ranking loss to handle unreliable depth estimation in weakly textured regions, and adopt aheuristic resampling strategy to overcome data sparsity. 3) We provide a dataset named MoonBlender as an ex-tension of existing lunar datasets, specifically designed to evaluate the performance of scene representation methods under weakly textured conditions. II. R ELATED WORK 
+
+A. Celestial Surface Reconstruction Based on Radiance Fields 
+
+Reconstructing celestial surface environments is critical for tasks such as geological analysis [12] and navigation simula-tion [13], providing essential data for robotic perception [14]– [21] and mission planning [22], [23]. Early approaches to novel view synthesis were based on light fields, initially using densely sampled data [24], [25] and subsequently allowing un-structured capture [26]. The advent of structure-from-motion (SfM) [27] opened the door to synthesizing novel views from photo collections, by estimating a sparse point cloud during camera calibration. Building on SfM, multi-view stereo (MVS) techniques [28] enabled the development of full 3D reconstruction pipelines and further advanced view synthesis algorithms [29], [30]. These methods typically reproject and blend input images based on the recovered geometry, produc-ing high-quality results in many scenarios. However, they can still suffer from unreconstructed regions or artifacts caused by inaccuracies in the MVS-generated geometry. Neural ra-diance field methods achieve higher fidelity and have shown promise in novel view synthesis, 3D reconstruction, and pose estimation [31]. Mildenhall et al. [8] encode a scene as an MLP-based implicit function and use volume rendering, which is computationally expensive due to extensive ray sampling. Subsequent techniques [32], [33] accelerate radiance field methods, and among these, 3DGS [9] employs Gaussian primi-tives with a rasterization approach to circumvent ray sampling, reconstructing scenes from dense posed images. Radiance fields have also been applied to celestial environments for high-fidelity visualization. For instance, MaRF [34] recon-structs Martian landscapes from NASA’s PDS, and Zhang et al. [35] extends neural radiance fields to lunar surface scenes. However, existing approaches often suffer from data sparsity and lack real-time performance. To address these issues in lunar applications, we format sparse lunar data as image pairs and design a specialized model architecture to exploit this sparsity. As a result, our method synthesizes high-quality lunar images in real time, strengthening robotic perception in lunar exploration. 3ViT Encoder ViT Decoder ViT Decoder Cross Attention Foundation Model (DUSt3R) 
+
+❄
+
+> 2D U-Net
+> (Optional) Embedding
+> Multi-level Features Fusion & U-Net
+> Cost Volume
+> 𝜶 𝟏 , 𝜮 𝟏 , 𝑺𝑯 𝟏
+> 𝜶 𝟐 , 𝜮 𝟐 , 𝑺𝑯 𝟐
+> unproject
+> Splatting MSE (Optional) Ranking Resample Strategy Ground truth
+
+(a) (b) (c) (d) (e) 
+
+Fig. 3: Architecture diagram. (a) MoonGS utilizes DUSt3R to extract multi-level robust depth features. (b) Multi-level features are fused and refined through 2D U-Net. (c) The model constructs a cost volume using the extracted features and optionally integrates semantic embeddings as inputs for prediction to obtain depth maps and Gaussian parameters. (d) It then unprojects the Gaussian parameters into space, synthesizes novel views using Gaussian splatting, and employs MSE for supervised learning, with an optional ranking loss. (e) Finally, the model implements a resampling strategy to select additional positional images that can improve rendering quality as inputs. Dashed arrows denote optional components. 
+
+B. Feed-forward Radiance Fields 
+
+To enable real-time reconstruction, researchers have ex-plored feed-forward radiance field methods that reconstruct a scene from a single forward pass. PixelNeRF [11] uses one or few input images to form an entire scene, integrating pixel features into rendering and showing that radiance fields can be learned from sparse views. Du et al. [36] adopt epipolar sam-pling and a lighter renderer for better results, and MuRF [10] constructs a cone volume of the target view, achieving strong performance via convolutional neural networks. However, all these NeRF-based methods rely on ray sampling, resulting in slower performance. 3D Gaussian Splatting (3DGS) [9] is significantly faster in both training and rendering. Consequently, many sparse-view reconstruction methods have adopted 3DGS. For instance, Splatter Image [37] employs U-Net to directly infer pixel-wise Gaussian parameters from a single view for object-level reconstruction, while PixelSplat [1] learns epipolar attention from two related views to predict depth distributions. However, ambiguous feature-to-depth mappings can misposition Gaus-sians and blur the final images. MVSplat [2] constructs a cost volume for more precise geometry, and MVSGaussian [38] similarly uses cost volumes for depth estimation. Yet, end-to-end MVS approaches struggle with limited overlap in planetary data and are not tailored to these scenarios. In contrast, MoonGS leverages a vision foundation model for depth-related features, inferring reliable depth even with sparse observations. It also uses rich lunar semantics as prior knowledge and employs a heuristic resampling strategy. These techniques yield superior reconstruction results for lunar scenes. 
+
+C. Key Components of Feed-forward 3DGS 
+
+In feed-forward 3DGS models, depth estimation is the most critical component, as it determines the positions of the Gaussians, which are more difficult to optimize compared with other parameters. Certain carefully designed approaches help obtain reliable depth estimates. Notably, pixelSplat [1] employs a combination of DINOv2 [39] and an epipolar transformer for feature extraction, whereas MVSplat [2] uses UniMatch’s [40] CNN and transformer modules to derive features. These components share the characteristic of first using the same encoder to acquire image encodings, followed by modules with cross-attention to decode and obtain cross-view features. However, DINOv2 is independent of depth estimation. UniMatch relies on matching between two input images to estimate depth, making it less robust in face of occlusions or other challenging scenarios. In contrast, vision foundation models such as DUSt3R [41] and VGGT [42] are pretrained on large-scale datasets and improve overall depth consistency and accuracy by generating pointmaps for each view. The features extracted from the foundational model fur-ther enhance performance in depth-related downstream tasks, such as image matching [43]. III. M ETHODS 
+
+We propose MoonGS, a Gaussian-based sparse view scene reconstruction method, whose architecture is shown in Fig.3. Given a pair of images along with their corresponding camera parameters and semantic images, our approach infers the Gaussian parameters representing the entire scene using a feed-forward procedure. With this scene representation, we can render images from viewpoints that are not observed directly. The key to our approach lies in how we infer more reliable depth, enabling precise determination of the Gaussian primitives’ positions, even in non-overlapping areas. Subsec-tion III-A clarifies our motivations and provides essential preliminaries on 3DGS [9]. Subsection III-B introduces the problem definition. Subsection III-C explains how we use a vision foundation model to extract robust depth features, which is crucial for reconstructing a scene from sparse images. Subsection III-D describes how we incorporate rich lunar 4
+
+semantic information to enhance the model’s performance. Subsection III-E designs a heuristic resampling strategy that can effectively guide the resampling positions of lunar surface operational equipment, thereby improving the quality of scene reconstruction. 
+
+A. Motivations and Preliminaries 
+
+Motivations. As lunar exploration missions progress, integrat-ing 3DGS for scene reconstruction plays a crucial role in augmenting robotic perception. Due to the inherently sparse nature of lunar data, applying standard methods often leads to artifacts or even reconstruction failures. Although several 3DGS-based methods exist for sparse-view reconstruction, they still face various difficulties. As illustrated in Fig.4, data collected by a forward-moving lunar rover encounter multiple issues: invalid epipolar constraints in non-overlapping regions, insufficient observations for regions far from the camera, and ambiguous depth in low texture sky areas, among others. Although state-of-the-art approaches—such as pixelSplat [1] and MVSplat [2]—mitigate these challenges only partially, key problems remain unsolved. In this work, we aim to address these limitations more effectively. 
+
+Preliminaries. 3DGS is a novel explicit scene representation method that employs anisotropic Gaussian primitives to model entire scenes. Each Gaussian primitive G is defined by a position μ ∈ R3, a covariance matrix Σ, a color c ∈ R3, and an opacity α ∈ R. The covariance matrix is parameterized by a scaling vector S ∈ R3 and a rotation matrix R ∈ R3×3 as follows: 
+
+Σ = R S S T RT , (1) where S and R, respectively control the scale and orientation of the Gaussian. Conceptually, the value of the Gaussian primitive at each position x can be expressed as: 
+
+g(x) = exp 
+
+
+
+− 12 (x − μ)T Σ−1 (x − μ)
+
+
+
+. (2) 3DGS [9] provides a highly efficient differentiable renderer, where the final color is computed through volumetric accu-mulation of opacity α as follows: 
+
+Color = X
+
+> i∈N
+
+ci αi g(xi)
+
+> i−1
+
+Y
+
+> j=1
+
+
+
+1 − αj g(xj )
+
+
+
+, (3) where N denotes the number of accumulated Gaussian primi-tives. Unlike NeRFs [8], [32], which requires sampling along each ray, 3DGS supports efficient tile-based rendering, al-lowing the entire process to be parallelized on the GPU. In other words, our goal is to reconstruct an entire scene in a Gaussian representation, which entails estimating the full set of parameters for each Gaussian primitive. 
+
+B. Problem Definition 
+
+Given a pair of images I = {I1, I 2} ∈ RH×W ×3 and their associated camera parameters P = {P1, P 2}, where 
+
+Pi = Ki[Ri, t i], K represents the camera intrinsic matrix, 
+
+R represents the rotation matrix, and t represents the trans-lation vector. Our goal is to design a learnable model, with Ref. 1 Ref. 2 
+
+Fig. 4: Epipolar-line visualization of three reconstruction challenges. Three types of epipolar lines illustrate difficul-ties encountered during reconstruction in lunar environments. Ref.1 and Ref.2 depict two viewpoints of the same lunar scene. Colored points in Ref.1 correspond to regions indicated by matching-colored epipolar lines in Ref.2. The blue lines denote regions with insufficient viewpoint overlap, resulting in invalid epipolar constraints. The red lines indicate weakly textured background regions, where epipolar constraints are prone to errors. The green lines mark areas with limited ob-servations at a distance, making high-fidelity texture prediction challenging. input consisting of image pairs, camera parameters, and other available information, and outputs representing the Gaussian parameters of the entire scene. This process can be formulated as:           
+
+> fθtrain ,θ fixed ({Ii, P i, C i}i=1 ,2) = {(μj,Σj, c j, α j)}H×W×2
+> j=1 ,(4)
+
+where fθ represents a feed-forward model. θtrain denotes the learnable parameters in the model and θfixed indicates the frozen parameters. C represents the prior information input to the model, such as semantic information. This model can ultimately obtain pixel-aligned Gaussian parameters, including position μ, opacity α, covariance Σ, and color c. Once the scene representation parameters are obtained, rendering from any viewpoint can be achieved using splatting [9]. The most critical factor in this process is the prediction of the Gaussian position, which is essential for effective training and high-quality rendering. The position parameters are typically obtained by predicting depth and unprojecting it using camera parameters. Therefore, the key issue of position prediction translates to the accuracy of depth prediction. Our method’s solution lies in leveraging the vision foundation model to enhance depth predictability in lunar scenes. Precisely, the vision foundation model can provide robust depth features that can be used for better depth appraisal and form the basis for estimating other Gaussian parameters, establishing robust geometric priors even in non-overlapping regions. 
+
+C. Robust Depth Features and Cost Volume 
+
+Our method focuses on how to obtain effective depth features to precisely locate Gaussian primitives. As a vision foundation model, DUSt3R [41] is designed to extract cross-view features from a pair of input images. These features are subsequently decoded to generate a depth-related pointmap. Since DUSt3R has been pre-trained on a large amount of data, the features it extracts perform well in downstream tasks. 5
+
+Therefore, we treat the features extracted from DUSt3R as robust depth features, which constitute a core component of our approach. 
+
+Robust depth features extraction. As shown in Fig.3, the vision foundation model (specifically DUSt3R) consists of two identical branches with the same structure, including an image encoder and decoder. Each branch only inputs one of the paired images. The pair of images are first encoded in a Siamese manner by the same weight-sharing ViT encoder [44], resulting in two token representations, F1 and F2:
+
+F1 = Encoder (I1), F 2 = Encoder (I2). (5) The decoder then performs joint reasoning on these inter-mediate features. Through self-attention and cross-attention mechanisms, the decoder effectively processes the view-related information embedded in these features. Specifically, the self-attention module enables the features to focus on other impor-tant regions within the current view, while the cross-attention module allows the features to attend to relevant regions across different views. This stacked structure, in which information is continuously exchanged, ensures that both branches acquire cross-view features after decoding. This process is a common technique in many advanced architectures and is crucial for reconstructing an entire scene using image pairs. After decod-ing, we obtain robust depth features provided by DUSt3R: 
+
+G1 
+
+> i
+
+= DecoderBlock 1 
+
+> i
+
+(G1
+
+> i−1
+
+, G 2
+
+> i−1
+
+),G2 
+
+> i
+
+= DecoderBlock 2 
+
+> i
+
+(G2
+
+> i−1
+
+, G 1
+
+> i−1
+
+), (6) for i = 1 , . . . , B for a decoder with B blocks and initialized with encoder tokens G10 := F 1 and G20 := F 2. Here, 
+
+DecoderBlock vi (G1
+
+> i−1
+
+, G 2
+
+> i−1
+
+) denotes the i-th block in branch 
+
+v ∈ { 1, 2}, G1 
+
+> i−1
+
+and G2 
+
+> i−1
+
+are the input tokens, with G2
+
+> i−1
+
+the tokens from the other branch. It should be noted that the parameters of DUSt3R are frozen. 
+
+Multi-level features fusion and refinement. By processing the features outputted by the multiple decoder blocks, multi-level features are obtained, which are subsequently fused to serve as inputs for downstream tasks. To ensure dimensional consistency, we select the features from the last two scales for fusion within our model. Additionally, we find that utilizing refined features enhances performance. Therefore, we employ a lightweight 2D U-Net [45], [46] to refine the obtained features and incorporate them as residuals into the original feature set. We obtain the refined feature as: 
+
+˜G = G + ∆ G, (7) where G is the original feature and ∆G is the residual output of the network. At this point, the obtained features ˜G can be utilized for the subsequent prediction phase. For simplicity, the feature ˜G is replaced by G in the following. 
+
+Cost volume construction and Gaussian parameters pre-diction. It is an intuitive approach to directly use the decoded features to predict the parameters of Gaussian primitives aligned with the pixels. However, the implicit camera repre-sentation adopted by DUSt3R limits the implementation of this method, which cannot be directly integrated into the existing training pipeline. Additionally, the depth information provided by DUSt3R lacks scale information and is not sufficiently ac-curate. To address these limitations, we employ the same cost volume construction method as MVSplat [2]. The cost volume effectively reflects the degree of matching between features and provides a smoother depth representation [40], [47]. This also enables us to convert the implicit camera model into an explicit model and learn depth in a unified scale space. Specifi-cally, given the feature G ∈ R H    
+
+> 4×W
+> 4×C
+
+and the corresponding camera pose P ∈ R4×4, MVS approach is used to sample 
+
+R different depth candidates V = {d1, d 2, . . . , d R} from 
+
+[dnear , d f ar ]. Then, the matching feature Gij dk ∈ R H   
+
+> 4×W
+> 4×C
+
+is sampled by warping the j-th view feature Gj to the i-th view according to depth dk, which is denoted as: 
+
+Gij dk = W arp (Gj , P i, P j , d k), (8) where W arp is the warping and sampling operation. The matching features from other views are utilized to generate the cost volume feature Gic = {Gid1 , G id2 , . . . , G idR }.It is computed as 
+
+Gidk = 1
+
+N − 1
+
+> N
+
+X 
+
+> j=1 , j ̸=i
+
+Gij dk · Gi
+
+√C . (9) The depth of the i-th view Di ∈ R H   
+
+> 4×W
+> 4
+
+is computed as 
+
+Di = softmax  Gic
+
+ V. (10) The depth will be unprojected to determine the position of the Gaussian parameters. Similar to MVSplat, we use the cost volume Gic in conjunction with the original features G when predicting Gaussian parameters, except for their position. The key difference lies in how our features are obtained, as they are derived from the vision foundation model. This incorporation significantly enhances the performance of our model compared to current methods. 
+
+D. Integrating Semantics for Enhanced Performance 
+
+The lunar scenes encompass rich semantic information, which can originate from expert annotations or be obtained through segmentation models such as SAM [48]. Semantic information serves as a highly effective prior in many tasks [49], [50], inspiring us to design methods that incorporate se-mantics to improve model performance in lunar reconstruction tasks. 
+
+Semantic fusion. Compared to indoor scenes, the semantics of objects in lunar scenes better reflect their characteristics. For instance, different categories of cups typically exhibit markedly distinct texture characteristics. Conversely, rocks of various shapes often possess similar texture features, and rock surfaces differ significantly from those of lunar regolith, which is shown in Fig.5. Semantic information must also account for certain special cases, such as scenarios where the texture differences between lunar regolith and impact craters are minimal. This inspires us to incorporate semantic information as a prior into the model to improve the accuracy of predicting Gaussian parameters. Specifically, we concatenate the one-hot encoded semantic information with the original features to predict the depth map and Gaussian parameters. When 6
+
+semantics are unreliable or absent, we gate out the fusion branch and use only appearance- and geometry-based features. Rock (from view 1) Mountain Lunar regolith Rock (from view 2) 
+
+Fig. 5: Color distribution histograms for semantic cate-gories. The color histograms demonstrate significant differ-ences in color distribution between specific semantic cate-gories, while the color distributions for the same semantic category show minimal variation. These patterns demonstrate that regions belonging to different semantic categories possess distinct color characteristics, whereas regions within the same semantic category exhibit high similarity. This property allows semantic information to serve as an effective feature for input. 
+
+Semantic ranking loss. In extremely distant regions such as sky and lunar mountains, standard depth estimators often produce imprecise predictions and rarely refine them [51], [52]. Rather than imposing hard background priors like setting background splats to zero opacity or clamping depth to a fixed far plane, which can erase genuine far-range structure and introduce scale bias, we employ a semantic ranking loss inspired by DIW-style supervision [53], [54] to regularize low-texture regions. Specifically, we sample from two categories 
+
+c1 and c2 whose depth relationship is known. Assuming 
+
+c1 is nearer than c2, two pairs of points [p1,c 1 , p 2,c 2 ] and 
+
+[p1,c 2 , p 2,c 2 ] can be obtained. We treat the point closer to the camera as a reference depth point, while the more distant point is used for depth optimization.               
+
+> LRanking (p1−p2) =
+> (
+> log (1 + exp ( p1−p2)) ,p1∈c1,
+> (p1−p2)2,p1∈c2.(11)
+
+The pairwise ranking loss, where p is defined in the loga-rithmic depth space, ensures that background regions remain farther away than the foreground and that depth transitions among background regions become smoother. The semantic ranking loss enforces ordinal relations across regions rather than metric depth, so it does not require specifying an absolute far distance. It applies when coarse semantics are available and can be instantiated on any pair of regions with a known farther–nearer relation, not only sky and terrain. The term imposes negligible computational overhead and includes a fallback mechanism that disables the loss when semantics are unavailable or of low quality. 14 310 7
+
+Fig. 6: Gaussian coverage statistics. First, we count the number of valid pixels occupied by each Gaussian. Then, for each pixel, we sum the occupied pixel counts from all Gaussians that cover it. The entire process runs in parallel on the GPU. 
+
+E. Heuristic Resampling Strategy 
+
+Lunar scenes exhibit a wide depth range and rover motion is predominantly forward. Mission-imposed resource constraints severely limit both the number and diversity of viewpoints, which leaves many surfaces sparsely observed. As a result, distant regions or areas visible from only one viewpoint are hard to reconstruct in detail under a two-view setting. Motivated by these constraints, we introduce a self-supervised heuristic resampling strategy to improve novel-view quality. After splatting, we compute two view-level statistics for a candidate view as illustrated in Fig.6. Let the image lattice be 
+
+Ω = {1, . . . , W } × { 1, . . . , H } and S = {1, . . . , |S|} index splats. Rasterization yields each footprint M (v) 
+
+> i
+
+⊆ Ω and its covered-pixel count 
+
+A(v) 
+
+> i
+
+= M (v) 
+
+> i
+
+, i ∈ S .
+
+We then accumulate, for every pixel x ∈ Ω, the total footprint size of splats that cover it: 
+
+T (v)(x) = X
+
+> i∈S
+
+A(v) 
+
+> i
+
+1
+
+h
+
+x ∈ M (v)
+
+> i
+
+i
+
+.
+
+Normalizing these totals over the image gives a probability function 
+
+p(v)(x) = T (v)(x)
+
+P 
+
+> y∈Ω
+
+T (v)(y) ,
+
+and the view score is the entropy 
+
+H(v) = − X
+
+> x∈Ω
+
+p(v)(x) log p(v)(x).
+
+Intuitively, H(v) is large when coverage is spatially dispersed and many footprints overlap, which signals under-coverage or ambiguity in a sparse two-view setting. We therefore use H(v)
+
+as a prioritization score and select candidate locations with the highest values during resampling. This procedure is self-supervised and does not require ground-truth images. Owing to its parallel implementation, the additional computational overhead is negligible. 7
+
+IV. E XPERIMENTS 
+
+In this section, we provide a comprehensive description of the data format and fundamental experimental configurations used in our study, including datasets, evaluation metrics, and implementation details, which are discussed in subsec-tions IV-A and IV-B. These specific details help us to better understand the working parts of the method and allow repro-ducing the entire experiment. We compared and analyzed the performance of our proposed method against several baseline approaches on lunar datasets, as detailed in subsection IV-C, to illustrate the improvement of our method over state-of-the-art techniques. Additionally, we conducted ablation experiments to validate the effectiveness of each component within the overall framework, as described in subsection IV-D, and further demonstrated the potential to extend our framework to advanced architectures like VGGT [42]. 
+
+A. Datasets 
+
+We used the LuSNAR [55] lunar sequence dataset that is compatible with our training pipeline. We also created a MoonBlender dataset with weak textures and more complex rock distributions, and we added qualitative evaluations on Chang’e mission imagery to verify effectiveness on real-world data. 
+
+LuSNAR is a multi-scene multi-label lunar benchmark dataset built for lunar exploration missions, using Unreal Engine 4 [56] as a simulator for its project. And for our architecture, it has serialized data, and each image contains real semantic labels and camera poses, which can provide the most basic guarantee for our task. In addition, LuSNAR has multiple scenes, allowing us to verify our algorithm in different scenes. It includes five semantic categories, namely sky, lunar regolith, rocks, impact craters, and mountains. The semantic pixel ratio is shown in Fig.7. The most important visual sense is that the rocks contained are relatively large irregular rocks that are relatively few. The sky belongs to the weak texture area and has a large pixel ratio. 
+
+MoonBlender is a lunar dataset we synthesized using Blender [57], which not only extends the LuSNAR dataset but also serves to validate the problem of weak texture, sparse view reconstruction. Real captures can produce frames with a large sky background. Panorama sweep patterns, narrow field of view optics, and operations constrained by illumination and thermal windows limit pointing range and increase the inci-dence of large sky background frames [58]. To quantify how often this occurs, we randomly sampled 96 images from the CE4 TCAM dataset, which contains Terrain Camera images captured by the Chang’e 4 lander during surface operations. 43 images had no sky background, and 53 images contained sky background. Among the images with sky background, the mean background pixel ratio was 42.11% as shown in Fig.7. These measurements show that frames dominated by sky are common in practice and that the background can occupy a large portion of the image when it occurs. As mentioned above when analyzing the characteristics of LuSNAR data, MoonBlender uses more rocks to simulate a more complex ground environment. At the same time, the sky pixels have a Lunar regolith, 68.70% Sky, 24.30% Rock, 2.50% Mountain, 3.20% Impact crater, 1.30% Lunar regolith, 59.90% Sky, 39.40% Rock, 0.70%  
+
+> LuSNAR MoonBlender
+> Others, 57.89% Sky, 42.11%
+> Chang’e Real (Chang’e)
+
+Fig. 7: Semantic pixel distributions and real-data evidence. 
+
+We show LuSNAR and MoonBlender distributions, the sky versus other pixel ratio for Chang’e imagery, and a real Chang’e example. We randomly sampled 96 CE4 TCAM images. 53 images had sky background, and the reported ratios are computed over this subset. larger proportion and a weaker texture (the value of the pixels is close to 0). This setting helps to evaluate the robustness of different sparse view reconstruction methods for the lunar environment. This is reasonable because the background of the moon has also weak texture when the forward-moving spacecraft collects data in the real environment. Slightly different from LuSNAR, we only have three semantic labels in this dataset: sky, lunar regolith, and rock. Our focus is on using this dataset to validate the effect of weak texture on the model. We referred to a known method for building planetary datasets [59] and selected five traversable routes. We rendered 1500 images with a resolution of 1200 ×1200 along the virtual cameras set up on these routes. To simulate illumination changes that affect reconstruction, we vary the Sun azimuth and elevation across the dataset. Similarly, this ensures that our data sequence conforms to the training pipeline. Due to Blender’s rich interface and excellent graphics processing capability, we can directly obtain metadata such as camera internal and external parameters and semantic segmentation labels of all objects without manual annotation [60]. Overall, we used the last 4 of the 9 scenes in LuSNAR as training and validation data. At the same time, all datasets of MoonBlender were used as auxiliary validation. Following the same data settings as previous studies, we trained and evalu-ated all models on two datasets on images with a resolution of 256 ×256. In addition, we conducted qualitative validation on Chang’e mission imagery to assess performance on real data. Images were grouped by acquisition time, camera poses were estimated with COLMAP for each group, and final view pairs were selected using the same baseline-filtering strategy as pixelSplat. 8
+
+TABLE I: Quantitative comparisons. We evaluated our method by rendering three novel view images from four reference viewpoints for each scene. The performance was determined by averaging across all scenes. The inference time includes both scene encoding and rendering time, tested on a single Q6000 GPU. The number of trainable parameters was computed with pytorch-lightning [61]. 
+
+Methods LuSNAR [55] MoonBlender Inference Time Trainable Params PSNR ↑ SSIM ↑ LPIPS ↓ PSNR ↑ SSIM ↑ LPIPS ↓ (s) (M) Du et al. [36] 13.26 0.347 0.727 14.01 0.374 0.722 2.870 -MuRF [10] 14.32 0.283 0.443 14.88 0.287 0.441 - -pixelSplat [1] 18.89 0.525 0.360 25.26 0.689 0.166 0.483 118 MVSplat [2] 16.99 0.224 0.385 25.11 0.676 0.192 0.323 12.0 
+
+MoonGS(Ours) 23.80 0.816 0.134 26.08 0.721 0.139 0.200 18.1 
+
+Ref. Ours MVSplat [2] pixelSplat [1] Fig. 8: Qualitative results on real Chang’e imagery. Given reference image pairs (left column) to render an intermediate viewpoint at the interpolated camera pose. We show three groups (top to bottom) under distinct illumination conditions. MoonGS remains consistent with the input pairs and is more robust to lighting variation, producing fewer artifacts than pixelSplat and MVSplat. PixelSplat exhibits reconstruction failures and noticeable artifacts in challenging lighting, and MVSplat is less robust to illumination changes. Red boxes indicate regions of interest for comparison, and arrows in the reference pair mark the locations of these regions. 
+
+B. Experimental Settings 
+
+Comparison methods. We compared methods for feed-forward synthesis of novel views from sparse views, including NeRF and 3DGS. Du et al. [36] is a light field-based rendering method that can aggregate epipolar features from the Trans-former structure. MuRF [10] is a sparse view reconstruction method based on NeRF. PixelSplat [1] and MVSplat [2] are advanced feed-forward methods based on 3DGS. Our method is mainly improved from MVSplat. These methods were compared qualitatively and quantitatively with ours. 
+
+Evaluation metrics and training losses. For image rendering quality, we used standard image quality metrics to quantita-tively evaluate and compare our method with other methods: pixel-level PSNR, patch-level SSIM [62], and feature-level LPIPS [63]. Since our training was trained and evaluated through the standard explicit camera model training pipeline, we could directly compare with the real ground truth. In addition, to more clearly illustrate the change in the overall resource consumption of the model after using the vision foundation model, we evaluated our resource consumption such as the number of trainable parameters and inference time to illustrate the increased resource consumption compared with other models. In addition, we also qualitatively evaluated the accuracy of the depth estimation of the model. It is common and effective to use MSE and LPIPS loss functions with weights 1 and 0.05, respectively during the training stage. Ranking loss with weight 0.01 was used in our study to regularize weakly textured regions. In general, the loss can be described by the following formula: 
+
+Ltotal = LMSE + 0 .05 × L LPIPS + 0 .01 × L Ranking . (12) 
+
+Hardware and implementation details. All timings were measured on NVIDIA Quadro RTX 6000 (Q6000) GPUs. Training used 4 GPUs with a global batch size of 16 (4 images per GPU) at an image resolution of 256 × 256 . We trained for 30,000 steps. We then fine-tuned for 500 steps with the ranking loss enabled to better regularize weak textured regions. Evaluation and inference were performed on a single Q6000. Unless otherwise stated, inference timings correspond to a batch size of 1. We optimized all models with Adam using a learning rate of 1 × 10 −4.
+
+C. Comparative Results 
+
+Image quality comparison. We report the quantitative re-sults of our method and the baselines on the LuSNAR and MoonBlender datasets in Tab. I. The baseline results were obtained by retraining the original implementations on these datasets. On the LuSNAR dataset, our method demonstrated ability to recover more realistic ground textures. Specifically, while the highest PSNR among the other methods was 18.89 dB, our approach achieved 23.80 dB, indicating a substan-tial improvement. Moreover, our method outperformed the baselines in terms of SSIM and LPIPS. On the MoonBlender dataset, our method improved the best PSNR (25.26 dB) from the pixelSplat baseline to 26.08 dB, while also outperforming 9
+
+Ref. Target View Ours Pixelsplat [1] MVSplat [2] Fig. 9: Qualitative comparison of novel views on the LuSNAR (top) and MoonBlender (bottom) test sets. Compared to the baseline, our method is able to generate more accurate and perceptually attractive images, especially for lunar regolith close to the camera. existing baselines on other metrics. Although this dataset is not specifically designed to evaluate reconstruction quality due to its relatively simple visual and environmental settings, our results suggest that the underlying DUSt3R [41] vision founda-tion model enhances the robustness of our approach, enabling it to handle scenes with varying complexity. Overall, our approach combines the structure extraction capability of the vision foundation model DUSt3R and the texture prediction capability of MVSplat to obtain realistic Lunar landscapes. Qualitative comparisons in Fig.9 further confirm that our method produced fewer artifacts than the best-performing baseline, pixelSplat, especially under more complex ground conditions. Additionally, when the rover moves forward on the lunar surface, non-overlapping regions near the camera exhibited fewer artifacts in our reconstruction. Notably, while pixelSplat did not perform as well as MVSplat in indoor sce-narios, it remained highly competitive in lunar environments. Our method achieved superior reconstruction in challenging areas primarily because the vision foundation model provides more effective depth-related features, laying a stronger ground-work for subsequent depth optimization. Quantitative analyses in Fig.11, reveal that our unprojection-based depth estimations were more reliable compared to other approaches. In contrast, pixelSplat produced highly noisy depth estimates in low-texture regions, and MVSplat often suffered from projection errors when trained on the sparse data of MoonBlender, 10 (a) (b) (c) (d) 
+
+Ref. Position 1 Position 2 Position 3 Position 4
+
+Fig. 10: Comparison of rendering results with and without heuristic resampling strategy. We present two groups of rendering results across four viewpoints: (a, c) with the heuristic resampling strategy, and (b, d) without the heuristic resampling strategy. The resampled region ( Position 2) is the selected resampling location. The results demonstrate that heuristic resampling effectively reduces artifacts and produces a more realistic textural appearance. resulting in Gaussian distributions collapsing to the same depth and leading to incorrect depth estimates. By leveraging robust depth features from the vision foundation model, our method generated more accurate depth estimates during subsequent optimization steps. The depth comparison also demonstrated that our depth maps are not only more reliable but also smoother. Furthermore, incorporating a semantic-based depth ranking loss allowed us to better optimize weakly textured sky regions, enhancing performance in these challenging areas. We see in Fig.11 that pixelSplat without regularization produced some incorrect depth estimates in weakly textured sky. This is mainly because the photometric loss is difficult to use for supervising the depth in weakly textured areas. We will continue to analyze this in ablation experiments. Qualitative results on real Chang’e mission imagery further supported these findings, as shown in Fig. 8. We evaluated three distinct illumination conditions and ran all methods on the same image pairs. PixelSplat frequently exhibited reconstruction failures under harsh lighting and produced pronounced artifacts near high-contrast edges. MVSplat was not robust to illumination shifts, and its renderings deviated from the reference views with noticeable texture washout and contrast drift. In contrast, our method adhered closely to the input image pair and showed no reconstruction failures across the tested illumination conditions. This demonstrated applica-bility to real lunar data and robustness to lighting variation. When illumination differed markedly between the two inputs, a visible boundary could appear. Even so, reconstructions from our method remained closer to the references and preserved fine-grained details. 
+
+Resource consumption comparison. To illustrate the advan-tages of our approach in terms of resource consumption, we examined several critical aspects. First, regarding inference time, as shown in Tab. I, methods based on 3DGS exhibited a 11    
+
+> Ref. Ours MVSplat [2] pixelSplat [1]
+
+Fig. 11: Qualitative comparison of depth maps on the MoonBlender dataset. This figure compares depth maps produced by several models on the MoonBlender dataset. Our proposed method (MoonGS) generates both accurate and smoothly varying depth maps. In contrast, MVSplat converges to erroneous depths, and although pixelSplat produces rela-tively accurate depths, it exhibits noticeable artifacts—such as non-smooth transitions (indicated by the arrows). These findings highlight the importance of robust depth estimation techniques for lunar scene reconstruction. significant lead over NeRF-based approaches, and our method outperformed MVSplat—the closest competitor in terms of inference speed—by at least 0.1 seconds. Second, in terms of trainable parameters, pixelSplat contains a substantial number of parameters due to its complex epipolar attention mecha-nism, while our method only adds a relatively modest number of parameters (around 6M) to MVSplat by incorporating a multi-scale feature fusion U-Net and a semantic fusion module. Nevertheless, we observed a marked performance improvement over MVSplat. Additionally, both modules em-ployed lightweight 2D convolution structures, which enabled superior performance even with fewer overall parameters. This indicates that the performance gains primarily stem from more effective feature representations rather than merely increasing the model size. We kept the DUSt3R backbone frozen and trained only the downstream modules. This reduced the num-ber of trainable parameters and lowered training cost while yielding competitive results in our setting. The choice was consistent with prior work that leveraged frozen visual back-bones in low-data regimes [64]. Freezing was also commonly used to mitigate overfitting when data were limited. Finally, with respect to training steps, our method required only around 30,000 steps yet still achieved better results than the baseline methods, underscoring its lower resource consumption. Overall, considering inference time, the number of trainable parameters, and the required training steps, our method demonstrated clear advantages in resource consump-tion over the baseline methods. 
+
+Image quality comparison with heuristic resampling strat-egy. The vision foundation model and semantic ranking loss effectively tackle two key challenges in lunar surface recon-struction: invalid epipolar constraints and unreliable depth estimation in areas with weak texture. The heuristic resampling method aims to address the third problem, the lack of long-distance observations during the forward sampling process of TABLE II: Applicability analysis on the LuSNAR dataset. 
+
+Evaluated at a resolution of 224 × 224 , the results show that our method effectively capitalizes on the VGGT backbone to outperform baselines, verifying its robust applicability and capacity to evolve with advanced foundation models.                   
+
+> Methods PSNR ↑SSIM ↑LPIPS ↓
+> pixelSplat [1] 19.22 0.632 0.355 MVSplat [2] 17.80 0.542 0.377 MoonGS + DUSt3R [41] 23.91 0.823 0.130 MoonGS + VGGT [42] 24.04 0.830 0.128
+
+the lunar rover. Fig.10 illustrates the rendered images on the LuSNAR dataset both with and without heuristic resampling. We computed statistics in parallel during the rendering process and used a heuristic approach to select the resampled locations. From a visual perspective, incorporating heuristic resampling lead to significantly richer detail and better outcomes. Com-pared with using image pairs, resampling can alleviate the problem of data sparsity from the data level. Qualitative observations further indicated that these improvements became more pronounced in areas closer to the position of the second reference image. Throughout the process, we did not use the true value, but adopted a self-supervised approach for guidance. This reflected the speed and quality advantages of our method. 
+
+Applicability to advanced backbones. To demonstrate that our framework is backbone-agnostic and can directly ben-efit from the evolution of vision foundation models, we replaced the default feature extractor with the state-of-the-art VGGT [42]. Rather than a mere compatibility check, this experiment validates the broad applicability of our method. By integrating the stronger priors from VGGT while keeping the foundation model frozen (maintaining only 50M trainable parameters), our framework achieves immediate performance gains (Tab. II). Fig. 12 further illustrates that the VGGT-equipped model significantly outperforms baselines without requiring auxiliary modules. This confirms that MoonGS is not limited to a specific encoder but serves as a versatile platform capable of evolving with future advancements in feature representation.    
+
+> Ref. Ours pixelSplat [1] MVSplat [2]
+
+Fig. 12: Qualitative comparison on the LUSNAR dataset. 
+
+We evaluate the effectiveness of integrating the VGGT founda-tion model within our proposed framework. In terms of visual quality, our method outperforms the baseline model. 
+
+D. Ablation Results 
+
+In this subsection, we systematically examine the effec-tiveness of our proposed method from several key perspec-tives. First, we analyzed the benefits of multi-level feature 12 MoonGS w/o ranking MoonGS w/ ranking pixelSplat w/o ranking pixelSplat w/ ranking Sample 1 Sample 2 Sample 3 Sample 4 Sample 5 Sample 6 
+
+Fig. 13: Impact of ranking loss on depth estimation in weakly textured background areas. The results show the effect of ranking loss on improving depth estimation in regions with weak texture. In the absence of ranking loss, depth estimates in these areas are often imprecise due to the lack of texture. However, by introducing ranking loss, the model is able to refine the depth predictions in these challenging regions, leading to more reliable results. Moreover, integrating ranking loss with the pixelSplat model yields further improvements in depth accuracy. These results underscore the value of ranking loss in addressing depth estimation issues in weakly textured regions. fusion combined with U-Net, which plays a critical role in efficient information extraction and enhancement. Next, we validated the contribution of integrating semantic informa-tion. Additionally, we evaluated the semantic ranking loss, demonstrating its effectiveness in further regularizing depth predictions. Our experiments also confirmed that the heuristic resampling strategy significantly enhanced rendering quality. Finally, we integrated our proposed post-processing module into the pixelSplat approach to demonstrate the effectiveness and broader applicability of our method. 
+
+Importance of multi-level feature fusion and U-Net. As shown in Tab. III, incorporating 2D U-Net consistently yielded notable benefits across different datasets: it provided a PSNR improvement of about 0.5 dB on the LuSNAR dataset and of nearly 1 dB on the MoonBlender dataset. This finding indicates that refining features with U-Net effectively enhances rendering quality. To visualize this effectiveness, we utilized cosine similarity to examine the relationships between points and pixels. As illustrated in Fig.14, we selected one pixel point each in the sky and ground semantic regions to assess simi-larity across the entire feature map. In the LuSNAR dataset, before any feature fusion, all pixels exhibited highly similar features. After applying multi-level feature fusion, features #1    
+
+> #2
+> Ref. w/o fusion w/o U-Net base
+
+Fig. 14: Visualization of features under different ablation settings. The features extracted by the visual foundation model and their corresponding similarity maps in different ablation settings: w/o fusion, w/o U-Net, and base. Two points are selected (#1 in the sky region and #2 on the lunar regolith), and global cosine similarity is computed to assess feature compactness. The results demonstrate that, after full module processing, the features become more coherent and compact. belonging to the same category showed greater similarity and clustered in a tighter region. Further refining the features 13 
+
+TABLE III: Ablation Studies. This table summarizes the results of removing semantic fusion and the 2D U-Net from our pipeline. Comparing the performance with and without these components highlights their essential role in producing high-quality novel view synthesis.                          
+
+> Methods PSNR ↑SSIM ↑LPIPS ↓
+> LuSNAR [55] MoonGS (Full) 23.80 0.816 0.134
+> w/o U-Net 23.29 0.786 0.137 w/o Semantic Fusion 23.02 0.781 0.141
+> MoonBlender
+> MoonGS (Full) 26.08 0.721 0.139
+> w/o U-Net 25.14 0.687 0.162 w/o Semantic Fusion 25.90 0.719 0.140
+
+with U-Net made the distribution smoother and concentrated similar features into smaller areas. These observations suggest that multi-level feature fusion produces tighter representations, serving as advantageous priors for the subsequent cost volume construction and feature matching. 
+
+Importance of semantic fusion. As shown in Tab. III, in-troducing semantic information provided certain enhancement in rendering quality: approximately 0.2 dB improvement on the MoonBlender dataset and about 0.8 dB on the LuSNAR dataset. We believe that the smaller improvement on Moon-Blender is primarily due to the lower number of seman-tic categories. Nevertheless, incorporating semantic features still improved the model’s performance on various quality metrics. On the one hand, adding semantic information in-creased the network’s learnable parameters, enabling a more thorough mapping from pixels to Gaussian distributions. On the other hand, semantics encouraged different categories to form tighter clusters in feature space, rather than overlapping. Given the strong correlation between semantics and texture, we visualized the predicted Gaussian color parameters in the LuSNAR dataset. Fig.15 indicates that, without semantic information, categories with similar colors (e.g., craters, lunar regolith, and rocks) became tangled in feature space. Adding semantic features, these categories’ features became separated, effectively mitigating the entanglement. When semantic masks were unreliable, the fusion branch was gated off. Under this setting, the model still surpassed the baselines on both datasets in PSNR/SSIM/LPIPS, as shown in Tab. I and Tab. III. This indicated that, when semantics were unavailable, our model remained applicable to lunar scenes. 
+
+Importance of ranking loss. We observed that in the pixel-Splat model, weakly textured regions tended to be represented as Gaussians with uncertain depth, whereas MVSplat failed to render such regions. This is mainly because weakly textured regions cannot be effectively handled by photometric loss alone. Two primary factors contribute to this issue. First, the strong fitting capability of Gaussians can lead the training to converge to local minima, such as MVSplat. Even if the Gaussian’s center position is slightly inaccurate, its anisotropy allows for a reasonably good fit, rendering photometric loss insufficient for proper training. Second, in weakly textured areas, visual geometric priors are less pronounced, causing w/o Semantic Ours 
+
+Fig. 15: t-SNE analysis of semantic fusion. The t-SNE analysis highlights the impact of semantic fusion on feature distribution. The left plot (w/o semantic) shows the feature distribution without semantic fusion, while the right plot (ours) presents the features after semantic fusion. Each color corresponds to a different semantic class. Incorporating se-mantic information leads to a more distinct separation between features. epipolar attention and MVS-based methods to easily fail. To address these challenges, we introduced a semantic-based ranking loss to regularize weakly textured regions, thereby achieving more meticulous and smoother depth estimates. We primarily validated this loss on the MoonBlender dataset, as it features notable weakly textured scenes compared to LuSNAR. As shown in Fig.11, pixelSplat yielded incorrect depth in the sky region, and MVSplat fell into local minima, producing erroneous depth estimates. Our method was able to produce good depth. Fig.13 shows that although our model could produce smooth depth on the ground before using ranking loss, there were still abnormal areas in the texture of the background sky. However, after regularization with ranking loss, this abnormality was resolved. Based on the foundation model and regularization loss, our method achieved better performance, which proves the effectiveness of our proposed method. Further, we evaluated the extensibility of this approach. We integrated the ranking loss into the pixelSplat method to regularize. As shown in Fig.13, the sky depth became noticeably more reliable after regularization, demonstrating that our method can be effectively incorporated into related approaches. This finding further underscores the extensibility and effectiveness of our proposed ranking loss function. When advanced models are used to reconstruct lunar scenes, our proposed semantic ranking loss is expected to extend to these models, thereby improving their effect. 
+
+Importance of heuristic resampling strategy. We evaluated the resampling positions under a fixed-interval resampling approach. Tab.IV indicated that, our resampling strategy out-performed the fixed-interval method on the LuSNAR video sequence dataset, achieving the highest PSNR of 24.09 dB. The principal advantages of our strategy include low reliance on prior information and high computational efficiency. No-tably, the high computational efficiency stems evaluation of resampling positions being performed in parallel with the rendering process. We also applied the resampled positions to pixelSplat. Tab. IV shows that our method improved the performance of 14 
+
+TABLE IV: Ablation study of the heuristic resampling strategy. This table shows the impact of our heuristic resam-pling strategy on the performance of various models, evaluated after synthesizing novel views for each model. Superscript values denote the specific resampling position. Overall, our strategy enhances the final rendering quality. 
+
+Methods PSNR ↑ SSIM ↑ LPIPS ↓
+
+MoonGS 
+
+w/o Resample 22.46 0.767 0.151 
+
+Fixed Resample 1 22.76 0.795 0.186 Fixed Resample 4 23.97 0.848 0.162 Fixed Resample 7 23.88 0.850 0.157 Fixed Resample 11 23.38 0.812 0.175 w/ Resample 24.09 0.854 0.155 
+
+pixelSplat [1] w/o Resample 17.92 0.481 0.383 w/ Resample 19.20 0.556 0.349 
+
+other models. This nicely illustrates that our method is both effective and scalable. V. D ISCUSSIONS 
+
+This section presents the scope of MoonGS, states its limitations, and outlines future work. First, several modules in our pipeline use semantics. When semantics are unavailable, we activate a fallback mechanism that preserves stability. In future work, we plan to reduce this dependence by incorporating priors that are easier to obtain. These include edge cues, regionness cues, uncertainty-aware pseudo-labels, and surface normals. Second, MoonGS focuses on pair-based feed-forward novel view synthesis. We specifically adopt this setting to address the challenge of sparse viewpoints in lunar exploration. However, the framework can be extended to incorporate three or more views, as the underlying vision foundation model supports multi-image inputs and the cost volume formulation gener-alizes to pairwise matching. In each forward pass the number of Gaussian primitives equals the number of input pixels, so the per-pass memory footprint depends on image resolution and per-primitive state rather than terrain size. Larger maps can be obtained by fusing outputs from multiple inferences of our model. For the fused maps, exploring hierarchical tiled representations and spatially adaptive splatting can improve memory efficiency and scalability, which we leave to future work. Third, although inference is fast, the network is not yet lightweight enough for constrained devices. We will explore model distillation, pruning, and quantization to obtain smaller models while preserving accuracy. Fourth, we keep the default backbone (DUSt3R) fixed during training. With limited lunar data, this choice improves stability and data efficiency. As larger and more diverse datasets become available, we plan to partially unfreeze the backbone and fine-tune selected layers to further improve adaptation. Fifth, as validated by the VGGT integration, our framework exhibits robust applicability to advanced backbone architec-tures. By incorporating stronger priors while freezing the foundation model, we ensure parameter efficiency without sacrificing performance. Future work will leverage this adapt-able design to integrate next-generation foundation models, a strategy that guarantees our method continues to capitalize on the rapid advancements in underlying feature representations. Finally, the current pipeline assumes known relative camera poses as input. In future work, we will investigate pose-free variants to broaden the applicability of our method. VI. C ONCLUSION 
+
+We introduced MoonGS, a feed-forward 3DGS method tailored to lunar environments. It aimed to improve the per-ception ability of robots on lunar terrains by addressing the problems of invalid epipolar constraints, ambiguous depth in weakly textured regions and insufficient data observations. First, we employed robust depth features provided by the vision foundation model to achieve better Gaussian positions, particularly in regions with limited overlapping views. Second, we incorporated lunar semantic priors into the model, which significantly enhanced its overall performance. To address ambiguous depth in regions with weak texture, we proposed a semantic-based ranking loss for depth regularization. In addition, we designed a heuristic resampling strategy to further improve the rendering quality. Finally, to facilitate a compre-hensive evaluation under challenging conditions, we introduce MoonBlender, a dataset extending existing lunar datasets and specifically designed to assess reconstruction performance in weakly textured regions. We also reported qualitative results on real Chang’e imagery, where MoonGS delivered higher-fidelity reconstructions and showed robustness under varying illumination. Experimental results showed that compared to state-of-the-art methods [1], [2], MoonGS achieved higher-quality reconstructions on two lunar datasets, even in non-overlapping or weakly textured regions. Furthermore, exper-iments with the advanced VGGT [42] backbone validated the broad applicability of our framework, demonstrating its capacity to seamlessly leverage state-of-the-art architectures for enhanced performance. The synthesized novel viewpoints have improved the perception capability of the lunar rover, thereby enabling more efficient and safer lunar exploration missions. REFERENCES [1] D. Charatan, S. L. Li, A. Tagliasacchi, and V. Sitzmann, “pixelsplat: 3d gaussian splats from image pairs for scalable generalizable 3d re-construction,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2024, pp. 19 457–19 467. [2] Y. Chen, H. Xu, C. Zheng, B. Zhuang, M. Pollefeys, A. Geiger, T.-J. Cham, and J. Cai, “Mvsplat: Efficient 3d gaussian splatting from sparse multi-view images,” in European Conference on Computer Vision .Springer, 2024, pp. 370–386. [3] R. E. Karlsen and G. Witus, “Terrain understanding for robot naviga-tion,” in 2007 IEEE/RSJ International Conference on Intelligent Robots and Systems , 2007, pp. 895–900. [4] R. Mur-Artal and J. D. Tard´ os, “Orb-slam2: An open-source slam system for monocular, stereo, and rgb-d cameras,” IEEE transactions on robotics , vol. 33, no. 5, pp. 1255–1262, 2017. [5] V. Vineet, O. Miksik, M. Lidegaard, M. Nießner, S. Golodetz, V. A. Prisacariu, O. K¨ ahler, D. W. Murray, S. Izadi, P. P´ erez et al. , “In-cremental dense semantic stereo fusion for large-scale semantic scene reconstruction,” in 2015 IEEE international conference on robotics and automation (ICRA) . IEEE, 2015, pp. 75–82. 15 
+
+[6] T. Whelan, S. Leutenegger, R. F. Salas-Moreno, B. Glocker, and A. J. Davison, “Elasticfusion: Dense slam without a pose graph.” in Robotics: science and systems , vol. 11. Rome, 2015, p. 3. [7] A. Dai, M. Nießner, M. Zollh¨ ofer, S. Izadi, and C. Theobalt, “Bundle-fusion: Real-time globally consistent 3d reconstruction using on-the-fly surface reintegration,” ACM Transactions on Graphics (ToG) , vol. 36, no. 4, p. 1, 2017. [8] B. Mildenhall, P. P. Srinivasan, M. Tancik, J. T. Barron, R. Ramamoorthi, and R. Ng, “Nerf: Representing scenes as neural radiance fields for view synthesis,” Communications of the ACM , vol. 65, no. 1, pp. 99–106, 2021. [9] B. Kerbl, G. Kopanas, T. Leimk¨ uhler, and G. Drettakis, “3d gaussian splatting for real-time radiance field rendering.” ACM Trans. Graph. ,vol. 42, no. 4, pp. 139–1, 2023. [10] H. Xu, A. Chen, Y. Chen, C. Sakaridis, Y. Zhang, M. Pollefeys, A. Geiger, and F. Yu, “Murf: multi-baseline radiance fields,” in Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 20 041–20 050. [11] A. Yu, V. Ye, M. Tancik, and A. Kanazawa, “pixelnerf: Neural radiance fields from one or few images,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2021, pp. 4578– 4587. [12] Z. Kang, X. Wang, T. Hu, and J. Yang, “Coarse-to-fine extraction of small-scale lunar impact craters from the ccd images of the chang’e lunar orbiters,” IEEE Transactions on Geoscience and Remote sensing ,vol. 57, no. 1, pp. 181–193, 2018. [13] Y. Jung, S. Lee, and H. Bang, “Digital terrain map based safe landing site selection for planetary landing,” IEEE Transactions on Aerospace and Electronic Systems , vol. 56, no. 1, pp. 368–380, 2020. [14] Y. Qi, X. Xiao, M. Yao, Y. Xiong, L. Zhang, and H. Cui, “Airformer: Learning-based object detection for mars helicopter,” IEEE Journal of Selected Topics in Applied Earth Observations and Remote Sensing ,vol. 18, pp. 100–111, 2025. [15] H. Zhao, M. Yao, X. Xiao, and B. Zheng, “Dynainsremover: A real-time dynamic instance-aware static 3d lidar mapping framework for dynamic environment,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) , 2024, pp. 1803–1809. [16] X. Xiao, M. Yao, H. Cui, and Y. Fu, “Safe mars landing strategy: Towards lidar-based high altitude hazard detection,” Advances in Space Research , vol. 63, no. 8, pp. 2535–2550, 2019. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S0273117719300134 [17] H. Yang, X. Xiao, M. Yao, Y. Xiong, H. Cui, and Y. Fu, “Pvspe: A pyramid vision multitask transformer network for spacecraft pose estimation,” Advances in Space Research , vol. 74, no. 3, pp. 1327– 1342, 2024. [Online]. Available: https://www.sciencedirect.com/science/ article/pii/S0273117724004368 [18] Y. Xiong, X. Xiao, M. Yao, H. Liu, H. Yang, and Y. Fu, “Marsformer: Martian rock semantic segmentation with transformer,” IEEE Transac-tions on Geoscience and Remote Sensing , vol. 61, pp. 1–12, 2023. [19] X. Xiao, M. Yao, H. Liu, J. Wang, L. Zhang, and Y. Fu, “A kernel-based multi-featured rock modeling and detection framework for a mars rover,” IEEE Transactions on Neural Networks and Learning Systems ,vol. 34, no. 7, pp. 3335–3344, 2023. [20] H. Liu, M. Yao, X. Xiao, B. Zheng, and H. Cui, “Marsscapes and udaformer: A panorama dataset and a transformer-based unsupervised domain adaptation framework for martian terrain segmentation,” IEEE Transactions on Geoscience and Remote Sensing , vol. 62, pp. 1–17, 2024. [21] H. Liu, M. Yao, X. Xiao, and H. Cui, “A hybrid attention semantic segmentation network for unstructured terrain on mars,” 
+
+Acta Astronautica , vol. 204, pp. 492–499, 2023. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S0094576522004064 [22] Y. Xiong, X. Xiao, M. Yao, H. Cui, and Y. Fu, “Light4mars: A lightweight transformer model for semantic segmentation on unstructured environment like mars,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 214, pp. 167–178, 2024. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S0924271624002466 [23] H. Zhao, M. Yao, Y. Zhao, Y. Jiang, H. Zhang, X. Xiao, and K. Gao, “M2cs: A multimodal and campus-scapes dataset for dynamic slam and moving object perception,” Journal of Field Robotics , vol. 42, no. 3, pp. 787–805, 2025. [Online]. Available: https://onlinelibrary.wiley.com/doi/abs/10.1002/rob.22468 [24] M. Levoy and P. Hanrahan, Light Field Rendering , 1st ed. New York, NY, USA: Association for Computing Machinery, 2023. [Online]. Available: https://doi.org/10.1145/3596711.3596759 [25] C. Buehler, M. Bosse, L. McMillan, S. Gortler, and M. Cohen, “Unstructured lumigraph rendering,” in Proceedings of the 28th Annual Conference on Computer Graphics and Interactive Techniques ,ser. SIGGRAPH ’01. New York, NY, USA: Association for Computing Machinery, 2001, p. 425–432. [Online]. Available: https: //doi.org/10.1145/383259.383309 [26] ——, Unstructured Lumigraph Rendering , 1st ed. New York, NY, USA: Association for Computing Machinery, 2023. [Online]. Available: https://doi.org/10.1145/3596711.3596764 [27] N. Snavely, S. M. Seitz, and R. Szeliski, Photo tourism: exploring photo collections in 3D , 1st ed. New York, NY, USA: Association for Computing Machinery, 2023. [Online]. Available: https://doi.org/10. 1145/3596711.3596766 [28] M. Goesele, N. Snavely, B. Curless, H. Hoppe, and S. M. Seitz, “Multi-view stereo for community photo collections,” 2007 IEEE 11th International Conference on Computer Vision , pp. 1–8, 2007. [Online]. Available: https://api.semanticscholar.org/CorpusID:1327696 [29] P. Hedman, J. Philip, T. Price, J.-M. Frahm, G. Drettakis, and G. Brostow, “Deep blending for free-viewpoint image-based rendering,” 
+
+ACM Trans. Graph. , vol. 37, no. 6, Dec. 2018. [Online]. Available: https://doi.org/10.1145/3272127.3275084 [30] G. Kopanas, J. Philip, T. Leimk¨ uhler, and G. Drettakis, “Point-based neural rendering with per-view optimization,” 2021. [Online]. Available: https://arxiv.org/abs/2109.02369 [31] Z. Chen, S. Wang, and L. Liu, “Larsnerf: Fast and effective view syn-thesis from low-altitude remote sensing scenarios,” IEEE Transactions on Aerospace and Electronic Systems , pp. 1–14, 2024. [32] T. M¨ uller, A. Evans, C. Schied, and A. Keller, “Instant neural graphics primitives with a multiresolution hash encoding,” ACM transactions on graphics (TOG) , vol. 41, no. 4, pp. 1–15, 2022. [33] A. Yu, R. Li, M. Tancik, H. Li, R. Ng, and A. Kanazawa, “Plenoctrees for real-time rendering of neural radiance fields,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 5752– 5761. [34] L. Giusti, J. Garcia, S. Cozine, D. Suen, C. Nguyen, and R. Alimo, “Marf: Representing mars as neural radiance fields,” in European Conference on Computer Vision . Springer, 2022, pp. 53–65. [35] X. Zhang, L. Cui, and J. Yin, “Neural radiance fields for unbounded lunar surface scene,” in 2024 IEEE International Conference on Robotics and Automation (ICRA) . IEEE, 2024, pp. 16 858–16 864. [36] Y. Du, C. Smith, A. Tewari, and V. Sitzmann, “Learning to render novel views from wide-baseline stereo pairs,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 4970–4980. [37] S. Szymanowicz, C. Rupprecht, and A. Vedaldi, “Splatter image: Ultra-fast single-view 3d reconstruction,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2024, pp. 10 208–10 217. [38] T. Liu, G. Wang, S. Hu, L. Shen, X. Ye, Y. Zang, Z. Cao, W. Li, and Z. Liu, “Mvsgaussian: Fast generalizable gaussian splatting recon-struction from multi-view stereo,” in European Conference on Computer Vision . Springer, 2024, pp. 37–53. [39] M. Oquab, T. Darcet, T. Moutakanni, H. Vo, M. Szafraniec, V. Khalidov, P. Fernandez, D. Haziza, F. Massa, A. El-Nouby et al. , “Dinov2: Learning robust visual features without supervision,” arXiv preprint arXiv:2304.07193 , 2023. [40] H. Xu, J. Zhang, J. Cai, H. Rezatofighi, F. Yu, D. Tao, and A. Geiger, “Unifying flow, stereo and depth estimation,” IEEE Transactions on Pattern Analysis and Machine Intelligence , vol. 45, no. 11, pp. 13 941– 13 958, 2023. [41] S. Wang, V. Leroy, Y. Cabon, B. Chidlovskii, and J. Revaud, “Dust3r: Geometric 3d vision made easy,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 20 697–20 709. [42] J. Wang, M. Chen, N. Karaev, A. Vedaldi, C. Rupprecht, and D. Novotny, “Vggt: Visual geometry grounded transformer,” 2025. [Online]. Available: https://arxiv.org/abs/2503.11651 [43] V. Leroy, Y. Cabon, and J. Revaud, “Grounding image matching in 3d with mast3r,” in European Conference on Computer Vision . Springer, 2024, pp. 71–91. [44] A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly et al. ,“An image is worth 16x16 words: Transformers for image recognition at scale,” arXiv preprint arXiv:2010.11929 , 2020. [45] O. Ronneberger, P. Fischer, and T. Brox, “U-net: Convolutional networks for biomedical image segmentation,” in Medical image computing and computer-assisted intervention–MICCAI 2015: 18th international con-ference, Munich, Germany, October 5-9, 2015, proceedings, part III 18 .Springer, 2015, pp. 234–241. 16 
+
+[46] R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer, “High-resolution image synthesis with latent diffusion models,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition ,2022, pp. 10 684–10 695. [47] H. Xu and J. Zhang, “Aanet: Adaptive aggregation network for efficient stereo matching,” in Proceedings of the IEEE/CVF conference on computer vision and pattern recognition , 2020, pp. 1959–1968. [48] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson, T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo et al. , “Segment anything,” in Proceedings of the IEEE/CVF international conference on computer vision , 2023, pp. 4015–4026. [49] X. Wu, A. Lucas, S. Lopez-Tapia, X. Wang, Y. H. Kim, R. Molina, and A. K. Katsaggelos, “Semantic prior based generative adversarial network for video super-resolution,” in 2019 27th European Signal Processing Conference (EUSIPCO) . IEEE, 2019, pp. 1–5. [50] Z. Ding, A. Wang, H. Chen, Q. Zhang, P. Liu, Y. Bao, W. Yan, and J. Han, “Exploring structured semantic prior for multi label recognition with incomplete labels,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2023, pp. 3398–3407. [51] L. Yang, B. Kang, Z. Huang, X. Xu, J. Feng, and H. Zhao, “Depth anything: Unleashing the power of large-scale unlabeled data,” in 
+
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , 2024, pp. 10 371–10 381. [52] L. Yang, B. Kang, Z. Huang, Z. Zhao, X. Xu, J. Feng, and H. Zhao, “Depth anything v2,” Advances in Neural Information Processing Sys-tems , vol. 37, pp. 21 875–21 911, 2024. [53] W. Chen, Z. Fu, D. Yang, and J. Deng, “Single-image depth perception in the wild,” Advances in neural information processing systems , vol. 29, 2016. [54] K. Xian, J. Zhang, O. Wang, L. Mai, Z. Lin, and Z. Cao, “Structure-guided ranking loss for single image depth prediction,” in Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition ,2020, pp. 611–620. [55] J. Liu, Q. Zhang, X. Wan, S. Zhang, Y. Tian, H. Han, Y. Zhao, B. Liu, Z. Zhao, and X. Luo, “Lusnar: A lunar segmentation, navigation and re-construction dataset based on muti-sensor for autonomous exploration,” 
+
+arXiv preprint arXiv:2407.06512 , 2024. [56] Epic Games, “Unreal engine.” [Online]. Available: https://www. unrealengine.com [57] B. O. Community, “Blender - a 3d modelling and rendering package,” Blender Foundation, Stichting Blender Foundation, Amsterdam, 2018. [Online]. Available: http://www.blender.org [58] J.-F. Yang, C.-L. Li, B. Xue, P. Ruan, W. Gao, W.-D. Qiao, D. Lu, X.-L. Ma, F. Li, Y.-H. He, T. Li, X. Ren, and X.-T. Yan, “Panoramic camera on the yutu lunar rover of the chang’e-3 mission,” Research in Astronomy and Astrophysics , vol. 15, no. 11, p. 1867, nov 2015. [Online]. Available: https://dx.doi.org/10.1088/1674-4527/15/11/009 [59] H. Liu, M. Yao, X. Xiao, and Y. Xiong, “Rockformer: A u-shaped transformer network for martian rock segmentation,” IEEE Transactions on Geoscience and Remote Sensing , vol. 61, pp. 1–16, 2023. [60] J. Cartucho, S. Tukra, Y. Li, D. S. Elson, and S. Giannarou, “Vi-sionblender: a tool to efficiently generate computer vision datasets for robotic surgery,” Computer Methods in Biomechanics and Biomedical Engineering: Imaging & Visualization , pp. 1–8, 2020. [61] W. Falcon and The PyTorch Lightning team, “PyTorch Lightning,” Mar. 2019. [Online]. Available: https://github.com/Lightning-AI/lightning [62] Z. Wang, A. C. Bovik, H. R. Sheikh, and E. P. Simoncelli, “Image quality assessment: from error visibility to structural similarity,” IEEE transactions on image processing , vol. 13, no. 4, pp. 600–612, 2004. [63] R. Zhang, P. Isola, A. A. Efros, E. Shechtman, and O. Wang, “The unreasonable effectiveness of deep features as a perceptual metric,” in 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , 2018, pp. 586–595. [64] M. Luo, Y. Zan, K. Khoshelham, and S. Ji, “Domain generalization for semantic segmentation of remote sensing images via vision foundation model fine-tuning,” ISPRS Journal of Photogrammetry and Remote Sensing , vol. 230, pp. 126–146, 2025. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S0924271625003569
