@@ -6,36 +6,41 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-10-07
-- 运行时间：2026-10-08 00:02:43 UTC
+- 最新运行日期：2026-10-09
+- 运行时间：2026-10-09 00:24:24 UTC
 - 运行状态：成功
-- 本次总论文数：5
+- 本次总论文数：6
 - 精读区：0
-- 速读区：5
+- 速读区：6
 
 ### 今日简报（AI）
-今日速读5篇3D高斯泼溅论文，聚焦稀疏视角与移动端重建。最值得看的是7.0分的DensiTok，用前馈方式让模型"看到"比输入更多的视角；PocketSplat和4D稀疏视角两篇也提供了移动端与时空先验思路。普通读者可优先从DensiTok入手，理解稀疏输入下的重建突破。
-- 详情：[/202610/07/README](/202610/07/README)
+- 今日共生成 6 篇推荐（精读 0 篇，速读 6 篇）
+- 速读：《Reconstructing the Dynamic World: A Representation-Centric View of 4D Scene Reconstruction》（6.0/10）, 《SteadySplats: Resampling of Low-Variance Gaussians for High-Fidelity Stochastic Rendering》（6.0/10）, 《S2Tok: Streaming 3D Gaussian Reconstruction with Persistent Spatial Tokens》（6.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202610/09/README](/202610/09/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [DensiTok: Making Feed-Forward 3D Gaussian Splatting See More Views Than It Is Given](/202610/07/2610.07958v1-densitok-making-feed-forward-3d-gaussian-splatting-see-more-views-than-it-is-given)  
-   标签：评分：7.0/10、query:aerial-dgs
-   evidence：前馈式三维高斯泼溅重建模块
-2. [PocketSplat: Mobile Gaussian Reconstruction via World-Space Latent Allocatio](/202610/07/2610.03192v1-pocketsplat-mobile-gaussian-reconstruction-via-world-space-latent-allocatio)  
+1. [Reconstructing the Dynamic World: A Representation-Centric View of 4D Scene Reconstruction](/202610/09/2609.39960v1-reconstructing-the-dynamic-world-a-representation-centric-view-of-4d-scene-reconstruction)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：前馈高斯重建与预算化高斯资产表示
-3. [Sparse-View 4D Gaussian Splatting via Spatiotemporal Priors and Generative Assistance](/202610/07/2610.04606v1-sparse-view-4d-gaussian-splatting-via-spatiotemporal-priors-and-generative-assistance)  
+   evidence：统一综述3D高斯泼溅与NeRF场景表示
+2. [SteadySplats: Resampling of Low-Variance Gaussians for High-Fidelity Stochastic Rendering](/202610/09/2610.05576v2-steadysplats-resampling-of-low-variance-gaussians-for-high-fidelity-stochastic-rendering)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：稀疏宽基线视角下的多视角高斯优化
-4. [MaRO-GS: Mask-Robust Object-Centric Gaussian Splatting from Inconsistent Multi-view Masks](/202610/07/2610.06472v1-maro-gs-mask-robust-object-centric-gaussian-splatting-from-inconsistent-multi-view-masks)  
+   evidence：3D高斯泼溅随机渲染与方差降低
+3. [S2Tok: Streaming 3D Gaussian Reconstruction with Persistent Spatial Tokens](/202610/09/2610.08978v1-s2tok-streaming-3d-gaussian-reconstruction-with-persistent-spatial-tokens)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：基于不一致多视图掩码的对象级高斯泼溅
-5. [MoonGS: High-quality Representation of the Lunar Surface via Gaussian Splatting Using Robust Depth Features from Image Pairs](/202610/07/2610.07110v1-moongs-high-quality-representation-of-the-lunar-surface-via-gaussian-splatting-using-robust-depth-features-from-image-pairs)  
+   evidence：基于持久空间令牌的流式3D高斯重建
+4. [RDGSplat: Render-Dedicated Geometry for Novel View Synthesis](/202610/09/2610.09173v1-rdgsplat-render-dedicated-geometry-for-novel-view-synthesis)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：稀疏多视角图像的三维高斯重建
+   evidence：三维基础模型上的高斯头用于新视角合成与渲染
+5. [DynStream: Online Streaming 4D Gaussian Reconstruction of Dynamic Worlds from Unposed Video](/202610/09/2610.09720v1-dynstream-online-streaming-4d-gaussian-reconstruction-of-dynamic-worlds-from-unposed-video)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：在线流式四维高斯重建与渲染
+6. [DeltaSplat: Iterative Gaussian Refinement for Pose-Free Feed-Forward 3D Gaussian Splatting](/202610/09/2610.09853v1-deltasplat-iterative-gaussian-refinement-for-pose-free-feed-forward-3d-gaussian-splatting)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：跨输入视图的迭代多视图高斯优化
 
 
 <div class="dpr-home-promo-card">
