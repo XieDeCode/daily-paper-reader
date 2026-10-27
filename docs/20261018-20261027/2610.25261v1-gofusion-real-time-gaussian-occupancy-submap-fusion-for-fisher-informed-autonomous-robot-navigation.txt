@@ -1,0 +1,439 @@
+Title: GOFusion: Real-Time Gaussian-Occupancy Submap Fusion for Fisher-Informed Autonomous Robot Navigation
+
+URL Source: https://arxiv.org/pdf/2610.25261v1
+
+Published Time: Tue, 20 Oct 2026 01:35:14 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+> This work has been submitted to the IEEE for possible publication. Copyright may be transferred without notice, after which this version may no longer be accessible. 1
+
+# GOFusion: Real-Time Gaussian-Occupancy Submap Fusion for Fisher-Informed Autonomous Robot Navigation 
+
+Boxin Bu 1,2, Simon Boche 1, Haoming Zhang 2, Jaehyung Jung 1, Jiaxin Wei 1, Hannah Schieber 3,Daniel Roth 3, Angela P. Schoellig 2,4, and Stefan Leutenegger 1
+
+Abstract —In this letter, we present GOFusion , a real-time visual mapping system for autonomous robot navigation that anchors Gaussian primitives to local occupancy maps, providing both spatial awareness for path planning and high-fidelity appear-ance that enables information-driven robot navigation. GOFusion 
+
+builds 3D Gaussian maps from pose estimates and local occu-pancy maps obtained via visual-inertial simultaneous localization and mapping (SLAM) and enables pose corrections to maintain both geometric and visual consistency. Furthermore, it restricts the 3D Gaussian Splatting optimization to active submaps to bound GPU memory usage. Building on the appearance-rich Gaussian map, we introduce a rasterizer-integrated Fisher approximation that quantifies per-primitive sensitivity online, serving as an information-driven heuristic for Gaussian pruning and next-best-view planning. We evaluate GOFusion on public datasets and in real-world drone flights. It not only outperforms several baselines in mapping quality, but also achieves real-time, high-fidelity and uncertainty-aware mapping at scale. Finally, we demonstrate fully autonomous drone exploration for Gaussian map refinement using the proposed Fisher-informed heuristic. Code is available at https://github.com/Bennnoo/GOFusion. We provide a supplementary video demonstration at https://youtu. be/pLQKbxQvb6I. 
+
+Index Terms —SLAM, Gaussian Splatting, Occupancy Map-ping, Autonomous Robot Navigation 
+
+I. I NTRODUCTION 
+
+Autonomous robots need maps that support safe motion, reliable localization, and visual understanding in unknown environments. Occupancy maps [1]–[3] distinguish between free, occupied, and unknown space so that planners can check collisions, extract frontiers [4], and generate paths in large environments [5]. Such maps, however, encode geometry alone and discard appearance, whereas advanced tasks such as inspection and human-robot interaction require detailed scene appearance. Radiance field map representations address this limitation, either by implicitly encoding the scene in a neural network [6] or by explicitly optimizing Gaussian primitives via 3D Gaus-sian Splatting (3DGS) [7]. While the former relies on dense per-ray sampling of an implicit field and therefore remains costly to train and query, 3DGS supports efficient rendering 
+
+> 1
+
+Mobile Robotics Lab, Technical University of Munich and ETH Zurich. 
+
+> 2
+
+Learning Systems & Robotics Lab, Technical University of Munich and Institute of Robotics and Machine Intelligence (MIRMI). 
+
+> 3
+
+Human-Centered Computing and Extended Reality Lab, TUM University Hospital, Clinic for Orthopedics and Sports Orthopedics, Munich Institute of Robotics and Machine Intelligence (MIRMI). 
+
+> 4
+
+University of Toronto Institute for Aerospace Studies, University of Toronto Robotics Institute, and Vector Institute for Artificial Intelligence, and Robotics Institute Germany. E-mail addresses: {first.secondname}@tum.de [17] RTG-SLAM [23] DiskChunGS Ours [19] GS-ICP SLAM [22] LoopSplat [10] GPS-SLAM [18] Photo-SLAM - failed - failed - failed - failed PSNR SSIM LPIPS ATE Full-FPS VRAM eff. 
+
+> -1
+> Real-Time Occupancy & 3DGS Maps
+> Gaussian-Map Fisher Approximation
+
+Fig. 1. Benchmark result on the uHumans2 dataset [8]. Left: finalized map of GOFusion , presenting different submaps. Right: performance summary of GOFusion on rendering quality (PSNR/SSIM/LPIPS), trajectory accuracy (ATE −1), speed (Full-FPS), and GPU-memory efficiency (VRAM eff.). 
+
+via rasterization of an explicit set of primitives and is therefore better suited to online mapping. However, vanilla 3DGS maps describe only observed surfaces and do not distinguish free space from potentially occupied space, which is unsafe for robot navigation. In principle, combining occupancy and Gaussian maps yields a complementary hybrid representation, in which an occupancy layer supports free-space reasoning, completeness assessment, and planning, while a Gaussian layer provides high-fidelity appearance. However, existing systems realize only half of this potential. GSFusion [9] and GPS-SLAM [10] exploit this coupling in one direction, predominantly using the geometric map to improve the reconstruction quality and efficiency rather than to support robot localization and naviga-tion. Therefore, a hybrid representation that directly supports navigation remains an open challenge. To address this challenge, we propose GOFusion , a real-time hybrid Gaussian-and-occupancy mapping system for au-tonomous robot navigation. GOFusion is built directly on a real-time visual-inertial SLAM system, OKVIS2-X [11], and inherits its state estimates and occupancy submaps. However, unlike previous reconstruction-oriented methods, we close the loop between the two map layers. While the occupancy submaps anchor and initialize the Gaussians, photometric optimization of 3DGS, in turn, refines the camera poses, thereby reducing pose jitter and improving map consistency. Our submap-local design keeps online optimization scalable, since trainable states are maintained only for active submaps. Beyond geometry and appearance, we further accumulate Fisher information from the Gaussian primitives to identify poorly-constrained map regions, providing an information-theoretic heuristic for trajectory planning that enables the robot to actively complete its own map. Fig. 1 presents the performance of our method compared to various baselines. arXiv:2610.25261v1 [cs.RO] 18 Oct 2026 2
+
+To our knowledge, GOFusion is the first hybrid Gaussian-occupancy mapping system that supports real-time 3D navi-gation outdoors from cameras and an IMU alone. The contri-butions of this paper are: 1) A submap-based 3D Gaussian representation for large-scale high-fidelity mapping that supports appearance-dependent tasks such as inspection and teleoperation alongside navigation, where SLAM pose-graph updates, including loop closures, also directly update both the occupancy and Gaussian layers. 2) A rasterizer-integrated online Fisher approximation that maintains a diagonal, accumulated Fisher information over all Gaussians at negligible cost. Serving as an information heuristic for robot exploration, it highlights another key methodological advantage of Gaussian map-ping in robotics. 3) A real-time navigation framework that integrates visual-inertial SLAM with our hybrid map, deployable either fully onboard or split across onboard and offboard compute for resource-limited platforms. 4) Real-world UAV experiments demonstrate GOFusion ’s online capabilities and how Fisher information can be used in Gaussian pruning and next-best-view selection. II. R ELATED WORK 
+
+A. Volumetric Mapping for Robot Navigation 
+
+Volumetric representations have dominated robot mapping for decades. Occupancy maps [1] explicitly distinguish free, occupied, and unknown space, supporting collision checking, frontier extraction [4], and navigation under partial observa-tion [12]. Truncated signed distance function (TSDF)- and signed distance field (SDF)-based systems such as [13, 14] instead target continuous surface reconstruction. They encode distance to the nearest observed surface, so unobserved volume is not separated from free space by the representation itself and must be handled by convention. Octree frameworks such as [3] improve scalability through hierarchical subdivision. These methods scale in space but not in time, since a globally pa-rameterized map must be re-optimized whenever loop closure revises past poses. Submap-based SLAM resolves this issue by integrating measurements into local maps, whose poses are frequently up-dated during graph optimization, improving global map consis-tency across all maps. This concept lends itself to exploration in large environments, where local submaps enable efficient updates while still supporting global planning [5]. OKVIS2-X [11] follows this direction for multi-sensor state estimation with occupancy submapping and submap alignment. Because pose corrections act at the submap level, the occupancy map remains directly available for planning throughout. These advantages, however, concern geometry alone. As occupancy quantifies uncertainty about space, not appearance, a surface can be reliable for collision avoidance yet unusable for inspection or human-robot collaboration. 
+
+B. Gaussian Mapping for Robot Navigation 
+
+A more recent line of work in mapping replaces volu-metric structures with explicit, addable, prunable, and rigidly transformable Gaussian primitives. Moreover, they are also differentiable under a fast rasterizer. Supervision is derived directly from image intensities, so every pixel contributes a residual [7]. Dense visual SLAM systems exploit this to jointly optimize camera poses and Gaussian primitives [15, 16], or to embed Gaussians in online pipelines through selective primitive updates, conventional frontends, and RGB-D align-ment [17]–[19]. Others pair Gaussian maps with dedicated planners or semantic objectives for closed-loop navigation [20, 21]. Hybrid systems go one step further: previous work [9, 10] use TSDF geometry to guide Gaussian insertion and suppress redundant primitives, although the geometry serves reconstruction rather than a trajectory planner. At the robot scale, Gaussian SLAM faces two further obstacles. A single global Gaussian map carries optimizer states, gradients, and rendering buffers that grow with scene size, and, once built, cannot easily adopt pose corrections. LoopSplat [22] addresses the second by organizing Gaussians into submaps that loop closure can rigidly transform, while DiskChunGS [23] addresses the first with disk-backed chunk-ing. Neither, however, maintains an occupancy representation for downstream robotic tasks. 
+
+C. Uncertainty-Aware Mapping for Robot Navigation 
+
+Mapping to support real-world robot navigation, how-ever, requires more than geometry and appearance, since the robot must also decide where to go next. Frontier-based exploration [4, 5] exposes unknown regions, but is blind to observed regions where the appearance model remains poorly constrained. Neural and Gaussian methods therefore study uncertainty-aware view selection, using Fisher infor-mation [24] or related visibility and information-gain sig-nals [25, 26] to improve reconstruction quality. A second line keeps uncertainty inside the estimator, reweighting tracking, registration, and loop constraints [27]. Closest to our setting, μSLAM [28] maintains a per-primitive confidence and plans on an occupancy grid projected from its Gaussian field. Its uncertainty never enters the planner, and the projected grid supports no planning beyond the ground plane. None of these systems, however, couples map uncer-tainty with the free-space reasoning required for real-time robot exploration. This motivates GOFusion ’s unified hybrid map representation that keeps Gaussian optimization local to the active submap while exposing a per-primitive uncertainty for downstream decisions. III. M ETHOD 
+
+Throughout this paper, we denote the world frame and the local frame of a local-occupancy map Om by F−→W and F−→Om ,respectively, and a transformation TAB ∈ SE (3) represents the rigid transform from F−→B to F−→A. Ap denotes a point p
+
+in its reference frame F−→A.Targeting real-world robot navigation, we build GOFusion on top of the real-time visual-inertial SLAM system, OKVIS2-X [11]. Our mapping system takes as input its M local-occupancy maps O = {Om}Mm=1 with their corresponding pose estimates TW O m , together with rectified RGB and depth 3[ ]11     
+
+> O1O2O3
+> Gaussian-Map Fisher Approximation
+> Joint Gaussian-Pose Optimization
+> Fig. 2. System overview of GOFusion . OKVIS2-X [11] processes stereo RGB, IMU, and depth to estimate poses and build local-occupancy maps. Each occupancy map guides image-adaptive, voxel-weighted, and normal-aligned Gaussian initialization. Online Gaussian optimization then refines the active submap and provides gradient buffers to compute the accumulated Fisher approximation, which can be used for redundant Gaussian pruning or next-best-view selection. Our system can run entirely onboard or split between onboard and offboard processes, depending on the available compute.
+
+images, as illustrated in Fig. 2. Here, F−→Om coincides with the pose of the anchoring keyframe of the local-occupancy map. Loop-closure correction and local map alignment run in parallel, keeping the local-occupancy maps consistent at runtime. 
+
+A. Hybrid Occupancy-Gaussian Mapping 
+
+In GOFusion , we define the complete map as a collection of hybrid submaps as: 
+
+M = {M m}Mm=1 , Mm =
+
+
+
+TW S m , Om, Gm, ˆHm
+
+
+
+, (1) 
+
+where we introduce the submap frame F−→Sm ≡ F−→Om , the origin for both, the local-occupancy map Om as well as corresponding Gaussian primitives Gm. Additionally, the ma-trix ˆHm stores their accumulated Fisher approximation (see Sec. III-D). We parameterize the i-th Gaussian primitive gi ∈ Gm as 
+
+gi =  μi, qi, si, ω i, f dc  
+
+> i
+
+, f rest 
+
+> i
+
+ ∈ R59 , (2) where μi ∈ R3 and qi ∈ R4 denote the center and the rotation quaternion of the Gaussian primitive in the local frame F−→Sm .
+
+si ∈ R3 and ωi represent the log-scales and the opacity logit, while f dc  
+
+> i
+
+∈ R3 and f rest  
+
+> i
+
+∈ R45 are the degree-3 spherical-harmonic color coefficients as in [7]. Our submap-local parameterization applies loop-closure correction or 3DGS pose refinement (see Sec. III-C) directly to the submap poses TW S m , leaving the Gaussian parameters un-touched. These pose updates propagate to the local-occupancy map and its Gaussian primitives without re-optimization. For instance, the center Sm μi of the i-th Gaussian primitive maps to the world frame as W μi = TW S m Sm μi. Thus, 3DGS optimization remains local to the active submap, keeping only one submap in a trainable state and limiting GPU memory usage as the scene grows. 
+
+B. Occupancy-Guided Gaussian Initialization 
+
+To improve the efficiency of 3DGS initialization, we adopt the quadtree image decomposition from [9] and extend it with a dual-threshold criterion. A tree node is subdivided either when its interior contrast is high or when the contrast against its surrounding band is high, capturing boundaries that the interior test alone would miss. As shown in Fig. 3, our  
+
+> Fig. 3. Comparison of quadtree-based image decomposition on [29]. Left: decomposition in [9]. Right: our dual-threshold decomposition. Red regions highlight additional subdivisions that capture the image details effectively.
+
+criterion produces additional finer subdivisions around image structures that are not split by the original criterion. Further, using summed-area tables enables O(1) rectangle-sum queries, avoiding repeated pixel scans during quadtree segmentation and significantly reducing computation time. This approach results in a set of leaf nodes Ψ, where each element ψi = (ui, d i) with pixel center ui and depth di
+
+proposes at most one Gaussian primitive via back-projection:  
+
+> Sm
+
+μi = TSmCt Ct pi, Ct pi = π−1(ui, d i), (3) which uses the camera pose estimate TW C t at time t to express the current camera pose in the submap frame: 
+
+TSmCt = T −1 
+
+> W S m
+
+TW C t . (4) Out of these Gaussian primitive proposals, GOFusion accepts only candidates whose occupancy voxel in the current active local-occupancy map Om has integration weight one: 
+
+Gnew  
+
+> m
+
+= ψi ∈ Ψ | di valid ∧ wOm (Sm μi) = 1 , (5) where wOm (·) returns the weight of the voxel corresponding to  
+
+> Sm
+
+μi, restricting insertion to newly observed occupied voxels and avoiding redundant primitives. The accepted proposal is initialized as a flattened anisotropic 3D Gaussian to fit the surface geometry. Its local z-axis is aligned with the depth normal and scaled to exp( si,z ) = 5 × 10 −6 m, while the in-plane scales follow the quadtree footprint. 
+
+C. Joint Gaussian-Pose Refinement 
+
+During online mapping, GOFusion optimizes the Gaussian parameters while keeping the camera poses from [11] fixed during each mapping optimization. Joint Gaussian-pose refine-ment is performed at the final global 3DGS optimization stage as in [9]. All Gaussian submaps are then transformed into the 4
+
+world frame and merged into G. At refinement iteration k,the merged Gaussian map is rendered as 
+
+ˆIkt = R G, ∆T kt ¯TCtW , K  , (6) where R(·) is the differentiable Gaussian rasterization and 
+
+K is the camera intrinsics. The pose prior ¯TCtW = T −1
+
+> W C t
+
+is held fixed during optimization, while the left perturbation 
+
+∆T kt , initialized with ∆T 0 
+
+> t
+
+= I4, is refined jointly with the Gaussian parameters. We implement our CUDA rasterizer following prior work [16]. The L1 photometric loss 
+
+Lrgb ,t ≜ Lrgb ( ˆIt, It) = ∥ ˆIt − It∥1 (7) forms the basis of our mapping objective, which we can optionally extend with depth and normal supervision as 
+
+Lmap ,t = Lrgb ,t + λD LD,t + λN LN,t , (8) where λD = 0 .1 and λN = 0 .15 are the empirically chosen weights. The depth and normal terms are              
+
+> LD,t =1
+> |ΩD,t |
+> X
+> u
+> |ˆdu−du|,LN,t =1
+> |ΩN,t |
+> X
+> u
+> (1 −ˆαuˆn⊤
+> unu),(9)
+
+where ΩD,t and ΩN,t are the valid pixel sets for depth and normal supervision. du and nu denote the input depth and its derived unit normal, and ˆdu, ˆnu the rendered depth and composited normal. The accumulated pixel opacity ˆαu from the current rendering is detached in the normal loss. Following the pose optimization strategy in [16], we obtain the pose increment δξkt ∈ R6 by backpropagating Lmap ,t 
+
+through R(·) and update the perturbation as in [11]. The joint Gaussian-pose optimization keeps residual pose errors out of the Gaussian parameters. As a final step, we merge all submaps and refine the Gaussian parameters together with per-keyframe pose increments over the global map. 
+
+D. Rasterized Gaussian-Map Fisher Approximation 
+
+During 3DGS optimization in Sec. III-C, we accumulate a per-primitive image sensitivity, which measures how strongly the rendered mapping views constrain that primitive. Under homoscedastic Gaussian noise, this sensitivity equals the per-primitive Fisher information up to the noise scale [24, 30]. We use it as an uncertainty measure over the Gaussian map. However, computing the Fisher matrix across the full prim-itive state gi ∈ R59 in (2) is prohibitive in both memory and computation at map scale. We therefore use a diagonal ap-proximation and restrict the parameter set of the i-th Gaussian primitive to 
+
+˜gFi = ( μi, ¯αi) ∈ R4, (10) where ¯αi = (1 + exp( −ωi)) −1 is the per-primitive opacity obtained by applying the sigmoid function to the opacity logit 
+
+ωi, as in 3DGS [7]. For Gaussian primitive i, we obtain the diagonal Fisher matrix entries by summing the diagonal Gauss-Newton con-tributions over RGB channel indices c ∈ { 1, 2, 3} and pixels 
+
+u ∈ ˆIv of each rendered image view v ∈ V as 
+
+hmi = X 
+
+> v, c, u
+
+diag  J⊤ J  , J = ∂ ˆIv,c, u
+
+∂ ˜gFi
+
+∈ R1×4, (11) which reduces to an elementwise square of J . In (11), we use the standard front-to-back alpha compositing of Gaussian splatting,              
+
+> ˆIv, u=X
+> i∈A v(u)
+> τi, uai, uci, u,τi, u=Y
+> j<i
+> (1 −aj, u),(12)
+
+where Av (u) is the depth-ordered set of primitives contribut-ing to pixel u, ai, u = ¯ αiΦi(u, μi) the opacity of primitive 
+
+i at that pixel with its projected Gaussian Φi(·). τi, u denotes the accumulated transmittance, as in [7]. However, evaluating (11) requires the channel-wise Jaco-bians of every primitive contributing to a pixel. We instead reuse the rasterizer forward buffers and the existing backward pass, seeding the Fisher branch with the upstream gradient pattern (1 , 1, 1) for every rendered RGB pixel. The resulting vector-Jacobian product returns the channel-summed sensitiv-ity of each reduced parameter directly, so that for a rendered mapping view v we accumulate 
+
+˜hmv,i = X
+
+> u
+
+X
+
+> c
+
+∂ ˆIv,c, u
+
+∂ ˜gFi
+
+!◦2
+
+(13) with the elementwise square (·)◦2 . Summing the channels be-fore squaring yields the exact diagonal Fisher of the channel-summed observation P 
+
+> c
+
+ˆIv,c, u under homoscedastic noise up to a constant scale. We therefore use ˜hmv,i , the i-th row of the Fisher matrix ˜Hmv ∈ R|G m|× 4+ , as a lightweight relative-sensitivity proxy of the Fisher information and evaluate it in Sec. IV-D. Because the Gaussian parameters change during optimiza-tion, their sensitivities accumulated from earlier views become stale. We therefore smooth the Fisher information ˜Hmv of each rendered view v over a subset of its past keyframes v′ ∈ V samp 
+
+randomly sampled from all stored historical views V hist of the active submap Mm as 
+
+¯Hm, hist  
+
+> v
+
+= |V hist ||V samp |
+
+X 
+
+> v′∈Vsamp
+
+˜Hmv′ . (14) Finally, we update the accumulated Fisher approximation 
+
+ˆHm in (1) for all primitives in Gm as 
+
+ˆHm ← (1 − η)
+
+ ˆHm + ˜Hmv
+
+
+
++ η ¯Hm, hist  
+
+> v
+
+, (15) where η = 0 .2 is empirically selected in this work. New primitives enter with a zero row, and we initialize ˆHm = 0
+
+when a Gaussian submap is created. 
+
+E. Fisher-Informed Gaussian Pruning and View Selection 
+
+Using the accumulated Fisher information ˆHm in Sec. III-D, we derive a relative uncertainty score per Gaussian primitive and show that it can be used for two different objectives: at the primitive level, the score prunes persistently unconstrained primitives, while it also identifies poorly con-strained regions aggregated over space, and guides next-best-view selection (see Sec. IV-D2 for more practical details). 
+
+1) Weakly-Constrained Gaussian Primitive Pruning: In-spired by [30], we combine the position and opacity Fisher in-formation as a coverage heuristic to prune weakly-constrained Gaussian primitives. Using the log-scale si in (2) and opacity 
+
+¯αi in (10), we define Ai =   13
+
+P 
+
+> l∈{ x,y,z }
+
+exp( si,l )2, where 5
+
+si,l denotes the log-scale along principal axis l of Gaussian i.The squared mean scale Ai serves as an area-averaging, view-independent supporting metric, so that ¯αiAi approximates the view coverage. The resulting importance score of each Gaussian primitive is 
+
+χi = r(βi) + λαr(γi) + r(δi), (16) with βi = log  1 + Ai
+
+P 
+
+> j∈{ x,y,z }
+
+ˆHi,j 
+
+, γi = log(1 + ¯ αi ˆHi,α ),and δi = log(1 + ¯ αiAi), where r(·) ∈ [0 , 1] maps each term to its rank percentile among all primitives in the submap, placing the three terms on a common scale before weighting, and λα
+
+weights the opacity term. The logarithm keeps the terms in a numerically stable range. Here, βi and γi reward position and opacity information, while δi prevents large smooth surfaces from being over-pruned. For a target pruning ratio ρ ∈ [0 , 1) , we partition the merged Gaussian map with a voxel grid and remove the lowest-scoring fraction ρ of primitives in each voxel by ascending score χi, keeping at least one primitive per voxel to preserve coverage in sparse regions. We evaluate this pruning strategy in Sec. IV-D1. 
+
+2) Next-Best-View Selection: To select the next-best-view for robot navigation, we use Fisher information to favor views whose rendered images are most sensitive to the least-constrained Gaussian parameters. Let Mquery ⊆ M denote the associated submaps used to score the query view v, and let ˆHi,j be the entry of ˆHm for primitive i and component 
+
+j ∈ { x, y, z, α }, with the submap index omitted for readability. We use the regularized inverse Ui,j = 1ˆHi,j +ϵ as a relative uncertainty score, where ϵ = 10 −6 caps the score at 1/ϵ for near-zero entries. Larger Ui,j indicates weaker accumulated image constraints. Consequently, we use this relative uncertainty score Ui,j 
+
+to weight the single-view Fisher information ˜hmv,i in (13) across all Gaussian primitives in Gm for a candidate view 
+
+v. Following [24], we scale each component of ˜hmv,i by its corresponding inverse historical information to obtain the per-primitive relative information-gain score Γi(v):
+
+Γi(v) = 13
+
+X
+
+> j∈{ x,y,z }
+
+Ui,j 
+
+˜hmv,i 
+
+ 
+
+> j
+
++ Ui,α 
+
+˜hmv,i 
+
+
+
+> α
+
+, (17) where [·]j selects the j-th component of the corresponding parameter. Across the queried submaps Mm ∈ M query , we compute 
+
+Γ( v) = mean m,i : Γ i(v)̸=0 Γi(v), then normalize it as Γ( v) ←
+
+Γ( v)/(1 + Γ( v)) to obtain the final next-best-view score. In Sec. IV-D2, we demonstrate how this score guides view selection during autonomous drone exploration to refine the Gaussian map. We adopt the submap-based drone exploration framework [5], and augment its candidate-view utility by adding the normalized Fisher score Γ( v) as a weighted term alongside its existing occupancy information gain. The planner then favors view candidates with a higher Γ( v) and emits a collision-free path to the robot. IV. E XPERIMENT AND RESULTS 
+
+A. Experimental Setup 
+
+We evaluate the proposed method on two public datasets and a real-world flight, comparing against state-of-the-art baselines throughout. TUM RGB-D [31] provides real-world indoor sequences with motion-capture ground-truth trajectories, while the uHumans2 [8] offers larger-scale synthetic environments with dense ground-truth geometry. The flight experiments additionally demonstrate real-time exploration of unknown, larger-scale environments, with the proposed Fisher informa-tion guiding view selection to refine the reconstruction. All experiments run on a workstation with an Intel Core Ultra 9-285K CPU, 96 GB of RAM, and an NVIDIA RTX 4090 GPU with 48 GB of VRAM, which also serves as the ground station for the outdoor flight 1. In the real-world experiment, we used a self-built quadcopter with a MicroStrain 3DM-GX5-25 IMU, a custom stereo rig of two ZED X One GS cameras, and a Jetson Orin NX with 16 GB of unified memory, running visual-inertial SLAM alongside a PX4 flight controller. In contrast to the public datasets, which provide low-resolution RGB and depth images at 640 × 480 , our outdoor-flight experiments use 1920 × 1200 images 2 at 15 Hz together with IMU measurements at 200 Hz . For DiskChunGS [23], we supply depth directly to bypass its stereo-depth network without loading or executing it. Unlike several baselines that evaluate only on valid-depth regions, we compute peak signal-to-noise ratio (PSNR), struc-tural similarity index measure (SSIM) and learned perceptual image patch similarity (LPIPS) over the full image for all methods, since regions without depth returns are still rendered. This is why our reproduced scores for some baselines fall be-low the numbers reported in their papers. We further measure absolute trajectory error (ATE) RMSE, the number of Gaussian primitives, and peak GPU VRAM usage. Mapping frames per second (FPS) (Mapp. FPS) reports mapping throughput and full-system FPS (Full-FPS) the full tracking-and-mapping pipeline, both excluding the post-SLAM refinement. 
+
+B. Evaluation of Mapping Quality 1) TUM RGB-D: On TUM RGB-D [31], we first evaluate reconstruction quality using ground-truth camera poses to isolate Gaussian mapping from trajectory estimation. Numbers are averaged over ten runs across all scenes in Table I. Both  
+
+> GOFusion
+
+configurations, with and without depth and normal supervision, take the top two places on PSNR and LPIPS at competitive mapping FPS. Although our image decomposition produces more primitives than [9], the memory footprint grows far more slowly, with 5.3 times as many primitives at 0.9 times the VRAM. The reason our SSIM falls behind [15] is likely its D-SSIM loss term and a three-times-larger primitive count. Interestingly, depth and normal supervision trade a small drop in RGB scores for better geometric consistency  
+
+> 1A fully onboard configuration at reduced resolution is shown in the supplementary video due to space limitations.
+> 2Depth images are processed by the ZED SDK (v5.4, NEURAL_PLUS
+> mode). See stereolabs.com. 6
+
+Table I. Benchmark of rendering quality and map compactness on TUM-RGBD [31] with ground-truth poses, averaged over 10 runs. All methods re-evaluated on full images, not cited from the original papers. (+D/N) denotes explicit depth and normal supervision in the 3DGS objective. Best and second-best in bold and underlined.                                                           
+
+> Method PSNR ↑SSIM ↑LPIPS ↓Mapp. FPS ↑
+> #Gauss. (10 6)↓
+> VRAM (GB) ↓
+> GSFusion [9] 20.23 0.708 0.357 18.17 0.10 2.1 RTG-SLAM [17] 18.47 0.708 0.470 10.64 0.31 2.4 GPS-SLAM [10] 18.78 0.652 0.393 103.7 0.51 8.8 PhotoSLAM [18] 21.30 0.748 0.205 34.57 0.11 1.2
+> GS-ICP SLAM [19] 18.92 0.688 0.304 30.02 1.47 2.2 SplaTAM [15] 19.45 0.801 0.336 2.40 1.91 3.9 Ours 21.84 0.754 0.192 32.86 0.53 1.9 Ours (+D/N) 21.55 0.748 0.194 31.35 0.52 3.2
+
+and map completeness. We further discuss this observation in Sec. IV-C2. 
+
+2) uHumans2: In extension to Sec. IV-B1, we next evaluate our method against a comparable set of baselines on uHu-mans2 [8] as a full-mapping system with estimated camera poses, in which SLAM also affects reconstruction quality. As shown in Table II and Fig. 1, our method leads on all rendering metrics across all four sequences and achieves the lowest ATE on the three long ones. Although we generate more Gaussian primitives, our memory footprint remains lower than that of [17] and [23]. This highlights the benefit of our system design that anchors occupancy and Gaussian primitives to share submap frames. Confining the optimization to the active submap guarantees GOFusion ’s scalability and enables consistent reconstruction across large environments where several baselines fail to complete sequences or suffer from trajectory drift. As observed in Sec. IV-B1, adding depth and normal supervision during 3DGS optimization does not necessarily improve rendering quality, since it regularizes the reconstruction toward geometric consistency. 
+
+3) Self-Collected Outdoor Flying Data: We benchmark all methods on 16 self-collected outdoor flight sequences 3
+
+with challenging real-world illumination. Table III reports the mapping performance in two settings. In the offline setting, all methods use camera poses from our SLAM output after bundle adjustment (BA) 4, which are held fixed as pseudo-GT poses and also fixed during global 3DGS refinement. In the online setting, we report metrics obtained with live SLAM pose estimates and incremental 3DGS optimization before and after global 3DGS refinement. SLAM runs on the resource-limited onboard platform, while the 3DGS optimization was executed on a ground station. As in the previous sections, a similar conclusion on mapping performance can be drawn from the offline evaluation, with [22] and [23] additionally failing to complete all sequences. Our offline configuration with RGB-only supervision performs best on PSNR and LPIPS, as shown in Sec. IV-B1. For online, real-time drone navigation, our method adap-tively skips frames to avoid blocking, thereby consuming fewer frames than offline baselines. Despite this, it already surpasses most offline baselines in rendering quality with 
+
+> 3
+
+The supplementary video shows the outdoor flight experiment. 
+
+> 4
+
+For a fair comparison of rendering quality, we supply our BA-refined poses to all baselines in offline evaluation in Table III, since their own tracking produces large trajectory errors or diverges entirely in Table II. Table II. Benchmark of rendering quality and SLAM performance on uHumans2 [8], averaged over 10 runs (median for ATE). (+D/N) denotes explicit depth/normal supervision in the 3DGS optimization objective. Best 
+
+and second-best results are bold and underlined. OOM: out-of-memory.                                                                                                                                                                             
+
+> Seq. Metric RTG-SLAM [17] GPS-SLAM [10] Photo-SLAM [18] GS-ICP SLAM [19] LoopSplat [22] DiskChun -GS [23]
+> Ours Ours
+> (+D/N) Apart. 49.4 m PSNR ↑26.04 14.79 20.27 23.67 25.24 29.15 33.09 31.96 SSIM ↑0.894 0.284 0.730 0.816 0.828 0.866 0.942 0.928 LPIPS ↓0.330 0.383 0.392 0.335 0.324 0.110 0.062 0.076 Full-FPS ↑9.66 42.35 57.13 10.62 0.59 10.50 35.23 30.54 ATE ↓0.007 0.140 0.139 1.581 0.046 0.016 0.015 0.014 #Gauss. ( 10 6)↓0.14 0.35 0.31 2.61 4.50 0.18 0.69 0.69 VRAM (GB) ↓4.5 5.4 5.2 11.9 42.8 4.9 2.4 4.2 Office 264 m PSNR ↑22.64 GPU OOM  14.40 GPU OOM CPU OOM  24.49 31.14 29.26 SSIM ↑0.813 0.589 0.794 0.939 0.910 LPIPS ↓0.421 0.631 0.263 0.053 0.076 Full-FPS ↑8.30 46.89 12.90 24.60 21.51 ATE ↓0.219 0.236 3.198 0.062 0.052
+> #Gauss. ( 10 6)↓0.42 1.92 0.39 2.31 2.32 VRAM (GB) ↓17.5 40.7 8.3 6.3 10.8 Subway 508.7 m PSNR ↑23.11 GPU OOM diverged GPU OOM CPU OOM  26.11 29.99 28.27 SSIM ↑0.782 0.780 0.902 0.859 LPIPS ↓0.479 0.223 0.085 0.125 Full-FPS ↑7.76 12.95 11.95 11.11 ATE ↓0.504 26.717 0.180 0.180
+> #Gauss. ( 10 6)↓0.56 1.35 3.90 3.90 VRAM (GB) ↓25.8 22.8 9.1 13.5 Neighb. 337.8 m PSNR ↑19.75 GPU OOM diverged GPU OOM CPU OOM  20.14 25.46 24.35 SSIM ↑0.710 0.661 0.829 0.781 LPIPS ↓0.533 0.387 0.163 0.209 Full-FPS ↑7.57 12.72 7.12 6.74 ATE ↓8.721 5.831 0.279 0.266
+> #Gauss. ( 10 6)↓0.35 0.50 1.99 2.01 VRAM (GB) ↓16.0 8.7 4.9 7.4
+
+Table III. Benchmark of rendering quality and map compactness on the real-world flight sequences using estimated poses, averaged over 16 sequences. (+D/N) denotes explicit depth and normal supervision in the 3DGS objective. 
+
+Best and second-best in bold and underlined.                                                                        
+
+> Method PSNR ↑SSIM ↑LPIPS ↓#Gauss. (10 6)↓
+> VRAM (GB) ↓
+> Offline GSFusion [9] 24.23 0.701 0.443 0.40 7.7 RTG-SLAM [17] 15.85 0.478 0.693 0.46 8.6 GPS-SLAM [10] 7.19 0.125 0.970 0.31 14.3 PhotoSLAM [18] 23.35 0.642 0.524 0.36 6.1
+> GS-ICP SLAM [19] 22.36 0.758 0.267 2.92 17.5 LoopSplat [22] CPU OOM DiskChunGS [23] ∗23.48 0.679 0.478 1.14 17.8 Ours 26.35 0.808 0.167 3.88 9.0 Ours (+D/N) 26.04 0.801 0.186 3.89 10.4 Online  Ours 1†(pre-global) 16.35 0.486 0.611 2.44 7.1 Ours 2†(post-global) 24.86 0.740 0.259 2.44 7.1 Ours 3†(post-global) 25.03 0.782 0.157 2.44 7.1
+> ∗
+> DiskChunGS [23] only completed 12 of 16 runs due to GPU OOM.
+> †
+> Live results with depth and normal supervision.
+> 1With live SLAM poses and real-time, incremental 3DGS refinement (pre-global).
+> 2With live SLAM poses and global 3DGS refinement (post-global).
+> 3With BA-refined poses and global 3DGS refinement (post-global).
+
+global 3DGS refinement across all submaps (i.e. post-global), whereas those baselines were evaluated offline with BA-refined poses. Under identical online conditions, it also sur-passes most offline baselines in memory usage with BA-refined poses. Since our incremental 3DGS optimization (i.e. pre-global) runs only on the current submap to bound computation and keep the system real-time, the rendering quality drops but still exceeds [10, 17]. This is sufficient during flight, where navigation plans on the occupancy layer and view selection relies on Fisher information rather than on rendering fidelity (see Sec. IV-D). This quality gap closes after a few passes of global optimization. In addition, we found that a larger Gaussian count, which 7
+
+Table IV. Ablation of map format and joint Gaussian-pose optimization on uHumans2 [8], averaged over 10 independent runs across all sequences. Best 
+
+and second-best results are bold and underlined.                                         
+
+> Metric Single Map Multiple Submaps w/o. Joint Opt. w. Joint Opt. w/o. Joint Opt. w. Joint Opt. PSNR ↑25.01 25.06 29.68 29.92
+> SSIM ↑0.774 0.775 0.898 0.903
+> LPIPS ↓0.274 0.269 0.096 0.091
+> ATE ↓0.150 0.124 0.134 0.134 Full-FPS ↑17.95 17.97 19.60 19.72
+> #Gauss. ( 10 6)↓0.60 0.61 2.23 2.22 VRAM (GB) ↓15.7 15.7 6.6 5.7 Novel View w/o. Depth/Normal Novel View w. Depth/Normal
+
+Fig. 4. Qualitative novel-view comparison of 3DGS optimization without (left) and with (right) depth and normal supervision on uHumans2 [8]. 
+
+results from denser keyframe selection and a finer occupancy resolution (e.g., 0.1 m ), does not translate into a proportional memory cost, since offline GOFusion holds roughly ten times as many primitives as [18] at less than twice its VRAM. 
+
+C. Ablation Studies 1) Submapping and Joint Optimization: We study the submap-based map representation and joint Gaussian-pose optimization on uHumans2 [8], using only RGB supervision. As shown in Table IV, partitioning the map into submaps improves every rendering metric, slightly raises full-system FPS, and reduces peak memory, since only the active submap carries training buffers. Because each submap covers a small region, its local Gaussians stay consistent with the underlying geometry, where a global pose correction is applied to all of them at once. Besides, the joint optimization yields further gains across all rendering metrics at no cost in full-system FPS, and lowers the ATE of the single map but not of the submaps, whose poses are already well constrained by loop closure and submap alignment. 
+
+2) Depth and Normal Supervision for 3DGS: We further investigate the impact of geometric supervision through depth and normals in (8). Fig. 4 illustrates exemplary RGB render-ings alongside their rendered normals from novel viewpoints on uHumans2 [8] 5. Accordingly, depth and normal supervi-sion consistently maintain surface geometry and substantially improve novel viewpoints, while the RGB renderings remain comparable. As discussed in [32], regularizing the 3DGS optimization toward geometric consistency prevents overfitting to the training-view appearance, which matters more for robot navigation than training-view rendering quality. However, this comes at the cost of a slight drop in rendering quality on the training views in our experiments, as shown in Table II. Consequently, the weights for depth and normal loss terms in (8) have to be carefully balanced. 
+
+> 5
+
+Since uHumans2 [8] provides only training views, we cannot report quantitative novel view synthesis results for this ablation study. Instead, we present an extensive qualitative comparison across all benchmark methods with and without depth/normal supervision in the supplementary video. 0 30 60 90            
+
+> 17.0  17.8  18.6
+> 0.57  0.60  0.63 0.43  0.46  0.49
+> ↑()PSNR dB ↑SSIM ↓LPIPS
+> Pruning ratio (%)
+> 030 60 90 030 60 90
+> Online [30] Offline Random
+
+Fig. 5. Comparison of three Gaussian pruning strategies evaluated on the live pre-global map with online SLAM poses on uHumans2 [8]. Planner Geofence Weakly-Constrained Gaussians Next-Best-View #1 Next-Best-View #2 Current Drone Pose  
+
+> Gaussian Map Accumulated Fisher Approximation
+> Planned Trajectory Drone Trajectory
+
+Fig. 6. Real-world autonomous drone flight with two next-best-view candidates. Camera frustums (light blue and green) indicate the planned next-best-views, directed toward regions with low Fisher entries (warm color). The yellow frame marks the planner’s geofence, keeping the drone out of cluttered areas during autonomous flights. 
+
+D. Evaluation of Gaussian-Map Fisher Approximation 1) Pruning of Weakly-Constrained Gaussians: In this ex-periment, we evaluate the proposed online Gaussian-map Fisher approximation as a pruning heuristic to remove weakly constrained Gaussians (see Sec. III-E), comparing rendering quality before and after pruning on four uHumans2 se-quences [8]. We evaluate our pruning heuristics against two baseline pruning scores: a random pruning strategy that re-places the entries of ˆHm in (15) with random values from a fixed seed, and an offline score recomputed over all keyframes after merging the submaps as in [30], which serves as the reference pruning strategy. Fig. 5 shows rendering quality as a function of the pruning ratio during online Gaussian mapping. Our online Gaussian pruning using the proposed Fisher approximation achieves pruning quality comparable to the offline reference, while both clearly outperform the random baseline as pruning becomes more aggressive. Since the offline reference is only available after the session ends, our online Fisher-based heuristic offers a practical alternative for Gaussian pruning. 
+
+2) Next-Best-View Selection: We then show that the Gaussian-map Fisher approximation can also select the next-best-view for map refinement in a real-world autonomous flight, while the occupancy map supports collision-free path planning. To achieve the best mapping performance, the visual-inertial SLAM runs onboard, while the ground station maintains the hybrid map and evaluates candidate views off-board. Fig. 6 provides a scene overview while the drone was transiting between two next-best-view candidates. To examine how a selected view improves reconstruction, we compare maps reconstructed from observations accumu-lated before and after its visit, using the same fixed final estimated trajectory. Both maps are rendered from the same candidate camera pose and intrinsics. 8Before the next-best-view visit After the next-best-view visit    
+
+> Rendered RGB Acc. Fisher Approx. Rendered RGB Acc. Fisher Approx.
+
+Fig. 7. Map before (left) and after (right) visiting the next-best-view during the flight. The rendered RGBs are from the same candidate pose. Warmer colors in the Fisher map indicate higher relative uncertainty. 
+
+As shown in Fig. 7, the visit improved both local detail and reconstruction completeness. The displayed high-response regions in the Fisher uncertainty map also become more local-ized, with remaining responses concentrated around vegetation and object boundaries. These qualitative results support the ability of Fisher-informed next-best-view selection to identify informative views that improve 3DGS reconstruction quality and reduce map uncertainty. V. C ONCLUSION 
+
+We present GOFusion , a hybrid mapping method that anchors 3D Gaussians to local-occupancy submaps from visual-inertial SLAM to support real-time robot navigation. Beyond spatial awareness for path planning and high-fidelity appearance, it enables Fisher-guided Gaussian pruning and next-best-view selection. Across our extensive evaluations and a real-world autonomous flight, GOFusion achieves higher rendering quality than existing Gaussian SLAM systems with bounded GPU memory usage and successfully completes sequences that several baselines fail to complete. However, our method still assumes accurate and robust depth estimation, requiring careful tuning of the depth and normal supervision during 3DGS optimization. To maintain the computational efficiency on resource-constrained devices, optimizing one submap at a time limits the online rendering quality where neighboring submaps overlap or are misaligned, which would become more pronounced in semi-static or dynamic environments. Future work will incorporate depth uncertainty into the mapping objective, extend the optimization across neighboring submaps, and use semantic cues to handle dynamic environments. ACKNOWLEDGMENTS 
+
+OpenAI Codex and ChatGPT assisted with experimental code development, experiment execution, and language pol-ishing. The authors take full responsibility. This work was funded by the Technical University of Mu-nich (MIRMI Seed Fund), supported by Huawei Technologies. The authors thank Dr. Massimiliano Maule, Hongjia Su, Dr. Xueliang Shi, Joseph Eichinger, Dr. Xueli An, and Lei Lu from Huawei Technologies for their support. REFERENCES [1] H. Moravec and A. Elfes, “High resolution maps from wide angle sonar,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA) , vol. 2, 1985. [2] A. Elfes, “Using occupancy grids for mobile robot perception and navigation,” Computer , vol. 22, no. 6, 1989. [3] A. Hornung, et al. , “OctoMap: An efficient probabilistic 3D mapping framework based on octrees,” Auton. Robots , vol. 34, no. 3, 2013. [4] B. Yamauchi, “A frontier-based approach for autonomous exploration,” in Proc. IEEE Int. Symp. Comput. Intell. Robot. Autom. (CIRA) , 1997. [5] S. Papatheodorou, et al. , “Efficient submap-based autonomous MAV exploration using visual-inertial SLAM configurable for LiDARs or depth cameras,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA) , 2025. [6] B. Mildenhall, et al. , “NeRF: Representing scenes as neural radiance fields for view synthesis,” Commun. ACM , vol. 65, no. 1, 2021. [7] B. Kerbl, et al. , “3D Gaussian Splatting for real-time radiance field rendering,” ACM Trans. Graph. , vol. 42, no. 4, 2023. [8] A. Rosinol, et al. , “Kimera: From SLAM to spatial perception with 3D dynamic scene graphs,” Int. J. Robot. Res. , vol. 40, no. 12-14, 2021. [9] J. Wei and S. Leutenegger, “GSFusion: Online RGB-D mapping where Gaussian splatting meets TSDF fusion,” IEEE Robot. Autom. Lett. ,vol. 9, no. 12, 2024. [10] Z. Peng, K. Zhou, and T. Shao, “Gaussian-plus-SDF SLAM: High-fidelity 3D reconstruction at 150+ fps,” Comput. Vis. Media , 2025. [11] S. Boche, et al. , “OKVIS2-X: Open keyframe-based visual-inertial SLAM configurable with dense depth or LiDAR, and GNSS,” IEEE Trans. Robot. , vol. 41, 2025. [12] M. Ryll, et al. , “Efficient trajectory planning for high speed flight in unknown environments,” in Proc. IEEE Int. Conf. Robot. Autom. (ICRA) ,2019. [13] R. A. Newcombe, et al. , “KinectFusion: Real-time dense surface map-ping and tracking,” in Proc. IEEE Int. Symp. Mixed Augment. Real. (ISMAR) , 2011. [14] H. Oleynikova, et al. , “Voxblox: Incremental 3D Euclidean signed distance fields for on-board MAV planning,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS) , 2017. [15] N. Keetha, et al. , “SplaTAM: Splat, track & map 3D Gaussians for dense RGB-D SLAM,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024. [16] H. Matsuki, et al. , “Gaussian splatting SLAM,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024. [17] Z. Peng, et al. , “RTG-SLAM: Real-time 3D reconstruction at scale using Gaussian splatting,” in Proc. ACM SIGGRAPH , 2024. [18] H. Huang, et al. , “Photo-SLAM: Real-time simultaneous localization and photorealistic mapping for monocular, stereo, and RGB-D cameras,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2024. [19] S. Ha, J. Yeon, and H. Yu, “RGBD GS-ICP SLAM,” in Proc. Eur. Conf. Comput. Vis. (ECCV) . Springer, 2024. [20] T. Chen, et al. , “Splat-Nav: Safe real-time robot navigation in Gaussian splatting maps,” IEEE Trans. Robot. , vol. 41, 2025. [21] K. Nagami, et al. , “VISTA: Open-vocabulary, task-relevant robot explo-ration with online semantic Gaussian splatting,” IEEE Robot. Autom. Lett. , 2026. [22] L. Zhu, et al. , “LoopSplat: Loop closure by registering 3D Gaussian splats,” in Proc. Int. Conf. 3D Vis. (3DV) , 2025. [23] C. Feldmann, et al. , “DiskChunGS: Large-scale 3D Gaussian SLAM through chunk-based memory management,” IEEE Robot. Autom. Lett. ,2026. [24] W. Jiang, B. Lei, and K. Daniilidis, “FisherRF: Active view selection and mapping with radiance fields using Fisher information,” in Proc. Eur. Conf. Comput. Vis. (ECCV) . Springer, 2024. [25] L. Jin, et al. , “ActiveGS: Active scene reconstruction using Gaussian splatting,” IEEE Robot. Autom. Lett. , vol. 10, no. 5, 2025. [26] L. Chen, et al. , “ActiveGAMER: Active Gaussian mapping through efficient rendering,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2025. [27] A. T. Tran and J. Košecká, “VarSplat: Uncertainty-aware 3D Gaussian splatting for robust RGB-D SLAM,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2026. [28] P. Jiang, et al. , “Uncertainty-driven 3D Gaussian splatting for robust real-time RGB-D SLAM,” IEEE Trans. Autom. Sci. Eng. , 2026. [29] J. Straub, et al. , “The Replica dataset: A digital replica of indoor spaces,” 
+
+arXiv:1906.05797 , 2019. [30] A. Hanson, et al. , “PUP 3D-GS: Principled uncertainty pruning for 3D Gaussian splatting,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2025. [31] J. Sturm, et al. , “A benchmark for the evaluation of RGB-D SLAM systems,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst. (IROS) , 2012. [32] H. Park, G. Ryu, and W. Kim, “DropGaussian: Structural regularization for sparse-view Gaussian splatting,” in Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR) , 2025.
