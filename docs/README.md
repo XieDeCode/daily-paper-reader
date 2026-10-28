@@ -6,54 +6,41 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-10-18 ~ 2026-10-27
-- 运行时间：2026-10-27 02:14:14 UTC
+- 最新运行日期：2026-10-28
+- 运行时间：2026-10-28 23:11:32 UTC
 - 运行状态：成功
-- 本次总论文数：11
-- 精读区：0
-- 速读区：11
+- 本次总论文数：7
+- 精读区：2
+- 速读区：5
 
 ### 今日简报（AI）
-2026-10-18至10-27共筛出11篇3D高斯泼溅相关论文，全部速读、无精读，其中FineSplat、RLSplat、CrossFit-GS三篇以7.0分领跑。最值得关注的是前向3DGS的资源预算控制（RLSplat）和无COLMAP位姿估计（CrossFit-GS）两个方向。普通读者可先从这三篇7分速读入手，判断是否需要深入。
-- 详情：[/20261018-20261027/README](/20261018-20261027/README)
+今日精选 7 篇论文，精读 2 篇、速读 5 篇，聚焦 3D 高斯泼溅与多视图重建。最值得看的是 GeoGSplat 提出的几何约束非像素对齐高斯泼溅，以及 GroundControl 用卫星条件多视图扩散直接生成新视角；这两篇均获 8.0 分。普通读者可先读这两篇精读，理解“几何对齐”和“免重建生成”两条主线，再按兴趣浏览高斯结构学习方向。
+- 详情：[/202610/28/README](/202610/28/README)
 
 ### 精读区论文标签
-- 本次无精读推荐。
+1. [GeoGSplat: Geometry-Grounded Non-Pixel-Aligned Gaussian Splatting](/202610/28/2610.36760v1-geogsplat-geometry-grounded-non-pixel-aligned-gaussian-splatting)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：结合几何先验的三维高斯泼溅场景表示与渲染
+2. [GroundControl: Satellite-Conditioned Multi-View Diffusion for Reconstruction-Free Novel View Synthesis](/202610/28/2610.37545v1-groundcontrol-satellite-conditioned-multi-view-diffusion-for-reconstruction-free-novel-view-synthesis)  
+   标签：评分：8.0/10、query:aerial-dgs
+   evidence：卫星与街景互补条件用于神经新视角合成
 
 ### 速读区论文标签
-1. [FineSplat: Fine Patches, Local Groups, Detailed Splats](/20261018-20261027/2610.25011v1-finesplat-fine-patches-local-groups-detailed-splats)  
+1. [Birth-Death Structural Learning for 3D Gaussian Splatting](/202610/28/2610.34344v1-birth-death-structural-learning-for-3d-gaussian-splatting)  
    标签：评分：7.0/10、query:aerial-dgs
-   evidence：前馈三维高斯泼溅的多视图聚合
-2. [RLSplat: Resource-Linear Budget Control for Feed-forward 3D Gaussian Splatting](/20261018-20261027/2610.27712v1-rlsplat-resource-linear-budget-control-for-feed-forward-3d-gaussian-splatting)  
-   标签：评分：7.0/10、query:aerial-dgs
-   evidence：资源线性预算控制的前馈三维高斯泼溅重建
-3. [CrossFit-GS: Out-of-Fold Pose Estimation for COLMAP-Free 3D Gaussian Splatting](/20261018-20261027/2610.28190v1-crossfit-gs-out-of-fold-pose-estimation-for-colmap-free-3d-gaussian-splatting)  
-   标签：评分：7.0/10、query:aerial-dgs
-   evidence：跨视角互细化位姿的多视图三维高斯优化
-4. [GOFusion: Real-Time Gaussian-Occupancy Submap Fusion for Fisher-Informed Autonomous Robot Navigation](/20261018-20261027/2610.25261v1-gofusion-real-time-gaussian-occupancy-submap-fusion-for-fisher-informed-autonomous-robot-navigation)  
+   evidence：面向3D高斯泼溅场景表示与渲染的原理化密度控制
+2. [Foundation4D: Towards a unified perception and reconstruction model for autonomous vehicles](/202610/28/2610.30340v1-foundation4d-towards-a-unified-perception-and-reconstruction-model-for-autonomous-vehicles)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向机器人导航的三维高斯地图表示、渲染与子图融合
-5. [MCSplat: Multi-View Photometric and Geometric Consistent Feed-Forward Gaussian Splatting for Driving Scenes](/20261018-20261027/2610.25345v1-mcsplat-multi-view-photometric-and-geometric-consistent-feed-forward-gaussian-splatting-for-driving-scenes)  
+   evidence：跨视角与时间的多相机多视图高斯重建
+3. [RelateGS: Reliable Semantic and Relational Evidence for 3D Scene Understanding with Gaussian Splatting](/202610/28/2610.33868v1-relategs-reliable-semantic-and-relational-evidence-for-3d-scene-understanding-with-gaussian-splatting)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：多视图一致的前馈高斯泼溅
-6. [Rethinking Sparse-View 3D Gaussian Splatting: A Few-Shot Learning Perspective on Overfitting Prevention](/20261018-20261027/2610.25887v1-rethinking-sparse-view-3d-gaussian-splatting-a-few-shot-learning-perspective-on-overfitting-prevention)  
+   evidence：语言感知三维高斯泼溅场景表示与多视图语义聚合
+4. [DUET4D: Self-Corrective Coupled Guidance for Sparse-View 4D Reconstruction](/202610/28/2610.35002v1-duet4d-self-corrective-coupled-guidance-for-sparse-view-4d-reconstruction)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：从少样本学习视角重构稀疏视角3D高斯优化
-7. [Drive2Gauss: FeedForward 4D Gaussian Reconstruction from Multimodal Generative Driving Videos](/20261018-20261027/2610.26585v1-drive2gauss-feedforward-4d-gaussian-reconstruction-from-multimodal-generative-driving-videos)  
+   evidence：面向稀疏视角4D高斯泼溅优化的自校正耦合引导
+5. [SG-Splat: Stable Geometry Learning under Pose Uncertainty for Pose-Free 3D Gaussian Splatting](/202610/28/2610.35361v1-sg-splat-stable-geometry-learning-under-pose-uncertainty-for-pose-free-3d-gaussian-splatting)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：支持多视角渲染的前馈4D高斯重建
-8. [Counting Contributions, Not Views: Occlusion-Aware Densification for 3D Gaussian Splatting](/20261018-20261027/2610.27108v1-counting-contributions-not-views-occlusion-aware-densification-for-3d-gaussian-splatting)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：3D高斯泼溅致密化与渲染核心改进
-9. [HiQGS: Hierarchical Spatiotemporal Querying for Feed-Forward Gaussian Reconstruction](/20261018-20261027/2610.27604v1-hiqgs-hierarchical-spatiotemporal-querying-for-feed-forward-gaussian-reconstruction)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：多视角前馈高斯重建，跨空间尺度与视角对齐
-10. [AirPlayground: Benchmarking Aerial Navigation across Diverse Reconstructed Environments](/20261018-20261027/2610.29699v1-airplayground-benchmarking-aerial-navigation-across-diverse-reconstructed-environments)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：基于94个真实感3D高斯城市场景的航拍基准
-11. [PixGR: Pixel-Space Generative Decoding for Fast Feed-Forward 3D Reconstruction](/20261018-20261027/2610.31908v1-pixgr-pixel-space-generative-decoding-for-fast-feed-forward-3d-reconstruction)  
-   标签：评分：6.0/10、query:aerial-dgs
-   evidence：前馈多视图三维高斯重建与生成式解码
+   evidence：对位姿不确定性鲁棒的无位姿前馈3D高斯重建
 
 
 <div class="dpr-home-promo-card">
