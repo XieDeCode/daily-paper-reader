@@ -1,0 +1,325 @@
+Title: AOV-GS: Active Open-Vocabulary Semantic Mapping with 3D Gaussian Splatting
+
+URL Source: https://arxiv.org/pdf/2610.29374v1
+
+Published Time: Thu, 22 Oct 2026 00:52:57 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# AOV-GS: Active Open-Vocabulary Semantic Mapping with 3D Gaussian Splatting 
+
+Rodion Shkokov 1* , Tatiana Zemskova 1,2, and Dmitry Yudin 1,2 
+
+> 1
+
+Moscow Institute of Physics and Technology (MIPT), Dolgoprudny, Russia 
+
+r.shkokov@gmail.com (*corresponding author)  
+
+> 2
+
+AIRI, Moscow, Russia 
+
+Abstract. Robots deployed in human-centered environments need maps that support both geometric navigation and open-vocabulary se-mantic queries beyond a fixed label set. A key challenge is enriching such maps with semantic information without relying on manually annotated segmentation masks or closed-set semantic categories. Existing geometry-driven active mapping maximizes coverage but treats semantics as a passive by-product of the collected trajectory, whereas active semantic mapping typically depends on supervised semantic segmentation. We present AOV-GS , an active 3D Gaussian mapping system that guides exploration using frozen foundation models. During coarse exploration, AOV-GS re-ranks geometrically promising candidate views according to CLIP mask-embedding novelty computed from SAM instance segmenta-tion, biasing exploration toward semantically informative regions. Frozen SAM and CLIP provide instance masks and language-aligned embed-dings throughout mapping, while a lightweight scene-specific language field is fitted offline directly to the collected CLIP embeddings rather than manually annotated masks, enabling open-vocabulary text-query segmentation on novel views. In a controlled comparison using the same SAM–CLIP perception stack, AOV-GS improves average language-field mIoU over geometry-only active planning by 1.3 percentage points on Replica (34.6% on eight scenes) and by 1.8 points on Matterport3D (23.1% on five scenes). With CorrCLIP, AOV-GS reaches 35.6% on Replica, 2.0 points above the matched Geometry-based + CorrCLIP baseline. Novel-view PSNR remains comparable to the geometry-only baseline on both datasets while depth L1 improves on Replica. Code is available at github.com/OptimusFaber/AOV-GS. 
+
+Keywords: Active semantic mapping · Open-vocabulary segmentation 
+
+· 3D Gaussian splatting · Next-best-view planning 
+
+## 1 Introduction 
+
+Mobile robots operating in human-centered environments need spatial maps of the environment that support both navigation and task-level semantic interac-tion. In practice this means a map should render high-quality RGB-D views 
+
+and support queries such as find the chair or locate the table near the win-dow . These objectives are coupled through exploration: the viewpoints collected arXiv:2610.29374v1 [cs.CV] 21 Oct 2026 2 R. Shkokov et al. 
+
+during mapping determine geometric completeness, object visibility, and the ev-idence available for downstream open-vocabulary retrieval. Recent 3D Gaussian Splatting (3DGS) SLAM systems [13, 11] achieve ef-ficient high-fidelity reconstruction suitable for online robotic mapping. Active planners such as ActiveGS [10], ActiveSplat [19], and ActiveGAMER [3] im-prove coverage through geometry-aware next-best-view (NBV) selection. In par-allel, foundation-model perception enables open-vocabulary semantics: Segment Anything (SAM) [15] provides prompt-free instance masks and CLIP [24] maps mask regions to a language-aligned embedding space. LangSplat [23] and related methods attach such features to 3D primitives for text-query segmentation, but typically assume a fixed observation trajectory. Active semantic mapping closes part of this gap. ActiveSGM [4] demon-strates that semantic signals can guide exploration in a 3DGS loop, but relies on per-scene OneFormer [7] fine-tuning, which limits open-vocabulary deployment. Passive fusion pipelines [8, 22] can improve semantic quality on pre-recorded trajectories but do not affect online data acquisition. This paper addresses the following question: Can a robot actively explore an unseen scene using frozen foundation models, improve open-vocabulary segmenta-tion through viewpoint selection, and preserve competitive RGB-D reconstruction quality? 
+
+We answer affirmatively with AOV-GS (Fig. 1). During coarse exploration (stage 0), geometric information gain is augmented with CLIP-embedding nov-elty computed from SAM instance masks on RGB views rendered from the cur-rent Gaussian map. Semantic novelty is measured against a growing keyframe embedding bank and re-ranks the top-K geometrically strong candidates. Dur-ing refinement (stage 1+), planning reverts to geometry-only behavior as in ActiveGS [10]. After exploration, per-keyframe CLIP mask embeddings train a sparse language field on Gaussian primitives, enabling open-vocabulary text-query segmentation on novel views. As in ActiveSGM, candidate RGB views for semantic scoring are rendered from the current Gaussian map; Habitat supplies the posed RGB-D observation after the selected view is executed. The experi-ments nevertheless use ground-truth camera poses as oracle SLAM input. Our contributions are: 
+
+– A coarse exploration NBV criterion that re-ranks the top-K candidates pro-duced by the geometric planner according to CLIP mask-embedding novelty, steering the robot toward semantically novel object instances while reverting to geometry-only scoring during later refinement stages. 
+
+– An active open-vocabulary semantic mapping pipeline combining online se-mantic exploration with offline LangSplatV2 language-field construction, without per-scene segmenter fine-tuning. 
+
+– A two-benchmark evaluation showing average open-vocabulary gains over geometry-only exploration while preserving comparable novel-view recon-struction quality. Under the matched SAM–CLIP stack, AOV-GS reaches 34.6% on Replica (+1.3 pp) and 23.1% on MP3D (+1.8 pp); the per-scene Replica results are heterogeneous and are analyzed explicitly. AOV-GS 3
+
+## 2 Related Work 
+
+Active perception for neural mapping uses information gain and coverage criteria to select informative views [9, 6, 21]. 3D Gaussian Splatting (3DGS) [13, 11] lowers planning and rendering cost relative to Neural Radiance Fields (NeRF) [20], enabling online systems such as ActiveGS [10], ActiveSplat [19], and ActiveGAMER [3]; these methods optimize geometry but leave semantic map utility to the collected trajectory. Semantic and open-vocabulary Gaussian mapping [17, 26, 23, 14, 1, 34] attaches language-aligned features to 3D primitives for text queries, typically on fixed trajectories; our language-field head follows LangSplatV2 [18], but AOV-GS uses semantic novelty to choose views during exploration rather than only processing a passive path. Recent semantic map-ping systems also include LEG-SLAM [28] and M3DMap [30], which integrate language-aligned or object-aware semantics into 3D reconstruction. Closely related but complementary is SegmATRon [31], an embodied active segmen-tation method that generates agent actions to maximize image segmentation quality rather than building a persistent semantic map. ActiveSGM [4] couples geometric and semantic terms during 3DGS exploration but requires per-scene OneFormer fine-tuning [7]. Passive open-vocabulary fusion [8, 22] improves semantics on recorded paths without steering acquisition. AOV-GS trades closed-set semantic supervision for open-vocabulary scene representations based on frozen SAM and CLIP. 
+
+## 3 Method 
+
+Figure 1 gives a system-level overview: (A–B) posed RGB-D mapping (Sec. 3.1); 
+
+(C) active NBV planner with semantic stage 0 and geometry-only stage 1+ (Sec. 3.2; Fig. 2); (D) CLIP mask embeddings (Sec. 3.3; Fig. 3); (E–F) language-field training/query (Sec. 3.4; Fig. 4). 
+
+3.1 Gaussian Mapping Backbone 
+
+We adopt SplaTAM [11] as the reconstruction backbone with ActiveGS-style active planning infrastructure [10]. Habitat [25] provides synchronized RGB-D frames with ground-truth camera poses. In both Replica and Matterport3D ex-periments, these poses are used as oracle SLAM input (Sec. 4.1). The scene is represented by isotropic 3D Gaussians optimized through differentiable ren-dering with RGB and depth L1 losses over silhouette pixels [11, 10]. Follow-ing ActiveGS [10], we maintain a voxel-based exploration map for collision-free candidate pose sampling and execute selected views with an RRT-based local planner [16]. 
+
+3.2 Coarse Exploration Criterion 
+
+Exploration proceeds in two stages following ActiveGAMER [3]: stage 0 aug-ments geometry with semantic novelty; stage 1+ reverts to pure geometry as in ActiveGS [10]. 4 R. Shkokov et al. ONLINE - closed-loop active mapping  
+
+> A
+> Habitat
+> RGB-D views
+> B
+> SplaTAM
+> 3D Gaussian map
+> C
+> Active planner
+> stage 0: geo + sem stage 1+: geometry
+> D
+> SAM + CLIP
+> mask embeddings
+> (parallel)
+> Embedding bank RRT
+> execute NBV
+> *repeat until budget
+> OFFLINE - after exploration E
+> Language field
+> train on Gaussians + SAM/CLIP feats
+> F
+> Language field query Novel-view
+> segmentation
+> top-K new pose keyframe final map
+> "chair "
+> *text query
+
+Fig. 1. AOV-GS system overview. Online loop : posed RGB-D updates a Gaussian map; the planner selects NBVs; CLIP mask embeddings are extracted in parallel on keyframes. Offline stage : a language field is trained on Gaussians and queried by text. 
+
+Geometric score. For each candidate pose v, we render the current map and count unseen silhouette pixels N Sv . Following ActiveGAMER [3], the geometric information gain is 
+
+Igeo  
+
+> v
+
+= σ(log N Sv ), (1) where σ(·) denotes softmax normalization over all candidates. Let T vx ∈ R3 and 
+
+T tx ∈ R3 denote, respectively, the translation of candidate pose v and the robot translation at planning step t. With distance lv = ∥T vx − T tx∥2, the distance-weighted score is 
+
+wgeo  
+
+> v
+
+=  1 − σ(lv ) Igeo  
+
+> v
+
+. (2) 
+
+Semantic novelty. For the top-K candidates ranked by wgeo  
+
+> v
+
+, the current Gaus-sian map renders an RGB view at each candidate pose. We apply SAM to obtain instance masks and encode each masked region with CLIP to produce embed-dings {ei}, ei ∈ R512 (Sec. 3.3). Thus semantic scoring uses only the appearance currently represented by the map, matching the information available to the ge-ometry branch and the corresponding ActiveSGM setup. Each ei is compared against keyframe bank B. Candidate embeddings are used only transiently to score the current candidate set and are not inserted into B; the bank contains embeddings extracted from RGB observations at accepted keyframes reached by the executed trajectory. Let sim( a, b ) denote cosine similarity. The semantic novelty score is 
+
+Isem  
+
+> v
+
+= Agg i
+
+
+
+1 − max   
+
+> bj∈B
+
+sim( ei, b j )
+
+
+
+, (3) where Agg is mean pooling over masks and bj denotes the j-th embedding stored in bank B. To avoid an empty reference set at the start of exploration, seman-tic scoring is skipped until B contains at least one embedding (the configured threshold is nB
+
+> min
+
+=1). We use distinct notation because τq denotes the query decoding threshold below. AOV-GS 5AOV-GS NBV — geometry scores all candidates, semantics re-ranks Top-K     
+
+> View from current pose
+> wgeo all N GS unseen IG Top-K
+> by w geo Isem on Top-K Model+SAM+CLIP
+> SAM+CLIP Embedding bank
+> Mask embedding novelty
+> w = w geo ·σ(I sem )argmax → NBV Top-1 by wgeo
+
+Fig. 2. Stage-0 NBV on office0 : candidate poses, geometric scores, and geometry-only vs. semantic-aware argmax. 
+
+Combined criterion. For each candidate pose v, the fused planner score is 
+
+wv = wgeo  
+
+> v
+
+· σ(Isem  
+
+> v
+
+), (4) where wgeo  
+
+> v
+
+and Isem  
+
+> v
+
+are defined in Eqs. (2) and (3); the NBV is arg max v wv .Semantic novelty re-weights geometrically strong candidates rather than replac-ing geometry-driven planning: when geometric scores among top candidates are close, the product can move the argmax toward views whose rendered masks contain embeddings far from B (Fig. 2). 
+
+3.3 Parallel CLIP Mask Embedding Extraction 
+
+For each accepted mapping keyframe, SAM ViT-H [15] segments the RGB image into instance masks; CLIP ViT-B/16 [24] encodes each region into a 512-D em-bedding (Fig. 3). We refer to this two-step process as the SAM–CLIP pipeline .Following LangSplatV2 [18], per-mask vectors supervise offline language-field distillation and populate bank B (Eq. (3)). SAM and CLIP are frozen ; no per-scene fine-tuning is performed. We optionally apply CorrCLIP-style [33] mask merging and inter-class suppression to stabilize downstream training. Extraction runs in a background thread and does not block the online planner. 6 R. Shkokov et al. Parallel SAM+CLIP on mapping keyframes (background thread)  
+
+> Keyframe
+> accepted by SplaTAM RGB (+ pose)
+> CorrCLIP (opt.)
+> preprocessing
+> CLIP
+> per-mask 512d embedding
+> Embedding bank ..Count mask embedding novelty NBV selection stage
+> SAM
+> instance masks
+
+Fig. 3. SAM–CLIP extraction on keyframes with optional CorrCLIP post-processing; embeddings feed B and offline language-field training. 
+
+3.4 Language Field Construction and Query 
+
+After exploration, stored CLIP mask embeddings train a LangSplatV2 sparse language field on the reconstructed Gaussians. A global codebook is initialized by k-means over mask embeddings; each Gaussian receives sparse coefficients over codebook entries. At inference, a text prompt is encoded by CLIP and matched against multi-scale rendered cosine-similarity maps ( s/m/l ), producing an open-vocabulary segmentation mask on a novel view (Fig. 4). The language field is trained after mapping and is decoupled from geometric refinement. Open-vocabulary query at inference — trained model + text prompt → heatmap → mask    
+
+> After exploration — query time (no retraining)
+> Trained scene model
+> 3D Gaussians
+> SplaTAM map
+> Language field
+> LangSplatV2 "sofa" CLIP text
+> encoder etext [512]
+> Render
+> 512-D CLIP field s / m / l levels
+> Relevancy heatmap
+> cos(e pixel , e text )
+> Decode
+> threshold + pool
+> Query mask
+> open-vocab seg 64-D lang logits → 512-D CLIP field render · best s/m/l level by argmax fused score
+
+Fig. 4. Open-vocabulary text query via multi-scale cosine-similarity maps and thresh-olding. 
+
+3.5 Implementation Details 
+
+Default online settings use top-K=8 semantic candidates in stage 0 on an NVIDIA RTX 4070 Ti SUPER (16 GB). Language-field training uses render downscale 0.5; query decoding uses threshold τq =0 .55 with open-dictionary negatives and multi-scale s/m/l decoding, held fixed across compared open-vocabulary methods. Switching scenes resets only the geometric map and AOV-GS 7
+
+embedding bank; SAM and CLIP weights remain unchanged. All ablated hyperparameters are listed in Table 7. 
+
+## 4 Experiments 
+
+4.1 Experimental Setup 
+
+Datasets. We evaluate in Habitat [25] on two photorealistic indoor benchmarks. All methods in our comparisons receive the same ground-truth Habitat camera poses; none is evaluated with estimated poses or SLAM localization noise. 
+
+Replica [27]: eight scenes ( office0 –office4 , room0 –room2 ). Replica fol-lows the standard ActiveGS [10]/ActiveSGM [4] benchmark and therefore enables direct comparison with previous active mapping work. Following Ac-tiveGS [10]/ActiveSGM [4], each Replica exploration is limited to 2000 steps. RGB-D is captured at 680 × 1200. Novel-view semantic evaluation uses held-out camera views that are not used for mapping. 
+
+Matterport3D (MP3D) [2]: five scenes from the benchmark used by NARUTO [6], ActiveGAMER [3], and ActiveSGM [4]. The scenes are 
+
+GdvgFV5R1Z5 , gZ6f7yhEvPG , HxpKQynjfin , pLe4wQe7qrG , and YmJkqBEsHnH .We use the same Habitat rendering settings as on Replica. Novel-view semantic evaluation likewise uses held-out camera views that are not used for mapping. We follow the MP3D protocol of ActiveSGM [4], ActiveGAMER [3], and NARUTO [6] using the same five benchmark scenes and a 5000-step explo-ration budget. No established passive semantic baseline exists for this protocol; therefore, passive comparisons are reported only on Replica. 
+
+Baselines. Passive (Replica only, semantic evaluation): fixed NVS trajec-tory, SAM–CLIP embedding extraction, and offline language-field training. 
+
+Geometry-based : geometry-only ActiveGS [10] planner with the same SAM– CLIP and language-field pipeline. Geometry-based + CorrCLIP : the same geometric planner with CorrCLIP applied to accepted keyframe masks and embeddings; candidate views are still ranked only by geometry. ActiveSGM traj. + LangSplatV2 : we replay ActiveSGM’s recorded pose sequence and keyframe schedule on each scene, replacing OneFormer with our SAM–CLIP extraction and LangSplatV2 language-field training. This comparison keeps the open-vocabulary perception stack fixed, but does not isolate trajectory quality completely because the replay contains 868 steps versus 956 for AOV-GS. ActiveSGM [4]: per-scene OneFormer fine-tuning on closed Replica and Matterport3D label sets, run in our Habitat setup on both datasets; shown for context only, not as an open-vocabulary baseline. AOV-GS (Ours) : our semantic stage-0 planner without CorrCLIP. AOV-GS + CorrCLIP (Ours) :the same semantic planner with CorrCLIP applied both to candidate masks during re-ranking and to accepted keyframe masks used for the embedding bank. 8 R. Shkokov et al. 
+
+Table 1. Open-vocabulary language-field mIoU (%) on Replica novel views. Gray rows: closed-set OneFormer runs in our setup (context only, not open-vocabulary baselines). Method Avg. Of0 Of1 Of2 Of3 Of4 R0 R1 R2 ActiveSGM (closed-set) 78.8 74.5 74.8 84.9 85.0 76.2 70.1 82.2 82.5 ActiveSGM trajectory + LangSplatV2 28.2 32.5 27.4 37.1 27.5 8.9 23.1 40.2 28.7 Passive 32.1 31.3 22.8 29.5 31.1 36.4 35.3 39.1 30.9                                     
+
+> Geometry-based 33.3 27.3 31.3 32.6 34.1 35.3 36.4 39.7 29.3 Geometry-based + CorrCLIP 33.6 30.8 29.7 34.1 33.7 35.2 36.5 39.0 29.5 AOV-GS (Ours) 34.6 34.4 30.1 28.7 39.3 38.7 34.7 42.8 27.9 AOV-GS + CorrCLIP (Ours) 35.6 33.6 29.8 37.3 38.5 38.3 36.4 41.7 29.4
+
+Metrics. Primary: open-vocabulary language-field mIoU [5] on text-query pairs over held-out novel views. For each dataset category present in a held-out view, its category name is used as the text query, the dataset semantic annotation supplies the binary ground-truth mask, and IoU is computed between that mask and the thresholded language-field prediction. We average over all category– view pairs and then report the scene mean; for example, office0 contains 23 categories and 2477 pairs. The released evaluation configuration fixes the held-out views, category names, negative prompts, and threshold for every compared method. Secondary: novel-view PSNR [12], SSIM [29], LPIPS [32], and depth L1 after map refinement. For the reported MP3D reconstruction metrics, we evaluate the outputs at the end of stage 1 and final refinement and report the better result per scene. 
+
+4.2 Open-Vocabulary Semantic Segmentation on Replica 
+
+Table 1 summarizes open-vocabulary language-field mIoU on eight Replica scenes. AOV-GS reaches 34.6% average mIoU without CorrCLIP (+1.3 over Geometry-based, +2.5 over Passive). With CorrCLIP, AOV-GS reaches 35.6%, compared with 33.6% for Geometry-based + CorrCLIP. ActiveSGM (78.8% closed-set mIoU in our runs) uses per-scene OneFormer on fixed label sets and is listed only as a supervised reference outside our open-vocabulary protocol. To better understand the heterogeneous per-scene results, we analyzed scene size, object statistics, lighting conditions, and semantic evaluation subsets. No consistent correlation was observed with scene area or object count alone. In-stead, improvements were primarily determined by the reliability of semantic observations. Large, well-segmented objects produced stable SAM masks and CLIP embeddings, whereas adverse visual conditions (including low illumina-tion, overexposure, and cluttered scenes containing many small objects) reduced semantic feature quality and limited the benefit of semantic planning. The Cor-rCLIP improvement on office2 (+8.6 pp) suggests that semantic feature quality is an important bottleneck. CorrCLIP is applied both to candidate masks used for semantic re-ranking and to accepted keyframe masks used to populate the embedding bank, so this result combines planner and representation effects. AOV-GS 9
+
+Failure modes. The four Replica regressions have different signatures (Table 1). 
+
+office1 is the darkest Replica scene in our image-statistics analysis (mean RGB intensity 44/255; 5th percentile 4/255), which may reduce the reliability of SAM masks and CLIP crops; AOV-GS is 1.2 pp below Geometry-based. We retain the benchmark’s fixed rendering conditions rather than tuning illumination per method. On office2 , AOV-GS is 3.9 pp below Geometry-based, while CorrCLIP recovers 8.6 pp; this is consistent with mask fragmentation being an important factor. room0 shows a category trade-off rather than a uniform failure: relative to Passive, AOV-GS improves floor IoU from 17.4% to 57.2% and chair from 75.2% to 82.8%, while its full-category mean decreases from 35.3% to 34.7% (Table 2). On room2 , the largest displayed degradation is chair IoU, from 76.3% to 32.8%, although floor improves from 7.0% to 57.6% (Table 2); this points to sensitivity to which object views are collected rather than a uniform loss of reconstruction quality.     
+
+> Fig. 5. Language-field masks on novel views for queries door, sofa, floor, and blanket. AOV-GS improves large-object coverage ( office3 /sofa, room0 /floor); narrow objects such as the office0 door remain difficult for all methods.
+
+Figure 5 qualitatively illustrates representative improvements on large struc-tural objects together with typical failure cases on narrow or visually ambiguous categories. 10 R. Shkokov et al. AOV-GS 
+
+> NBV selection (office0)
+> Geometry-based
+> Geometry-only baseline (ActiveGS)
+> ActiveSGM
+> Semantic entropy · OneFormer
+> OURS
+> Open-vocabulary
+
+Fig. 6. Exploration routes on office0 : AOV-GS covers the central workspace more thoroughly than the geometry-only planner. 
+
+When semantic exploration helps. Semantic exploration is most beneficial when semantically distinctive objects occupy the central workspace and remain visible from multiple viewpoints. On office0 , the geometry-only planner favours pe-ripheral unseen regions over the furniture-dense core (Fig. 6), yielding +7.1 pp mIoU over the geometry-only baseline (Table 1) and strong sofa /table cover-age for AOV-GS (87.3%/84.3%). Similar behaviour appears on office3 and 
+
+office4 (+4.4 and +3.0 pp with CorrCLIP). In the bedroom scene room1 , dis-criminative bed-region embeddings give the best open-vocabulary result (42.8%). Table 2 lists per-category IoU for structural classes. 
+
+Trajectory transfer. The ActiveSGM traj. + LangSplatV2 row in Table 1 aver-ages 28.2% mIoU, below both Geometry-based (33.3%) and AOV-GS (34.6%). A trajectory optimized for OneFormer supervision does not benefit a SAM–CLIP language field; the largest degradation occurs on office4 (8.9%), while room1 
+
+remains high (40.2%) because furniture layout still yields useful views regard-less of planner objective. The 6.4 pp gap between this transferred trajectory and AOV-GS shows that viewpoint selection must be matched to the semantic representation used for training and querying the map. AOV-GS 11 
+
+Table 2. Selected per-category language-field IoU (%) on Replica scenes: AOV-GS vs. Passive. Higher value in bold per category; “—” marks categories absent from a scene. The Mean row is computed over the full evaluation category set, not only the displayed rows. Of0 Of1 Of2 Of3 Of4 R0 R1 R2 Category Ours Pass. Ours Pass. Ours Pass. Ours Pass. Ours Pass. Ours Pass. Ours Pass. Ours Pass. bed — — — — — — — — — — — — 26.5 22.0 — —sofa 87.3 70.6 — — 41.3 54.8 66.6 31.7 — — 29.5 32.7 — — — —table 84.3 66.8 — — 45.6 57.5 77.0 62.5 0.3 35.5 45.3 59.1 — — 81.3 76.9 chair 36.4 73.8 56.3 29.1 48.2 33.4 73.1 75.7 28.6 27.0 82.8 75.2 — — 32.8 76.3                                                                            
+
+> wall 39.7 33.6 22.0 14.2 59.0 70.6 57.5 47.6 57.5 52.8 15.8 13.6 9.1 24.6 12.0 43.4
+> floor 4.9 8.7 22.6 2.1 9.3 15.3 45.9 21.0 41.6 20.1 57.2 17.4 64.5 55.1 57.6 7.0 ceiling 50.3 17.5 39.9 0.1 39.9 47.0 59.5 73.8 72.1 67.6 68.1 61.5 67.5 62.9 45.0 44.6 pillow ————————————80.9 79.2 ——Mean 34.4 31.3 30.1 22.8 28.7 29.5 39.3 31.1 38.7 36.4 34.7 35.3 42.8 39.1 27.9 30.9
+
+4.3 RGB-D Reconstruction on Replica 
+
+A practical semantic planner should preserve reconstruction quality while im-proving semantic coverage. Table 3 reports eight-scene averages from a single run per method. AOV-GS matches the Geometry-based planner on PSNR (31.19 vs. 31.47 dB), SSIM, and LPIPS, while improving depth L1 (1.18 vs. 1.26 cm). To assess stability, we repeat Geometry-based and AOV-GS on all eight scenes with five independent seeds (0–4). Table 4 summarizes pooled render-ing metrics and office0 language-field mIoU. Cross-seed PSNR, SSIM, and LPIPS have similar descriptive means and spreads. On office0 , semantic mIoU is 33 .6±1.1% for AOV-GS versus 28 .8±1.4% for Geometry-based. 
+
+4.4 Computational Cost 
+
+Stage-0 semantic scoring applies only to top-K candidates ( ≈8 s per view on 
+
+office0 on an NVIDIA RTX 4070 Ti SUPER); stage 1+ adds no semantic overhead. A complete office0 run takes 52:32, 61:23, and 70:41 for K=4, 8, and 16, respectively, with peak GPU memory of 12.59, 12.92, and 13.80 GB. Because candidate views are scored sequentially, increasing K affects runtime more strongly than memory. Offline language-field training peaks at 12.6 GB with the default 0.5 downscale and ranges from 9.9 to 29.1 GB across the evaluated render-downscale settings; runtime increases with the number of rendered pixels. Multi-scale text-query decoding takes 1.41 s per query–view pair and peaks at 4.2 GB. On Matterport3D, both open-vocabulary planners fit in 16 GB on this hardware, whereas ActiveSGM in our setup required ≈36–48 GB due to the OneFormer module. 
+
+4.5 Evaluation on Matterport3D 
+
+We apply the same open-vocabulary pipeline to the five MP3D scenes defined in Sec. 4.1. Compared with Replica, MP3D contains larger layouts and sub-12 R. Shkokov et al.                                             
+
+> Table 3. Novel-view rendering after refinement on Replica (eight-scene average, single run). Method Steps ↓PSNR ↑SSIM ↑LPIPS ↓L1 (cm) ↓
+> Passive 1999 27.45 0.949 0.149 6.98 Geometry-based 914 31.47 0.964 0.131 1.26 ActiveSGM 868 32.11 0.970 0.110 1.23 AOV-GS (Ours) 956 31.19 0.964 0.123 1.18 AOV-GS + CorrCLIP (Ours) 952 31.56 0.964 0.128 1.14 Table 4. Five-seed stability on Replica (seeds 0–4). Rendering: eight-scene average; mIoU: office0 only. Method PSNR ↑SSIM ↑LPIPS ↓mIoU (%) Geometry-based 31.62 ±2.63 0.965 ±0.014 0 .128 ±0.033 28 .8±1.4AOV-GS (Ours) 31 .53 ±2.44 0.965 ±0.014 0.126 ±0.027 33.6 ±1.1
+
+stantially longer exploration trajectories, reducing the relative influence of the semantic stage-0 planner. Table 5 reports language-field mIoU on MP3D novel views. AOV-GS improves the average from 21.3% to 23.1% (+1.8 pp) over the Geometry-based planner, with the largest absolute gains on GdvgFV5R1Z5 
+
+(+3.5 pp), gZ6f7yhEvPG (+2.7 pp), and pLe4wQe7qrG (+1.9 pp). The improve-ment on HxpKQynjfin (+0.7 pp) supports that semantic novelty remains infor-mative in larger layouts. On MP3D, exploration trajectories are longer (mean 3472 vs. 3496 steps), but semantic stage-0 re-ranking still shifts viewpoint selec-tion toward CLIP-embedding novelty. The CorrCLIP gain is smaller for Geometry-based because its trajectory is fixed by the geometric planner: CorrCLIP can improve only the masks and embeddings extracted from accepted keyframes. In AOV-GS, CorrCLIP addi-tionally changes the candidate-mask embeddings used for semantic re-ranking and can therefore alter the acquired trajectory. CorrCLIP is not uniformly ben-eficial, however: merging adjacent regions or suppressing small and overlapping masks can remove useful object evidence, so its effect depends on the scene. With CorrCLIP, AOV-GS reaches 24.0% average mIoU, compared with 21.8% for the matched Geometry-based + CorrCLIP baseline. The resulting +2.2 pp difference isolates the benefit of semantic view selection under the same CorrCLIP-enhanced perception stack. Although absolute mIoU values are lower on Matterport3D, AOV-GS retains a +1.8 pp average advantage over the geometry-only planner (Fig. 7). AOV-GS 13                                                
+
+> Table 5. Open-vocabulary language-field mIoU (%) on Matterport3D novel views (five scenes). Gray rows: closed-set OneFormer runs in our setup (context only). Method Avg. HxpK Gdvg gZ6f YmJk pLe4 ActiveSGM (closed-set) 61.5 51.2 56.3 69.8 66.1 64.0 ActiveSGM trajectory + LangSplatV2 18.1 25.2 16.9 19.7 13.8 15.1 Geometry-based 21.3 29.6 19.9 23.2 16.2 17.8 AOV-GS (Ours) 23.1 30.3 23.4 25.9 16.2 19.7 Geometry-based + CorrCLIP 21.8 29.7 20.1 23.6 17.6 18.0 AOV-GS + CorrCLIP (Ours) 24.0 30.5 23.5 26.8 18.1 21.1
+> Fig. 7. Language-field masks on MP3D novel views for gZ6f7 /seating, HxpKQ /chair,
+> YmJkq /seating, and Gdvg /bed (GT in green; Geometry-based in orange; AOV-GS in yellow).
+
+Novel-view rendering on MP3D is summarized in Table 6. AOV-GS improves novel-view rendering quality over the geometry-only planner on PSNR, SSIM, and LPIPS; depth L1 is the only metric slightly above the geometry baseline (2.83 vs. 2.80 cm). The MP3D results therefore retain the semantic gain without reducing RGB rendering quality. 
+
+4.6 Ablation Studies 
+
+Table 7 summarizes single-run ablations on office0 over 23 categories (2477 query pairs), varying one factor at a time while keeping the default configuration elsewhere ( K=8, render downscale 0 .5, threshold 0 .55, LangSplatV2 “other” negatives). Increasing top-K from 4 to 8 improves mIoU from 33.2% to 34.4%; 
+
+K=16 does not improve quality and increases semantic-scoring time because 14 R. Shkokov et al.                                                            
+
+> Table 6. Novel-view rendering on Matterport3D (five-scene average, single run); each scene uses the better offline evaluation of the stage-1 and final-refinement outputs. Method Steps ↓PSNR ↑SSIM ↑LPIPS ↓L1 (cm) ↓
+> Geometry-based 3496 26.19 0.928 0.233 2.80 ActiveSGM 3821 26.08 0.917 0.259 3.76 AOV-GS (Ours) 3472 26.25 0.931 0.232 2.83 AOV-GS + CorrCLIP (Ours) 3454 26.27 0.932 0.233 2.79 Table 7. Ablation on office0 . GPU memory denotes peak allocated memory. Factor Setting mIoU ↑Peak GPU memory Top-KK=4 33.2 12.59 GB
+> K=8 (default) 34.4 12.92 GB
+> K=16 34.4 13.80 GB Downscale 0.25 32.0 9.9 GB 0.5 (default) 34.4 12.6 GB 1.0 (full) 26.2 29.1 GB Negative prompts ( τq=0 .55) none 25.1 4.2 GB 1 class vs. all others 17.7 4.2 GB 1 class vs. “other” (LangSplatV2) 34.4 4.2 GB Threshold (“other” negs.)
+> τq=0 .50 25.0 4.2 GB
+> τq=0 .55 (default) 34.4 4.2 GB
+> τq=0 .60 33.9 4.2 GB
+
+twice as many candidates are processed relative to K=8. Render downscale 0 .5balances mIoU and offline training cost; full resolution (downscale 1 .0) overfits CLIP feature noise (26.2%), while downscale 0 .25 reaches 32.0% mIoU with lower offline memory (9.9 GB) and downscale 0 .5 reaches the best mIoU 34.4%. LangSplatV2 “other” negatives with τq =0 .55 outperform alternatives; query-only decoding reaches 25.1% mIoU. 
+
+## 5 Conclusion 
+
+We presented AOV-GS, an active open-vocabulary semantic mapping pipeline that guides exploration with CLIP mask-embedding novelty from frozen SAM and CLIP and trains a scene-specific LangSplatV2 language field on the collected embeddings for text-query segmentation on novel views. Across Replica and Mat-terport3D, the resulting maps improve average open-vocabulary language-field mIoU over geometry-only exploration while preserving comparable novel-view reconstruction quality. Replica gains vary by scene, while the five-seed office0 
+
+experiment shows a consistent advantage over geometry-only exploration. Experiments further show that these gains depend on alignment between ex-ploration and the downstream semantic representation: trajectories optimized for AOV-GS 15 
+
+a closed-set OneFormer pipeline do not transfer to a SAM–CLIP language field, whereas semantic novelty co-designed with that representation improves the av-erage on both benchmarks. The evaluation uses ground-truth camera poses, matching the simulator protocol used by the compared active-mapping meth-ods; robustness to SLAM drift and real sensor noise is outside the scope of this simulator study. 
+
+Disclosure of Interests. The authors have no competing interests to declare that are relevant to the content of this article. 
+
+## References 
+
+1. Cen, J., Fang, J., Yang, C., Xie, L., Zhang, X., Shen, W., Tian, Q.: SAGA: Segment any 3D gaussians. In: arXiv preprint arXiv:2312.00860 (2023) 2. Chang, A., Dai, A., Lambert, T., Funkhouser, T., Nießner, M.: Matterport3d: Learning from RGB-D data in indoor environments. In: 2017 International Con-ference on 3D Vision (3DV). pp. 667–676. IEEE (2017) 3. Chen, L., Zhan, H., Chen, K., Xu, X., Yan, Q., Cai, C., Xu, Y.: Activegamer: Active gaussian mapping through efficient rendering. In: Proceedings of the Computer Vision and Pattern Recognition Conference. pp. 16486–16497 (2025) 4. Chen, L., Zhan, H., Yin, H., Xu, Y., Mordohai, P.: Understanding while exploring: Semantics-driven active mapping. arXiv preprint arXiv:2506.00225 (2025) 5. Everingham, M., Van Gool, L., Williams, C.K.I., Winn, J., Zisserman, A.: The Pascal visual object classes (VOC) challenge. International Journal of Computer Vision 88 (2), 303–338 (2010) 6. Feng, Z., Zhan, H., Chen, Z., Yan, Q., Xu, X., Cai, C., Li, B., Zhu, Q., Xu, Y.: Naruto: Neural active reconstruction from uncertain target observations. In: Pro-ceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recogni-tion. pp. 21572–21583 (2024) 7. Jain, J., Li, J., Chiu, M.T., Hassani, A., Orlov, N., Shi, H.: Oneformer: One trans-former to rule universal image segmentation. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 298–307 (2023) 8. Jatavallabhula, K.M., Kuwajerwala, A., Gu, Q., Omama, M., Chen, T., Li, S., Iyer, G., Saryazdi, S., Keetha, N., Tewari, A., et al.: ConceptFusion: Open-set multimodal 3d mapping. In: Proceedings of Robotics: Science and Systems (2023) 9. Jiang, W., Lei, B., Daniilidis, K.: Fisherrf: Active view selection and uncer-tainty quantification for radiance fields using fisher information. arXiv preprint arXiv:2311.17874 (2023) 10. Jin, L., Zhong, X., Pan, Y., Behley, J., Stachniss, C., Popovi´ c, M.: Activegs: Ac-tive scene reconstruction using gaussian splatting. IEEE Robotics and Automation Letters (2025) 11. Keetha, N., Karhade, J., Jatavallabhula, K.M., Yang, G., Scherer, S., Ramanan, D., Luiten, J.: Splatam: Splat track & map 3d gaussians for dense rgb-d slam. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 21357–21366 (2024) 12. Kele¸ s, O., Yılmaz, M.A., Tekalp, A.M., Korkmaz, C., Do˘ gan, Z.: On the compu-tation of PSNR for a set of images or video. In: 2021 Picture Coding Symposium (PCS). pp. 1–5. IEEE (2021) 16 R. Shkokov et al. 13. Kerbl, B., Kopanas, G., Leimk¨ uhler, T., Drettakis, G.: 3d gaussian splatting for real-time radiance field rendering. ACM Trans. Graph. 42 (4), 139–1 (2023) 14. Kerr, J., Kim, C.M., Goldberg, K., Kanazawa, A., Tancik, M.: LERF: Language embedded radiance fields. In: Proceedings of the IEEE/CVF International Confer-ence on Computer Vision. pp. 19729–19739 (2023) 15. Kirillov, A., Mintun, E., Ravi, N., Mao, H., Rolland, C., Gustafson, L., Xiao, T., Whitehead, S., Berg, A.C., Lo, W.Y., et al.: Segment anything. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 4015–4026 (2023) 16. LaValle, S.M.: Rapidly-exploring random trees: A new tool for path planning. Tech. rep., Iowa State University, Computer Science Department (1998) 17. Li, M., Liu, S., Zhou, H., Zhu, G., Cheng, N., Deng, T., Wang, H.: Sgs-slam: Semantic gaussian splatting for neural dense slam. In: European Conference on Computer Vision. pp. 163–179. Springer (2024) 18. Li, W., Zhao, Y., Qin, M., Liu, Y., Cai, Y., Gan, C., Pfister, H.: Langsplatv2: High-dimensional 3d language gaussian splatting with 450+ fps. In: Advances in Neural Information Processing Systems. vol. 38 (2025). https://doi.org/10.52202/085713-5798 19. Li, Y., Kuang, Z., Li, T., Hao, Q., Yan, Z., Zhou, G., Zhang, S.: Activesplat: High-fidelity scene reconstruction through active gaussian splatting. IEEE Robotics and Automation Letters (2025) 20. Mildenhall, B., Srinivasan, P.P., Tancik, M., Barron, J.T., Ramamoorthi, R., Ng, R.: Nerf: Representing scenes as neural radiance fields for view synthesis. Commu-nications of the ACM 65 (1), 99–106 (2021) 21. Pan, X., Lai, Z., Song, S., Huang, G.: ActiveNeRF: Learning where to see for ac-tive sensing. In: European Conference on Computer Vision. pp. 129–144. Springer (2022) 22. Peng, S., Genova, K., Jiang, C.M., Tagliasacchi, A., Pollefeys, M., Funkhouser, T.: OpenScene: 3d scene understanding with open vocabularies. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 815–824 (2023) 23. Qin, M., Li, W., Zhou, J., Wang, H., Pfister, H.: Langsplat: 3d language gaussian splatting. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 20051–20060 (2024) 24. Radford, A., Kim, J.W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sathya-murthy, G., Askell, A., Mishkin, P., Clark, J., et al.: Learning transferable visual models from natural language supervision. In: International Conference on Machine Learning. pp. 8748–8763. PMLR (2021) 25. Savva, M., Kadian, A., Maksymets, O., Zhao, Y., Wijmans, E., Jain, B., Straub, J., Liu, J., Koltun, V., Malik, J., et al.: Habitat: A platform for embodied ai research. In: Proceedings of the IEEE/CVF International Conference on Computer Vision. pp. 9339–9347 (2019) 26. Siegel, P., Tombari, F., Pollefeys, M., Barath, D.: Segsplat: Feed-forward gaussian splatting and open-set semantic segmentation. arXiv preprint arXiv:2511.18386 (2025) 27. Straub, J., Whelan, T., Ma, L., Chen, Y., Wijmans, E., Green, S., Engel, J.J., Mur-Artal, R., Ren, C., Verma, S., et al.: The replica dataset: A digital replica of indoor spaces. arXiv preprint arXiv:1906.05797 (2019) 28. Titkov, R., Zubkov, E., Yudin, D., Mahmoud, J., Mohrat, M., Sidorov, G.: LEG-SLAM: Real-time language-enhanced gaussian splatting for SLAM. arXiv preprint arXiv:2506.03073 (2025) AOV-GS 17 29. Wang, Z., Bovik, A.C., Sheikh, H.R., Simoncelli, E.P.: Image quality assessment: from error visibility to structural similarity. IEEE Transactions on Image Process-ing 13 (4), 600–612 (2004) 30. Yudin, D.A.: M3DMap: Object-aware multimodal 3d mapping for dynamic envi-ronments. Optical Memory and Neural Networks 34 (2), 215–230 (2025) 31. Zemskova, T., Kichik, M., Yudin, D.A., Staroverov, A., Panov, A.: SegmATRon: Embodied adaptive semantic segmentation for indoor environment. Neurocomput-ing 638 , 130169 (2025). https://doi.org/10.1016/j.neucom.2025.130169 32. Zhang, R., Isola, P., Efros, A.A., Shechtman, E., Wang, O.: The unreasonable effec-tiveness of deep features as a perceptual metric. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 586–595 (2018) 33. Zhao, W., Huang, Y., Li, X., Wang, F., Zhang, Y., Li, G., Yang, Y.: CorrCLIP: Reconstructing correlograms in CLIP for open-vocabulary semantic segmentation. arXiv preprint arXiv:2411.16963 (2024) 34. Zhou, S., Chang, H., Jiang, S., Fan, Z., Zhu, Z., Xu, D., Chari, P., You, S., Wang, Z., Kadambi, A.: Feature 3DGS: Supercharging 3D gaussian splatting to enable distilled feature fields. In: Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition. pp. 21676–21685 (2024)
