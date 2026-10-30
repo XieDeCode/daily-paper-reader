@@ -6,42 +6,42 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-10-29
-- 运行时间：2026-10-29 23:10:26 UTC
+- 最新运行日期：2026-10-30
+- 运行时间：2026-10-30 23:31:49 UTC
 - 运行状态：成功
 - 本次总论文数：7
 - 精读区：0
 - 速读区：7
 
 ### 今日简报（AI）
-今日速读 7 篇、精读 0 篇，重点浏览了 3D Gaussian Splatting 与空中导航方向。最值得看的是 3DGS 的两条实用路线：AOV-GS 做开放词汇语义建图，BoundedGS 解决高分辨率训练的内存瓶颈；AirPlayground 则提供跨重建环境的空中导航评测基准。普通读者可先挑与自身场景最接近的一篇，读摘要和实验设置，再决定是否深读。
-- 详情：[/202610/29/README](/202610/29/README)
+今日速读7篇，0篇精读，重点集中在三维视觉与重建方向。最值得关注的是GOFish的全视场高斯泼溅与网格提取，以及BudSplat在渲染预算约束下的前馈3D高斯泼溅。普通读者可先看这两篇的摘要和可视化结果，快速判断是否与自己的场景相关。
+- 详情：[/202610/30/README](/202610/30/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [AOV-GS: Active Open-Vocabulary Semantic Mapping with 3D Gaussian Splatting](/202610/29/2610.29374v1-aov-gs-active-open-vocabulary-semantic-mapping-with-3d-gaussian-splatting)  
+1. [Ground Sample Distance Constrained k-Coverage Viewpoint Planning via Set Multi-Cover Formulation](/202610/30/2610.36450v1-ground-sample-distance-constrained-k-coverage-viewpoint-planning-via-set-multi-cover-formulation)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：主动3D高斯语义建图
-2. [AirPlayground: Benchmarking Aerial Navigation across Diverse Reconstructed Environments](/202610/29/2610.29699v1-airplayground-benchmarking-aerial-navigation-across-diverse-reconstructed-environments)  
+   evidence：面向无人机三维重建的多视覆盖视点规划
+2. [GOFish: Full Field-of-View Gaussian Splatting and Mesh Extraction](/202610/30/2610.37818v1-gofish-full-field-of-view-gaussian-splatting-and-mesh-extraction)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向导航基准的航拍三维高斯泼溅环境
-3. [BoundedGS: Memory-Efficient High-Resolution Training for 3D Gaussian Splatting](/202610/29/2610.34233v1-boundedgs-memory-efficient-high-resolution-training-for-3d-gaussian-splatting)  
+   evidence：面向鱼眼全视场的3D高斯溅射表示与渲染及网格提取
+3. [BudSplat: Feed-forward 3D Gaussian Splatting under a Rendering Budget](/202610/30/2610.38278v1-budsplat-feed-forward-3d-gaussian-splatting-under-a-rendering-budget)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：内存高效的高分辨率3D高斯溅射训练
-4. [ParetoGS: High-Quality Continuous-Budget 3D Gaussian Splatting with Sparse Adapted Anchors](/202610/29/2610.34235v1-paretogs-high-quality-continuous-budget-3d-gaussian-splatting-with-sparse-adapted-anchors)  
+   evidence：多视角输入的前馈三维高斯泼溅
+4. [GradSplat: Gradients Inside the Forward Pass for Feed-Forward 3D Gaussian Splatting](/202610/30/2610.38951v1-gradsplat-gradients-inside-the-forward-pass-for-feed-forward-3d-gaussian-splatting)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：跨预算的可扩展三维高斯泼溅场景表示
-5. [DimFlow: Bidirectional Grid-Expert Learning for Dynamic Gaussian Reconstruction](/202610/29/2610.34952v1-dimflow-bidirectional-grid-expert-learning-for-dynamic-gaussian-reconstruction)  
+   evidence：利用输入视角梯度对多视图三维高斯进行精化
+5. [ACD-GS: Asymmetric Curvature-aware Densification for 3D Gaussian Splatting](/202610/30/2610.39399v1-acd-gs-asymmetric-curvature-aware-densification-for-3d-gaussian-splatting)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：动态高斯重建与网格专家场景特征
-6. [SG^2SLAM: Spatial Geometry-Informed 3D Gaussian Splatting SLAM for Monocular Outdoor Navigation](/202610/29/2610.36312v1-sg2slam-spatial-geometry-informed-3d-gaussian-splatting-slam-for-monocular-outdoor-navigation)  
+   evidence：面向三维高斯优化的曲率感知致密化
+6. [MLLM-GS: Multimodal Large Language Model Prior-Guided Fast Novel View Synthesis in Extreme Environments](/202610/30/2610.39936v1-mllm-gs-multimodal-large-language-model-prior-guided-fast-novel-view-synthesis-in-extreme-environments)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：基于射线条件化核的3D高斯泼溅SLAM，实现稠密地图与渲染
-7. [LingGS: Decoupling Feed-Forward Geometry Prediction from Camera Tracking for High-Fidelity Gaussian SLAM](/202610/29/2610.36853v1-linggs-decoupling-feed-forward-geometry-prediction-from-camera-tracking-for-high-fidelity-gaussian-slam)  
+   evidence：基于高斯泼溅的退化多视图新视角合成
+7. [A Unified Benchmark for Aerial-Enhanced Autonomous Driving: The KITScenes Aerial Dataset](/202610/30/2610.40455v1-a-unified-benchmark-for-aerial-enhanced-autonomous-driving-the-kitscenes-aerial-dataset)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：高斯SLAM中的流式高斯稠密场景表示
+   evidence：航拍影像与地面车载数据的互补融合建图
 
 
 <div class="dpr-home-promo-card">
