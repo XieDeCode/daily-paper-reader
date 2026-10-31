@@ -1,0 +1,1306 @@
+DomeGS: Perceptually Consistent Background Completion for
+Unbounded 3D Gaussian Splatting in Virtual Reality
+Anastasiya Pechko*
+Jagiellonian University
+Agata Szyma´nska †
+Jagiellonian University
+Piotr Borycki ‡
+Jagiellonian University
+Ideas Research Institute
+Joanna Szelewska §
+Jagiellonian University
+Ideas Research Institute
+Michał Mnich ¶
+Jagiellonian University
+Slawomir Konrad Tadeja ||
+University of Cambridge
+Przemysław Spurek**
+Jagiellonian University
+Ideas Research Institute
+Figure 1: We present DomeGS a method for filling missing background in 3D Gaussian Splatting scenes. It is directly incorporated
+with the scene by utilizing outpainted panorama view, followed by scene-adaptive dataset preparation, which expands the set of
+training views to incorporate previously missing background. Finally, the scene is fine-tuned according to both original and added
+views to achieve a unified Gaussian Splatting scene. This design encourages preserving depth and realism, enabling immersive
+VR environment creation.
+ABSTRACT
+The growing need for high-quality 3D content remains among the
+most prevalent challenges in virtual reality (VR). Recently, novel
+view synthesis techniques have enabled rapid content creation, with
+the 3D Gaussian Splatting (3DGS) emerging as one of the most
+promising methods for generating high-fidelity 3D scenes. How-
+ever, using 3DGS to reconstruct unbounded outdoor scenes can
+leave horizons incomplete due to missing data or a lack of dis-
+tant geometric constraints. Such incompleteness can break immer-
+sion, compromising VR’s core characteristic. A typical workaround
+in traditional VR systems is a textured cube (skybox) or sphere
+(skydome) surrounding the environment to create the illusion of a
+distant background. However, these approaches struggle to blend
+seamlessly with the reconstructed 3DGS geometry.
+To address
+these issues, we introduce the DomeGS framework 1, which incor-
+porates the skydome concept not as a flat background shell, but as a
+part of the reconstructed Gaussian Splatting 3D scene. By integrat-
+*e-mail: anastasiya.pechko@doctoral.uj.edu.pl, Doctoral School in the
+Exact Sciences, Jagiellonian University
+†e-mail: agata.szymanska@doctoral.uj.edu.pl, Doctoral School in the
+Social Sciences, Jagiellonian University, Krakow, Poland
+‡e-mail: piotr.borycki@doctoral.uj.edu.pl, Doctoral School in the Exact
+Sciences, Jagiellonian University
+§e-mail: joanna.szelewska@doctoral.uj.edu.pl, Doctoral School in the
+Exact Sciences, Jagiellonian University
+¶e-mail: michal.mnich@uj.edu.pl
+||e-mail: skt40@cam.ac.uk
+**e-mail: przemyslaw.spurek@uj.edu.pl
+1Code: https://github.com/Anastasiya999/DomeGS
+ing the horizon and sky into the 3DGS representation, our method
+provides a unified, scene-consistent environment bridging fore-
+grounds and backgrounds for greater realism. Experimental evalua-
+tion with N = 36 users demonstrates that DomeGS significantly in-
+creases spatial presence (p = 0.042) and realism (p = 0.042) com-
+pared to the skybox baseline.
+Index Terms:
+Virtual reality, VR, skybox, skydome, Gaussian
+Splatting, 3DGS.
+1
+INTRODUCTION
+Realistic, highly immersive experiences are a core requirement in
+spatial interfaces such as virtual reality (VR) [30, 9] and a pri-
+mary objective within the spatial computing community [16, 42]. A
+key factor shaping these experiences is the high-quality 3D content
+that populates fully virtual environments [32]. Recently, 3D Gaus-
+sian Splatting (3DGS) [20] has emerged as a promising method of
+scene representation and rendering for interactive VR systems, pro-
+viding high-fidelity 3D reconstruction while also enabling complex
+physics-aware interactions [17, 26]. 3DGS is a real-time view syn-
+thesis method that offers high visual quality at frame rates feasible
+for head-mounted displays (HMDs).
+3DGS works best when reconstructing near-field, bounded
+scenes with compelling depth cues. However, when we attempt
+to reconstruct unbounded outdoor environments, 3DGS reveals a
+critical constraint caused by sparseness or entirely missing far-field
+detail in the capture data (e.g. skies, distant facades, and the hori-
+zon). Without sufficient multi-view parallax and geometric land-
+marks, the 3DGS optimization process lacks the details needed to
+accurately triangulate depth in these regions [1]. As a result, stan-
+dard 3DGS models fail to reconstruct plausible geometry in the dis-
+tance [27, 36]. In immersive VR, this failure can negatively affect
+immersion, as users may encounter jagged boundaries, floating ar-
+tifacts, or gaps in the virtual environment that break the illusion of
+arXiv:2610.37172v1  [cs.GR]  27 Oct 2026
+
+
+a continuous unbounded outdoor scene [38, 43] (see Fig. 1).
+A common workaround to mask these missing regions, natively
+supported in game engines such as Unity2, is to project a panoramic
+image onto an infinitely distant skybox.
+Here, recent advance-
+ments have made significant strides in unbounded 3D scene gener-
+ation [7, 8] through development of sophisticated diffusion models
+capable of synthesizing high-quality 360◦panoramas [18, 37, 41],
+and extended them to layered 3D representations [39, 44]. While
+these completion methods can successfully synthesize missing
+backgrounds, modular frameworks facilitate their integration [40],
+treating the background as an infinite cubemap. However, directly
+compositing such a pre-existing map with the reconstructed scene
+can cause color or illumination discrepancies and result in inconsis-
+tent, implausible integration between the reconstructed scene and
+the panoramic background, visually noticeable between the near-
+field Gaussians and the far-field backdrop (see Fig. 2).
+To address this, we introduce DomeGS, a novel framework for
+perceptually consistent background completion for 3DGS scene re-
+construction. Rather than relegating the far-field to a post-processed
+2D backdrop, our method constructs a scene with a background in-
+spired by skydome-like approaches (i.e. an alternative to a skybox
+solution based on a textured sphere instead of a cube to surround
+the virtual environment) directly within the Gaussian representa-
+tion. We first extract a partial panorama from the near-field scene
+and complete the missing distant background regions using a 360◦-
+specialized generative model. Crucially, we then use this completed
+map to supervise a secondary optimization stage, where we seed
+and refine new Gaussians on a finite-radius distant sphere. This
+unification of the near-field scene and the far-field skydome into a
+single 3DGS asset offered by our DomeGS ensures that the entire
+environment responds cohesively to user movement. The result is
+a geometrically continuous background plausibly integrated with
+the 3DGS scene. Furthermore, we experimentally compared the
+DomeGS method with the skybox baseline and showed significant
+increases in sense of presence (p = 0.042) and realism (p = 0.042).
+In summary, our main contributions are threefold:
+1. We offer a unified pipeline for extending unbounded 3DGS
+scenes specifically designed to preserve depth cues and real-
+ism in an immersive VR environment.
+2. We effectively integrate 360◦-aware generative outpainting
+into a Gaussian-based skydome, achieving photometric align-
+ment and coherent background completion without degrading
+the primary reconstructed scene.
+3. Results of a comprehensive within-subjects user study
+demonstrating that our DomeGS methods significantly en-
+hance 3DGS-based background consistency under motion,
+spatial presence, and experienced realism compared to the
+classical infinite skybox baseline while eliciting comparable
+behavior and comfort.
+2
+RELATED WORKS
+Here, we first reviewed classical approaches to representing distant
+backgrounds in VR, such as skybox and skydome. Next, we re-
+viewed generative methods for 3D environment completion as well
+as their current limitations. Finally, we specifically reviewed lim-
+ited approaches for completing 3DGS reconstructions.
+2.1
+Distant Background Representations for VR
+A standard way to create the illusion of distant backgrounds in 3D
+environments is the skybox approach, which maps panoramic im-
+agery onto an effectively infinite cubemap [13], as a high-dynamic-
+range image (HDRI) to encode both appearance and illumination
+2Unity 6.1 User Manual, https://docs.unity3d.com/6000.1/
+Documentation/Manual/skyboxes-using.html
+Figure 2: 3DGS scene integration in game engines, illustrated using
+Unity. Top row: Raw 3DGS, rendered without any background com-
+pletion, exhibiting missing sky regions and boundary floaters. Mid-
+dle row: Naive integration with a cubemap skybox fills the missing
+background but introduces visible seams and illumination mismatch.
+Bottom row: Our method achieves seamless background integration
+without visible artifacts.
+for image-based lighting. In conventional pipelines, such a decou-
+pling strategy, where the skybox surrounds explicit mesh geometry
+representing foreground elements, allows environmental conditions
+to be adjusted simply by swapping the HDRI, without touching
+the underlying meshes. An alternative approach, namely skydome,
+represents the environment on a finite spherical or hemispherical
+surface, introducing depth-dependent motion parallax under viewer
+translation. Unlike the skybox, it must be manually constructed and
+integrated as a custom mesh and shader3, making it unsuitable as a
+baseline without dedicated implementation. Although less common
+as a default environment representation, this finite spatial extent is
+relevant to VR, where motion parallax provides important cues for
+depth, self-motion, and scene scale [2, 15].
+2.2
+Generative Environment Completion
+Generative methods have recently enabled the synthesis of environ-
+ment content beyond the observed regions, supporting unbounded
+scene generation, novel-view extrapolation [7, 8], as well as full
+360◦panorama generation [18, 37, 41]. In a conventional pipeline,
+a pre-existing 360◦panoramic file, such as a high dynamic range
+image (HDRI), can be freely replaced or adjusted as the foreground
+geometry and its appearance are controlled independently. This
+differs for scenes reconstructed from captured images, such as a
+3DGS-based scene, because the environment’s appearance and il-
+lumination are implicitly baked into the reconstruction, so an inde-
+pendently chosen HDRI may introduce inconsistent colors, light-
+ing, or visual cues at the foreground-background boundary. There-
+fore, the missing environment must be synthesized consistently
+with the 3D scene rather than treated as an independent component.
+Recent methods have further extended generative environment
+synthesis to explorable 3D representations by converting generated
+panoramas into 3D Gaussian representations [39, 44]. However,
+these approaches generate new environments or scenes rather than
+completing the unobserved surroundings of an existing 3DGS re-
+construction under explicit scene-consistency constraints. To the
+best of our knowledge, this setting remains unexplored. Our work
+addresses this gap by generating novel views conditioned on the
+captured scene and reconstructing them as a finite Gaussian sky-
+dome around the existing 3DGS representation, extending the scene
+3Skydome tutorial: https://www.rastertek.com/tertut10.html.
+
+
+with spatially coherent background content while preserving depth-
+dependent motion parallax.
+2.3
+3DGS for Unbounded Scene Reconstruction
+3D Gaussian Splatting (3DGS) [20] combines high-fidelity view
+synthesis with real-time rendering for high-quality, thus attracting
+increasing interest from the domain of spatial interfaces [17] as it
+can reconstruct indoor and outdoor scenes, as well as support other
+applications [24, 29]. However, its structure-from-motion (SfM)-
+based initialization provides limited support for plausibly recon-
+structing distant regions of the environment, such as the skies or
+horizon, especially since their details are often sparse or missing
+from the input imagery data. This is particularly challenging for us-
+ing 3DGS to reconstruct unbounded outdoor scenes, where nearby
+scene content may be well represented while distant environmental
+regions remain unobserved.
+Existing methods address this by removing or separately model-
+ing such regions, including sky masking in WildGaussians [21] and
+a finite spherical Gaussian shell in EnvMap-GS [27]. EnvMap-GS
+fits that shell to observed background radiance and can bake it into
+an environment map; it does not generate missing sky, and baking
+again yields an infinite, no-parallax backdrop.
+However, these approaches do not address synthesizing envi-
+ronmental content that is entirely absent from the input imagery.
+Moreover, their evaluation typically considers static viewpoints
+rather than movement in immersive environments, where contin-
+uous viewpoint changes can reveal inconsistencies in distant scene
+content and horizon cues.
+3
+METHODOLOGY
+The goal of our method is to create an impressive environment fea-
+turing a reconstructed scene and additional outpainting background
+(see Fig. 1). This section first introduces the necessary prelimi-
+naries and then presents our proposed pipeline, which consists of
+three main stages. (I) Panorama Extraction and Outpainting gen-
+erates a seamless equirectangular environment map from the exist-
+ing scene; (II) Scene-Adaptive Dataset Preparation converts that
+2D panorama into a geometrically grounded, multi-view supervi-
+sion dataset; and (III) Unified Sky Gaussian Optimization fuses this
+dataset with the original scene into a single 3DGS representation.
+3.1
+Preliminaries and Problem Formulation
+We develop our method on top of 3DGS [20], which represents a
+3D environment as an unstructured collection of explicit 3D Gaus-
+sians G = {gi}N
+i=1. Each primitive gi is parameterized by a tuple
+(µi,Σi,αi,ci), where µi ∈R3 is its center position, Σi ∈R3×3 is a
+3D covariance matrix (factorized into scaling Si and rotation quater-
+nion Ri), αi ∈[0,1] is the opacity, and ci denotes view-dependent
+spherical harmonics (SH) coefficients. Given a 6DoF camera pose
+T = [R | t] ∈SE(3) representing an HMD eye viewpoint, primi-
+tives are projected onto the image plane and alpha-blended via a
+tile-based rasterizer to render novel views in real time.
+Achieving immersive experience in VR relies on unrestricted
+6DoF navigation. However, an initial scene G0 = {gi}N0
+i=1 recon-
+structed from a collection of training views leaves peripheral re-
+gions unmodeled. Standard, naive background completion fails be-
+cause immersion depends on two conditions:
+(1) Radiometric Coherence: The created background must
+seamlessly match the baked illumination, tone, and color balance
+of G0, preventing horizon boundary artifacts.
+(2) Kinematic Parallax: Under translational head movement
+tHMD, the background must preserve realistic, depth-consistent mo-
+tion parallax rather than being static, as in traditional skyboxes.
+To achieve these requirements, we formulate our objective as ex-
+panding G0 with a background Gaussian collection Gbg = {g j}Nbg
+j=1
+Figure 3:
+Experimental scenes used in our study, rendered as
+equirectangular projections from Gpano. The four outdoor unbounded
+3DGS reconstructions are divided into two scene types: Close-range
+(top: Garden, Bear) and Panoramic (bottom: Buddha, Tower).
+into a unified scene: G = G0 ∪Gbg where Gbg is anchored on a dis-
+tant, finite-radius spherical shell, enabling joint rasterization with
+G0 under arbitrary HMD poses.
+3.2
+Stage I: Panorama Extraction and Outpainting
+To initialize background completion we place a virtual panorama
+camera at the trajectory centroid e = 1
+K ∑K
+k=1 tk and exclude Gaus-
+sians intersecting an exclusion sphere of radius r around e:
+Gpano = {gi ∈G0 | ∥µi −e∥2 > r +smax
+i
+},
+(1)
+where smax
+i
+is the maximum scaling factor of primitive i.
+We
+then render an equirectangular projection image I0 from e using
+Gpano (Fig. 3) and construct a binary completion mask M, where
+M = 1 indicates unobserved sky and background voids.
+To complete the missing environment without boundary arti-
+facts, we employ a two-stage generative process:
+(1) Global Outpainting:
+A 360◦-aware latent diffusion
+model [25] is conditioned on I0 and M to fill missing background,
+generating an initial panorama I(1).
+(2) Wrap-Seam Harmonization: To eliminate boundary dis-
+continuities at the 360◦wrap seam, we cyclically shift I(1) by 180◦
+to recenter the panorama. A vertical strip mask Mseam centered
+at the new boundary is inpainted with a secondary diffusion pass,
+yielding a seamless panorama sI(2).
+3.3
+Stage II: Scene-Adaptive Dataset Preparation
+Geometric Parameter Estimation. To properly incorporate the
+2D completed panorama I(2) within 3D space, we dynamically cal-
+culate two geometric parameters:
+(1) Background Shell Radius (R): To ensure the skydome en-
+compasses all foreground geometry without intersecting near-field
+objects, we estimate the shell radius from the distribution of visible
+scene depths rendered from centroid e:
+R = m·Quantileq({∥µi −e∥2 : i ∈Vcube}),
+(2)
+where Vcube denotes Gaussians visible across a 6-face cubemap,
+with quantile q = 98% and scale factor m = 1.
+(2) Optimal Base Pitch (ψ⋆): Casual captures often exhibit an
+asymmetric vertical camera distribution. We determine an optimal
+base camera pitch ψ⋆by evaluating probe cameras relative to the
+world up-vector uup, maximizing visible scene density while pe-
+nalizing unobserved sky voids:
+ψ⋆= argmax
+ψ
+|G (ψ)∩Gfg|
+|Gfg|
+−λψ
+|G (ψ)\Gfg|
+|G (ψ)|
+
+,
+(3)
+where Gfg is the set of confident foreground Gaussians with Gaus-
+sian opacity (αi) greater than or equal to a fixed threshold (τα),
+
+
+Figure 4: Comparison of generators for completing the same masked
+panorama: (A) initial panorama with missing regions; (B) FLUX.2-
+dev, with a color mismatch; (C) FLUX.1-Fill-dev, with repeated struc-
+tures; (D) 512-inpainting-ema, with discontinuity at the horizon; (E)
+Nano Banana, with a visible sky seam; and (F) FLUX.2-klein-base-
+9B and 360 ERP LoRA, with better color consistency and reduced
+seam artifacts, selected for the VR conditions.
+λψ = 0.3 is a hyperparameter, and G (ψ) is the set of primitives
+visible at pitch ψ.
+In addition, 3DGS models trained on bounded trajectories fre-
+quently accumulate degenerate, low-opacity Gaussians outside the
+capture frustum. We must remove these unconstrained primitives
+to not corrupt the newly synthesized background. We cast a set of
+“look-back” probe cameras yaw-flipped by 180◦and pitched away
+from the primary scene (ψlb). Primitives visible in these views, Glb,
+are identified as backside floaters and pruned via G ′ = G0 \Glb. Full
+derivations of ψ⋆and ψlb, along with the fixed threshold τα and
+search settings, are provided in the supplementary material.
+With the cleaned scene G ′ and geometry parameters R,ψ⋆, we
+synthesize a multi-view dataset Isup across stratified camera rings
+at varying vertical pitch angles: downward ground views (pdown),
+horizontal transition views (pscene), and upward sky views (pbg).
+These bands serve distinct functional roles and are assigned role-
+dependent supervision targets:
+Isup(T) =
+(
+IG ′(T),
+p = pdown,
+IG ′(T)+Ibg(T)⊙
+ 1−α(T)
+
+,
+p ∈{pscene, pbg},
+(4)
+where IG ′(T) and α(T) ∈[0,1] are the rendered RGB image us-
+ing camera T and accumulated 2D opacity from G ′ against a black
+background. The background image Ibg(T) is obtained by casting
+camera rays from T, computing their intersection with the bounding
+sphere of radius R and sampling the completed panorama I(2).
+This role-dependent formulation resolves boundary seams by
+treating foreground silhouettes and distant background content
+through physically grounded alpha compositing. Consequently, it
+guides newly optimized background Gaussians to populate empty
+regions behind foreground geometry, eliminating boundary clip-
+ping without explicit mesh segmentation or manual refinement.
+3.4
+Stage III: Unified Sky Gaussian Optimization
+The optimization stage initializes from the floater-cleaned initial
+scene G ′ and metadata (e,R).
+To preserve captured foreground
+structures while integrating background into the scene, we fix Gaus-
+sians within radius r f = maxk ∥tk −e∥2 throughout optimization.
+Primitives outside r f remain trainable and protected from pruning,
+size-based culling, and opacity resets. To represent the background,
+we initialize a set of seed Gaussians Gseed distributed across an
+upper-hemispherical shell centered at e:
+µ j = e+rjdj,
+d j ∼Unif(S2
++),
+r j ∼Unif([γR,R]),
+(5)
+where S2+ = {d ∈S2 | d · uup ≥0} denotes the unit upper hemi-
+sphere in the world coordinates, and γ = 0.99 defines the shell
+thickness across all scenes. These Gaussians are initialized with
+scales adapted to the local sampling density, then optimized to-
+gether with the original scene.
+At each training step, we sample a synthetic camera pose T
+alongside its supervision target Isup (Eq. 4), render the current scene
+ˆIG (T), and minimize a joint photometric and geometric objective:
+L = Lphoto +λshellLshell +λplanLplan.
+(6)
+The photometric loss Lphoto combines an L1 color difference with
+structural dissimilarity (D-SSIM) [20]:
+Lphoto = (1−λds)∥ˆIG −Isup∥1 +λds
+ 1−SSIM(ˆIG ,Isup)
+
+,
+(7)
+where λds balances high-frequency per-pixel accuracy with struc-
+tural consistency.
+To supervise 3D background integration, we introduce two ad-
+ditional regularizers applied to the background Gaussians Gbg ob-
+tained from densification of Gseed. First, a radial shell loss penalizes
+primitives that leave a spherical shell:
+Lshell =
+1
+|Gbg| ∑
+gj∈Gbg
+ max(0, d j −R)+max(0, γR−dj)
+2 ,
+(8)
+where d j = ∥µ j −e∥2. Second, a planarity loss discourages spiked
+Gaussians by aligning shortest axis amin
+j
+with the radial direction
+ˆrj = (µ j −e)/∥µ j −e∥2 from the shell centre:
+Lplan =
+1
+|Gbg| ∑
+gj∈Gbg
+smax
+j
+smin
+j
++ε
+
+1−
+amin
+j
+· ˆr j
+
+
+,
+(9)
+During optimization, Gaussians from Gseed are densified into the
+final background Gbg. While the primitives from Gseed are protected
+from pruning and deletion, this restriction does not apply to newly
+created Gaussians, allowing the model to capture fine details while
+removing redundant primitives. Additionally, scale-based culling is
+disabled across all background primitives to maintain extensive spa-
+tial coverage. The resulting unified representation combines fine-
+tuned scene and optimized background G = G ′ ∪Gbg.
+4
+ABLATION: GENERATIVE ENVIRONMENT COMPLETION
+We outpainted the panorama using a generative model and used
+the same completed panorama in both VR conditions. Because
+the input represents a 360°environment, the missing content must
+be completed while preserving continuity across the spherical im-
+age.
+Several tested methods produced visible problems, for in-
+stance, 512-inpainting-ema [28] and Nano Banana [12] pro-
+duced seams at the image boundaries, FLUX.1-Fill-dev [3] re-
+peated parts of the scene, and FLUX.2-dev [4] produced color mis-
+matches (see Fig. 4).
+Among the tested methods, FLUX.2-klein-base-9B with a
+360°ERP LoRA provided the best overall result, with better color
+consistency and reduced seam artifacts (see Fig. 4). The full can-
+didate list and the two-stage wrap procedure used to remove the
+remaining ERP join are reported in the supplementary material.
+5
+USER STUDY
+We evaluated how background integration affects the perception
+of completed 3DGS scenes. The study follows a fully counter-
+balanced within-subjects design. Every participant experienced all
+four 3DGS scenes under both background rendering technologies
+(DomeGS and Skybox), resulting in a repeated-measures evalua-
+tion. To control for potential ordering, learning, and fatigue effects,
+we counterbalanced the presentation order on two levels, i.e. the se-
+quence of technologies was balanced between participants (forming
+two groups: Skybox-first vs. DomeGS-first), while the presentation
+order of the four scenes within each block was randomized across
+participants using six distinct Latin-square sequences. The relevant
+ethics committee approved the user study.
+
+
+Figure 5: Bird-search task design. (a) Teleport pad and target placement logic: pads are positioned along the original camera trajectory, targets
+spawn outside a ±65◦front exclusion zone and within scene-dependent vertical elevation bands, with radial distance scaled to local scene
+geometry. (b) Task flow: the participant teleports to a pad, the corresponding target becomes visible, and the participant turns to locate and
+acquire it before proceeding to the next pad.
+Table 1: Participant demographics by presentation order (first Sky-
+box, or first DomeGS).
+N=36 Participants
+Skybox→DomeGS
+DomeGS→Skybox
+Age (yr)
+M = 26.2 (SD = 3.8)
+M = 25.4 (SD = 3.6)
+M = 26.9 (SD = 4.0)
+VR/AR (yr)
+M = 0.8 (SD = 1.3)
+M = 1.1 (SD = 1.7)
+M = 0.4 (SD = 0.6)
+Gaming (yr)
+M = 11.7 (SD = 7.2)
+M = 10.9 (SD = 5.8)
+M = 12.4 (SD = 8.4)
+Gender (M/F)
+31 / 5
+16 / 2
+15 / 3
+5.1
+Participants
+We recruited N = 36 participants, satisfying an a priori power anal-
+ysis targeting ≈80% statistical power to detect a medium within-
+subjects effect size (dz ≈0.5, analytic minimum N = 34).
+Volunteers (31 male, 5 female) aged 20-37 years (M = 26.2,
+SD = 3.8) completed the study. Prior VR/AR experience was gen-
+erally low (median 0 years, M = 0.8, SD = 1.3), while self-reported
+gaming experience averaged 11.7 years (SD = 7.2). Participants
+were divided into two groups. The only difference was the order
+in which we presented the methods. Between-group statistical tests
+confirmed that demographic variables did not differ significantly
+between the two order groups (all p > 0.22), confirming balanced
+baseline characteristics across groups (see Tab. 1).
+5.2
+Apparatus
+The VR environment was facilitated with a Meta Quest Pro VR
+HMD connected wirelessly to a dedicated computer through Meta
+Quest Air Link over a 5/6 GHz Wi-Fi network. The environments
+were rendered in Unity operating at a stable 90 Hz refresh rate.
+The host rendering workstation was equipped with an Intel Core
+i7-14700K CPU (3.40 GHz), 32.0 GB of RAM, and an NVIDIA
+GeForce RTX 4070 SUPER GPU, running Windows 11 Home. Par-
+ticipants interacted with the scenes using Meta Quest Touch Pro
+hand-held controllers.
+5.3
+Experimental Task
+We designed a structured bird-search task (see Fig. 5) to elicit broad
+360◦visual exploration while actively guiding participants’ atten-
+tion to the upper hemisphere and horizon i.e. the area where the
+visual differences between the Skybox and our DomeGS parallax
+are most prevalent (see Fig. 6). We deliberately selected such fo-
+cused task instead of a free-exploration, exhaustive task to standard-
+ize visual attention across conditions and keep individual exposure
+within a concise time frame (≈2–3 minutes per scene).
+We placed teleport pads at viewpoints derived from the camera
+poses used to train the 3D Gaussian Splatting reconstruction, so that
+participants always view the scene from angles where the recon-
+struction is most reliable. This keeps viewpoint selection consistent
+across scenes, and helps ensure that immersion ratings reflect dif-
+ferences between the sky representations, rather than artifacts from
+viewing undersampled or poorly reconstructed scene components.
+We reused the same pad layout and visit order for both DomeGS
+and Skybox within a scene, so participants followed an identical
+path regardless of which representation they experienced.
+We used a procedural target placement system (see Fig. 5), i.e.
+in each trial exactly one target (a bird) was assigned to each tele-
+port pad and became visible only after the participant teleported
+to that pad. To avoid immediate target discovery upon arrival, we
+excluded targets from the frontal ±65◦region, requiring partici-
+pants to search laterally and toward the rear. In addition, target
+elevation was calibrated to the scene geometry: [−5◦,+45◦] for
+ground-level scenes (Garden, Bear) and [−15◦,+40◦] for elevated
+platform scenes (Buddha, Tower). We adjusted these ranges to ac-
+count for differences in scene geometry and keep search difficulty
+comparable across scene types. For example, in elevated scenes the
+greater amount of open sky makes targets easier to notice against
+a relatively uniform background, so we shifted the elevation range
+downward and capped it at +40◦. In contrast, searches in the lower
+parts could be more difficult due to denser near-field geometry and
+greater occlusion. We therefore allowed a wider upward range, up
+to +45◦.
+Radial target distances were scaled to the environment geometry,
+ranging from 35% to 85% of the maximum inter-pad distance (3.0-
+12.0m), with the participant’s viewpoint fixed at a standard standing
+eye height of 1.6m above the pad. To prevent spatial memoriza-
+tion across repeated visits, target positions alternated between two
+counterbalanced bird-spawn layouts (α and β), in which the tele-
+port pads were fixed and only the birds’ azimuthal positions around
+each pad changed.
+5.4
+Independent Variables
+The study follows a within-subjects 2 × 2 factorial design with
+two independent variables: technology (i.e. Skybox (baseline) vs.
+DomeGS (our)) and scene type (i.e. Panoramic vs. Close). Ev-
+ery participant explores each 3DGS scene completed under both
+technologies, maintaining identical foreground Gaussians, the same
+panorama I⋆, and matched teleportation viewpoints (see Fig. 5).
+We selected four outdoor 3DGS reconstructions representing
+two spatial characteristics (see Fig. 3). The Panoramic environ-
+ments (Buddha, Tower) are open, aerial scenes dominated by dis-
+tant backgrounds. In contrast, the Close environments (Garden [1],
+Bear [14]) contain more nearby geometry and foreground objects.
+We included both types to ensure technology effects were not tied to
+a single capture style or source. Using different scene types also lets
+us examine whether the observed effects vary across reconstruc-
+
+
+Figure 6: Parallax behavior under forward translation for DomeGS
+(left) and Skybox (right), shown before and after movement in two
+scenes. Top (Garden): the Skybox’s static background causes a visi-
+ble mismatch with the foreground as the user moves, while DomeGS
+maintains alignment. Bottom (Bear): the Skybox tree fails to scale
+with proximity, whereas DomeGS’s parallax reflects the change in
+distance.
+tions. Each participant experienced all four environments under
+both rendering conditions in a fully crossed repeated-measures de-
+sign (4 scenes × 2 technologies). In the supplementary material
+demo.mp4, we also present examples of scenes using both tech-
+nologies.
+5.5
+Dependent Measures
+We collected several types of measures, including in-task percep-
+tual ratings, validated questionnaires, and behavioral data.
+Following protocols demonstrating that single-item presence
+measures are psychometrically valid [5] and enable sensitive, low-
+intrusion in-VR assessment [6, 35], we adapted this approach using
+two single-item micro-probes inside the VR immediately after each
+bird-search trial (≈15-25 s), rated on a 7-point Likert-like scale (−3
+to +3). Higher IMM scores indicate stronger perceived immersion
+and presence, while higher scores on the custom SKY probe indi-
+cate better perceived background consistency and stability during
+movement and teleportation. This resulted in N = 288 observations
+per measure, allowing us to compare scenes while minimizing dis-
+ruption to the VR experience. The exact item wording for IMM and
+SKY is reported in the supplementary material.
+After exposure to either DomeGS or Skybox condition, par-
+ticipants completed the Igroup Presence Questionnaire (IPQ-PL)
+adapted for Polish samples [31], previously used in the VR con-
+text [11, 33, 34], and adapted to their native tongue, comprising 13
+items rated on a −3 to +3 scale. Following the IPQ-PL scoring pro-
+cedure, we analyzed general presence (G1), spatial presence (SP),
+involvement (INV), and experienced realism (REAL), together with
+an overall IPQ score. At the end of the session, participants indi-
+cated their forced-choice or tied preference across four dimensions:
+(1) overall immersion, (2) close-range inspection, (3) panoramic
+viewing, and (4) willingness for prolonged stay. We also adminis-
+tered the Simulator Sickness Questionnaire (SSQ) [19] before and
+after the experiment to monitor potential cybersickness symptoms.
+To verify that task difficulty remained balanced across back-
+ground rendering conditions, we logged: (1) total bird-search du-
+ration, defined as the time elapsed from search initiation until the
+final target was located; (2) head trajectory length, defined as cu-
+mulative head displacement excluding discrete teleportation jumps
+(> 0.5 m); and (3) target discovery latency, defined as the time re-
+quired to locate individual target pads within each trial.
+5.6
+Hypotheses
+While the Skybox baseline leaves the background statically locked
+to the viewpoint during locomotion, DomeGS embeds the com-
+pleted environment into finite 3D Gaussians. In VR, this provides
+natural motion parallax between foreground and background con-
+tent during movement and teleportation (see Fig. 6). Therefore, we
+hypothesize improvement in perceived immersion, perceived visual
+consistency, and user preference:
+H1 (Immersion & Consistency): DomeGS yields significantly
+higher perceived immersion (IMM) and background consistency
+under motion (SKY) than Skybox.
+H2 (Presence & Preference): DomeGS leads to higher per-
+ceived presence and is subjectively preferred over Skybox.
+Furthermore, the accompanying experimental task was designed
+not to be difficult but to elicit broad visual exploration of the whole
+virtual environment. Therefore, we also hypothesize equivalence in
+the execution performance:
+H3 (Task Performance Equivalence): Measurable behavior
+(i.e. search duration, head path length, and rotational exploration)
+does not differ between Skybox and DomeGS.
+5.7
+Experimental Protocol
+Individual sessions lasted ≈30-40 min (including ≈15-25 min of
+total HMD exposure) and were carried out in five phases. First, par-
+ticipants reviewed data protection, signed the consent form, com-
+pleted a demographic survey, and filled out the baseline Simulator
+Sickness Questionnaire (SSQpre). Next, we familiarized themselves
+with the VR environment and interaction, including teleportation
+locomotion and target interaction, and the bird-search task.
+During the experimental phase, participants visited the four
+scenes (Buddha, Tower, Garden, Bear) in their assigned coun-
+terbalanced sequence under their initial representation condition
+(DomeGS or Skybox) and target layout (α or β). Each scene fol-
+lowed a standard trial pipeline, i.e. a 30 s observation phase on
+pad0, the three-pad target search task, and an in-VR micro-probe
+(≈15-25 s). After the fourth scene, participants completed the mid-
+session sickness survey (SSQmid) and the first presence question-
+naire (IPQ1) during a mandatory ≈3 min rest break. Next, partici-
+pants revisited the scenes in the same order under the alternate rep-
+resentation and mirrored target layout.
+After exiting VR, participants completed the second presence
+questionnaire (IPQ2), the forced-choice technology preference sur-
+vey, and the final simulator sickness questionnaire (SSQpost).
+5.8
+Statistical Analysis
+We analyzed the micro-probe ratings, i.e. IMM and SKY ratings
+(N = 288) using Linear Mixed-Effects Models (LMMs; Gaussian
+family, bobyqa optimizer) fitted with Residual Maximum Likeli-
+hood (REML). Each model included used technology (DomeGS vs.
+Skybox), scene (Buddha, Tower, Garden, Bear), and their two-way
+interaction as fixed effects, alongside a random intercept for partic-
+ipants. We tested fixed effects with Satterthwaite’s approximation
+
+
+Table 2: LMM results for IMM and SKY micro-probe items (N=288
+visits, 36 participants). ∆is the estimated marginal difference be-
+tween DomeGS and Skybox (DomeGS −Skybox) on the −3...+3
+scale; positive values indicate higher ratings for DomeGS. 95%
+CIs show the uncertainty around ∆.
+Holm-adjusted p values ac-
+count for the two overall technology comparisons (SKY and IMM).
+d is the corresponding standardized effect size. technology × scene
+(SKY F(3,245)=4.10, p=0.007; IMM F(3,245)=0.81, p=0.488) tested
+whether the technology difference varies across scenes.
+Item
+∆
+95% CI
+F(1,245)
+Holm p
+d
+SKY
++1.24
+[0.95,1.53]
+70.70
+< 0.001
+0.85
+IMM
++0.44
+[0.21,0.68]
+14.01
+< 0.001
+0.35
+for degrees of freedom and computed 95% Wald confidence inter-
+vals. We verified residual normality using Q-Q plots. We adjusted
+post-hoc pairwise contrasts using the Holm-Bonferroni method. If
+the interaction was significant, we used the GAMLj4 pairwise cell
+table (Holm over all 28 pairs) for follow-up.
+For block-level IPQ subscales, we first tested pairwise differ-
+ences (DomeGS −Skybox) for normality using the Shapiro-Wilk
+test. If the assumption of normality was met (p ≥0.05), paired
+t-tests were conducted; otherwise, two-tailed paired Wilcoxon
+signed-rank tests were used. P-values across the five IPQ subscales
+(G1, SP, INV, REAL, and Total) were adjusted using the Holm
+method.
+We recorded the presentation order of DomeGS and Skybox to
+control for order effects, then encoded each preference response as
++1 for (DomeGS), 0 for equal, and −1 for Skybox. Next, we evalu-
+ated directional preference using two-tailed exact binomial tests on
+non-tied responses against an equal-preference baseline (p0 = 0.5).
+Moreover, we compared pre-session and post-session SSQ scores
+using paired tests to assess cybersickness onset.
+To verify that search difficulty was unconfounded across ren-
+dering conditions, behavioral logs (i.e. search duration, head path,
+and yaw+pitch) were tested for equivalence with Two One-Sided
+Tests (TOST) [22] against a medium SESOI (dz≈0.5) mapped to
+raw bounds (±60 s, ±6 m, ±2600◦). We also reported paired t-tests
+of a zero difference. As a sensitivity check that the same metrics can
+detect known difficulty, we compared Close vs. Panoramic person
+means collapsed across technology with paired t-tests. As a pro-
+tocol check, we tested whether the person-level DomeGS−Skybox
+difference itself differed by order in which participants experienced
+each completion method (Welch t on the two order arms).
+6
+USER STUDY RESULTS
+6.1
+Immersion and Background Consistency (H1)
+In terms of perceived immersion (IMM), the immersion rat-
+ings were significantly higher for DomeGS compared to Skybox
+(see Fig. 7a; ∆=+0.44, 95% CI [0.21,0.68], Holm p<0.001,
+d=0.35).
+The technology × scene interaction was not signifi-
+cant (F(3,245)=0.81, p=0.488), indicating that the advantage of
+DomeGS over the baseline did not significantly differ across scenes.
+With respect to background consistency under motion (SKY),
+DomeGS ratings were significantly higher than Skybox on average
+(see Fig. 7b; ∆=+1.24, Holm p < 0.001, d=0.85). The technol-
+ogy × scene interaction was significant (F(3,245)=4.10, p=.007),
+indicating that although DomeGS was overall better than Skybox,
+the size of this advantage varied across scenes. Scene-wise con-
+trasts showed that DomeGS significantly outperformed the baseline
+in three scenes, with the largest difference in Buddha (∆= + 2.08,
+Holm p < 0.001), followed by Bear (∆=+1.14, Holm p=0.002),
+Garden (∆=+1.08, p=0.004). The difference for the Tower scene
+4GAMLj: https://gamlj.github.io/
+Figure 7: Participant-level micro-probe estimation plots (N = 36):
+(a) Perceived Immersion (IMM) and (b) Background Consistency
+under motion (SKY). Left subpanels show raw distributions for (B)
+DomeGS and (S) Skybox via boxplots (medians and IQRs), jittered
+points (individual participants), and diamond markers (group means).
+Right subpanels display the paired mean difference (DomeGS −
+Skybox) with its 95% confidence interval (dashed line indicates zero
+difference; ∗Holm p < .05, ∗∗∗Holm p < .001).
+was smaller (∆= +0.67) and was not statistically significant after
+correction (Holm p = 0.225). The Tower also had relatively high
+ratings under the Skybox condition, compared with the remaining
+three scenes (all Holm p<0.001).
+The LMM results used to evaluate H1 are summarized in Tab. 2
+and Fig. 7. Full model coefficients, random-effect estimates, and
+scene-wise pairwise comparisons are provided in the supplemen-
+tary material. Based on these results, we conclude that H1 is sup-
+ported and that DomeGS yields significantly higher perceived im-
+mersion (IMM) and background consistency under motion (SKY)
+than the traditional Skybox baseline.
+6.2
+Preconceived Presence and Preference (H2)
+Participants generally preferred DomeGS over Skybox for over-
+all immersion, panoramic viewing, and willingness to prolong
+their stay within the virtual scenes (see Fig. 8). The strongest
+preference was for longer VR visit, with 75.0% of participants
+choosing DomeGS compared with only 8.3% for Skybox (Holm
+p < 0.001). For Panoramic scenes and overall immersion, DomeGS
+was chosen by 69.4% (Holm p = 0.004) and 66.7% (Holm p =
+0.004) of participants, respectively.
+In Close scenes (i.e. Garden, Bear), DomeGS was preferred by
+52.8% of participants, compared with 22.2% for Skybox, with the
+difference not reaching the corrected significance threshold (Holm
+p = 0.0522, 25.0% of participants reported no preference, the high-
+est tie rate among the four measures). This difference across scene
+types is consistent with theories of visual depth perception and spa-
+tial layout [10, 15]. In cluttered close-range scenes, dense fore-
+ground geometry already provides sufficient local depth and mo-
+tion cues, which may reduce reliance on distant background cues.
+In contrast, open panoramic scenes are dominated by the horizon
+and distant environment, making the spatial continuity offered by
+our DomeGS important for maintaining immersion [10, 15].
+At the same time, preference did not differ by order in which
+participants experienced the technology (Fisher’s exact test on non-
+tied responses, all p>0.58). Among participants with complete,
+non-tied preference profiles, a Cochran’s test likewise found no sig-
+nificant differences in DomeGS-choice rates across the four scenes.
+IPQ scores showed acceptable internal consistency in both con-
+ditions (DomeGS α=0.86; Skybox α=0.80). Shapiro-Wilk tests
+on paired differences were inconsistent across subscales (some
+p<0.05, others p≥0.05), therefore we applied two-sided Wilcoxon
+signed-rank tests to all five outcomes and Holm-adjusted p-values.
+DomeGS received higher mean scores than Skybox across all
+IPQ subscales (see Fig. 9). After Holm correction, spatial presence
+(SP) (1.73 vs. 1.41, ∆= +0.32, Holm p = 0.042) and experienced
+
+
+Figure 8: End-of-session comparative preference distributions (N =
+36). Stacked horizontal bars show the proportion of participants fa-
+voring DomeGS (blue), Equal (gray), and Skybox (orange).
+Sta-
+tistical annotations denote Holm-adjusted two-tailed exact binomial
+tests against chance on non-tied choices (∗padj < 0.05, ∗∗padj < 0.01,
+∗∗∗padj < 0.001).
+realism (REAL) (0.36 vs. −0.07, ∆= +0.44, Holm p = 0.042)
+were significant. General presence (G1), involvement (INV), and
+total score favored DomeGS but were not significant after correc-
+tion (Holm p = 0.117, p = 0.374, and p = 0.055, respectively). The
+full Wilcoxon statistics, including means, confidence intervals, and
+test statistics for all subscales, are reported in the supplementary
+material. The interaction between presentation order and technol-
+ogy exposure was not statistically significant for any measure (all
+Holm p ≥0.142), suggesting that participants’ preferences were not
+significantly influenced by order of exposure to each technology.
+These findings provide partial support for H2, suggesting that
+DomeGS leads to statistically higher spatial presence (SP) (1.73 vs.
+1.41, ∆= +0.32, Holm p = 0.042) and experienced realism (REAL)
+(0.36 vs. −0.07, ∆= +0.44, Holm p = 0.042), and is significantly
+preferred over Skybox for Panoramic scenes.
+6.3
+Task Performance and Manipulation Checks (H3)
+To evaluate H3 whether measurable behavior did not differ between
+Skybox and DomeGS, we tested whether person-level search dura-
+tion, head path, and rotational exploration (yaw+pitch) were equiv-
+alent under DomeGS vs. Skybox (see Fig. 10, Tab. 3).
+TOST
+against a medium SESOI (dz≈0.5; δ= ± 60 s, ±6 m, ±2600◦) re-
+jected nonequivalence for all three metrics (all pTOST≤0.005): each
+90% CI of ∆(DomeGS−Skybox) lay inside its bound.
+In addition, we analyzed head orientation (yaw + pitch) to ver-
+ify that participants actively engaged with the background. Par-
+ticipants showed broad 360◦visual exploration in both conditions,
+characterized by low mean resultant lengths (DomeGS: R = 0.094;
+Skybox: R = 0.113; paired Holm p = 0.721, dz = 0.23) and wide
+circular standard deviations (128.7◦vs. 123.8◦). They spent more
+than two-thirds of search time looking above the horizon toward the
+sky (pitch > 0◦: 68.8% vs. 68.4%; ∆= +0.44%, Holm p = 1.000,
+dz = 0.03). Mean vertical pitch was also matched (7.70◦vs. 7.30◦,
+Holm p = 1.000). Together, these results suggest that participants
+explored the background similarly in both conditions, with no evi-
+dence of a systematic gaze-angle bias.
+Participants spent more time, followed longer paths, and scanned
+more in Close scenes than in Panoramic scenes (all p < 0.01,|dz| ≥
+0.49), indicating that these metrics were sensitive to scene layout
+and consistent with the greater movement and visual-search de-
+mands ofClose scenes. Interactions between presentation order and
+technology were not significant for either search time (p = 0.135)
+or path (p = 0.127). Gaze heatmaps, Close vs. Panoramic tables,
+order-group diagnostics, and the remaining Euler TOST tests are in
+the supplementary material.
+Together, these findings support H3 that behavioral load (i.e.
+search duration, head path, and rotational exploration) was equiv-
+alent across technologies within a medium effect-size bound, con-
+firming matched task difficulty. Thus, we concluded that the ac-
+companying experimental task was equally difficult across all con-
+Table
+3:
+Task-load
+equivalence
+(H3;
+n=36
+paired),
+∆
+is
+DomeGS−Skybox with the TOST 90% CI. Bounds δ implement a
+medium SESOI (dz≈0.5), pTOST=max(plower, pupper).
+Measure
+δ
+∆[90% CI]
+NHST p
+pTOST
+Search time (s)
+±60
+−6.7 [−38.8, 25.4]
+.727
+.004
+Head path (m)
+±6
+−0.40 [−3.74, 2.95]
+.842
+.004
+Yaw+pitch (◦)
+±2600
+−220 [−1694, 1254]
+.803
+.005
+Table 4: Automated visual quality evaluation using Qwen3-VL-32B.
+Absolute Scores (1-5 scale): Boundary Continuity (B), Lighting Co-
+herence (C), and Perspective Alignment (P). Pairwise Preference
+(−2 to +2 scale): Relative comparison with position swapping (+2 =
+DomeGS win, −2 = Skybox win).
+Skybox (Baseline)
+DomeGS (Ours)
+Scene
+Typology
+B / C / P
+B / C / P
+Pref. Score
+Tower
+Panoramic
+3.22 / 3.38 / 3.31
+4.00 / 4.10 / 3.71
++0.747
+Buddha
+Panoramic
+2.36 / 2.90 / 2.79
+3.43 / 3.58 / 3.58
++1.083
+Garden
+Close
+2.72 / 2.96 / 2.87
+3.69 / 3.68 / 3.70
++0.475
+Bear
+Close
+2.54 / 2.69 / 2.67
+3.38 / 3.46 / 3.52
++0.383
+Mean
+-
+2.71 / 2.98 / 2.91
+3.63 / 3.71 / 3.63
++0.672
+ditions and elicited the same broad visual exploration pattern.
+6.4
+Cybersickness and Comfort
+SSQ scores [19] analyzed with Wilcoxon did not differ be-
+tween DomeGS and Skybox; Wilcoxon throughout, Shapiro-Wilk
+p≤0.005). Total was 16.5 vs. 17.9 (DomeGS vs. Skybox; ∆= −
+1.35, 95% CI [−5.46, 2.75], W=117, Holm p=1.000, dz=−0.11);
+Nausea, Oculomotor, and Disorientation were likewise n.s. (all
+Holm p=1.000).
+Scores stayed in the mild range (Total <20).
+Pre-to-post Total accumulation was not significant (14.4 to 18.0,
+t(35)=1.21, Holm p=0.931); Disorientation rose modestly (7.3 to
+16.2, Wilcoxon Holm p=0.05, dz=0.43). The full SSQ descrip-
+tives, paired technology contrasts and pre-to-post accumulation are
+reported in the supplementary material.
+6.5
+Automated Vision-Language Quality Evaluation
+As an additional sanity check, alongside human perceptual evalu-
+ations, we conducted an objective visual quality assessment using
+a state-of-the-art vision-language model (Qwen3-VL-32B-Instruct)
+as an automated visual inspector across all test scenes. The ren-
+dered viewpoints were evaluated using two protocols:
+(1) Absolute Quality Scoring (1-5 scale), where renders were
+evaluated across three visual criteria: Boundary Continuity (B),
+Lighting Coherence (C), and Perspective/Horizon Alignment (P).
+(2) Pairwise Comparison (-2 to +2 scale), where renders from
+DomeGS and the Skybox were evaluated head-to-head with posi-
+tion swapping. Positive scores indicate preference for DomeGS.
+As summarized in Tab. 4, DomeGS consistently outperforms the
+traditional Skybox baseline across all datasets and metrics. In ab-
+solute scoring, DomeGS achieves higher scores in boundary transi-
+tion, lighting coherence, and perspective alignment. Furthermore,
+the position-swapped pairwise evaluation confirms a strong prefer-
+ence for DomeGS across all scenes.
+7
+DISCUSSION
+In our study, we compared two main conditions that differed only
+in the far-field representation, i.e. the traditional infinite skybox
+baseline provided no translational parallax as opposed to the pro-
+posed finite DomeGS binding skydome with 3DGS. The poten-
+tial improvements therefore reflect the far-field representation itself
+by unifying the near-field scene and the far-field skydome into a
+single 3DGS asset, ensuring that the entire environment responds
+
+
+Figure 9: Block-level IPQ presence scores across representation conditions (N = 36): (a) general presence (G1), (b) spatial presence (SP),
+(c) involvement (INV), (d) experienced realism (REAL), and (e) total presence. Box plots show medians and interquartile ranges (IQRs); jittered
+points show individual participant ratings on the [−3,+3] scale (DomeGS in blue, Skybox in orange); and diamond markers indicate group means.
+Overhead brackets denote Holm-adjusted significance (∗Holm p < 0.05, n.s.: Holm p ≥0.05).
+Figure 10: Participant-level task performance estimation plots, i.e.
+(a) total search time and (b) total head path length across all scenes.
+Left subpanels show raw distributions for DomeGS and Skybox via
+boxplots (medians and IQRs), jittered points (individual participants),
+and diamond markers (group means). Right subpanels display the
+paired mean difference (DomeGS-Skybox) with its 95% confidence
+interval (dashed line indicates zero difference; n.s. for Holm p ≥0.05).
+cohesively to user movement. In contrast, prior 3DGS pipelines
+either suppress the sky [21, 36] or generate entire panoramic
+worlds [39, 44]. These approaches change image content and rep-
+resentation together.
+Moreover, to evaluate our approach’s quality, we conducted a
+controlled user study to isolate the effect of the far-field repre-
+sentation. The micro-probe ratings following low-intrusion pres-
+ence assessment protocols [5, 6, 35] suggest that the enhance-
+ment was largest for the items targeting the background consis-
+tency under motion (SKY, p<0.001, d=0.85) and smaller but re-
+liable for perceived immersion (IMM, p<0.001, d=0.35, uniform
+across scenes), which is consistent with presence being shaped by
+multiple sensorimotor cues [9, 30]. Furthermore, the significant
+technology × scene interaction for SKY shows where this benefit
+was concentrated, namely, it was largest in the Buddha scene and
+not significant in Tower, where Skybox ratings were already high.
+Since both scenes belong to the same Panoramic category, the sim-
+ple taxonomy of panoramic and non-panoramic scenes alone cannot
+explain this difference. A possible explanation can be tentatively
+attributed to what the initial reconstruction missed in each scene,
+i.e. in the case of the Tower scene, it was mainly sky, which was
+well-approximated with the traditional skybox’s infinite-distance
+assumption. Whereas the Buddha scene also includes closer terrain
+and rock formations that this assumption cannot represent correctly,
+but DomeGS can result in a much larger improvement (Fig. 3).
+We also saw a similar pattern among questionnaire results.
+Among the IPQ subscales, only the items directly related to the
+depth cues, i.e. spatial presence (p = 0.042), as well as experi-
+enced realism (p = 0.042), related to the scene behaving as a phys-
+ical space should as the viewer moves, were statistically significant.
+In terms of participants’ declared preferences, the only prefer-
+ence contrast that did not reach significance was for Close scenes
+(p=0.052), which also had the highest rate of tied responses, which
+may reflect depth-cue redundancy [10, 15]. In cluttered near-field
+scenes, nearby geometry already provides strong parallax and oc-
+clusion cues, so the background may contribute less additional in-
+formation. While in open panoramic scenes, where the horizon
+dominates the view but parallax is naturally weak at that distance,
+background coherence, the absence of seams at the horizon, is
+likely the more salient cue driving preference.
+Moreover, these observed gains carried no added cost, with SSQ
+scores remaining mild and statistically non-significant between the
+Skybox and DomeGS approaches. This is consistent with skydome
+parallax being geometrically compatible with the user’s own trans-
+lation, avoiding the visual-vestibular conflict contributing to the in-
+duction of simulator sickness symptoms [23].
+8
+CONCLUSION
+In this work, we offer DomeGS, a new background rendering tech-
+nique that provides enhanced visual fidelity for completing 3DGS
+scenes. Our pipeline is specifically designed to preserve depth cues
+and realism in an immersive VR environment. To achieve this, we
+integrated 360◦-aware generative outpainting into a Gaussian-based
+skydome, enabling correctly aligned, coherent background comple-
+tion without degrading the primary reconstructed scene.
+We systematically compared our approach with a traditional sky-
+box baseline via a comprehensive within-subjects user study with
+N = 36 participants. The results of this experimental comparison
+demonstrate that 3DGS significantly improves background consis-
+tency under motion, spatial presence, and experienced realism com-
+pared to the classical skybox baseline.
+ACKNOWLEDGMENTS
+This work of P. Spurek, A. Pechko, was supported by the project
+“Effective rendering of 3D objects using Gaussian Splatting in
+an Augmented Reality environment” (FENG.02.02-IP.05-0114/23)
+carried out within the First Team programme of the Foundation
+for Polish Science co-financed by the European Union under the
+European Funds for Smart Economy 2021-2027 (FENG). The
+
+
+work of P. Borycki was supported by the National Centre of Sci-
+ence (Poland) Grant No.
+2025/57/N/ST6/04389.
+The work of
+J. Szelewska was supported by the National Centre of Science
+(Poland) Grant No. 2025/57/N/ST6/04390.
+The authors acknowledge the use of generative AI tools, namely
+GPT-5.6, Gemini Flash 3.6, and Grammarly, solely for editorial as-
+sistance, grammar enhancement, and improving the text flow. The
+figures use icons from flaticon 5. Due to limited space the exact
+author attributions can be found in supplementary materials.
+REFERENCES
+[1] J. T. Barron, B. Mildenhall, D. Verbin, P. P. Srinivasan, and P. Hed-
+man. Mip-nerf 360: Unbounded anti-aliased neural radiance fields.
+In Proceedings of the IEEE/CVF conference on computer vision and
+pattern recognition, pp. 5470–5479, 2022. 1, 5
+[2] A. C. Beall, J. M. Loomis, J. W. Philbeck, and T. G. Fikes. Abso-
+lute motion parallax weakly determines visual scale in real and virtual
+environments. In Human Vision, Visual Processing, and Digital Dis-
+play VI, vol. 2411 of Proc. SPIE, pp. 288–297. SPIE, 1995. doi: 10.
+1117/12.207547 2
+[3] Black Forest Labs. FLUX.1-Fill-dev. https://huggingface.co/
+black-forest-labs/FLUX.1-Fill-dev, 2024. 4
+[4] Black Forest Labs.
+FLUX.2-dev.
+https://huggingface.co/
+black-forest-labs/FLUX.2-dev, 2025. 4
+[5] S. Bouchard, G. Robillard, J. St-Jacques, S. Dumoulin, M.-J. Patry,
+and P. Renaud. Reliability and validity of a single-item measure of
+presence in vr. In The 3rd IEEE international workshop on haptic, au-
+dio and visual environments and their applications, pp. 59–61. IEEE,
+2004. 6, 9
+[6] S. Bouchard, J. St-Jacques, G. Robillard, and P. Renaud.
+Anxiety
+increases the feeling of presence in virtual reality. Presence: Teleop-
+erators and Virtual Environments, 17(4):376–391, 2008. 6, 9
+[7] L. Chai, R. Tucker, Z. Li, P. Isola, and N. Snavely. Persistent na-
+ture: A generative model of unbounded 3d worlds. In 2023 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR), pp.
+20863–20874. IEEE, 2023. 2
+[8] Z. Chen, G. Wang, and Z. Liu. Scenedreamer: Unbounded 3d scene
+generation from 2d image collections. IEEE transactions on pattern
+analysis and machine intelligence, 45(12):15562–15576, 2023. 2
+[9] J. J. Cummings and J. N. Bailenson. How immersive is enough? a
+meta-analysis of the effect of immersive technology on user presence.
+Media psychology, 19(2):272–309, 2016. 1, 9
+[10] J. E. Cutting and P. M. Vishton. Perceiving layout and knowing dis-
+tances: The integration, relative potency, and contextual use of differ-
+ent information about depth. In Perception of space and motion, pp.
+69–117. Elsevier, 1995. 7, 9
+[11] K. Godula, S. Tadeja, D. Hekiert, and M. Igras-Cybulska. Endless
+Runner F0: Loudness-Based and Pitch-Based Voice Control for VR
+Arcade Games. IEEE Transactions on Games, pp. 1–11, 2026. doi:
+10.1109/TG.2026.3692944 6
+[12] Google
+DeepMind.
+Introducing
+Gemini
+2.5
+Flash
+Im-
+age.
+https://developers.googleblog.com/en/
+introducing-gemini-2-5-flash-image/,
+2025.
+Model
+also known as “Nano Banana”. 4
+[13] N. Greene.
+Environment mapping and other applications of world
+projections. IEEE computer graphics and Applications, 6(11):21–29,
+1986. 2
+[14] A. Haque, M. Tancik, A. Efros, A. Holynski, and A. Kanazawa.
+Instruct-nerf2nerf: Editing 3d scenes with instructions. In Proceed-
+ings of the IEEE/CVF International Conference on Computer Vision,
+2023. 5
+[15] I. P. Howard and B. J. Rogers. Seeing in Depth, Volume 2: Depth
+Perception. I. Porteous, Toronto, 2002. 2, 7, 9
+[16] N. Huang, P. Goswami, V. Sundstedt, Y. Hu, and A. Cheddad. Per-
+sonalized smart immersive XR environments: a systematic literature
+review. The Visual Computer, 41(11):8593–8626, Sept. 2025. doi: 10
+.1007/s00371-025-03887-9 1
+5flaticon, https://www.flaticon.com/
+[17] Y. Jiang, C. Yu, T. Xie, X. Li, Y. Feng, H. Wang, M. Li, H. Lau,
+F. Gao, Y. Yang, et al. Vr-gs: A physical dynamics-aware interactive
+gaussian splatting system in virtual reality. In ACM SIGGRAPH 2024
+Conference Papers, pp. 1–1, 2024. 1, 3
+[18] N. Kalischek, M. Oechsle, F. Manhardt, P. Henzler, K. Schindler, and
+F. Tombari.
+Cubediff: Repurposing diffusion-based image models
+for panorama generation. In International Conference on Learning
+Representations, vol. 2025, pp. 81169–81181, 2025. 2
+[19] R. S. Kennedy, N. E. Lane, K. S. Berbaum, and M. G. Lilienthal. Sim-
+ulator sickness questionnaire: An enhanced method for quantifying
+simulator sickness. The international journal of aviation psychology,
+3(3):203–220, 1993. 6, 8
+[20] B. Kerbl, G. Kopanas, T. Leimk¨uhler, and G. Drettakis. 3d gaussian
+splatting for real-time radiance field rendering. ACM Transactions on
+Graphics, 42(4), July 2023. 1, 3, 4
+[21] J. Kulhanek, S. Peng, Z. Kukelova, M. Pollefeys, and T. Sattler.
+WildGaussians: 3D gaussian splatting in the wild. In Proceedings of
+the 38th International Conference on Neural Information Processing
+Systems, 2024. 3, 9
+[22] D. Lakens. Equivalence tests: A practical primer for t tests, correla-
+tions, and meta-analyses. Social psychological and personality sci-
+ence, 8(4):355–362, 2017. 7
+[23] J. J. LaViola Jr. A discussion of cybersickness in virtual environments.
+ACM Sigchi Bulletin, 32(1):47–56, 2000. 9
+[24] K. Li, M. Masuda, S. Schmidt, and S. Mori. Radiance fields in xr: A
+survey on how radiance fields are envisioned and addressed for xr re-
+search. IEEE Transactions on Visualization and Computer Graphics,
+2025. 3
+[25] nomadoor.
+FLUX.2
+Klein
+9B
+360
+ERP
+Out-
+paint
+LoRA.
+https://huggingface.co/nomadoor/
+flux-2-klein-9B-360-erp-outpaint-lora,
+2026.
+LoRA
+adapter for FLUX.2 Klein 9B. 3
+[26] A. Pechko, P. Borycki, J. Waczy´nska, D. Barczyk, A. Szyma´nska,
+S. Tadeja, and P. Spurek.
+Gs-verse: Mesh-based gaussian splat-
+ting for physics-aware interaction in virtual reality.
+arXiv preprint
+arXiv:2510.11878, 2025. 1
+[27] D. Pintani, A. Caputo, N. Lewis, M. Stamminger, F. Pellacini, and
+A. Giachetti. Envmap-gs: two-stage outdoor gaussian reconstruction
+with background-to-environment map baking. The Visual Computer,
+42(10):416, 2026. 1, 3
+[28] R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer. High-
+resolution image synthesis with latent diffusion models.
+In 2022
+IEEE/CVF conference on computer vision and pattern recognition
+(CVPR), pp. 10674–10685. ieee, 2022. 4
+[29] H. Schieber, J. Young, T. Langlotz, S. Zollmann, and D. Roth.
+Semantics-controlled gaussian splatting for outdoor scene reconstruc-
+tion and rendering in virtual reality. In 2025 IEEE Conference Virtual
+Reality and 3D User Interfaces (VR), pp. 318–328. IEEE, 2025. 3
+[30] M. Slater. Place illusion and plausibility can lead to realistic behaviour
+in immersive virtual environments. Philosophical Transactions of the
+Royal Society B: Biological Sciences, 364(1535):3549, 2009. 1, 9
+[31] P. Strojny and A. Strojny. The immersion questionnaire–polish adap-
+tation and empirical verification of the scale. Homo Ludens, 1(6):171–
+186, 2014. 6
+[32] S. Tadeja. Exploring Engineering Applications of Visual Analytics in
+Virtual Reality. PhD thesis, Apollo - University of Cambridge Repos-
+itory, 2020. doi: 10.17863/CAM.74319 1
+[33] S. K. Tadeja, P. Langdon, and P. O. Kristensson. Supporting Iterative
+Virtual Reality Analytics Design and Evaluation by Systematic Gen-
+eration of Surrogate Clustered Datasets. In 2021 IEEE International
+Symposium on Mixed and Augmented Reality (ISMAR), pp. 376–385,
+2021. doi: 10.1109/ISMAR52148.2021.00054 6
+[34] S. K. Tadeja, W. Rydlewicz, Y. Lu, T. Bubas, M. Rydlewicz, and P. O.
+Kristensson. Measurement and Inspection of Photo-Realistic 3-D VR
+Models. IEEE Computer Graphics and Applications, 41(6):143–151,
+2021. doi: 10.1109/MCG.2021.3114955 6
+[35] S. Thorp, A. Sævild Ree, and S. Grassini. Temporal development of
+sense of presence and cybersickness during an immersive vr experi-
+ence. Multimodal Technologies and Interaction, 6(5):31, 2022. 6, 9
+[36] Y. Wang, J. Wang, R. Gao, Y. Qu, W. Duan, S. Yang, and Y. Qi. Look
+
+
+at the sky: Sky-aware efficient 3d gaussian splatting in the wild. IEEE
+Transactions on Visualization and Computer Graphics, 31(5):3481–
+3491, 2025. 1, 9
+[37] T. Wu, C. Zheng, and T.-J. Cham.
+Panodiffusion:
+360-degree
+panorama outpainting via diffusion. In International Conference on
+Learning Representations, vol. 2024, pp. 43552–43572, 2024. 2
+[38] H. Xiong, S. Muttukuru, R. Upadhyay, P. Chari, and A. Kadambi.
+Sparsegs: Real-time 360 sparse view synthesis using gaussian splat-
+ting. arXiv e-prints, pp. arXiv–2312, 2023. 2
+[39] S. Yang, J. Tan, M. Zhang, T. Wu, G. Wetzstein, Z. Liu, and D. Lin.
+Layerpano3d: Layered 3d panorama for hyper-immersive scene gen-
+eration.
+In Proceedings of the special interest group on computer
+graphics and interactive techniques conference conference papers, pp.
+1–10, 2025. 2, 9
+[40] C. Ye, Y. Nie, J. Chang, Y. Chen, Y. Zhi, and X. Han. Gaustudio:
+A modular framework for 3d gaussian splatting and beyond. arXiv
+preprint arXiv:2403.19632, 2024. 2
+[41] W. Ye, C. Ji, Z. Chen, J. Gao, X. Huang, S.-H. Zhang, W. Ouyang,
+T. He, C. Zhao, and G. Zhang. Diffpano: Scalable and consistent
+text to panorama generation with spherical epipolar-aware diffusion.
+Advances in Neural Information Processing Systems, 37:1304–1332,
+2024. 2
+[42] J. Yuan, B. Yang, K. Wang, P. Pan, L. Ma, X. Zhang, X. Liu, Z. Cui,
+and Y. Ma. Immersegen: Agent-guided immersive world generation
+with alpha-textured proxies. arXiv preprint arXiv:2506.14315, 2025.
+1
+[43] Z. Yuan, H. Huang, Z. Xiong, D. Wang, and G. Yang. Robust and
+efficient 3d gaussian splatting for urban scene reconstruction. In 2025
+IEEE/CVF International Conference on Computer Vision (ICCV), pp.
+26209–26219. IEEE, 2025. 2
+[44] S. Zhou, Z. Fan, D. Xu, H. Chang, P. Chari, T. Bharadwaj, S. You,
+Z. Wang, and A. Kadambi. Dreamscene360: Unconstrained text-to-
+3d scene generation with panoramic gaussian splatting. In European
+Conference on Computer Vision, pp. 324–342. Springer, 2024. 2, 9
