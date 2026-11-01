@@ -6,26 +6,27 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-10-31
-- 运行时间：2026-10-31 21:59:43 UTC
+- 最新运行日期：2026-11-01
+- 运行时间：2026-11-01 22:48:06 UTC
 - 运行状态：成功
 - 本次总论文数：2
-- 精读区：1
-- 速读区：1
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日精读1篇、速读1篇，聚焦VR中无界3D高斯泼溅的背景补全与高效场景渲染重建。最值得看的是《DomeGS》以8.0分提出的感知一致背景补全，以及《Honeycomb-Surfels》用紧凑六边形图元降低渲染与重建成本。普通读者可先读《DomeGS》理解VR无界场景的补全思路，再浏览《Honeycomb-Surfels》关注效率优化方向。
-- 详情：[/202610/31/README](/202610/31/README)
+今天速读了两篇3D高斯与生成模型方向的论文，均获6.0分，暂无精读。值得关注的是3D高斯编辑与视频扩散的结合，以及基于隐式3D高斯记忆的实时无限世界生成。普通读者可先从VidEdit3D了解3D内容编辑思路，再按需跟进世界生成方向。
+- 详情：[/202611/01/README](/202611/01/README)
 
 ### 精读区论文标签
-1. [DomeGS: Perceptually Consistent Background Completion for Unbounded 3D Gaussian Splatting in Virtual Reality](/202610/31/2610.37172v1-domegs-perceptually-consistent-background-completion-for-unbounded-3d-gaussian-splatting-in-virtual-reality)  
-   标签：评分：8.0/10、query:aerial-dgs
-   evidence：面向无界户外场景的3D高斯泼溅渲染
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Honeycomb-Surfels: Compact Hexagonal Primitives for Efficient Scene Rendering and Reconstruction](/202610/31/2610.37668v1-honeycomb-surfels-compact-hexagonal-primitives-for-efficient-scene-rendering-and-reconstruction)  
+1. [VidEdit3D: Flexible 3D Gaussian Editing with Video Diffusion](/202611/01/2610.35756v1-videdit3d-flexible-3d-gaussian-editing-with-video-diffusion)  
    标签：评分：6.0/10、query:aerial-dgs
-   evidence：面向高效三维场景渲染与重建的六边形紧凑泼溅基元
+   evidence：基于3D高斯泼溅的多视角一致场景编辑
+2. [L3G-World: Real-Time Infinite World Generation with Latent 3D Gaussian Memory](/202611/01/2610.40614v1-l3g-world-real-time-infinite-world-generation-with-latent-3d-gaussian-memory)  
+   标签：评分：6.0/10、query:aerial-dgs
+   evidence：以潜在3D高斯记忆作为紧凑可渲染场景表征
 
 
 <div class="dpr-home-promo-card">
